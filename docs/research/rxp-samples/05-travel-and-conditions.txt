@@ -1,0 +1,74 @@
+-- forever-route-lab RXP parser fixture 05: travel, hearth, flight, death-skip and skip conditions.
+-- Self-authored (GPL-3.0-or-later). Quest IDs reuse fixture 01. Area IDs 362 (Razor Hill),
+-- 363 (Valley of Trials) and 364 (The Den) come from QuestieDB
+-- support/Forever/Zones/areaIdToUiMapId.lua:354-356 @ b6f5b07.
+-- All coordinates are placeholders, including the world-coordinate ones, and the flight-path
+-- names are only substrings for the resolver to match. 6673 is a real spell ID, used only as a
+-- syntax example; nothing here depends on which spell it is. Nothing here is a tested route.
+#forever
+#name 11-13 Travel Fixture
+#version 1
+#group Forever Route Lab Fixtures
+#subgroup Parser Samples
+
+step
+    #completewith next
+    .zone Durotar >>Cross into |cFF40A040Durotar|r
+step
+    -- World-coordinate goto (UiMapID/instance,y,x): world yards, world Y first; not percent.
+    .goto 1411/1,-4800.00,-1300.00,15
+    >>Run to Razor Hill
+step
+    .goto Durotar,51.90,41.60
+    .home >>Set your Hearthstone to Razor Hill
+    .bindlocation 362 >>Skipped if already bound to Razor Hill (area 362)
+step
+    .goto Durotar,45.50,12.50
+    .fp Orgrimmar >>Discover the Orgrimmar flight master
+    .subzoneskip 364
+step
+    .goto 1411,45.50,12.50
+    .fly Crossroads >>Take a flight to the Crossroads
+    .zoneskip The Barrens
+step
+    .hs >>Use the Hearthstone (bound to Razor Hill)
+    .bindlocation 362,1 >>Skipped if NOT bound to Razor Hill (flag 1 reverses)
+    .cooldown item,6948,>0 >>Item 6948 = Hearthstone (QuestieDB foreverItemDB.lua:4344)
+step
+    #softcore
+    .deathskip >>Release and resurrect at the spirit healer
+step
+    -- Skip predicates. Each one hides or completes the step for some character states.
+    .isOnQuest 788
+    .isQuestTurnedIn 4641
+    .isQuestAvailable 789
+    .isQuestComplete 792
+    .isNotOnQuest 790
+    .itemcount 4862,10
+    .money <0.10
+    .maxlevel 12
+    .xp <11,1
+    .train 6673,1
+    .zoneskip Orgrimmar/Mulgore,1
+    >>Condition-only step (all elements are text-only)
+step
+    .goto Durotar,42.00,68.00
+    .collect 4862,10,789,1 >>Collect 10 tails for quest 789, objective bit 1
+    .use 4862
+    .abandon 790 >>Abandon Sarkoth if it is still in your log
+step
+    .waypoint Durotar,50.00,40.00,20
+    .waypoint 1411/1,-4700.00,-1200.00,20
+    .line Durotar,50.00,40.00,51.00,41.00,52.00,40.00
+    .loop 25,Durotar,50.00,40.00,51.00,41.00,52.00,40.00,50.00,40.00
+    .goto Durotar,52.00,40.00,30
+    >>Follow the arrow
+step
+    .goto Durotar,52.20,43.10
+    .vendor >>Buy food and water
+    .buy 159,10 >>Item 159 = Refreshing Spring Water (QuestieDB foreverItemDB.lua:62)
+    .trainer >>Visit your class trainer << Warrior
+    .train 6673 >>Learn spell 6673 (a real spell ID, used only as an example) << Warrior
+    .timer 30,Boat arrives
+    .link https://example.org/route-notes >>Route notes
+    .dungeon RFC

@@ -13,10 +13,13 @@ coverage/
 assets-source/*
 !assets-source/README.md
 
-# Generated map tiles/images produced locally from assets-source/.
+# public/maps holds only the committed placeholder geometry. Local map outputs go to local-maps/
+# (outside public/, D-018), never here.
 public/maps/*
-!public/maps/README.md
 !public/maps/placeholder/
+
+# Extraction report (timings, extraction time): not committed (ARCHITECTURE §5.2).
+generated/questiedb-report.json
 
 # Editor / OS noise
 .DS_Store
@@ -32,3 +35,7 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+
+# Local map sets (art and extra geometry) from your own client. Never committed or deployed (D-018).
+local-maps/*
+!local-maps/README.md

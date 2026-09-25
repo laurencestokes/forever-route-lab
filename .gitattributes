@@ -1,0 +1,14 @@
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.blp binary
+
+# RXP edge-case fixtures that must keep CRLF, trailing spaces and no final newline
+docs/research/rxp-samples/*-crlf.txt -text
+tests/fixtures/rxp/*-crlf.txt -text
+
+# Generated data: reviewable, but collapsed in diffs
+public/data/** linguist-generated=true -diff
+public/maps/placeholder/*.json linguist-generated=true -diff
+tests/fixtures/data/** linguist-generated=true -diff

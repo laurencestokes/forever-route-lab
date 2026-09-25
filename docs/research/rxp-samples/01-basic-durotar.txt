@@ -1,0 +1,104 @@
+-- forever-route-lab RXP parser fixture 01: baseline raw-text guide.
+-- Self-authored for this project (GPL-3.0-or-later). No line is copied from a RestedXP guide.
+-- RestedXP's guides place Kaltunk, Galgar and Zureetha at the same QuestieDB positions, so their
+-- gotos here use the numeric UiMapID form, which equals no RestedXP guide line (docs/RXP.md
+-- section 19.2).
+-- Quest, NPC and item IDs, quest names, prerequisites and the zone-percent NPC coordinates
+-- were checked against QuestieDB data/Forever at commit b6f5b07 (docs/RXP.md section 19).
+-- The route order is original and has NOT been tested in game. Do not use it as a real route.
+-- Covers: header block, "<< Horde" guide filter, #name affix normalisation (1-4 -> 01-04),
+-- several accepts/turn-ins in one step, .complete objective indices, zone-name and numeric
+-- UiMapID .goto forms, full-line and trailing comments, ">>" notes, "+" manual objective,
+-- ".target Name::npcId".
+#forever
+#classic
+<< Horde
+#name 1-4 Valley of Trials (fixture)
+#version 1
+#group Forever Route Lab Fixtures
+#subgroup Parser Samples
+#defaultfor Orc/Troll
+#next 4-6 Fixture Two
+
+step
+    .goto 1411,43.29,68.53
+    >>Talk to |cRXP_FRIENDLY_Kaltunk|r
+    .accept 4641 >>Pick up Your Place In The World
+    .target Kaltunk
+step
+    .goto Durotar,42.06,68.33
+    >>Talk to |cRXP_FRIENDLY_Gornek|r in the Den
+    .turnin 4641 >>Hand in Your Place In The World
+    .accept 788 >>Pick up Cutting Teeth
+    .target Gornek
+step
+    -- Mottled Boar spawns taken from QuestieDB npc 3098 (zone 14 = Durotar)
+    .goto Durotar,45.16,70.47,40,0
+    .goto Durotar,43.92,70.62,40,0
+    .goto Durotar,42.72,71.58
+    >>Hunt |cRXP_ENEMY_Mottled Boars|r south-east of the Den
+    .complete 788,1 --objective 1 of quest 788
+    .mob Mottled Boar
+step
+    .goto Durotar,42.06,68.33
+    .turnin 788 >>Hand in Cutting Teeth
+    .accept 789 >>Pick up Sting of the Scorpid
+    .target Gornek
+step
+    .goto 1411,42.73,67.23 -- same zone, numeric UiMapID form
+    .accept 4402 >>Pick up Galgar's Cactus Apple Surprise
+    .target Galgar
+step
+    .goto 1411,42.85,69.15
+    .accept 792 >>Pick up Vile Familiars
+    .target Zureetha Fargaze::3145
+step
+    .goto Durotar,40.60,62.58
+    .accept 790 >>Pick up Sarkoth
+    .target Hana'zua
+step
+    #completewith SarkothKill
+    >>Loot |cRXP_LOOT_Scorpid Worker Tails|r and collect |cRXP_PICK_Cactus Apples|r while you travel
+    .complete 789,1 --tails for quest 789
+    .complete 4402,1 --apples for quest 4402
+    .mob Scorpid Worker
+step
+    #label SarkothKill
+    .goto Durotar,40.50,66.83
+    >>Kill |cRXP_ENEMY_Sarkoth|r and loot his claw
+    .complete 790,1 --the claw for quest 790
+    .mob Sarkoth
+step
+    .goto Durotar,40.60,62.58
+    .turnin 790 >>Hand in Sarkoth
+    .target Hana'zua
+step
+    >>Finish the scorpid tails and the cactus apples
+    .complete 789,1
+    .complete 4402,1
+    .mob Scorpid Worker
+step
+    .goto Durotar,43.71,55.47,40,0
+    .goto Durotar,42.76,52.71
+    >>Hunt |cRXP_ENEMY_Vile Familiars|r to the north
+    .complete 792,1 --objective 1 of quest 792
+    .mob Vile Familiar
+step
+    .xp 4 >>Grind to level 4 if you are short
+step
+    .goto 1411,42.73,67.23
+    .turnin 4402 >>Hand in Galgar's Cactus Apple Surprise
+    .target Galgar
+step
+    .goto Durotar,42.06,68.33
+    .turnin 789 >>Hand in Sting of the Scorpid
+    .target Gornek
+step
+    .goto 1411,42.85,69.15
+    .turnin 792 >>Hand in Vile Familiars
+    .target Zureetha Fargaze::3145
+step
+    +Tick this box once you have sold your junk
+    .vendor >>Sell junk to any vendor
+step << Warrior/Rogue/Hunter/Shaman/Warlock/Mage/Priest
+    .trainer >>Visit your class trainer

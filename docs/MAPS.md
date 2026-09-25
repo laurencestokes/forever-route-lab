@@ -1,3 +1,939 @@
 # Maps
 
-_Filled by Milestone 0 research: map sources, extraction, coordinate transforms, redistribution._
+Status: **Milestone 0 research (2026-09-25), revised for ARCHITECTURE revision 2 and the
+architect's rulings on the Milestone 0 consistency check.** No map code or map assets exist yet.
+This file covers:
+
+- where map data comes from and how a developer extracts it locally;
+- what is committed (the placeholder geometry) and how Milestone 2 reproduces it;
+- how local map sets are served without ever reaching a deployed build;
+- how the map renders.
+
+Derivations and worked numbers are in [research/coordinates.md](research/coordinates.md).
+
+**Authority.** [ARCHITECTURE.md](ARCHITECTURE.md) §6-§7 and §16, [DECISIONS.md](DECISIONS.md)
+D-016 to D-026, and the domain types in `src/domain/*.ts` (`points.ts` for coordinates) win over
+this file. D-017 covers coordinates, D-018 map files, D-022 client values in docs and tests,
+D-025 deployment, and D-026 per-row geometry builds. Earlier recommendations that revision 2 or
+the architect's later rulings replaced are kept for their evidence and marked **Superseded**
+with the entry or section that replaced them. §12 lists them all. Findings such as F03 or LIC-01
+are from the Milestone 0 critique; their dispositions are in
+[reviews/review-m0-architecture.md](reviews/review-m0-architecture.md).
+
+Placeholders: `<repo>/` is this repository. `<wow-install>` is the World of Warcraft installation
+root; on Windows the Battle.net default is `C:\Program Files (x86)\World of Warcraft`. It is
+**read-only** to every tool.
+
+Rule: **never copy maps, tiles, geometry or code from any other WoW route-planner web app.**
+
+## 1. Summary
+
+| Item | Decision / fact | Source |
+|---|---|---|
+| Map source | The developer's **own** Forever client (local CASC, read-only) or Blizzard's public CDN for the same build. No third-party map images are used. | §2, §5 |
+| WoW flavour / product | WoW Forever = product **`wow_classic_beta`** (`.flavor.info` in `<wow-install>/_classic_beta_`) | Local install, read only |
+| Client build | **1.60.1.70009**, Build Key `05215079e3905ef5922ae0b03ffefb73`. The brief said 69977; the launcher updated the client on 2026-09-25 (D-013). | `<wow-install>/.build.info`; `us.version.battle.net/wow_classic_beta/versions` |
+| Data frame | **1.60.1.69893**, QuestieDB's DBC target (D-013). `UiMapAssignment` is byte-identical at 69893 and 70009. | [coordinates §10-11](research/coordinates.md) |
+| Frame compatibility | A local map set is accepted when its rows for the 49 shared zone frames **hash-equal** the committed rows, not when build strings match (D-018, F09). It may only **add** UiMaps: a local row for a UiMap the committed file already has must be identical, or the whole set is rejected (ARCHITECTURE §6). | §5.6 |
+| Map art | UI world-map art: `UiMapXMapArt → UiMapArt → UiMapArtStyleLayer + UiMapArtTile` BLP tiles, plus `WorldMapOverlay(Tile)` explored overlays. Every Forever map with 1002 × 668 art uses 4 × 3 tiles of 256 px. Art is **local only**: never committed or deployed (D-018). | DB2 at 70009 (§3) |
+| Map metadata | DB2 tables `UiMap`, `UiMapAssignment`, `UiMapArt`, `UiMapArtTile`, `UiMapArtStyleLayer`, `UiMapXMapArt`, `WorldMapOverlay`, `WorldMapOverlayTile`, `AreaTable`, `Map`, `TaxiNodes`, `TaxiPath`, `TaxiPathNode`, decoded with WoWDBDefs `cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd` (has the 1.60.1.x layouts) | §3, §5 |
+| Primary tools (scripted, local) | **TACTTool** (wowdev/TACTSharp, declares MIT, `a507ff7b`) for read-only extraction by FileDataID. **DBC2CSV** (Marlamin, `1e4aaa46`) for DB2 → CSV. Our own `tools/maps/*.ts` for BLP decoding, stitching and manifests. | §4 |
+| Fallback tool (GUI) | **wow.export 0.2.19** (declares MIT, commit `c2fd7bde`, 2026-06-22). NW.js GUI only, with no CLI or headless mode. Never scripted (D-011). **Use CDN mode or disable cache collection first** (§4.1). | `.cache/wow.export` |
+| Raw file types | `.db2` (WDC5, per WoWDBDefs), `.blp` (BLP2: palette, DXT1/3/5 or BGRA) | §3 |
+| Local map set | One local extraction set in `local-maps/` at the repository root: `maps.manifest.json`, `geometry.local.json`, `art/<uiMapId>.webp` and, optionally, `taxi.local.json`. It is gitignored and **outside `public/`**. `tools/maps/validate.ts --activate` writes `maps.manifest.json` after the checks pass; that file is the one `infra/maps` probes. Only `tools/maps/vite-local-maps.ts` serves the folder, in `dev` and `preview`; `vite build` never emits it (D-018, ARCHITECTURE §7.3). | §5.2, §5.7 |
+| Committed geometry | `public/maps/placeholder/geometry.placeholder.json` plus `NOTICE.md`, produced only by `tools/maps/import.ts --placeholder` from the pinned QuestieDB `conversion.json` and the committed `tools/maps/inputs/db2-rows-1.60.1.70009.json`, so it is reproducible. It holds 49 zone frames (`source: 'questiedb-conversion'`, build 1.60.1.69893) and 12 DB2-only rows for 11 UiMaps (`source: 'db2-csv'`, build 1.60.1.70009), taken from CSVs fetched as individual requests during research (not scripted crawling). Every row records its source and build (D-018, D-026). | §8 |
+| Coordinates | Dataset spawns ship as published zone percent and are converted to `WorldPoint` at load. A route `Location` stores the authored `SourcedPoint`; `resolve()` derives world coordinates at runtime, and nothing derived is persisted (D-017). | §6; [coordinates §15](research/coordinates.md#15-coordinate-model-typescript-sketch) |
+| Renderer | Leaflet 1.9.4 (declares BSD-2-Clause) behind `MapAdapter`, `L.CRS.Simple`, **one surface per world map**. Canvas renderer with level of detail. The combined overview surface is deferred until after the MVP (F23). No react-leaflet (D-005). | §7 |
+| Images | One image per UiMap at native `LayerWidth × LayerHeight` (1002 × 668), **WebP** (lossy, q≈90), optional PNG. No tile pyramid is needed at this size. Local only. | §5.4 |
+
+## 2. Client, build and data locations
+
+| Fact | Value | Evidence |
+|---|---|---|
+| Install root | `<wow-install>` (**strictly read-only**) | — |
+| `.build.info` | One row: `Product=wow_classic_beta`, `Version=1.60.1.70009`, `Branch=us`, `Active=1`, CDN Key `9b3c456dbb837d133a026d380c7c13e9`, `CDN Path tpr/wow`. Its `Tags` column includes account-region tags: do not copy it. | Read 2026-09-25 |
+| CASC storage | `<wow-install>/Data/` (`data/`, `indices/`, `config/`, `ecache/`, plus one small folder per installed product such as `wow_classic_beta/`), shared by every installed flavour | Directory listing only |
+| Flavour folder | `<wow-install>/_classic_beta_/` holds `WowB.exe`, `.flavor.info` (`wow_classic_beta`), `Interface/`, `Fonts/` and more. **Never read `WTF/`, `Cache/`, `Logs/` or SavedVariables.** | — |
+| Public CDN | Patch server `https://us.version.battle.net/wow_classic_beta/versions` serves 1.60.1.70009 with the same BuildConfig, so the exact client build can also be streamed without a local install. Whether any files are **encrypted** is UNVERIFIED. | Fetched 2026-09-25 |
+| Forever builds seen | 1.60.1.69876 (2026-09-16), 69893 (09-16), 69913 (09-18), 69977 (09-23), 70009 (09-24) | wago.tools `/api/builds`, WoWDBDefs `BUILD` lines |
+
+Each local map set comes from exactly one build and records it (§5.3). Whether a set can be used
+with the committed data is decided by the frame hash (§5.6), not by comparing build strings.
+Evidence that build strings are the wrong test: `UiMapAssignment` is byte-identical at 69893 and
+70009, while `UiMap` parents and types changed between them
+([coordinates §11.3](research/coordinates.md#113-changes-between-forever-beta-builds)).
+*Superseded by D-018 and F09:* revision 1's rule "pin one build per map set, use it only when the
+build matches" could never match, because the data frame is 69893 and the client is 70009.
+
+## 3. What the Forever client contains (1.60.1.70009)
+
+Values in this section are individual client-derived values. Each is cited by table and, where
+relevant, column, at build 1.60.1.70009, as D-022 allows. Bulk tables stay local; the committed
+placeholder's 61 `UiMapAssignment` rows are the one recorded exception (D-018, D-026).
+
+| Kind | Content |
+|---|---|
+| UiMaps (`UiMap`) | 60 in total: Azeroth 947 (world); Kalimdor 1414 and Eastern Kingdoms 1415 (continents); alternative continents 1463 and 1464; 46 Classic zones and cities (1411-1413, 1416-1458); 3 battlegrounds (1459-1461); 6 new maps: Mount Hyjal 2482, Zephras Isle 2521 and 2665, Darkspear Islands 2524, Riverglades 2548, Shen'dralas 2652. **No dungeon UiMaps.** |
+| Assignments (`UiMapAssignment`) | 61 rows. Every zone has one `OrderIndex 0` row with the full `(0,0)-(1,1)` UI rectangle and no WMO or Z restriction. 947 has two rows (MapID 1 → left sub-rectangle, MapID 0 → right). 49 rows are the zone frames in QuestieDB `conversion.json`; the other 12 (for 11 UiMaps) are the DB2-only rows (§8.3). |
+| Art styles (`UiMapArtStyleLayer`) | Style 1: one layer of 1002 × 668 in 256 px tiles (57 UiMaps). Style 4: 512 × 512 single tile (1463, 1464, 2665). Styles 5, 106 and 107 (3840 × 2560) exist, but no Forever UiMap links to them. |
+| Tiles (`UiMapArtTile.FileDataID`) | 687 rows are linked. 675 of them have FileDataIDs ≥ 5,000,000 (range 364,696 to 8,128,990). Whether Forever repainted the art compared with Era is UNVERIFIED. |
+| Explored overlays (`WorldMapOverlay`, `WorldMapOverlayTile`) | 580 overlay rows on linked art, all with `PlayerConditionID = 0`, and 1,739 overlay tiles, placed at `OffsetX/OffsetY` in layer pixels |
+| Minimaps | `world/minimaps/<Map.Directory>/mapXX_YY.blp` (terrain, 533.33 yd per tile). **Not used**: large, unlabelled, and needs a listfile for names. |
+| Taxi (`TaxiNodes`) | 100 nodes (51 on MapID 0, 47 on MapID 1, 2 on 30), world positions in `Pos_0/1/2`. Taxi-derived leg timings are local-only by default (D-022, STATUS OD-6). |
+| `UiMapLink` | wago.tools reports "Table not found" at 70009, although WoWDBDefs lists the build. UNKNOWN. |
+
+DB2 FileDataIDs, from WoWDBDefs `manifest.json`:
+
+| Table | FDID | Table | FDID |
+|---|---:|---|---:|
+| UiMap | 1957206 | WorldMapOverlay | 1134579 |
+| UiMapAssignment | 1957219 | WorldMapOverlayTile | 1957212 |
+| UiMapArt | 1957202 | AreaTable | 1353545 |
+| UiMapArtTile | 1957210 | Map | 1349477 |
+| UiMapArtStyleLayer | 1957208 | TaxiNodes | 1068100 |
+| UiMapXMapArt | 1957217 | TaxiPath | 1067802 |
+| UiMapLink | 2030690 | TaxiPathNode | 1000437 |
+
+Example: Durotar 1411 uses art 2169 (`UiMapXMapArt.UiMapArtID`). Its 12 tiles
+(`UiMapArtTile.FileDataID`) are `8073638, 8074081, 8074082, 8074083` (row 0), `8074084…8074087`
+(row 1) and `8074088, 8073639, 8073686, 8074080` (row 2). It has 11 overlays (`WorldMapOverlay`).
+The first is ID 5358 at offset (427, 78), a 256 × 256 texture, AreaID 370.
+
+## 4. Tools evaluated
+
+| Tool | Licence (as declared) | Version / commit | Reads local CASC | Reads CDN | Headless | DB2 → CSV | Map art | Notes |
+|---|---|---|---|---|---|---|---|---|
+| **wow.export** | MIT | 0.2.19, `c2fd7bde…` (2026-06-22) | Yes (`casc-source-local.js:42-52`, via `.build.info`) | Yes (`casc-source-remote.js`, patch server) | **No.** NW.js 0.104.1 GUI; the only CLI flag is `--disable-auto-update` (`app.js:14`) | CSV, SQL or raw DB2 (`core.js:384-388`) | Zones tab (PNG/WebP); Textures tab (BLP → PNG/WebP/raw BLP); Maps tab (minimap/terrain PNG + JSON sidecar) | Privacy issue: **cache collection is on by default** (§4.1). Never scripted (D-011). |
+| **TACTSharp / TACTTool** | MIT | `a507ff7b…` (HEAD as fetched 2026-09-25) | Yes: `-d/--basedir` is used "as source for build info and read-only file cache" (README) | Yes (`-p <product> -r <region>`) | **Yes** (CLI) | No | Extracts raw BLP/DB2 by `fdid`, `name`, `ckey`, `ekey` or a `list` file | README lists "support for encrypted products" as a TODO |
+| **DBC2CSV** | No licence file found at `1e4aaa46` | `1e4aaa46…` | n/a | n/a | **Yes** (CLI or drag-drop) | Yes, WDB5+; optional hotfix `DBCache.bin` | No | .NET 8 runtime. Its bundled definitions are "likely outdated", so supply current WoWDBDefs (the flag is UNVERIFIED). |
+| DBCD | MIT | `e732093f…` | n/a | n/a | Library | Yes | No | C# DB2 reader used by DBC2CSV |
+| CascLib | MIT | `2a280f5a…` | Yes | Yes (online mode) | Library (C) | No | Raw files | Mature; would need bindings |
+| CASCExplorer | No licence file found | — | Yes | Yes | GUI (and CASCConsole) | No | Raw files | Not evaluated further |
+| wow.tools.local | MIT | `c58a179b…` | Yes | Yes | Local web server; CLI overrides such as `-wowFolder` and `-wowProduct` | Yes (web UI/API) | Yes | Heavy. Its README advises closing WoW and Battle.net while it runs. |
+| **wago.tools** (web) | Service; no terms page found | Builds list includes all five 1.60.1.x builds | — | — | HTTP GET of a per-table CSV URL works | Yes | No | **`robots.txt`: `Disallow: /`.** Manual use only; never scripted and never in CI (D-011). The placeholder's two source CSVs were fetched this way, as individual requests during research (not scripted crawling). Reproducing the placeholder needs no request: the 12 rows are committed (§8.3). |
+| QuestieDB `tools/dbc` | Repo has no licence file (D-016) | `b6f5b07b` | No | No | CLI (Python) | Reads a **private** `Questie/dbc` SQLite release (`download.py:23-24`, needs `gh` auth; `github.com/Questie/dbc` returns 404 anonymously) | No | Not reproducible for us. Its **output** `data/Forever/conversion.json` is public and is the source of the 49 committed frames (§8). |
+
+### 4.1 wow.export details (0.2.19)
+
+- **Products**: `wow_classic_beta` ("Beta: World of Warcraft Classic") is in `constants.js:114-126`,
+  line 120. Local mode lists products from `.build.info` and falls back to the CDN for files
+  missing locally (`casc-source-local.js:63-70`).
+- **DB2**: uses WoWDBDefs definitions fetched at run time from the **unpinned `master`** branch
+  (`default_config.jsonc:15`). Schema selection is by build or layout hash (`WDCReader.js:240-276`),
+  and WDC2-WDC5 are supported (`WDCReader.js:22-26`). No hotfix (`DBCache.bin`) application was
+  found in `src/js/db` or `src/js/casc`. Data tab exports write `<exportDir>/<Table>.csv`
+  (`ui/data-exporter.js:41-42`).
+- **Zones tab** (`modules/tab_zones.js`): lists AreaIDs that have a `UiMapAssignment` row
+  (lines 409-437). It renders `UiMapXMapArt → UiMapArt → UiMapArtStyleLayer`, draws
+  `UiMapArtTile` BLPs at `col·TileWidth, row·TileHeight` (lines 168-205) on a
+  `LayerWidth × LayerHeight` canvas (lines 136-140), then draws `WorldMapOverlay` tiles at their
+  offsets (lines 211-272; `showZoneOverlays` defaults to true, `default_config.jsonc:126`). It
+  exports `zones/Zone_<AreaID>_<ZoneName>_<AreaName>[_Phase<n>].png|.webp` (lines 451-484) with
+  **no metadata sidecar**. **Continents and Azeroth (AreaID 0) are not listed**, so their art must
+  be exported as raw tiles from the Textures tab.
+- **Maps tab** (`modules/tab_maps.js`): exports minimap tiles as `maps/<dir>/minimap/mapXX_YY.png`
+  (line 846) and stitched PNGs with a JSON sidecar (`map_id`, `tiles`, `image`,
+  `corners.{top_left,bottom_right}.{world_x,world_y}`, lines 789-808). This is the only sidecar
+  wow.export writes, and it is for terrain minimaps, not UI maps.
+- **Formats**: textures export as PNG, WebP (quality 90) or raw BLP (`core.js:299-304`;
+  `default_config.jsonc:42-43`). Terrain exports as OBJ, PNG, minimap tiles, raw or heightmaps
+  (`core.js:305-311`).
+- **Network use**: listfile (GitHub `wowdev/wow-listfile` with a kruithne.net fallback), DBDs,
+  TACT keys (`wowdev/TACTKeys`), update checks, and a realm list and armory at `marlam.in`
+  (`default_config.jsonc:9-28`).
+- **Privacy (important).** `allowCacheCollection` defaults to `true` (`default_config.jsonc:127`).
+  When a **local** install is opened (`screen_source_select.js:109-128`), a worker scans every
+  `_*_` flavour folder of the install. It reads `Cache/WDB/<locale>/*` and
+  `Cache/ADB/<locale>/DBCache.bin` (`workers/cache-collector.js:179-236`), hashes executables, and
+  uploads the cache files to `https://www.kruithne.net/wow.export/v2/cache/submit`
+  (`constants.js:95`; `cache-collector.js:305`) with a random machine ID. This project's rules
+  forbid reading `Cache/`. **Either use CDN mode**, where collection only runs for local sources,
+  **or turn collection off before opening the local install.** It is not verified whether the
+  setting can be reached before a source is selected, so CDN mode is the safer choice.
+
+## 5. Local map pipeline
+
+Milestone 3 builds this pipeline (ARCHITECTURE §18). Milestone 2 builds only
+`import.ts --placeholder` (§8).
+
+### 5.1 Principles
+
+1. **Developer-supplied, local, outside `public/`.** Raw inputs (DB2, CSV, BLP) go in the
+   gitignored `assets-source/`. Generated map sets go in the gitignored `local-maps/` at the
+   repository root. Neither ever lives under `public/`: gitignore stops commits, not publication,
+   and Vite copies everything under `public/` into `dist/` (D-018, F03/LIC-01). `tools/maps` writes
+   under `public/` only in `--placeholder` mode, which writes exactly the two committed files from
+   committed or pinned inputs.
+2. **Read-only toward the client.** Tools may read `<wow-install>/Data/` through CASC. Nothing
+   may be written under `<wow-install>`, and `WTF/`, `Cache/`, `Logs/` and SavedVariables must
+   never be read. Close the game and the launcher first to avoid file locks (the wow.tools.local
+   README gives the same advice).
+3. **Pinned and reproducible.** The set manifest records product, build, Build Key, tool
+   versions/commits, the WoWDBDefs commit and the SHA-256 of every input and output. It holds no
+   timestamps, so the same inputs give the same bytes.
+4. **The app never requires real maps.** `infra/maps` always loads the committed placeholder
+   geometry. It then probes `local-maps/maps.manifest.json`, a URL that only the dev/preview
+   plugin serves (§5.7). A deployed site therefore gets a 404 (or an SPA fallback page, which
+   counts as absent) and stays placeholder-only. A local set is used only if it passes the frame
+   check (§5.6).
+   *Superseded by D-018 and F09:* revision 1 probed `public/maps/<build>/maps.manifest.json` and
+   compared build strings.
+5. **Deployable builds come only from CI on a clean checkout** (D-025). `audit-dist` enforces the
+   map rules in ARCHITECTURE §16 (§5.7 below).
+
+### 5.2 Directory layout
+
+```
+assets-source/                                  # gitignored except README.md: raw inputs only
+  maps/wow_classic_beta/<build>/
+    source.json          # developer-written: product, build, buildKey, method, tool versions (no local paths)
+    extract-list.txt     # written by import.ts: "fdid;<id>;<relative out path>" lines for TACTTool
+    db2/<Table>.db2      # raw DB2 (TACTTool)
+    csv/<Table>.csv      # DBC2CSV (or wow.export Data tab) output, header row required
+    blp/<fdid>.blp       # raw art and overlay tiles (TACTTool, or wow.export Textures → "BLP (Raw)")
+tools/maps/
+  README.md
+  inputs/db2-rows-1.60.1.70009.json   # committed: the 12 cited DB2 rows and their UiMap rows (§8.3)
+  import.ts              # --placeholder: pinned conversion.json + inputs/db2-rows-…json → public/maps/placeholder/ (M2)
+                         # --build <b>: csv/ → local-maps/geometry.local.json; writes extract-list.txt (M3)
+  convert.ts             # BLP decode → stitch → crop → overlays → local-maps/art/ (WebP/PNG)
+  validate.ts            # §5.5 checks; --activate writes local-maps/maps.manifest.json after a pass
+  vite-local-maps.ts     # dev/preview-only Vite plugin (§5.7)
+public/maps/placeholder/                        # committed (§8.2)
+  geometry.placeholder.json
+  NOTICE.md
+local-maps/                                     # gitignored except README.md; outside public/; never built or deployed
+  maps.manifest.json     # written only by validate.ts --activate; its presence activates the set (§5.3)
+  geometry.local.json    # rows with source "local-db2" (§5.3)
+  art/<uiMapId>.webp
+  taxi.local.json        # optional: local taxi-derived leg times (D-022; SIMULATION TIME-6)
+```
+
+`local-maps/` holds one set at a time, from one build (ARCHITECTURE §7.3). Raw inputs for several
+builds can sit side by side in `assets-source/`, and a set for another build is rebuilt from
+them. Proposal: `import.ts --build` first deletes `local-maps/maps.manifest.json`, so a set being
+rebuilt is inactive until `validate.ts --activate` passes again. `infra/maps` also checks file
+hashes against the manifest (§5.6), so a file changed after activation makes the set count as
+absent. The content of `taxi.local.json` is specified with the simulation (SIMULATION TIME-6).
+
+*Superseded by ARCHITECTURE §6-§7.3 (revision 2):* the first revision-2 draft of this file kept
+one folder per set (`local-maps/<product>-<build>/`) with a copied discovery manifest and a
+separate `validation.json`. It also proposed copying the two placeholder CSVs to
+`assets-source/maps/placeholder-inputs/1.60.1.70009/`. The set now sits directly in
+`local-maps/` with the validation result in its manifest, and the placeholder reads the committed
+rows file instead of CSVs.
+
+`.gitignore` already has `assets-source/*` with `!assets-source/README.md`, and `local-maps/*`
+with `!local-maps/README.md`. It also has `public/maps/*` with `!public/maps/placeholder/` and
+`!public/maps/README.md`; that README is optional. These rules keep stray files out of Git.
+They do not keep anything out of `dist/`, which is why nothing local may be written under
+`public/`.
+
+*Superseded by D-018 (F03/LIC-01, F05/LIC-02/PERF-12):* revision 1 wrote local sets to
+`public/maps/<build>/{maps.manifest.json, geometry.json, art/…}`, and ARCHITECTURE revision 1 put
+the committed geometry at the gitignored path `public/maps/geometry.json`.
+
+### 5.3 File formats
+
+**Geometry** has one schema for both files. `geometry.placeholder.json` is shown; §8.2 lists its
+full content. `geometry.local.json` has `"kind": "local"`, rows with `source: "local-db2"` and
+the set's build, its own inputs, and `"redistribution": "local-only"` (§5.7).
+
+```jsonc
+{ "schema": 1, "kind": "placeholder", "product": "wow_classic_beta",
+  "frameHash": "2cb10551b1502b652e4d54922e8b3a1ecb48057fbfb7cf9c77863edd7efea78f",   // §5.6
+  "inputs": {
+    "questiedb-conversion": { "repo": "https://github.com/Questie/QuestieDB",
+        "commit": "b6f5b07b0acf1c820993cbb0ce2521c912bb4c92", "path": "data/Forever/conversion.json",
+        "sha256": "f4477d6c575575152225f2a9d40858029bf9d2d5fdf6b083c06557fce8b5984b",   // LF git blob
+        "build": "1.60.1.69893" },
+    "db2-csv": { "path": "tools/maps/inputs/db2-rows-1.60.1.70009.json",
+        "sha256": "…",                                                                   // LF bytes of the committed file
+        "build": "1.60.1.70009",
+        "csvSha256": { "UiMapAssignment": "79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a",
+                       "UiMap": "1f4aac70eaac015b1d2d0ea0faf6e3d7fb2cf7afdf45e5bb6772d9b80a72346b" } } },
+  "maps": {
+    "1411": { "name": "Durotar", "nameSource": "questiedb-conversion", "type": null, "parent": null,
+      "assignments": [ { "id": 46721, "mapId": 1, "areaId": 14, "orderIndex": 0,
+          "xMin": -1716.6666259766, "xMax": 1808.3332519531, "yMin": -7249.9995117188, "yMax": -1962.4998779297,
+          "uiMin": [0, 0], "uiMax": [1, 1], "source": "questiedb-conversion", "build": "1.60.1.69893" } ] },
+    "1414": { "name": "Kalimdor", "nameSource": "db2-csv", "type": 2, "parent": 947,
+      "assignments": [ { "id": 46724, "mapId": 1, "areaId": 0, "orderIndex": 0,
+          "xMin": -11733.299804688, "xMax": 12799.900390625, "yMin": -19733.2109375, "yMax": 17066.599609375,
+          "uiMin": [0, 0], "uiMax": [1, 1], "source": "db2-csv", "build": "1.60.1.70009" } ] } },
+  "eraToForever": {
+    "1412": { "scaleX": 0.8348002068275978, "offsetX": 7.007453108736848,
+              "scaleY": 0.8349418225477033, "offsetY": 13.15387327724201,
+              "fromBuild": "1.15.9.69722", "toBuild": "1.60.1.69893", "source": "questiedb-conversion" } } }
+```
+
+- `xMin`, `xMax`, `yMin`, `yMax` are `Region_0`, `Region_3`, `Region_1`, `Region_4` (world X is
+  north, Y is west; [coordinates §3](research/coordinates.md#3-uimapassignment-the-map-to-world-link)).
+  QuestieDB's `bottom`, `top`, `right`, `left` are the same values.
+- Numbers are written exactly as the source decimal strings parse, so the 49 rows equal
+  `conversion.json` value for value.
+- `type` and `parent` are `null` for the 49 QuestieDB rows, because `conversion.json` does not
+  carry them. Surfaces group maps by `mapId`, so the placeholder does not need them.
+- `eraToForever` holds `conversion.json` `coefficients` for exactly 1412, 1423, 1433 and 1453. The
+  other 45 are identity. ARCHITECTURE §6 names this block as the coefficients' source.
+- `inputs.db2-csv` names the committed rows file and its hash. `csvSha256` repeats the hashes of
+  the full research CSVs that the rows file records (§8.3); the importer does not read the CSVs.
+
+**Set manifest** (`local-maps/maps.manifest.json`). `validate.ts --activate` writes it only after
+every local-set check passes (§5.5); its presence is what makes the set active (ARCHITECTURE
+§7.3). File paths are relative to `local-maps/`. `set` is a label, `<product>-<build>`.
+
+```jsonc
+{ "schema": 1, "redistribution": "local-only", "set": "wow_classic_beta-1.60.1.70009",
+  "product": "wow_classic_beta", "build": "1.60.1.70009", "buildKey": "05215079e3905ef5922ae0b03ffefb73",
+  "source": { "method": "tacttool-local | tacttool-cdn | wow.export-gui",
+              "tools": { "TACTTool": "<commit/version>", "DBC2CSV": "<version>" },
+              "wowdbdefs": "cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd" },
+  "generator": { "repoCommit": "<sha>", "node": "22.x" },
+  "tables": { "UiMapAssignment": { "rows": 61, "sha256": "…" } /* every input table */ },
+  "frameHash": "…",                  // informational; infra/maps recomputes it from geometry.local.json
+  "geometry": { "file": "geometry.local.json", "sha256": "…" },
+  "images": { "1411": { "file": "art/1411.webp", "width": 1002, "height": 668, "sha256": "…", "tileFdids": [8073638] } },
+  "taxi": { "file": "taxi.local.json", "sha256": "…" },          // optional
+  "validation": { "passed": true, "checks": ["L1", "L2", "L3", "L4", "L5", "L6", "L7"] } }
+```
+
+`redistribution` is always `local-only`, in the manifest, `geometry.local.json` and
+`taxi.local.json` alike, and `audit-dist` fails on any file that carries it (§5.7). Revision 1's
+`generatedAt` field is dropped because it made identical inputs produce different bytes.
+
+### 5.4 Extraction steps (local sets, Milestone 3)
+
+**(a) Metadata (scripted, preferred).** None of these commands has been run yet; they come from
+the tools' READMEs.
+
+1. Write `assets-source/maps/wow_classic_beta/<build>/source.json` by hand.
+2. Extract the DB2s read-only from the local install, with the product pinned. `-d` is a
+   read-only base directory:
+   `TACTTool -p wow_classic_beta -d "<wow-install>" -m list -i extract-list.txt -o assets-source/maps/wow_classic_beta/<build>`,
+   with lines such as `fdid;1957219;db2/UiMapAssignment.db2` (FDIDs in §3). The exact `fdid;` list
+   syntax is UNVERIFIED. Without `-d`, the same build is read from the CDN.
+3. `DBC2CSV <dir>/db2` → `csv/*.csv`, using WoWDBDefs at the pinned commit. Do **not** pass any
+   `DBCache.bin`: it comes from `Cache/`, which is forbidden.
+4. `pnpm tsx tools/maps/import.ts --build 1.60.1.70009` reads the CSVs **by column name** and
+   fails on missing columns. It deletes `local-maps/maps.manifest.json` (§5.2), writes
+   `local-maps/geometry.local.json` (rows `source: "local-db2"`) and appends every art and overlay
+   tile FDID to `extract-list.txt`.
+
+**(b) Art (scripted).**
+
+1. Run TACTTool again on the list: `blp/<fdid>.blp`.
+2. `convert.ts` performs these steps and writes only under `local-maps/art/`:
+   - Decode BLP2: palette (encoding 1), DXT1/3/5 (encoding 2) and BGRA (encoding 3). Port this from
+     wow.export's `casc/blp.js` and `3D/loaders/DXTDecoder.js` (both declare MIT), keeping their
+     headers and listing them in THIRD_PARTY_NOTICES under "Ported code" (ARCHITECTURE §16).
+   - Draw tiles at `(col·256, row·256)` on a `LayerWidth × LayerHeight` canvas (1002 × 668), so
+     edge tiles are cropped.
+   - Draw every overlay tile at `(OffsetX + col·256, OffsetY + row·256)` to get a fully explored
+     map.
+   - Encode WebP. Suggested dev-only encoders: `sharp` (declares Apache-2.0), or `pngjs`
+     (declares MIT) for PNG. Both must pass `licence-gate` before they are added.
+3. `pnpm tsx tools/maps/validate.ts --activate` runs the §5.5 local-set checks, hashes every set
+   file, and on a pass writes `local-maps/maps.manifest.json` (§5.3), which activates the set. It
+   takes the build from `geometry.local.json`, and product, method and tool versions from that
+   build's `source.json`.
+
+**(c) Manual fallback (wow.export GUI).**
+
+1. Start wow.export 0.2.19. **Choose "CDN" → Beta: World of Warcraft Classic 1.60.1.70009**, or
+   disable cache collection (§4.1) before selecting the local folder.
+2. Data tab: select the §1 tables → Export as CSV → copy to `csv/`.
+3. Zones tab (optional): export zone PNGs. They match the `convert.ts` output for zones, but
+   there are no continents and no sidecar.
+4. Textures tab: export the tile FDIDs as "BLP (Raw)" into `blp/`, then run `convert.ts` as in (b).
+5. Record "wow.export-gui" and the version in `source.json`. This path is less reproducible: its
+   DBDs are unpinned and it needs a GUI.
+
+**Recommendation.** For (a), use a developer-local DB2 extraction (TACTTool + DBC2CSV, or the
+wow.export Data tab), checked against the committed geometry by the frame hash (§5.6). wago.tools
+is a manual cross-check only (D-011). For (b), use TACTTool raw BLP by FDID plus our own
+`convert.ts`, so that zones, continents and Azeroth go through one code path. Use the wow.export
+Zones tab only as a visual reference.
+
+### 5.5 `validate.ts` checks
+
+**Placeholder checks** run in CI from Milestone 2. Any failure fails the build.
+
+| # | Check |
+|---|---|
+| P1 | Exactly 49 UiMaps have `source: "questiedb-conversion"` rows. They are the `ui_map_id`s of `conversion.json` `geometry.transforms`, and each row equals its `target_bounds`, `target_assignment_id`, `map_id` and `area_id` at the pinned commit. The input hash is the LF git blob (`f4477d6c…`, ARCHITECTURE §5.1). |
+| P2 | Exactly the 12 `db2-csv` rows of §8.3 exist, 12 rows for 11 UiMaps because Azeroth 947 has two (assignment IDs 46724, 46725, 46774, 46775, 46784, 46785, 69032, 69208, 69219, 69323, 69778, 69852). Each row, and each of the 11 UiMaps' name, type and parent, equals its entry in `tools/maps/inputs/db2-rows-1.60.1.70009.json`, and that file's SHA-256 (LF bytes) equals `inputs.db2-csv.sha256`. CI needs no CSV and no network request. |
+| P3 | Every row has `source` and `build`, and no other UiMap or row is present (60 UiMaps, 61 rows). |
+| P4 | `frameHash` equals the value recomputed from the 49 rows (§5.6). |
+| P5 | `eraToForever` has exactly 1412, 1423, 1433 and 1453, each equal to `conversion.json` `coefficients`, and the other 45 `conversion.json` coefficients are identity. |
+| P6 | `git ls-files --error-unmatch public/maps/placeholder/geometry.placeholder.json public/maps/placeholder/NOTICE.md` succeeds (F05). `audit-dist` requires both files in `dist/maps/placeholder/`, byte-equal to the tracked files (PERF-12). |
+
+**Local-set checks** run on the developer's machine, in `validate.ts --activate`. Any failure
+leaves the set inactive.
+
+| # | Check |
+|---|---|
+| L1 | Every Type 3/6 UiMap with art has exactly one `OrderIndex 0` assignment with `UiMin (0,0)`, `UiMax (1,1)`, WMO 0 and Z `±1e6`. Anything else is reported. |
+| L2 | Isotropy: `(Ymax−Ymin)/(Xmax−Xmin)` equals `LayerWidth/LayerHeight` to within 0.2%. |
+| L3 | Image dimensions equal `LayerWidth × LayerHeight`, and every tile listed in `extract-list.txt` decoded. (`validate.ts` then hashes the set files into the manifest; `infra/maps` checks those hashes at runtime, §5.6.) |
+| L4 | **Frame compatibility** (§5.6). The frame hash of the set's rows for the 49 shared UiMaps equals the committed `frameHash`, and every row for a UiMap the placeholder already has is identical to the committed row (§5.6 step 4). On a hash mismatch the build's geometry has changed, so QuestieDB percentages would be read in the wrong frame. On a shared-row mismatch, resolution would differ between machines. Either way the set is not activated. *Superseded by D-018:* revision 1 compared DB2 bounds with `target_bounds` directly; the hash is the same test in a form `infra/maps` can also run. |
+| L5 | Every `TaxiNodes` position on MapID *m* falls inside 0..100 of at least one zone on *m*. |
+| L6 | Landmarks: each QuestieDB flight master is within 30 yd of a TaxiNode on the same MapID. The measured values are 2.6, 3.6 and 11.9 yd; reading in the Era frame gives 108.9 yd ([coordinates §9](research/coordinates.md#9-independent-cross-check-flight-masters-vs-taxinodes)). The TaxiNodes inputs are local. The three landmark rows are cited client values that `src/geo` tests pin (D-022, ARCHITECTURE §6). |
+| L7 | World ↔ percent round-trip error is below 1e-9 for all spawn points. |
+
+### 5.6 Frame compatibility (D-018, F09)
+
+**Frame set F.** F is the 49 UiMaps in `conversion.json` `geometry.transforms` at the pinned
+QuestieDB commit: 1411-1413 and 1416-1461. The dataset's spawn percentages are in these frames
+(data frame 1.60.1.69893).
+
+**Canonical form** (ratified by ARCHITECTURE §6; Milestone 2 pins it in `src/geo` tests):
+
+- Build one tuple per UiMap in F, sorted ascending by UiMapID:
+  `[uiMapId, mapId, xMin, xMax, yMin, yMax, uiMin_u, uiMin_v, uiMax_u, uiMax_v]`. Assignment IDs
+  are excluded, because they are provenance, not frame.
+- Pass every coordinate through `Math.fround`. DB2 stores float32, so exporters that print
+  different decimal strings for the same float (wago CSV, DBC2CSV, wow.export) agree. The largest
+  gap between a Milestone 0 CSV value and its float32 is 5e-10.
+- Serialise the array with `JSON.stringify` (ECMAScript number formatting, no whitespace). The
+  hash is the lowercase hex SHA-256 of its UTF-8 bytes.
+- A UiMap in F without exactly one `OrderIndex 0` row makes the geometry incompatible.
+- `src/geo` builds the canonical string (pure); `infra/maps` hashes it with WebCrypto;
+  `tools/maps` hashes it with `node:crypto`.
+
+**Reference values** at the Milestone 0 inputs:
+
+| Input | Frame hash (SHA-256) |
+|---|---|
+| `conversion.json` `target_bounds` at `b6f5b07` (4,030 bytes of JSON) | `2cb10551b1502b652e4d54922e8b3a1ecb48057fbfb7cf9c77863edd7efea78f` |
+| `UiMapAssignment` CSV at 1.60.1.69893, and the one at 1.60.1.70009 | same value (all three agree) |
+| `UiMapAssignment` CSV at Era 1.15.9.69722, same 49 UiMaps (negative vector) | `b94bf685200c28a7edc2720d995082ea32bbdcc5398ecc3c08dc33436a852cfb`, differing exactly at 1412, 1423, 1433, 1453 |
+
+**Runtime behaviour** (`infra/maps`, ARCHITECTURE §7.3):
+
+1. Load `maps/placeholder/geometry.placeholder.json`. It is always required.
+2. Fetch `local-maps/maps.manifest.json`. A 404 (every deployed site), a non-JSON body (for
+   example an SPA fallback page served with status 200) or a schema failure means "no local set";
+   this is not an error.
+3. Fetch `local-maps/geometry.local.json`, verify its SHA-256 against the manifest, and recompute
+   the frame hash. Do not trust the manifest's `frameHash`.
+4. If the hash equals the committed one, check the rows for UiMaps outside F (ARCHITECTURE §6):
+   - a UiMap the committed file lacks is **added**;
+   - a UiMap the committed file already has (one of the 11 `db2-csv` UiMaps) must have
+     **identical** rows: the sorted lists of canonical tuples (one tuple per row, as above) are
+     equal after `Math.fround`. Assignment IDs, `source` and `build` are provenance and are not
+     compared;
+   - if any such row differs, the whole local set is rejected as a frame mismatch (step 5).
+
+   Resolution therefore never differs between machines for a UiMap both know.
+   *Superseded by ARCHITECTURE §6:* this step first proposed that local rows could replace the
+   committed `db2-csv` rows for the same UiMap on that machine, with each replaced UiMap listed
+   in the layer panel.
+5. If the hash differs, or a shared row differs, keep the placeholder and show a banner naming
+   the local build and the UiMaps whose frames differ.
+6. The layer panel always shows both builds: the data frame and placeholder rows ("data frame
+   1.60.1.69893; placeholder: 49 frames @ 69893, 12 rows @ 70009") and the local set ("local set
+   1.60.1.70009: compatible, N UiMaps added", "…: incompatible, using placeholder", or "none").
+
+### 5.7 Serving local maps; keeping them out of `dist/` (D-018, D-025; F03/LIC-01)
+
+`tools/maps/vite-local-maps.ts` is a Vite plugin that:
+
+- registers middleware only through `configureServer` (dev) and `configurePreviewServer`
+  (preview), serving `GET <base>local-maps/*` from `<repo>/local-maps/`;
+- has no build hooks (no `generateBundle`, `writeBundle` or copy step), so `vite build` never
+  emits the folder. `publicDir` stays `public/`, and `local-maps/` is never inside it;
+- resolves each request inside `local-maps/` and refuses path traversal. It returns 404 for
+  missing files, sets `Cache-Control: no-store`, and sends WebP/JSON content types.
+
+`vite preview` therefore shows local maps on the developer's machine, while the built `dist/` it
+serves contains none.
+
+`tools/build/audit-dist.ts` fails the build if `dist/`:
+
+- contains `local-maps/`;
+- contains any `maps.manifest.json` or JSON file with `"redistribution": "local-only"` (which
+  also catches a copied `geometry.local.json` or `taxi.local.json`);
+- contains images outside an allowlist of app assets (so no map WebP or PNG);
+- contains local paths, `.cache` references, `.lua`, `.blp` or source maps;
+- contains files over budget;
+- lacks a required notice file;
+- lacks `maps/placeholder/geometry.placeholder.json` or `maps/placeholder/NOTICE.md` (P6).
+
+Deployable builds come only from CI on a clean checkout, and release builds refuse a dirty tree
+(D-025, ARCHITECTURE §16).
+
+## 6. Coordinate transforms (summary)
+
+Full derivations and numeric examples: [research/coordinates.md](research/coordinates.md).
+
+- **Storage (D-017).** Dataset spawns ship exactly as QuestieDB publishes them: 0-100 zone
+  percent, 2 dp, keyed by AreaTable ID, in the Forever frame. `infra/data` converts them once at
+  load through `src/geo` and the committed geometry, so runtime domain types see `WorldPoint`s. A
+  route `Location` stores the authored `SourcedPoint` (world with an optional `uiMapId` hint, or
+  zone percent with its frame; both with optional lexemes), a label and an optional arrival
+  `radius` in yards (`src/domain/points.ts`). `resolve(location, geometry)` derives the world
+  point at runtime; a `null` result means unknown travel plus an info issue, never zero distance
+  (ARCHITECTURE §6).
+  *Superseded by D-017:* D-004's "store everything as `WorldPoint`" and revision 1's build-time
+  conversion.
+- **World** (per `Map.ID`, yards): `+X` north, `+Y` west. On every map, right is east
+  (decreasing Y) and down is south (decreasing X).
+- **`UiMapAssignment.Region`**: `Region_0/1/2` are min X/Y/Z, and `Region_3/4/5` max X/Y/Z.
+  QuestieDB's `left = Region_4`, `right = Region_1`, `top = Region_3`, `bottom = Region_0`.
+- **Zone percent ⇄ world** (zone rows have `UiMin 0,0` and `UiMax 1,1`):
+
+  ```
+  x% = 100·(Ymax − Y)/(Ymax − Ymin)        Y = Ymax − x%/100·(Ymax − Ymin)
+  y% = 100·(Xmax − X)/(Xmax − Xmin)        X = Xmax − y%/100·(Xmax − Xmin)
+  ```
+
+- **General form** (Azeroth 947 sub-rectangles):
+  `u = UiMin_0 + (Ymax − Y)/(Ymax − Ymin)·(UiMax_0 − UiMin_0)` and
+  `v = UiMin_1 + (Xmax − X)/(Xmax − Xmin)·(UiMax_1 − UiMin_1)`, using the row whose MapID
+  matches.
+- **Zone → continent**: go through world, or use the per-axis affine
+  `cx% = (Wz/Wc)·x% + 100·(C.Ymax − Z.Ymax)/Wc` and `cy% = (Hz/Hc)·y% + 100·(C.Xmax − Z.Xmax)/Hc`.
+- **Continent UiMaps** (`UiMap`/`UiMapAssignment` at 1.60.1.70009, unchanged from Era
+  1.15.9.69722; committed as `db2-csv` rows, D-018): Azeroth **947** (MapID 1 in
+  `(0.0399,0.0855)-(0.4083,0.9234)`, MapID 0 in `(0.5505,0.0994)-(0.8966,0.8691)`), Kalimdor
+  **1414** (MapID 1, X −11733.30…12799.90, Y −19733.21…17066.60), Eastern Kingdoms **1415**
+  (MapID 0, X −16000…7466.60, Y −19199.90…16000).
+- **Worked example** (Gornek, Durotar `42.06, 68.33`): world `(X, Y) = (−600.30, −4186.42)` on
+  MapID 1, Kalimdor `57.7531, 54.6207`, Azeroth `28.7673, 51.5603`.
+- **Era → Forever** applies only to `frame: 'era'` points on Mulgore 1412, Eastern Plaguelands
+  1423, Redridge 1433 and Stormwind City 1453, at resolve time:
+  `x' = scale_x·x + offset_x`, `y' = scale_y·y + offset_y` (the `conversion.json` coefficients,
+  carried in the placeholder's `eraToForever`). For example, Chief Hawkwind at Era `44.18, 76.06`
+  becomes `43.888926, 76.659548`. QuestieDB Forever data is **already** converted and is never
+  converted again. Era-frame points enter only through an explicit import option, for example
+  RXP percent gotos on those four maps (`RXP030-frame-ambiguous`, ARCHITECTURE §10).
+- **HBD and RXP world form**: HereBeDragons and RXP `.goto <UiMap>/<MapID>,a,b` use
+  `(a, b) = (Y, X)`. Lowering swaps them into the world `SourcedPoint`, keeps `lexemes` in the
+  order written, and keeps the `<UiMap>` prefix as the point's `uiMapId` hint (ARCHITECTURE §6).
+  An edited group's canonical re-emission therefore reproduces the prefix as well. The hint is
+  not used for resolution.
+- **Pitfalls**: AreaID, UiMapID and MapID are separate namespaces that collide (AreaID 2521 ≠
+  UiMapID 2521). `{-1,-1}` means instance presence (`InstancePresence`), resolved to a dungeon
+  entrance when `zones.json` has one. A published point whose AreaID has no UiMap (suppressed
+  areas, legacy dungeon pairs, instance areas) becomes an `UnmappedAreaPoint` with a reason and
+  is not placed (ARCHITECTURE §5.2). Percent is not a distance: 1% is 52.9 yd on Durotar and
+  17.4 yd on Stormwind.
+
+## 7. Rendering plan (Leaflet behind `MapAdapter`)
+
+This follows ARCHITECTURE §7. The React integration is a thin wrapper of our own around `L.map`
+(a ref plus effects). `map/leaflet` is the only Leaflet importer. **react-leaflet is not used:**
+versions 3.x-5.x declare `Hippocratic-2.1` (npm registry; 2.8.0 declared MIT). The owner's
+posture is not to use it in this GPL-3.0-or-later repository (D-005). This is not a legal
+conclusion.
+
+### 7.1 Surfaces
+
+| Surface | Status | CRS mapping | Art overlay (local sets only) |
+|---|---|---|---|
+| `world:<mapId>` (MapIDs 0, 1, 2991, 2997, …) | **MVP.** One surface per world map, chosen with the surface switcher | `L.CRS.Simple`, `latLng = (X, −Y)` in yards (north up, east right) | `L.imageOverlay(url, [[Xmin, −Ymax], [Xmax, −Ymin]])` |
+| Overview (both continents on one canvas, Azeroth 947 layout; revision 1's `UiSurface`) | **Deferred until after the MVP** (F23, ARCHITECTURE §7.2). The surface abstraction keeps it possible; the maths is in [coordinates §14.1](research/coordinates.md#141-surfaces). | `latLng = (−v·668, u·1002)` | `L.imageOverlay(url, [[−668, 0], [0, 1002]])` |
+
+- Surface extent: the committed continent frame (1414 for MapID 1, 1415 for MapID 0). For
+  Zephras Isle (2991) and Darkspear Islands (2997), the union of their zone frames plus a margin.
+  Where those two islands sit on the world map is unknown (§10 M3); per-world surfaces do not
+  need to know.
+- Zoom: an art image's native zoom is `log2(1002 / (Ymax − Ymin))`: −5.2 for continents, −2.4
+  for Durotar and −0.8 for Stormwind. Use `minZoom −6`, `maxZoom 1` and `zoomSnap 0.25`.
+- All zones of a continent share one world frame, so lines crossing zone borders need no special
+  handling. Zone rectangles overlap and cities sit inside zones: use them for placeholders,
+  hit-testing and "zoom to zone", and use real continent art when a local set has it.
+
+### 7.2 Level of detail (PERF-7)
+
+Scale: the Milestone 0 critique counted 72,734 drawable referenced spawn points at `b6f5b07`:
+39,585 on MapID 0, 31,961 on MapID 1 and 4,369 in The Barrens alone. This was a scratch count,
+indicative only. Leaflet's canvas renderer moves the canvas with CSS during pan and zoom
+animation. At `moveend`/`zoomend` it redraws every path, and each hit test walks the whole path
+list. Cost therefore shows up as long frames at `moveend` and on layer changes, not as a lower
+pan frame rate.
+
+- Canvas renderer (`L.canvas`), one per surface.
+- **Raw points** (spawns, objectives, givers) are drawn only at zone zoom, or at any zoom for the
+  selected or hovered quest. Proposed threshold: zoom ≥ −3.5, between continent (−5.2) and zone
+  (about −2.4) native zooms. Milestone 3 tunes it.
+- **At continent zoom**, per-zone aggregate glyphs replace raw points: one glyph per (layer, zone
+  frame) at the centroid of that zone's points, showing a count. A hex-bin density view (revision
+  1's placeholder "terrain hint") is an optional later layer and counts toward the cap.
+- **Hard cap on drawn paths per surface.** Proposed starting value: 5,000, revision 1's marker
+  budget. Milestone 3 sets it from the `moveend` measurement. Above the cap, the paths nearest
+  the viewport centre are drawn, and the layer shows "N more hidden, zoom in".
+- Labels on hover only.
+- Budgets (ARCHITECTURE §14): `moveend` redraw ≤ 16 ms at the cap; applying one route edit
+  ≤ 8 ms. Both are measured with `performance.measure` marks in `LeafletMapAdapter` and driven by
+  Playwright.
+
+### 7.3 Layer updates
+
+- Layers: available quests, route line, step markers, objectives, turn-ins, flight masters, zone
+  frames, map art, proposal overlay.
+- Descriptors are plain data with stable ids, for example `step:<stepId>`,
+  `spawn:<npc|object>:<id>:<i>`, `run:<mapId>:<style>:<firstStepId>`, `agg:<layer>:<uiMapId>`.
+- `map/layers.ts` memoises each layer on its own inputs. Spawn layers do not depend on the route,
+  and unchanged descriptors keep their object identity.
+- The adapter skips a layer whose content array is unchanged by reference. Otherwise it diffs by
+  id: it creates new ids, removes missing ones, and updates in place (`setLatLngs`, `setStyle`)
+  descriptors whose object changed. A route edit never re-creates thousands of paths.
+
+### 7.4 Route lines
+
+- One polyline per (world map, style) run of consecutive steps, plus a small highlight polyline
+  for the selected leg. Transport, flight and hearth legs are styled distinctly.
+- A MapID change (boat, zeppelin, portal, instance, hearth) ends the run and gets transition
+  glyphs at both ends. The switcher then moves between surfaces. Revision 1's dashed 947
+  connector belongs to the deferred overview.
+- Instance steps are drawn at their dungeon entrance (`zones.json`, from QuestieDB
+  `support/Forever/Zones/dungeons.lua`) with an instance badge.
+- A step whose `Location` resolves to `null` is not drawn. Its leg is marked unknown, matching the
+  simulation (ARCHITECTURE §6). Unmapped spawn points, and instance presence without a known
+  entrance, are not drawn either.
+- Points outside a zone frame (percent outside 0..100) are valid. In a zone view, draw them with an
+  off-frame indicator.
+
+## 8. Placeholder map and committed geometry
+
+**Goal.** A clean checkout builds and deploys a usable map from committed files only. It
+contains no Blizzard art.
+
+### 8.1 What is drawn
+
+| Layer | Drawn from | Committed? |
+|---|---|---|
+| Zone frames (outlines, labels) for 49 zones | `geometry.placeholder.json` rows with `source: "questiedb-conversion"` (QuestieDB `data/Forever/conversion.json` `geometry.transforms[].target_bounds`) | **Yes** (D-018) |
+| Continent frames 1414/1415, the Azeroth 947 rows, alternative continents 1463/1464, the six new maps | The same file, rows with `source: "db2-csv"` | **Yes**, by owner approval (D-018). *Superseded by D-018:* revision 1's default "not committed; new zones show only with a local set". |
+| Surface extent | Continent frame for MapIDs 0 and 1; union of zone frames plus a margin for 2991 and 2997 | Computed at runtime. *Superseded by D-018:* revision 1 used the union of zone frames everywhere, to avoid the then-uncommitted continent frames. |
+| Grid, ticks, compass, scale bar in yards | Procedural | Code only |
+| Points of interest: quest givers, flight masters, innkeepers, trainers, objects | `public/data/` (`entities.json` includes every flight master, innkeeper and trainer by `npcFlags`, ARCHITECTURE §5.2), drawn with level of detail (§7.2) | Committed data |
+| Per-zone aggregates | Runtime, from the loaded spawns | Computed |
+| Zone labels | The geometry's `name`: `conversion.json` `target_name` for the 49, `UiMap.Name_lang` at 1.60.1.70009 (from the committed rows file, §8.3) for the other 11 UiMaps. `zones.json` names are specified in DATA_PROVENANCE. | Committed. *Corrected (LIC-13):* revision 1 said names came from "QuestieDB zone and l10n tables"; QuestieDB's Forever l10n has no zone-name tables (RXP.md §10.3). |
+
+A `PlaceholderLayer` draws in the same `world:<mapId>` coordinates as real art, so routes,
+markers and hit-testing are identical; a local set changes only the base layer. The placeholder
+uses an original visual style, not a Blizzard-style parchment look or game icons. It says
+"schematic map: zone frames, not terrain" in the UI.
+
+### 8.2 `geometry.placeholder.json` and `NOTICE.md`
+
+- **Producer:** `tools/maps/import.ts --placeholder` (Milestone 2) is the only producer. The
+  files are never edited by hand. It reads:
+  - QuestieDB `data/Forever/conversion.json` as the **LF git blob** at the pinned commit, from
+    the checkout that `tools/questiedb/fetch.ts` provides. Blob SHA-256:
+    `f4477d6c575575152225f2a9d40858029bf9d2d5fdf6b083c06557fce8b5984b`. A Windows worktree copy
+    with `core.autocrlf=true` hashes differently (`6613032214aa517b…` was observed), which is why
+    ARCHITECTURE §5.1 hashes LF blobs.
+  - The committed `tools/maps/inputs/db2-rows-1.60.1.70009.json`, which holds the 12 cited rows
+    and the 11 UiMaps' names, types and parents (§8.3).
+
+  Both inputs are pinned or committed, so any machine, CI included, reproduces the two files
+  byte for byte with no network request (ARCHITECTURE §6).
+- **Content:** 60 UiMaps, 61 assignment rows:
+  - 49 UiMaps with one `questiedb-conversion` row each (build 1.60.1.69893, `conversion.json`
+    `geometry.target_build`);
+  - 11 UiMaps with the 12 `db2-csv` rows (build 1.60.1.70009). Their `name`, `type` and `parent`
+    come from `UiMap` at 70009; 2524 is recorded as Type 6, parent 1414, its 70009 values (at
+    69893 it was Type 3, parent 947).
+
+  Together the 61 rows equal the full `UiMapAssignment` table at 1.60.1.70009. Also included:
+  `eraToForever` for the four changed maps, the input identities, and `frameHash`. The file is
+  small (tens of KB).
+- **`NOTICE.md`** states:
+  - What the files are: zone frames and map metadata for the procedural placeholder, no art.
+  - Origin 1: the 49 frames and the four coefficient sets, copied from `conversion.json` at the
+    pinned commit (with its blob SHA-256).
+  - Origin 2: the 12 rows (and the 11 UiMaps' names, types and parents), Blizzard client values
+    from `UiMapAssignment` and `UiMap` at 1.60.1.70009. The CSVs were fetched on 2026-09-25 as
+    individual requests during research (not scripted crawling). The rows are committed with
+    citations in `tools/maps/inputs/db2-rows-1.60.1.70009.json`, with both CSV hashes, by owner
+    decision (D-018, D-022, D-026).
+  - The D-016 finding: Questie/QuestieDB publish no licence file; the draft on Questie's
+    `license` branch says to consider Questie "all rights reserved".
+  - The owner's posture (publish with notices, accepting the risk).
+  - The carve-out, verbatim from [DATA_PROVENANCE.md](DATA_PROVENANCE.md) §3.2, as in
+    `public/data/NOTICE.md`:
+
+    > GPL-3.0-or-later applies to this project's contributions and, as a posture, to
+    > Questie-derived data; it grants no rights over Blizzard content (names, text, client-derived
+    > values) or other third-party material embedded in that data.
+
+  - Non-affiliation with Blizzard Entertainment and the Questie project.
+  - "This is not a legal conclusion."
+  - The regeneration command, `pnpm tsx tools/maps/import.ts --placeholder`.
+
+  *Superseded by DATA_PROVENANCE §3.2 (LIC-10):* the first revision-2 text of this list said the
+  licence "covers this project's contributions (the format and the generator)" and left out the
+  posture clause for Questie-derived data. The NOTICE now uses the carve-out verbatim.
+
+  THIRD_PARTY_NOTICES lists `public/maps/placeholder/**` among the Questie-derived and
+  client-derived files (LIC-11).
+
+### 8.3 Placeholder inputs and reproduction
+
+**Committed rows file** (`tools/maps/inputs/db2-rows-1.60.1.70009.json`; ARCHITECTURE §6,
+D-018). It is the placeholder's only input besides the pinned `conversion.json`, and is written
+once in Milestone 2 from the two research CSVs below. It holds:
+
+- the 12 `UiMapAssignment` rows for 11 UiMaps (Azeroth 947 has two), each with table, build and
+  row ID and every column value as the CSV's decimal string;
+- the `UiMap` `Name_lang`, `Type` and `ParentUiMapID` of the 11 UiMaps, cited the same way;
+- per table, the full CSV's SHA-256, the request URL, the fetch date, and how it was obtained:
+  fetched as an individual request during research, not by scripted crawling (D-011).
+
+Proposed shape (one row shown):
+
+```jsonc
+{ "schema": 1, "product": "wow_classic_beta", "build": "1.60.1.70009",
+  "sources": {
+    "UiMapAssignment": { "url": "https://wago.tools/db2/UiMapAssignment/csv?build=1.60.1.70009",
+        "fetched": "2026-09-25", "obtained": "individual research request, not scripted (D-011)",
+        "rows": 61, "sha256": "79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a" },
+    "UiMap": { "url": "https://wago.tools/db2/UiMap/csv?build=1.60.1.70009",
+        "fetched": "2026-09-25", "obtained": "individual research request, not scripted (D-011)",
+        "rows": 60, "sha256": "1f4aac70eaac015b1d2d0ea0faf6e3d7fb2cf7afdf45e5bb6772d9b80a72346b" } },
+  "assignments": [
+    { "table": "UiMapAssignment", "id": 46724, "columns": { "UiMapID": "1414", "OrderIndex": "0",
+        "MapID": "1", "AreaID": "0", "Region_0": "-11733.299804688", "…": "…" } } ],
+  "uiMaps": [ { "table": "UiMap", "id": 1414, "Name_lang": "Kalimdor", "Type": 2, "ParentUiMapID": 947 } ] }
+```
+
+The file is hashed as LF bytes, the way ARCHITECTURE §5.1 hashes upstream inputs
+(`.gitattributes` already sets `* text=auto eol=lf`). Only the importer and P2 read it.
+
+**Milestone 0 CSVs.** They still exist on the research machine (checked 2026-09-25) under
+`<repo>/.cache/experiments/maps/`, which is gitignored and local. They were fetched on
+2026-09-25 as individual requests during research (not scripted crawling), about 18 in total,
+from wago.tools (`https://wago.tools/db2/<Table>/csv?build=<build>`). No script or CI job made
+them.
+
+All files are UTF-8 text with LF line endings, a trailing newline and a header row. Row counts
+exclude the header and come from a quote-aware parser (`Map` has multi-line fields).
+
+| File (in `.cache/experiments/maps/`) | Build | Bytes | Rows | SHA-256 | Used for |
+|---|---|---:|---:|---|---|
+| `UiMapAssignment_1.60.1.70009.csv` | 1.60.1.70009 | 6,778 | 61 | `79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a` | **Source of the committed rows file**: the 12 `db2-csv` rows; frame-hash check |
+| `UiMap_1.60.1.70009.csv` | 1.60.1.70009 | 3,097 | 60 | `1f4aac70eaac015b1d2d0ea0faf6e3d7fb2cf7afdf45e5bb6772d9b80a72346b` | **Source of the committed rows file**: names, types, parents of the 11 DB2-only UiMaps |
+| `UiMapAssignment_1.60.1.69893.csv` | 1.60.1.69893 | 6,778 | 61 | `79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a` | Byte identity with 70009 |
+| `UiMap_1.60.1.69893.csv` | 1.60.1.69893 | 3,093 | 60 | `4c5ede52826ef48808aa7c0cd9d63fb3d028df88de1b2041148b164bb42328b2` | Parent/type changes ([coordinates §11.3](research/coordinates.md#113-changes-between-forever-beta-builds)) |
+| `UiMapAssignment_1.15.9.69722.csv` | 1.15.9.69722 (Era) | 6,086 | 55 | `da74d3984c2625b4ec3a13d2a7cd93ed8c318dda4ab35ed82f69824a1e273fa1` | `source_bounds` check; negative frame-hash vector |
+| `UiMapArt_1.60.1.70009.csv` | 1.60.1.70009 | 2,103 | 144 | `1e2635e147661b322fc2c63be7711230f9525fb88b1dfd7dcf07b4eaa118e968` | §3 art facts |
+| `UiMapArtTile_1.60.1.70009.csv` | 1.60.1.70009 | 41,520 | 1,672 | `5e72ffb01f2a54e44d80c40c5cb7ef6724e7c5d0e4cadc84a341227f4e683c74` | §3 tile facts |
+| `UiMapArtStyleLayer_1.60.1.70009.csv` | 1.60.1.70009 | 348 | 6 | `a8322f8c5c119f6c018ba47f750b42a8ad7f00f0881f4cec8ad36a35285af499` | §3 styles |
+| `UiMapXMapArt_1.60.1.70009.csv` | 1.60.1.70009 | 1,049 | 60 | `81092d619701f0b31a3537129ec5667b38630b5291e211034971a1dde05678dc` | §3 art links |
+| `WorldMapOverlay_1.60.1.70009.csv` | 1.60.1.70009 | 60,058 | 1,081 | `1c1df50805e6c65b9c840166542a6752c5ebad3fd8b2ca3715842f4ab5483108` | §3 overlays |
+| `WorldMapOverlayTile_1.60.1.70009.csv` | 1.60.1.70009 | 42,204 | 1,739 | `31d8b8c4cae7a1afd312f13a74ba75a461042e00b6e69e2b63809ce9809df02f` | §3 overlays |
+| `AreaTable_1.60.1.70009.csv` | 1.60.1.70009 | 148,651 | 1,371 | `33f9e012652d3648757c63081c8d7df2586813fe63aebbf6ad2bd71406d45fec` | New-map AreaIDs ([coordinates §12](research/coordinates.md#12-new-forever-maps-160170009)) |
+| `Map_1.60.1.70009.csv` | 1.60.1.70009 | 11,640 | 72 | `97f83110f7f040868bc804aa1dce14a4691d3b8007abd11f4b4f7746009b6e89` | MapIDs 2991/2997, InstanceType |
+| `TaxiNodes_1.60.1.70009.csv` | 1.60.1.70009 | 12,384 | 100 | `e3d4833dcb395214c0366d241fdaa4b7d7e2330133bb6db03ed5bfd01f974bea` | Landmark cross-check ([coordinates §9](research/coordinates.md#9-independent-cross-check-flight-masters-vs-taxinodes)) |
+| `TaxiPath_1.60.1.70009.csv` | 1.60.1.70009 | 4,578 | 328 | `07222b184a692c0b275ad713bbb30e1a88e8da14e3f2e26d9afb6d6b59e41404` | Research only (taxi timings stay local, D-022) |
+| `UiMapLink_1.60.1.70009.csv` | 1.60.1.70009 | 29 | — | `721db986bbf76b8cdc085d504fb9cc5dad36d02deade0e7f14eb765b5bcb58d8` | **Not a CSV**: the body is the JSON error `{"errors":"Table not found."}` |
+
+The same folder also holds WoWDBDefs `.dbd` files, `dbd-manifest.json`, `builds.json` (the
+wago.tools build list) and the scratch scripts `csv.js`, `worked.js`, `steps.js` and
+`tablecheck.js`. None of them is a placeholder input.
+
+Caveat: wago.tools does not echo the served build inside the CSV. The two `UiMap` files differ
+between 69893 and 70009, which shows those two requests were served from different builds. That
+a 70009 request was served from exactly 70009 is not independently verified.
+
+**Reference rows: the 12 `db2-csv` rows.** From `UiMapAssignment` at 1.60.1.70009, with
+`Name_lang`, `Type` and `ParentUiMapID` from `UiMap` at 1.60.1.70009. On every row, `Region_2` =
+−1,000,000, `Region_5` = +1,000,000, and `WMODoodadPlacementID` = `WMOGroupID` = 0. These are
+individual cited client values (D-022), committed by D-018 in the rows file above. With the 49
+QuestieDB frames they make up the whole `UiMapAssignment` table at 1.60.1.70009, the exception
+D-026 records.
+
+| UiMap | Name | Type | Parent | ID | Order | MapID | AreaID | UiMin (u, v) | UiMax (u, v) | Region_0 (Xmin) | Region_3 (Xmax) | Region_1 (Ymin) | Region_4 (Ymax) |
+|---:|---|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|
+| 947 | Azeroth | 1 | 0 | 46785 | 0 | 1 | 0 | 0.03990000114, 0.08550000191 | 0.40830001235, 0.92339998484 | −12800 | 12266.700195312 | −9600 | 6933.2998046875 |
+| 947 | Azeroth | 1 | 0 | 46784 | 1 | 0 | 0 | 0.55049997568, 0.09939999878 | 0.89660000801, 0.86909997463 | −16000 | 6933.2998046875 | −7466.7001953125 | 8000 |
+| 1414 | Kalimdor | 2 | 947 | 46724 | 0 | 1 | 0 | 0, 0 | 1, 1 | −11733.299804688 | 12799.900390625 | −19733.2109375 | 17066.599609375 |
+| 1415 | Eastern Kingdoms | 2 | 947 | 46725 | 0 | 0 | 0 | 0, 0 | 1, 1 | −16000 | 7466.6000976562 | −19199.900390625 | 16000 |
+| 1463 | Eastern Kingdoms | 2 | 0 | 46774 | 0 | 0 | 0 | 0, 0 | 1, 1 | −15980 | 5817 | −11880 | 9917 |
+| 1464 | Kalimdor | 2 | 0 | 46775 | 0 | 1 | 0 | 0, 0 | 1, 1 | −11870 | 12470 | −13370 | 10970 |
+| 2482 | Mount Hyjal | 3 | 1414 | 69032 | 0 | 1 | 616 | 0, 0 | 1, 1 | 3989.5830078125 | 6304.166015625 | −4395.833984375 | −922.916015625 |
+| 2521 | Zephras Isle | 3 | 947 | 69208 | 0 | 2991 | 16593 | 0, 0 | 1, 1 | 1247.9169921875 | 4956.25 | −1331.25 | 4231.25 |
+| 2524 | Darkspear Islands | 6 | 1414 | 69219 | 0 | 2997 | 16606 | 0, 0 | 1, 1 | −835.416015625 | 447.916015625 | 993.75 | 2918.75 |
+| 2548 | Riverglades | 3 | 1415 | 69323 | 0 | 0 | 16591 | 0, 0 | 1, 1 | −9700 | −6466.666015625 | −6741.666015625 | −1891.666015625 |
+| 2652 | Shen'dralas | 3 | 1414 | 69778 | 0 | 1 | 16651 | 0, 0 | 1, 1 | −3266.666015625 | −1900 | −25 | 2025 |
+| 2665 | Zephras Isle | 3 | 0 | 69852 | 0 | 2991 | 0 | 0, 0 | 1, 1 | 1247.9200439453 | 4956.25 | −1331.25 | 4231.25 |
+
+The 12 rows' CSV lines, LF-joined in file order with a trailing LF, hash to
+`0aff6391a197d4ff33a2f56bd3388ca72f305a5543fc646682580437646870bb`. This is a convenience check.
+The 49 remaining rows equal `conversion.json` `target_bounds` bit for bit (checked 2026-09-25).
+
+**Reproduction (Milestone 2 onward, any machine, CI included).**
+
+1. `pnpm tsx tools/maps/import.ts --placeholder` reads the pinned `conversion.json` LF blob (from
+   the `tools/questiedb/fetch.ts` checkout) and `tools/maps/inputs/db2-rows-1.60.1.70009.json`,
+   and writes both placeholder files. It reads no CSV and makes no request to wago.tools.
+2. `validate.ts` runs P1-P6.
+
+**Writing the rows file (once, Milestone 2).**
+
+1. Generate it from `UiMapAssignment_1.60.1.70009.csv` and `UiMap_1.60.1.70009.csv` in
+   `.cache/experiments/maps/`, parsing by column name, after checking both SHA-256 values
+   against the inventory table above.
+2. Check the 12 rows and 11 UiMaps against the reference table above, and the 12 raw CSV lines
+   against `0aff6391…`.
+3. If the research CSVs are missing (another machine, or a cleared `.cache/`), use a
+   developer-local extraction at 1.60.1.70009 (§5.4 a). Its bytes differ (column order, float
+   formatting), but its values must equal the reference table after `Math.fround`; record that
+   source in the file. Fetching the two tables again from wago.tools is allowed only as
+   individual requests, never by a script, loop or CI job: its `robots.txt` disallows crawling
+   (D-011).
+4. On a hash mismatch against the inventory (wago.tools may reformat or re-serve a table), do not
+   edit values. Compare the parsed rows with the reference table and the 49 frames with the
+   frame hash (§5.6):
+   - if all values are equal, record the new CSV hash in the rows file and in `NOTICE.md`, with a
+     note;
+   - if any value differs, stop: the build's geometry changed and needs owner review.
+
+*Superseded by ARCHITECTURE §6 and D-018:* the first revision-2 draft had `import.ts
+--placeholder` read the two CSVs from `assets-source/maps/placeholder-inputs/1.60.1.70009/`,
+re-downloaded when missing. That made the committed placeholder depend on local, uncommitted
+files; the committed rows file replaces it.
+
+The scratch scripts in `.cache/experiments/maps/` are CommonJS. Since the repository's
+`package.json` declares `"type": "module"`, running them in place fails with
+`require is not defined`. Run copies renamed to `.cjs` ([coordinates §16](research/coordinates.md#16-reproducing-these-numbers)).
+
+## 9. Redistribution record (no legal conclusions)
+
+This section records evidence and owner decisions. It is not legal advice, and it draws no legal
+conclusions.
+
+1. **Blizzard terms.** The Blizzard EULA (the fetched page states a last revision of 2024-03-21)
+   says Blizzard owns game content, data and code (§2.A). It restricts copying, reproduction and
+   derivative works except as permitted (§1.C.i). Map art, BLP tiles and DB2 tables are client
+   content. Its §1.C.vi addresses unauthorised software that reads or "mines" information stored
+   by the platform. Whether offline reading of local CASC files falls under it was not assessed.
+2. **Legal FAQ.** Blizzard's Legal FAQ describes a limited, revocable permission to use its images
+   on web pages for personal, non-commercial purposes, with notices and without alteration.
+   Whether stitched or composited map images would fit it was not assessed. The owner's posture
+   is that no map art is committed or deployed (D-018; STATUS OD-10, default "never").
+3. **Tool licences.** wow.export, TACTSharp, DBCD and CascLib declare MIT in their licence files.
+   The project does not treat any tool's licence as permission for the files the tool extracts.
+4. **Beta status.** The owner states that the Forever beta has no NDA and is public (D-022). On
+   that basis, individual client-derived values may appear in committed docs and tests when they
+   cite table, build and column. Bulk client tables and art stay local (the committed placeholder
+   is the one recorded exception, item 5), and taxi-derived leg timings are local-only by
+   default. The beta's terms themselves were not reviewed here.
+   *Superseded by D-022:* revision 1 recorded the beta terms as UNKNOWN and asked for a check
+   before publishing any beta-derived numbers.
+5. **Client values in the committed placeholder.** The 12 `db2-csv` rows are Blizzard client
+   values, committed by owner decision (D-018) with citations in
+   `tools/maps/inputs/db2-rows-1.60.1.70009.json`. With the 49 `conversion.json` rows, the
+   committed file holds every `UiMapAssignment` row of 1.60.1.70009; D-026 records this as an
+   explicit exception to D-022's "bulk tables stay local". That others (QuestieDB, wago.tools)
+   publish the same numbers is recorded as a fact, not as permission.
+   *Superseded by D-018:* revision 1 limited the placeholder to what the QuestieDB lineage
+   already contained.
+6. **Questie lineage.** The 49 frames and the Era→Forever coefficients come from QuestieDB
+   `conversion.json`. Neither `Questie/Questie` nor `Questie/QuestieDB` has ever had a licence
+   file on its default branch. Questie's unmerged `license` branch (commits `ce65498c`,
+   2023-02-13, to `842201bd`, 2024-05-06) drafts a `LICENSE.md`. The draft says that, when in
+   doubt, Questie should be considered "all rights reserved". It also drafts a CLA to relicense
+   contributions as MIT (CC0 where MIT does not apply). The owner's posture is to publish the
+   derived files with prominent notices and to accept the risk (D-016). This is not a legal
+   conclusion.
+7. **This repository's licence.** The repository's own code is GPL-3.0-or-later (D-001, D-016).
+   The owner's posture is stated in every notice, the placeholder `NOTICE.md` included (§8.2),
+   with the carve-out verbatim from DATA_PROVENANCE §3.2: "GPL-3.0-or-later applies to this
+   project's contributions and, as a posture, to Questie-derived data; it grants no rights over
+   Blizzard content (names, text, client-derived values) or other third-party material embedded
+   in that data." This is not a legal conclusion.
+   *Superseded by D-016 (LIC-10):* revision 1 said the GPL "covers this project's code and
+   Questie-derived data". *Superseded by DATA_PROVENANCE §3.2:* this item's first revision-2
+   wording paraphrased the carve-out and left out the posture clause.
+8. **react-leaflet.** react-leaflet 3.x-5.x declares `Hippocratic-2.1` (npm registry; 2.8.0
+   declared MIT). The owner's posture is not to use it and to use Leaflet (declares BSD-2-Clause)
+   directly (D-005). This is not a legal conclusion.
+9. **Other planners and map packs.** Never copied, whatever licence they declare.
+10. **Hosting.** Anything committed to the public repository, or present in `dist/`, is
+    published. Local map sets live outside `public/`, are served only by the dev/preview plugin,
+    and `audit-dist` fails on map-like output. Deployable builds come from CI on a clean checkout
+    (D-018, D-025). A developer's own `vite preview` shows local maps on that machine only.
+11. **wago.tools.** No terms page was found, and `robots.txt` has `Disallow: /`. The owner's
+    posture is manual use only (D-011). The placeholder's two source CSVs were fetched as
+    individual requests during research (not scripted crawling). Reproducing the placeholder
+    reads the committed rows file and makes no request (§8.3).
+12. **Privacy.** wow.export uploads `Cache/` files from local installs by default (§4.1). This
+    data-leak risk is separate from redistribution.
+
+## 10. Risks and open questions
+
+| # | Item | Owner / next step |
+|---|---|---|
+| M1 | The Forever beta changes `UiMapAssignment` for the 49 shared frames, putting QuestieDB data in a stale frame | Frame hash (§5.6): local sets fall back with a banner. A QuestieDB pin bump re-runs P1-P5 (D-013). |
+| M2 | TACTTool list syntax, encryption support and DBC2CSV definition flags are unverified | Try them in `.cache/experiments/` in Milestone 3 |
+| M3 | Where Zephras Isle (MapID 2991) and Darkspear Islands (2997, InstanceType 3) sit on the world map | Not needed with per-world surfaces. Needed only for the deferred overview. `UiMapLink` was unavailable. |
+| M4 | 98 RXP Forever percent-form `.goto` lines on the changed zones may be Era-framed | Import-time frame option and `RXP030-frame-ambiguous` (ARCHITECTURE §10); landmark review |
+| M5 | Commit the 12 DB2-only geometry rows? | **Decided: commit** (D-018, STATUS OD-5) |
+| M6 | May any real map art ever be deployed? | Default never (D-018, STATUS OD-10); a change needs a new decision |
+| M7 | wago.tools `robots.txt` disallows crawling, and some sibling tooling uses it | Manual only (D-011); never in CI. The 12 rows are committed with citations in `tools/maps/inputs/db2-rows-1.60.1.70009.json`, so reproducing the placeholder needs no request (§8.3). |
+| M8 | A frame-compatible local set has different rows for one of the 11 `db2-csv` UiMaps (a later build) | **Decided** (ARCHITECTURE §6): local geometry may only add UiMaps. A differing row for a UiMap the committed file has rejects the whole local set as a frame mismatch (§5.6 step 4). *Superseded:* the proposal that local rows win on that machine. A later build that really changes these rows needs a new committed rows file and owner review. |
+| M9 | wago.tools may not serve exactly the requested build | Not verified (§8.3 caveat). Mitigated by row-level comparison and the frame hash. |
+| M10 | The path cap and the zone-zoom threshold are unmeasured | Milestone 3 measurement against the ARCHITECTURE §14 map budgets |
+| M11 | RXP world-form gotos carry a UiMapID (`<UiMap>/<MapID>`) that the world `SourcedPoint` could not hold | **Decided** (ARCHITECTURE §6, `src/domain/points.ts`): the world variant has a `uiMapId: UiMapId \| null` hint, so the prefix survives lowering and canonical re-emission (§6; [coordinates §15](research/coordinates.md#15-coordinate-model-typescript-sketch)) |
+
+## 11. Sources
+
+- Local, read-only: `<wow-install>/.build.info`, `<wow-install>/_classic_beta_/.flavor.info`,
+  and the `<wow-install>/Data/` directory listing (2026-09-25).
+- QuestieDB `b6f5b07b`: `data/Forever/conversion.json`,
+  `tools/dbc/{README.md,coordinates.py,maps.py,download.py}`, `support/Forever/Zones/*.lua`,
+  `docs/{forever.md,forever-data.md,forever-coordinate-audit.md,forever-map-override-audit.md,forever-spatial-validation.md,api.md}`.
+  `docs/client-metadata-probes.md` is about TOC metadata and has no map content.
+- wow.export `c2fd7bde` (0.2.19): `package.json`, `LICENSE`, `src/js/constants.js`,
+  `src/js/casc/casc-source-{local,remote}.js`,
+  `src/js/modules/{tab_zones,tab_maps,tab_data,screen_source_select}.js`,
+  `src/js/workers/cache-collector.js`, `src/default_config.jsonc`, `src/js/db/WDCReader.js`,
+  `build.json`.
+- WoWDBDefs `cf84e010` (`definitions/*.dbd`, `manifest.json`). TACTSharp, DBC2CSV and
+  wow.tools.local READMEs (raw.githubusercontent.com, 2026-09-25).
+- wago.tools `/api/builds` and the per-table CSV endpoint (2026-09-25, individual research
+  requests; inventory in §8.3), plus `robots.txt`.
+- Blizzard patch server `https://us.version.battle.net/wow_classic_beta/versions` (2026-09-25).
+- Questie `40016145`, `Libs/HereBeDragons/HereBeDragons-2.0.lua`. RXPGuides `c3429e06`:
+  `functions.lua` and `Guides/Forever/*`, read for behaviour and counts only (D-019).
+- Leaflet v1.9.4 `src/geo/crs/CRS.Simple.js`. npm registry metadata for leaflet, react-leaflet,
+  sharp and pngjs.
+- Milestone 0 critique (level-of-detail counts, placement findings):
+  [reviews/review-m0-architecture.md](reviews/review-m0-architecture.md).
+- Blizzard EULA: https://www.blizzard.com/en-us/legal/fba4d00f-c7e4-4883-b8b9-1b4500a402ea/blizzard-end-user-license-agreement
+  and Legal FAQ: https://www.blizzard.com/en-us/legal/c1ae32ac-7ff9-4ac3-a03b-fc04b8697010/blizzard-legal-faq
+  (fetched and paraphrased 2026-09-25).
+
+## 12. Superseded recommendations
+
+Revision 1 recommendations first, then first-draft revision 2 proposals that the architect's
+rulings on the Milestone 0 consistency check replaced.
+
+| Earlier recommendation | Now |
+|---|---|
+| Local map sets under `public/maps/<build>/`, protected by `.gitignore` | Superseded by D-018: `local-maps/` outside `public/`, served only by `tools/maps/vite-local-maps.ts`; `audit-dist` rules (§5.7) |
+| Use the local set when its manifest build matches | Superseded by D-018 (F09): frame hash of the 49 shared rows (§5.6); fixed discovery path `local-maps/maps.manifest.json` |
+| Local DB2 geometry named `geometry.json`, one provenance per file | Superseded by D-018 (LIC-02): `geometry.local.json`; `source` and `build` on every row |
+| `import.ts --from-questiedb` produces the placeholder | Superseded (ARCHITECTURE §3): `tools/maps/import.ts --placeholder`, the only producer |
+| DB2-only rows (continents, 947, 1463/1464, new maps) not committed by default | Superseded by D-018: committed as `db2-csv` rows from hash-recorded CSVs |
+| Placeholder continent extent from the union of zone frames | Superseded by D-018: committed continent frames; union only for 2991/2997 |
+| Beta terms unknown; check before publishing numbers | Superseded by D-022 (owner: no NDA) |
+| "GPL covers Questie-derived data" | Superseded by D-016 wording (§9 item 7) |
+| Route steps stored as `WorldPoint`, converted at import | Superseded by D-017: `Location` stores the authored `SourcedPoint`; resolved at runtime |
+| `UiSurface` for Azeroth 947 and a 947 connector | Deferred until after the MVP (F23; ARCHITECTURE §7.2) |
+| Placeholder hex-bin "terrain hint" | Folded into level of detail as an optional aggregate (§7.2, PERF-7) |
+| Zone names from QuestieDB "zone and l10n tables" | Corrected (LIC-13; §8.1) |
+| Manifest `generatedAt` | Dropped for byte reproducibility (§5.3) |
+| Revision 2 draft: frame-compatible local rows replace committed `db2-csv` rows on that machine | Superseded by ARCHITECTURE §6: local geometry only adds UiMaps; a differing row for a committed UiMap rejects the whole set (§5.6 step 4, M8) |
+| Revision 2 draft: placeholder reads two CSVs copied to `assets-source/maps/placeholder-inputs/1.60.1.70009/`, re-downloaded when missing | Superseded by ARCHITECTURE §6 and D-018: committed `tools/maps/inputs/db2-rows-1.60.1.70009.json` plus the pinned `conversion.json` (§8.3) |
+| Revision 2 draft: one folder per local set, a copied discovery manifest and a separate `validation.json` | Superseded by ARCHITECTURE §7.3: one set directly in `local-maps/` (`maps.manifest.json`, `geometry.local.json`, `art/`, optional `taxi.local.json`), activated by `validate.ts --activate` (§5.2, §5.3) |
+| Revision 2 draft: placeholder NOTICE says the GPL "covers this project's contributions (the format and the generator)" | Superseded by DATA_PROVENANCE §3.2: the carve-out verbatim (§8.2, §9 item 7) |
+| Revision 2 draft: inaccurate wording of how the placeholder CSVs were obtained | Corrected: fetched as individual requests during research, not scripted crawling (§8.3) |
+| Revision 2 draft: world `SourcedPoint` without the RXP UiMapID (M11 open) | Resolved by ARCHITECTURE §6: optional `uiMapId` hint on the world variant (§6) |
+| Revision 2 draft: frame-hash encoding as a Milestone 0 proposal | Ratified by ARCHITECTURE §6 (§5.6) |
+| Revision 2 draft: `eraToForever` block as a proposed coefficient source | Ratified by ARCHITECTURE §6 (§5.3, P5) |

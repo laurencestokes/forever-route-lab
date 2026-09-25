@@ -1,0 +1,86 @@
+-- forever-route-lab RXP parser fixture 06: lowering to route groups and steps, and export.
+-- Self-authored (GPL-3.0-or-later). Quest, NPC and item IDs and the Gornek, Hawkwind and
+-- Hana'zua positions come from QuestieDB data/Forever at b6f5b07 (see fixture 01; Chief Hawkwind
+-- is foreverNpcDB.lua:2448). Quest 900001 is synthetic and is not in the dataset. 6673 is a real
+-- spell ID used only as a syntax example. All other coordinates are placeholders.
+-- Each RXP step is tagged Lnn. docs/RXP.md section 19.3 lists the expected groups, steps and
+-- diagnostics for every Lnn, and the export cases X1-X5 that use this file.
+#forever
+#name 13-14 Lowering Fixture
+#version 1
+#group Forever Route Lab Fixtures
+#subgroup Parser Samples
+
+step
+    -- L01: Gornek's position in world form: UiMap 1411 on world map 1, HereBeDragons order (world
+    -- Y, then world X). It must resolve to Durotar 42.06,68.33 (docs/research/coordinates.md 7).
+    .goto 1411/1,-4186.42,-600.30
+    .turnin -788 >>Hand in Cutting Teeth if it is in your log
+    .accept 789
+step
+    -- L02: percent points on frame-changed UiMaps: Mulgore by name and by number, and the
+    -- StormwindClassic pseudo-zone (UiMap 1453). Each gets RXP030; the import option picks the frame.
+    .goto Mulgore,43.89,76.66,0
+    .goto 1412,44.00,77.00,0
+    .goto StormwindClassic,60.00,70.00
+    >>Three frame-ambiguous points
+step
+    -- L03: RXP converts StormwindNew with coefficients this project does not have (RXP036).
+    .goto StormwindNew,50.00,50.00
+    >>An unconvertible pseudo-zone point
+step
+    -- L04: waypoint kinds, a filtered goto after the location, and merged .complete lines.
+    .goto Durotar,45.00,70.00,35,0
+    .goto Durotar,46.00,68.00,35,0
+    .goto Durotar,45.50,69.00,0
+    .goto Durotar,44.00,69.00,20
+    .goto Durotar,44.20,69.20 << Orc
+    .complete 788,1
+    .complete 789,1
+    .complete 788,2 --RXP031: quest 788 has one objective
+    .mob Mottled Boar
+step
+    #completewith next
+    -- L05: every quest target in a #completewith step is partial.
+    .complete 792,1
+    .collect 4862,10,789,1
+    .complete 900001,1 --RXP032: quest 900001 is not in the dataset
+step
+    -- L06: any-of accept and a turn-in with a reward choice.
+    .goto Durotar,42.06,68.33
+    .acceptmultiple 790,792 >>Take whichever of the two is offered
+    .turnin 789,2
+step
+    -- L07: grind targets: plain level, xpInto (L+N), xpShort (L-N) and fraction (L.F) offsets.
+    .xp 6
+    .xp 6+150
+    .xp 7-200
+    .xp 7.5
+step << Orc/Troll
+    -- L08: group-level condition: step filter, variant tags and a skip predicate.
+    #xprate <1.5
+    #softcore
+    .dungeon RFC
+    .isOnQuest 790
+    .goto Durotar,40.60,62.58
+    .turnin 790
+step
+    -- L09: travel, bind, flight and hearth steps.
+    .goto Durotar,52.00,41.00,15
+    >>Walk to the placeholder point
+step
+    .goto Durotar,51.90,41.60
+    .home >>Bind the Hearthstone here
+step
+    .goto Durotar,45.50,12.50
+    .fp Orgrimmar >>Discover this flight master
+    .fly Crossroads >>Then fly on
+step
+    .hs >>Use the Hearthstone
+step
+    -- L10: a trainer visit, a spell, a death skip the route model does not simulate (RXP034)
+    -- and an any-of turn-in.
+    .trainer
+    .train 6673 >>Learn spell 6673
+    .deathskip >>Kept as a preserved note
+    .turninmultiple 790,792 >>Hand in whichever of the two you have
