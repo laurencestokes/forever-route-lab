@@ -80,6 +80,17 @@ export {
   REPOSITORY_URL,
   type AboutDialogProps,
 } from './shell/AboutDialog';
+export {
+  LoadErrorScreen,
+  LoadingScreen,
+  NO_RETRY_TEXT,
+  formatMegabytes,
+  loadingText,
+  type BootProgress,
+  type LoadErrorScreenProps,
+  type LoadingScreenProps,
+  type LoadRemedy,
+} from './shell/BootScreen';
 export { AppShell, LEFT_PANEL_DEFAULT, LEFT_PANEL_MAX, LEFT_PANEL_MIN, clampLeftWidth, type AppShellProps } from './shell/AppShell';
 export { MapPlaceholder, PLANNED_MAP_LAYERS, type MapLayerStub, type MapPlaceholderProps } from './shell/MapPlaceholder';
 export {

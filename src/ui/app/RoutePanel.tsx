@@ -35,6 +35,8 @@ export interface RoutePanelProps {
   readonly routeName: string;
   /** Placeholder data is loaded: show its line in the banner. */
   readonly placeholder: boolean;
+  /** A line about the route itself, for example that it is an auto-generated sample; null for none. */
+  readonly notice?: string | null | undefined;
   readonly activeRow: ActiveRow | null;
   readonly onActiveRowChange: (row: ActiveRow) => void;
   readonly actions: RouteActions;
@@ -48,7 +50,8 @@ export interface RoutePanelProps {
 const unavailable = (flag: boolean): true | undefined => (flag ? true : undefined);
 
 /**
- * The route editor (left panel): header with history, the placeholder banner and its legend, the
+ * The route editor (left panel): header with history, the banner (placeholder data, a sample
+ * route's notice) and its legend, the
  * route actions and the virtualised list. It reads the selection, the lock and the history; the
  * rows come from the caller, built once per route revision.
  */
@@ -57,6 +60,7 @@ export const RoutePanel = memo(function RoutePanel({
   view,
   routeName,
   placeholder,
+  notice = null,
   activeRow,
   onActiveRowChange,
   actions,
@@ -165,6 +169,12 @@ export const RoutePanel = memo(function RoutePanel({
           <p className="frl-app-banner__line">
             <PlaceholderTag what="data" />
             <span>{PLACEHOLDER_DATA_NOTICE}</span>
+          </p>
+        )}
+        {notice !== null && (
+          <p className="frl-app-banner__line">
+            <PlaceholderTag label="Sample" what="route" />
+            <span>{notice}</span>
           </p>
         )}
         <p className="frl-app-banner__legend">

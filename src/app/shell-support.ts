@@ -74,15 +74,36 @@ export function questOpenTo(
   }
 }
 
-/** Ascending level (unknown last), then id. */
+/**
+ * The level a quest sorts at: the higher of its level and its required level, so a level-1 quest
+ * that needs level 42 (4295 "Rocknot's Ale") sorts with the level-42 quests, not first (M2 review
+ * code-F9). A scaling quest sorts at its required level (at least 1); an unknown or invalid level
+ * (null, 0, a fraction) sorts last, and an invalid required level is ignored.
+ */
+export function questSortLevel(quest: Pick<QuestRecord, 'level' | 'minLevel'>): number {
+  const required = quest.minLevel !== null && isLevel(quest.minLevel) ? quest.minLevel : 1;
+  if (quest.level === SCALING_QUEST_LEVEL) return required;
+  return quest.level !== null && isLevel(quest.level) ? Math.max(quest.level, required) : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * The required level to show next to a quest for a character of `level`: the quest's `minLevel`
+ * when it is above that level, else null (nothing to say, or unknown).
+ */
+export function requiredLevelAbove(quest: Pick<QuestRecord, 'minLevel'>, level: number | null): number | null {
+  if (quest.minLevel === null || !isLevel(quest.minLevel) || level === null) return null;
+  return quest.minLevel > level ? quest.minLevel : null;
+}
+
+/** Ascending sort level (unknown last), then id. */
 function byLevel(a: QuestRecord, b: QuestRecord): number {
-  const la = a.level ?? Number.POSITIVE_INFINITY;
-  const lb = b.level ?? Number.POSITIVE_INFINITY;
+  const la = questSortLevel(a);
+  const lb = questSortLevel(b);
   return la === lb ? a.id - b.id : la - lb;
 }
 
 export interface QuestsForCharacter {
-  /** Quests whose race and class masks admit the character, by level. */
+  /** Quests whose race and class masks admit the character, by `questSortLevel` and then id. */
   readonly open: readonly QuestRecord[];
   /** Quests closed to the character's race or class. */
   readonly closed: readonly QuestRecord[];

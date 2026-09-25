@@ -16,7 +16,7 @@ Forever levelling routes.
 
 | Assumption in the brief | Reality (2026-09-25) | Consequence |
 |---|---|---|
-| QuestieDB is GPLv3 | Neither Questie nor QuestieDB has ever had a licence file on its default branch. An unmerged Questie `license` branch drafts "consider Questie all rights reserved" and a CLA to relicense as MIT/CC0 | The owner decided to publish the derived dataset anyway, with prominent notices (D-016). No legal conclusion is drawn here |
+| QuestieDB is GPLv3 | Neither Questie nor QuestieDB has ever had a root licence file on its default branch (none covering Questie's own code or data; Questie's subfolders carry licence files for bundled third-party material only). An unmerged Questie `license` branch drafts "consider Questie all rights reserved" and a CLA to relicense as MIT/CC0 | The owner decided to publish the derived dataset anyway, with prominent notices (D-016). No legal conclusion is drawn here |
 | QuestieDB `data/Forever` holds Forever content | It is the Era 1.15.9 baseline with coordinates re-projected on four zones: zero Forever-only IDs, zero content diffs, empty Forever corrections, Era QuestXP seed | Every dataset record's Forever status is `unknown`. **Custom quests** are first-class. Unknown quest IDs are warnings |
 | RXPGuides is reusable open source | It declares CC BY-NC-SA 4.0; the owner's posture is not to combine it with this repo | Independent implementation from a behavioural spec; no RXP code, guide text or data values (D-019) |
 | RXP `.goto` is zone percent | 82% of RXP Forever gotos use world yards (`UiMapID/instance,y,x`); Zephras Isle gotos are always percent | Locations keep the **authored** point and derive world coordinates when geometry allows (D-017) |
@@ -293,7 +293,9 @@ interface Location { source: SourcedPoint; label: string | null; radius: number 
 
 The file also carries an `eraToForever` block (the four changed UiMaps' coefficients, copied from
 `conversion.json`) and a canonical **frame hash** of the 49 shared rows (float32 tuples,
-JSON, SHA-256; MAPS §5.6). Every row records its source and build.
+JSON, SHA-256; MAPS §5.6). It also carries a **content hash** over every row, name, parent and
+coefficient (`canonicalGeometryContent`, MAPS §5.3); `infra/maps` recomputes both at load and
+refuses the file on any mismatch (M2 review code-F2). Every row records its source and build.
 
 A local geometry (`geometry.local.json`, rows `source: 'local-db2'`) is accepted only when its
 frame hash equals the committed one. It may **add** UiMaps the committed file lacks; a local row
@@ -502,11 +504,31 @@ values), so a `train` step is recognised as riding either by `skill: 'riding'` o
 - taxi nodes identified by `TaxiNodeRef` (dataset flight masters by `npcFlags` FLIGHT_MASTER,
   or a cited TaxiNodes id for new Forever nodes), with edges only where known;
 - instance entrance edges (zero wait) from the dungeon entrances in `zones.json`, so steps inside
-  a dungeon's world map are reachable.
+  a dungeon's world map are reachable. An entrance with `frameVerified: false` (three at the pin,
+  on changed frames QuestieDB's coordinate audit leaves unverified) seeds no edge
+  (DATA_PROVENANCE §6.6; M2 review COORD-4).
 
 Without committed taxi data a leg's time is straight-line distance × `taxiDetourFactor` / taxi
 speed; the detour default is a cited aggregate client statistic (D-022, D-024). A local
 `taxi.local.json` (§7.3) replaces it with per-leg times on that machine.
+
+**Travel model (D-028).** Walking and riding legs go through one seam:
+
+```ts
+interface TravelModel {
+  readonly id: 'straight-line' | 'navigation';
+  legSeconds(from: WorldPoint, to: WorldPoint, speedYps: number): Estimated<number>;
+  path(from: WorldPoint, to: WorldPoint): readonly WorldPoint[] | null;   // for drawing; null if unknown
+}
+```
+
+`straight-line` (distance × `travelDetourFactor` / speed, basis `assumption`) is the fallback.
+`navigation` uses the committed derived navigation data built in Milestone 3b from the client's
+terrain, liquids and object collision. That includes connectors for bridges, tunnels and
+elevators, which come from client geometry or cited data only. Its results have basis
+`derived`. The engine, simulation and the optimiser's travel matrix all call the same model, so
+they agree. How queries stay fast (a precomputed region graph, caching, a worker) is decided in
+the Milestone 3b design step, within the §14 budgets.
 
 ### 9.2 Engine walker (`src/engine`)
 
@@ -985,6 +1007,7 @@ entries.
 | 1 | Foundation | toolchain, strict TS, lint, Vitest, domain types, zod schemas (unstable v1), store and history skeleton, three-panel shell with placeholder data, architecture test, licence gate, dist audit |
 | 2 | Forever data pipeline | `tools/questiedb`, committed dataset and NOTICE, `geo`, committed placeholder geometry (`tools/maps import --placeholder`), dataset loader and `DatasetView`, fixture slice, data review |
 | 3 | Map | `MapAdapter`, Leaflet adapter, placeholder rendering with LOD, markers, route lines, focus, layers, local-maps plugin and `tools/maps` local pipeline, map review |
+| 3b | Terrain navigation (D-028) | research and design step with critique; read-only TypeScript CASC reader over the local client's `Data/`; ADT terrain, liquids and holes plus WMO/M2 collision; derived walkability or navmesh plus connectors, committed with notices; `TravelModel` implementation and pathfinding within the §14 budgets; route lines follow paths; navigation review |
 | 4 | Route editor and storage | route operations, virtualised list, drag and keyboard reorder, lock, undo/redo, IndexedDB autosave, JSON import/export |
 | 5 | RXP | unwrap, CST, diagnostics, lowering, serializer, fixtures, round trips, import/export UI, rxp-overlap tool, parser review |
 | 6 | Rules, simulation, validation | ruleset, walker, XP/time model, validator, route warnings, validation panel; schema v1 frozen at the end |
@@ -1002,4 +1025,5 @@ Owner decisions and open research items are tracked in the **Owner decisions** t
 2. Objective counts are absent from QuestieDB; defaults are assumptions with per-step overrides.
 3. Taxi data (TaxiNodes/TaxiPath-derived leg times): committed, local-only or unknown in clean
    deploys. Default until decided: local-only; clean deploys use straight-line × detour / 32 yd/s.
+   (Walking and riding legs move to the navigation model in Milestone 3b, D-028.)
 4. The Skyborne race token and Forever realm season values for RXP filters.

@@ -27,6 +27,16 @@
     "$comment": "Each data/ file may grow to its recorded gzip baseline + tolerance. Baselines are recorded in Milestone 2; once the milestone2 list is active, a data/ file without a baseline fails the audit.",
     "totalGzipBudgetBytes": 1200000,
     "baselineTolerance": 0.1,
-    "baselines": {}
+    "baselines": {
+      "$comment": "gzip level 6 bytes (this audit's gzipSize) of each public/data file, recorded by tools/questiedb at QuestieDB b6f5b07 (dataRevision 65c377bc..., after the Milestone 2 review fixes). docs/measurements/data-m2.json has the method and raw sizes, from the same run.",
+      "data/NOTICE.md": 2023,
+      "data/entities.json": 157135,
+      "data/items.json": 81428,
+      "data/manifest.json": 9029,
+      "data/overlays.json": 2878,
+      "data/quests.json": 315711,
+      "data/spawns.json": 360429,
+      "data/zones.json": 10007
+    }
   }
 }

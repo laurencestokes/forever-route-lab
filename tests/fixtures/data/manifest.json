@@ -1,0 +1,968 @@
+{
+  "_generated": {
+    "by": "tools/questiedb",
+    "upstream": "Questie/QuestieDB@b6f5b07b0acf1c820993cbb0ce2521c912bb4c92",
+    "notice": "NOTICE.md",
+    "manifest": "manifest.json",
+    "edit": "do not edit; regenerate with pnpm data:extract"
+  },
+  "schemaVersion": 1,
+  "dataRevision": "695c41df5635b456ca1b9698814e7a07fd40db2c83dd721181e1a46b8cec6cad",
+  "dataset": "questiedb-forever",
+  "flavour": "Forever",
+  "slice": {
+    "uiMapId": 1411,
+    "label": "Durotar (UiMap 1411) and its subzones, including the Valley of Trials",
+    "areaIds": [
+      14,
+      362,
+      363,
+      364,
+      365,
+      366,
+      367,
+      368,
+      369,
+      370,
+      371,
+      372,
+      373,
+      374,
+      375,
+      393,
+      407,
+      410,
+      638,
+      639,
+      640,
+      814,
+      816,
+      817,
+      1296,
+      1297,
+      2320,
+      2337,
+      2979
+    ],
+    "rule": "quests whose starters or finishers spawn in the region, and their closure (tools/questiedb/lib/slice.ts)"
+  },
+  "upstream": {
+    "repository": "https://github.com/Questie/QuestieDB",
+    "branchObserved": "master",
+    "commit": "b6f5b07b0acf1c820993cbb0ce2521c912bb4c92",
+    "commitDate": "2026-09-23T14:13:50+02:00"
+  },
+  "licence": {
+    "upstreamLicenceFile": null,
+    "checked": "2026-09-25",
+    "finding": "no root licence file (none covering Questie's own code or data) on the default branch of Questie/QuestieDB or Questie/Questie, full-history check (docs/DATA_PROVENANCE.md §3.1)",
+    "projectLicence": "GPL-3.0-or-later",
+    "scope": "GPL-3.0-or-later applies to this project's contributions and, as a posture, to Questie-derived data; it grants no rights over Blizzard content (names, text, client-derived values) or other third-party material embedded in that data.",
+    "notice": "NOTICE.md"
+  },
+  "sourceGameBuilds": {
+    "dbcTarget": "1.60.1.69893",
+    "conversionSource": "1.15.9.69722",
+    "uiSourceResearched": "1.60.1.69913",
+    "tocInterface": 16001
+  },
+  "toolTreeHash": {
+    "tree": "808b906bba5e23824d191b972042bba38a98cd99",
+    "lockfile": "fd469b152c96035ae4b09ba4cc32fc90e444a4265b7f7a9716ab5853aa92979d"
+  },
+  "runtime": {
+    "luaparse": "0.3.1"
+  },
+  "inputs": [
+    {
+      "path": "data/Forever/foreverQuestDB.lua",
+      "sha256": "41cddaaf32b174eb2b80e216a0f070d3dfd16f7a717b83877a3b39f3514b8748",
+      "gitBlob": "f7dcf30ffc5fb0d8019874c87975b823420c297e",
+      "bytes": 1038790,
+      "role": "data"
+    },
+    {
+      "path": "data/Forever/foreverNpcDB.lua",
+      "sha256": "a8c4169690726323dac3c6441f74f7a4d9cafcc08ec42231d72ff28c9471f0ee",
+      "gitBlob": "7940d463751b2e0ecffed4f63a7f75c807140e1e",
+      "bytes": 2033176,
+      "role": "data"
+    },
+    {
+      "path": "data/Forever/foreverObjectDB.lua",
+      "sha256": "af4536c12c5b1da5fd32cb33be5c9c01d2436f97a5b9f60e2cdd238273b2cc09",
+      "gitBlob": "8d57a7f1d10949d5e154e19622426855cc7aec2a",
+      "bytes": 1011387,
+      "role": "data"
+    },
+    {
+      "path": "data/Forever/foreverItemDB.lua",
+      "sha256": "987d037b6df94d5b0b1dc326a1670581e3abb952736a4ae055fd9f161328b71c",
+      "gitBlob": "8cacee3220dd7c370513ba80fed31801a5b44e41",
+      "bytes": 2181706,
+      "role": "data"
+    },
+    {
+      "path": "src/corrections/Forever/legacy/classicQuestReputationFixes.lua",
+      "sha256": "155b2502990304339833f65c5d5f46d6f1ad84527b9e476a976f4f9157a14322",
+      "gitBlob": "578dd859fbd107fb7c8e6790183323ec5a4daaaf",
+      "bytes": 351294,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/Forever/legacy/classicQuestFixes.lua",
+      "sha256": "76cd6a05f035826cabc6180a0ff2a1a37c5e7946c891eb0a06412fab5a4caf2e",
+      "gitBlob": "92a9ecbef98167bc29862386df10b946fce51aec",
+      "bytes": 317446,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/Forever/legacy/classicNPCFixes.lua",
+      "sha256": "1de19d17db00581a35d397c7440124aa3f14150d5456c771d2deb3cfba79f031",
+      "gitBlob": "d34482830530f27244006a1399930b6a5ba9778f",
+      "bytes": 251507,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/Forever/legacy/classicObjectFixes.lua",
+      "sha256": "181bea5a5db73f8af1bebe1d8aa835d28e2d4c11adf9ff786c4f54edb3cdc76a",
+      "gitBlob": "1210f985054d26d489ee5e560676458d94ed3ed0",
+      "bytes": 63547,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/Forever/legacy/itemStartFixes.lua",
+      "sha256": "c5f379867c82a401432e0ba2ef58c4e44ffe878a806f4901e070f9f090523bc6",
+      "gitBlob": "ac16cffc36f74076558d144f74bde02786e7a52c",
+      "bytes": 99433,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/Forever/legacy/classicItemFixes.lua",
+      "sha256": "688286a44e5d95045ff943d55ba3a9fccffce7ca4a982fa55a67499b39509b87",
+      "gitBlob": "9616783cede128f8e06a6c7353e0088770266f72",
+      "bytes": 62628,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/Forever/foreverQuestFixes.lua",
+      "sha256": "6b6769a3cb8c55cb3e92e92b6b1342337f2fd738abb121b51918550c48148e3f",
+      "gitBlob": "14904c369bcf34ec90d223002a51410faf6f257e",
+      "bytes": 1993,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/Forever/foreverNPCFixes.lua",
+      "sha256": "3e578f228b2327e4ef0703e0eb693fee102a6dd8d22b79339cfd518fa662992e",
+      "gitBlob": "a35ccea7972bdb939e29e727b5b548476442c611",
+      "bytes": 1224,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/Forever/foreverObjectFixes.lua",
+      "sha256": "1464ae42df2c7199bfeb9a5119eb8b7dd997de7d77aac551273efe802ade8c3f",
+      "gitBlob": "2725945a55fc0f9f14c821baa88fbed4cf8a2a55",
+      "bytes": 936,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/Forever/foreverItemFixes.lua",
+      "sha256": "87a384d376b848a67722fa4c14bc2db1cd71e97c6e4161f2fa1d9733d22c5f63",
+      "gitBlob": "9450fc2f7582473ffa9c617f065d2153384d4b99",
+      "bytes": 864,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/constants.lua",
+      "sha256": "82ad0121925ccbd76c58b15c421f70f868f81a98626367ac44a0965e1ea8262a",
+      "gitBlob": "5e7c865fbca922b1865e3bdbf357bba5d5321334",
+      "bytes": 992,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/fieldKeys.lua",
+      "sha256": "39911b10ece983371e24d44fe75764af0c3c4bd1fd9fa782eb7e7a0fde2c059e",
+      "gitBlob": "ef93d2a3f49d8fb5225e0d09b95cf10a1811f476",
+      "bytes": 1849,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/items.lua",
+      "sha256": "c4b861584fe54ad3edb8a46338064e6ffa9759032dcbaa79756ba4172fa579a2",
+      "gitBlob": "84c9f77b850a686c29b041dd35c91110e35052d2",
+      "bytes": 346,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/quests.lua",
+      "sha256": "eb15f94f58be894772786706bb9c3db56756df1985d7ab93fc180d7567103ede",
+      "gitBlob": "759d5d333a52f03e0aee82a35b4eb09235d3ec56",
+      "bytes": 2242,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/professions.lua",
+      "sha256": "3ae501a3b0d288159c566c88622c2f870fc4fd937a919a0f640a8ead8b3fc138",
+      "gitBlob": "e498356db2bd7deeac8938a581d04c0fe2b23405",
+      "bytes": 1666,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/factions.lua",
+      "sha256": "c6c8c6dc12d5fa0e7a7aa22a21491706aaeba8d55fb68ba3a469c87e2687cbfc",
+      "gitBlob": "b077dbaaa49c18b0eadd78cc86cf3923db231fb3",
+      "bytes": 4163,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/zones.lua",
+      "sha256": "a39418b66c8f1c93fa435cbef6e30ba5a79b4a1af459fdd7af3af7729b1a975b",
+      "gitBlob": "a30d5c798465e2ed3ed4251069a3f5be6bc167d4",
+      "bytes": 13341,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/phases.lua",
+      "sha256": "1736eb5fccfeb3788a07eb94e2c871e84b4cff805ccbb6aa9040e337fb687622",
+      "gitBlob": "275a6fea9192c32c15add055223a1df4896ab96b",
+      "bytes": 18874,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/icons.lua",
+      "sha256": "ea4390aadd96d99ad9feab6cf564ecad50350353a526e3695fe39e40c144011b",
+      "gitBlob": "2de2008a690a442bbf94d6b988e6deb3e632ff05",
+      "bytes": 1005,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/waypoints.lua",
+      "sha256": "10f2b234c70d87ba42163782b6022f522affa4d16230eddde55b0a30f7c3861b",
+      "gitBlob": "a7a8006bc4e566fb9780885d86dd61e3805057d6",
+      "bytes": 6709,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/enum/expansions.lua",
+      "sha256": "68a4405bc9551a3efae61f4f2e20e12d8b9c4fd6cf99d59980e3e00daf1f52ac",
+      "gitBlob": "53f0da0dcab122d8f952fd129e77c71ac40c90f2",
+      "bytes": 6543,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/compat.lua",
+      "sha256": "a08c1f79033a6fe0696ee068580fb0f84521c68fe88c48b6789eb9052b122539",
+      "gitBlob": "3ea41e6a6364de316d3beeaa1fd6d027f71917c9",
+      "bytes": 10305,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/registry.lua",
+      "sha256": "f8ad7dd54e6baad137ed217dc26f2802e721b7e3eea5d9da2c5522806bdcef67",
+      "gitBlob": "179026677292a1d3f97281f6cee039f3392545d8",
+      "bytes": 29421,
+      "role": "correction"
+    },
+    {
+      "path": "src/corrections/manifest.lua",
+      "sha256": "60fcc8b79a9bb3b8494ff42270a0067f6c842bbced77c334789659e0b2027d80",
+      "gitBlob": "4c002dba77ee9647e3ead090c02e0f87fafcd4cd",
+      "bytes": 6664,
+      "role": "correction"
+    },
+    {
+      "path": "src/config.lua",
+      "sha256": "ec03223d44cf67553f785a608c040cd639c1acfd4668223d9aeaa29a0f864808",
+      "gitBlob": "4b78b558eb3b5434e9b656bdde78f8dd19aabacf",
+      "bytes": 22070,
+      "role": "correction"
+    },
+    {
+      "path": "src/meta/questMeta.lua",
+      "sha256": "2cf91fe3dc43ac06b06fadf31c9dc05c48c545005ef49d70d3d413a3437e2bb2",
+      "gitBlob": "3ce72d358d2112209d5606964d8538136906af67",
+      "bytes": 6972,
+      "role": "schema"
+    },
+    {
+      "path": "src/meta/npcMeta.lua",
+      "sha256": "01d9f0047f4d8396be6dfaa7a6e286bd07f158c3c111245097f26e479319234e",
+      "gitBlob": "42fca9247314e9fca2aed67d29df31f25ee863d8",
+      "bytes": 3632,
+      "role": "schema"
+    },
+    {
+      "path": "src/meta/objectMeta.lua",
+      "sha256": "d53c228d4749eb125bd9fd513997b82d4e494a282af5db86fcde1dbab4929a1a",
+      "gitBlob": "0363f8f31a39f72f977325bd9ccdabc7624a3240",
+      "bytes": 2399,
+      "role": "schema"
+    },
+    {
+      "path": "src/meta/itemMeta.lua",
+      "sha256": "a11209ef102e9cc0d1d199de4e7d662a515964a36f3013aafce9b6a14bae509f",
+      "gitBlob": "5db6707e8efd971482e2b05eff15230746218cef",
+      "bytes": 3426,
+      "role": "schema"
+    },
+    {
+      "path": "src/corrections/register.lua",
+      "sha256": "1abd208277be869221b08fd623cc78e1cef6fd1a80a8fca7e99a507a4a4bf7c0",
+      "gitBlob": "08a6bb437bfedcb07f98f01d637e1497a74a39b2",
+      "bytes": 8584,
+      "role": "semantics"
+    },
+    {
+      "path": "src/derived/requiredRaces.lua",
+      "sha256": "19cab68a2ffc46dc2115f1387b8ac1dec526c67fcc57c4cc09dea57e4612299d",
+      "gitBlob": "3ff5545e5a8c5a280ef48c7f469c3544b2107079",
+      "bytes": 6671,
+      "role": "semantics"
+    },
+    {
+      "path": "src/derived/_end.lua",
+      "sha256": "60578bb0634acabc770c786a459baed2f1c0efab06b5adba68b012b51922195a",
+      "gitBlob": "1b350b354b59d9f42a3211db338e1366eedd2be4",
+      "bytes": 1463,
+      "role": "semantics"
+    },
+    {
+      "path": "src/meta/normalize.lua",
+      "sha256": "9047cb03c21dd5f26e007d07ee0f700dab0b20149484e5ee5ba4504e266b131b",
+      "gitBlob": "24c6f92346f14fd7da6f0b54ee41fb3878648387",
+      "bytes": 13057,
+      "role": "semantics"
+    },
+    {
+      "path": "src/support/data.lua",
+      "sha256": "70e4dba6d3eea140b47acf0a67d2a9bbcbc4bda0b251596eb584fdcc8d7e91d4",
+      "gitBlob": "37eb7bcaecea1b0e3c71c9eca6d1e2eadb066a64",
+      "bytes": 3291,
+      "role": "semantics"
+    },
+    {
+      "path": "docs/forever-coordinate-audit.md",
+      "sha256": "ac4b4e56f34911c104ae374d2d936443fbf91a43e0cb76562b964ea95739aab6",
+      "gitBlob": "2bde1996500a326795b32bf46c9ecbddeebab3b1",
+      "bytes": 9878,
+      "role": "semantics"
+    },
+    {
+      "path": "support/Forever/QuestXP/xpDB-classic.lua",
+      "sha256": "9f5ca777904f6f62693cbe6f8b8ce91d0e0430e3ed5f7621df6e8691d4269149",
+      "gitBlob": "adb35495a783c2d27ccec963001f8a21883096ab",
+      "bytes": 357742,
+      "role": "support"
+    },
+    {
+      "path": "support/Forever/Zones/areaIdToUiMapId.lua",
+      "sha256": "cf9ae6f896e3e2fb1e43352b11596641312d9e61365ca7f281e5af1092185d07",
+      "gitBlob": "d4d2ca56e08d45cb2cee380eea42a1da2b20985f",
+      "bytes": 59350,
+      "role": "support"
+    },
+    {
+      "path": "support/Forever/Zones/uiMapIdToAreaId.lua",
+      "sha256": "4964def0918a8cddef6c5f8292526a076b2afe73ea58f178f68a78e35bec39e3",
+      "gitBlob": "5f83b93f8ea5a667bc2fd3ceedf9484bf3ded3d3",
+      "bytes": 4770,
+      "role": "support"
+    },
+    {
+      "path": "support/Forever/Zones/dungeons.lua",
+      "sha256": "e2aa4eb8daf0096958da848727af5d57d7b184b5fa73a3d3643bcb818a045b44",
+      "gitBlob": "a4d837d3d0d0a71ad27fe1128b63a956c97f07f1",
+      "bytes": 13207,
+      "role": "support"
+    },
+    {
+      "path": "support/Forever/Zones/zoneIds.lua",
+      "sha256": "55d56138c2a6aeab0d76dd43003c894aae09b899ab0e998649a94796153c9a80",
+      "gitBlob": "e6b5556a2d072a5ddd4829d335ae625fae59fa0c",
+      "bytes": 18389,
+      "role": "support"
+    },
+    {
+      "path": "data/Forever/conversion.json",
+      "sha256": "f4477d6c575575152225f2a9d40858029bf9d2d5fdf6b083c06557fce8b5984b",
+      "gitBlob": "7cbcf66b224e77a4ed794f50055bdc68a7abc913",
+      "bytes": 54282,
+      "role": "support"
+    },
+    {
+      "path": "support/Forever/provenance.json",
+      "sha256": "5538df5af9f749a28d25c605d6f8df4e0245aa4071c90fea870b61518fa07ac5",
+      "gitBlob": "0e7a8447f8886f42d2f374ed3a26c0407109b080",
+      "bytes": 50090,
+      "role": "provenance-only"
+    },
+    {
+      "path": "data/Classic/classicQuestDB.lua",
+      "sha256": "210e9ac3f98baf2c624be0c8677e7e9adec3f2b9e426f30fd649c4018678afab",
+      "gitBlob": "740c3c45ed71db201a5ac3db8a65e1c0e803d6d3",
+      "bytes": 1038790,
+      "role": "provenance-only"
+    },
+    {
+      "path": "data/Classic/classicNpcDB.lua",
+      "sha256": "ee4a241db3ff89e5f0883b688b58920c1121f5617202ecba81d90b17271ccd54",
+      "gitBlob": "723307d352a89cf6d074129f471719f0cdb48d81",
+      "bytes": 2033320,
+      "role": "provenance-only"
+    },
+    {
+      "path": "data/Classic/classicObjectDB.lua",
+      "sha256": "d08fbd8216757918330d9ff02bfc1b13f837f198e0aa62aa76260bb1bd9cd042",
+      "gitBlob": "435bbef8f7b80c4598264597923c71820c4be913",
+      "bytes": 1011337,
+      "role": "provenance-only"
+    },
+    {
+      "path": "data/Classic/classicItemDB.lua",
+      "sha256": "987d037b6df94d5b0b1dc326a1670581e3abb952736a4ae055fd9f161328b71c",
+      "gitBlob": "8cacee3220dd7c370513ba80fed31801a5b44e41",
+      "bytes": 2181706,
+      "role": "provenance-only"
+    },
+    {
+      "path": "src/corrections/Era/classicQuestReputationFixes.lua",
+      "sha256": "155b2502990304339833f65c5d5f46d6f1ad84527b9e476a976f4f9157a14322",
+      "gitBlob": "578dd859fbd107fb7c8e6790183323ec5a4daaaf",
+      "bytes": 351294,
+      "role": "provenance-only"
+    },
+    {
+      "path": "src/corrections/Era/classicQuestFixes.lua",
+      "sha256": "fd28ff9f01e1b613aae2aeeafc192c8e2677b3850a9ab5937b7a1a52cc692b28",
+      "gitBlob": "a927e458401bccf072a34dea4237b0f6135b193e",
+      "bytes": 317440,
+      "role": "provenance-only"
+    },
+    {
+      "path": "src/corrections/Era/classicNPCFixes.lua",
+      "sha256": "38e5217bfd4f23ba03393d6050c589aba88593d4c96510d9a0edfbb70f1b2cdb",
+      "gitBlob": "eb6013cb58945eaa45a50cf78bc7f8914859fb5b",
+      "bytes": 250896,
+      "role": "provenance-only"
+    },
+    {
+      "path": "src/corrections/Era/classicObjectFixes.lua",
+      "sha256": "78d80e6244ba7b1bfc49a8ba65b0207031cd921bdb15ac41ea3a7a545f7f4540",
+      "gitBlob": "6cb4c45f18c33f032d0ca821ac4123da87d4799a",
+      "bytes": 63282,
+      "role": "provenance-only"
+    },
+    {
+      "path": "src/corrections/Era/classicItemFixes.lua",
+      "sha256": "688286a44e5d95045ff943d55ba3a9fccffce7ca4a982fa55a67499b39509b87",
+      "gitBlob": "9616783cede128f8e06a6c7353e0088770266f72",
+      "bytes": 62628,
+      "role": "provenance-only"
+    },
+    {
+      "path": "src/corrections/Shared/itemStartFixes.lua",
+      "sha256": "c5f379867c82a401432e0ba2ef58c4e44ffe878a806f4901e070f9f090523bc6",
+      "gitBlob": "ac16cffc36f74076558d144f74bde02786e7a52c",
+      "bytes": 99433,
+      "role": "provenance-only"
+    },
+    {
+      "path": "docs/forever.md",
+      "sha256": "a45fd7422d86e7e7759c4f839f8365486b4ea586d7f1e2e8f075b8616a4ca820",
+      "gitBlob": "9293f75e32af2509fb58123d32781a994416a022",
+      "bytes": 8864,
+      "role": "provenance-only"
+    },
+    {
+      "path": "generate.lua",
+      "sha256": "b35d8fc7dd62ea9a3a6a510b5f2fe8bcd2bbec484df9b6038ce1c911b60268a5",
+      "gitBlob": "f8bf863fe94472efa917183bc611c9e7ac64ba49",
+      "bytes": 21193,
+      "role": "provenance-only"
+    }
+  ],
+  "upstreamManifestCheck": {
+    "conversionFiles": [
+      {
+        "output": "data/Forever/foreverItemDB.lua",
+        "outputSha256Matches": true,
+        "source": "data/Classic/classicItemDB.lua",
+        "sourceSha256Matches": true
+      },
+      {
+        "output": "data/Forever/foreverNpcDB.lua",
+        "outputSha256Matches": true,
+        "source": "data/Classic/classicNpcDB.lua",
+        "sourceSha256Matches": true
+      },
+      {
+        "output": "data/Forever/foreverObjectDB.lua",
+        "outputSha256Matches": true,
+        "source": "data/Classic/classicObjectDB.lua",
+        "sourceSha256Matches": true
+      },
+      {
+        "output": "data/Forever/foreverQuestDB.lua",
+        "outputSha256Matches": true,
+        "source": "data/Classic/classicQuestDB.lua",
+        "sourceSha256Matches": true
+      },
+      {
+        "output": "src/corrections/Forever/legacy/classicItemFixes.lua",
+        "outputSha256Matches": true,
+        "source": "src/corrections/Era/classicItemFixes.lua",
+        "sourceSha256Matches": true
+      },
+      {
+        "output": "src/corrections/Forever/legacy/classicNPCFixes.lua",
+        "outputSha256Matches": true,
+        "source": "src/corrections/Era/classicNPCFixes.lua",
+        "sourceSha256Matches": true
+      },
+      {
+        "output": "src/corrections/Forever/legacy/classicObjectFixes.lua",
+        "outputSha256Matches": true,
+        "source": "src/corrections/Era/classicObjectFixes.lua",
+        "sourceSha256Matches": true
+      },
+      {
+        "output": "src/corrections/Forever/legacy/classicQuestFixes.lua",
+        "outputSha256Matches": true,
+        "source": "src/corrections/Era/classicQuestFixes.lua",
+        "sourceSha256Matches": true
+      },
+      {
+        "output": "src/corrections/Forever/legacy/classicQuestReputationFixes.lua",
+        "outputSha256Matches": true,
+        "source": "src/corrections/Era/classicQuestReputationFixes.lua",
+        "sourceSha256Matches": true
+      },
+      {
+        "output": "src/corrections/Forever/legacy/itemStartFixes.lua",
+        "outputSha256Matches": true,
+        "source": "src/corrections/Shared/itemStartFixes.lua",
+        "sourceSha256Matches": true
+      }
+    ],
+    "zoneSymbolsSha256Matches": true,
+    "provenanceJson": {
+      "dbcReportBuild": "1.60.1.69893",
+      "matchesDbcTarget": true,
+      "upstreamSeedCommit": "0529e8d82075316242b0796e2128afb40d300130",
+      "coordinateToolBase": "d94542ac92423f05c6fbde6574ada29b15c0d4e8"
+    },
+    "allMatch": true
+  },
+  "layers": [
+    "legacy/classicQuestReputationFixes.lua:Load",
+    "legacy/classicQuestFixes.lua:Load",
+    "foreverQuestFixes.lua:Load",
+    "legacy/classicNPCFixes.lua:Load",
+    "foreverNPCFixes.lua:Load",
+    "legacy/classicObjectFixes.lua:Load",
+    "foreverObjectFixes.lua:Load",
+    "legacy/itemStartFixes.lua:LoadAutomaticQuestStarts(noNewEntries,noOverwrites)",
+    "legacy/classicItemFixes.lua:Load",
+    "foreverItemFixes.lua:Load",
+    "derived:requiredRaces:questieCompatibility",
+    "hints:killCreditObjectiveFirst=[]",
+    "hints:objectObjectiveFirst=[]",
+    "hints:itemObjectiveFirst=[503,5088]",
+    "hints:eventObjectiveFirst=[]",
+    "hints:spellObjectiveFirst=[]"
+  ],
+  "dynamicLayers": [
+    {
+      "key": "faction:Alliance",
+      "file": "overlays.json",
+      "providers": [
+        "legacy/classicQuestFixes.lua:LoadFactionFixes",
+        "foreverQuestFixes.lua:LoadDynamic",
+        "legacy/classicNPCFixes.lua:LoadFactionFixes",
+        "foreverNPCFixes.lua:LoadDynamic",
+        "legacy/classicObjectFixes.lua:LoadFactionFixes",
+        "foreverObjectFixes.lua:LoadDynamic",
+        "legacy/classicItemFixes.lua:LoadFactionFixes",
+        "foreverItemFixes.lua:LoadDynamic"
+      ],
+      "dungeons": "support/Forever/Zones/dungeons.lua (UnitFactionGroup)"
+    },
+    {
+      "key": "faction:Horde",
+      "file": "overlays.json",
+      "providers": [
+        "legacy/classicQuestFixes.lua:LoadFactionFixes",
+        "foreverQuestFixes.lua:LoadDynamic",
+        "legacy/classicNPCFixes.lua:LoadFactionFixes",
+        "foreverNPCFixes.lua:LoadDynamic",
+        "legacy/classicObjectFixes.lua:LoadFactionFixes",
+        "foreverObjectFixes.lua:LoadDynamic",
+        "legacy/classicItemFixes.lua:LoadFactionFixes",
+        "foreverItemFixes.lua:LoadDynamic"
+      ],
+      "dungeons": "support/Forever/Zones/dungeons.lua (UnitFactionGroup)"
+    },
+    {
+      "key": "class",
+      "file": "overlays.json",
+      "providers": [
+        "legacy/classicQuestFixes.lua:LoadFactionFixes",
+        "foreverQuestFixes.lua:LoadDynamic",
+        "legacy/classicNPCFixes.lua:LoadFactionFixes",
+        "foreverNPCFixes.lua:LoadDynamic",
+        "legacy/classicObjectFixes.lua:LoadFactionFixes",
+        "foreverObjectFixes.lua:LoadDynamic",
+        "legacy/classicItemFixes.lua:LoadFactionFixes",
+        "foreverItemFixes.lua:LoadDynamic"
+      ],
+      "classes": [
+        "WARRIOR",
+        "PALADIN",
+        "HUNTER",
+        "ROGUE",
+        "PRIEST",
+        "SHAMAN",
+        "MAGE",
+        "WARLOCK",
+        "DRUID"
+      ],
+      "appliedAfter": "faction"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "NOTICE.md",
+      "sha256": "ddf6fc217af43cdf78c905bc7c3866185bf83516072ccfcef23221fccbb695aa",
+      "bytes": 5053,
+      "records": null,
+      "origins": []
+    },
+    {
+      "path": "entities.json",
+      "sha256": "9232bd61a6db938c221da3d0ef0d634910d2fa95cde6c67ee732c9038c530c46",
+      "bytes": 46947,
+      "records": 162,
+      "origins": [
+        {
+          "fields": [
+            "name",
+            "subName"
+          ],
+          "origin": "blizzard-game-content",
+          "evidence": "data/Forever/foreverNpcDB.lua; data/Forever/foreverObjectDB.lua"
+        },
+        {
+          "fields": [
+            "minLevel",
+            "maxLevel",
+            "rank",
+            "zoneId",
+            "npcFlags",
+            "friendlyTo",
+            "factionId",
+            "questStarts",
+            "questEnds"
+          ],
+          "origin": "questiedb",
+          "evidence": "data/Forever/foreverNpcDB.lua; data/Forever/foreverObjectDB.lua; src/corrections/Forever/**"
+        }
+      ]
+    },
+    {
+      "path": "items.json",
+      "sha256": "2dbc6f8b1b7aa4f2b113d3e1535e49d4bfaa4e10469d652171454c9a1a3bdce0",
+      "bytes": 13753,
+      "records": 56,
+      "origins": [
+        {
+          "fields": [
+            "name"
+          ],
+          "origin": "blizzard-game-content",
+          "evidence": "data/Forever/foreverItemDB.lua"
+        },
+        {
+          "fields": [
+            "startsQuest (the items listed in manifest provenance.itemStartFixesOnly)"
+          ],
+          "origin": "declared:wowhead-generated via questiedb:itemStartFixes",
+          "evidence": "src/corrections/Forever/legacy/itemStartFixes.lua:13"
+        },
+        {
+          "fields": [
+            "dropNpcs",
+            "dropObjects",
+            "dropItems",
+            "startsQuest (every other item)",
+            "itemClass"
+          ],
+          "origin": "questiedb",
+          "evidence": "data/Forever/foreverItemDB.lua (no third-party origin declared; the declared Wowhead/CMaNGOS drop percentages are not shipped: support/Forever/DropTables/classicItemDrops.lua:7,17806)"
+        }
+      ]
+    },
+    {
+      "path": "overlays.json",
+      "sha256": "6a49b6c614893c3a66d34b5ace3e2f3c03596bfa223cc608edd9e6077a5c1c5a",
+      "bytes": 941,
+      "records": 2,
+      "origins": [
+        {
+          "fields": [
+            "faction",
+            "class"
+          ],
+          "origin": "questiedb (dynamic corrections; names and text inside are blizzard-game-content)",
+          "evidence": "src/corrections/Forever/legacy/*:LoadFactionFixes; support/Forever/Zones/dungeons.lua"
+        }
+      ]
+    },
+    {
+      "path": "quests.json",
+      "sha256": "707850aee0c2dd26a01a0c073be551159bc8347e6af43abc8680297c5250e9e4",
+      "bytes": 106688,
+      "records": 96,
+      "origins": [
+        {
+          "fields": [
+            "id",
+            "level",
+            "minLevel",
+            "maxLevel",
+            "races",
+            "classes",
+            "zoneOrSort",
+            "starters",
+            "finishers",
+            "objectives",
+            "prerequisites",
+            "requirements",
+            "reputationReward",
+            "flags"
+          ],
+          "origin": "questiedb",
+          "evidence": "data/Forever/foreverQuestDB.lua; src/corrections/Forever/**"
+        },
+        {
+          "fields": [
+            "dungeonQuest"
+          ],
+          "origin": "derived by forever-route-lab from questiedb",
+          "evidence": "support/Forever/Zones/dungeons.lua; tools/questiedb/lib/dungeon-areas.ts (self-authored classification of its entries)"
+        },
+        {
+          "fields": [
+            "name",
+            "objectivesText"
+          ],
+          "origin": "blizzard-game-content",
+          "evidence": "data/Forever/foreverQuestDB.lua (quest text via QuestieDB)"
+        },
+        {
+          "fields": [
+            "objectives[].label",
+            "objectives[kind=event].text"
+          ],
+          "origin": "blizzard-game-content or questiedb-authored (not distinguished)",
+          "evidence": "data/Forever/foreverQuestDB.lua; src/corrections/Forever/legacy/classicQuestFixes.lua (corrections write labels and event text too)"
+        },
+        {
+          "fields": [
+            "objectives[kind=event].points",
+            "objectiveHints[].points"
+          ],
+          "origin": "questiedb; Era→Forever projection blizzard-client-derived (1.15.9.69722 → 1.60.1.69893)",
+          "evidence": "data/Forever/conversion.json"
+        },
+        {
+          "fields": [
+            "objectiveHints[].text"
+          ],
+          "origin": "questiedb",
+          "evidence": "src/corrections/Forever/legacy/classicQuestFixes.lua (extraObjectives are authored in the corrections)"
+        },
+        {
+          "fields": [
+            "xp"
+          ],
+          "origin": "questiedb (Era seed; value origin not declared)",
+          "evidence": "support/Forever/QuestXP/xpDB-classic.lua:1; docs/forever-data.md:70"
+        }
+      ]
+    },
+    {
+      "path": "spawns.json",
+      "sha256": "be77d84b2d44cd2a906742aa27ef1b84df435cdab9c78b8ec80e4d0936bfdf4b",
+      "bytes": 21429,
+      "records": 162,
+      "origins": [
+        {
+          "fields": [
+            "npc",
+            "object"
+          ],
+          "origin": "questiedb; Era→Forever projection blizzard-client-derived (1.15.9.69722 → 1.60.1.69893)",
+          "evidence": "data/Forever/conversion.json"
+        }
+      ]
+    },
+    {
+      "path": "zones.json",
+      "sha256": "10dfa31bde87d63a2ca6061ceab56806999749bcb7c903f7142b15e1d9589af5",
+      "bytes": 3870,
+      "records": 60,
+      "origins": [
+        {
+          "fields": [
+            "areas[].uiMapId"
+          ],
+          "origin": "blizzard-client-derived (1.60.1.69893, hand-completed upstream)",
+          "evidence": "support/Forever/Zones/areaIdToUiMapId.lua:1-4"
+        },
+        {
+          "fields": [
+            "areas[].link"
+          ],
+          "origin": "derived by forever-route-lab from questiedb",
+          "evidence": "support/Forever/Zones/areaIdToUiMapId.lua; support/Forever/Zones/uiMapIdToAreaId.lua; tools/questiedb/lib/zones.ts"
+        },
+        {
+          "fields": [
+            "uiMaps[].name",
+            "dungeons[].name"
+          ],
+          "origin": "blizzard-game-content (from comments of a hand-completed file; dungeons.lua)",
+          "evidence": "support/Forever/Zones/uiMapIdToAreaId.lua:1-4; support/Forever/Zones/dungeons.lua"
+        },
+        {
+          "fields": [
+            "dungeons[].entrances",
+            "dungeons[].alternativeAreaIds",
+            "instanceAreas"
+          ],
+          "origin": "questiedb",
+          "evidence": "support/Forever/Zones/dungeons.lua"
+        },
+        {
+          "fields": [
+            "dungeons[].entrances[].frameVerified"
+          ],
+          "origin": "derived by forever-route-lab from questiedb",
+          "evidence": "docs/forever-coordinate-audit.md (QuestieDB); tools/questiedb/lib/zones.ts FRAME_UNVERIFIED_ENTRANCES"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "raw": {
+      "quests": 4244,
+      "npcs": 10119,
+      "objects": 6645,
+      "items": 14889
+    },
+    "composed": {
+      "quests": 4257,
+      "npcs": 10122,
+      "objects": 6666,
+      "items": 14899
+    },
+    "shipped": {
+      "quests": 96,
+      "npcs": 149,
+      "objects": 13,
+      "items": 56
+    },
+    "spawnEntities": {
+      "npc": 149,
+      "object": 13
+    },
+    "spawnPoints": {
+      "drawable": 1349,
+      "instancePresence": 0
+    },
+    "createdByCorrection": null,
+    "npcSelection": null,
+    "questsWithNullLevel": 0,
+    "questsWithNullXp": 9,
+    "dungeonQuests": 1,
+    "dungeonQuestAreas": null,
+    "itemStartFixesOnly": 2,
+    "derivedRequiredRaces": null,
+    "uiMaps": {
+      "named": 16,
+      "unnamed": 0
+    },
+    "areas": 44,
+    "unresolvedReferences": null
+  },
+  "provenance": {
+    "comparisonBasis": "each composed static row (raw + static corrections + requiredRaces), and each faction x class persona row of it, compared with the fork base (Era) composed the same way; the worst tag wins",
+    "taggedByPersonaLayers": {
+      "quests": 0,
+      "npcs": 0,
+      "objects": 0,
+      "items": 0
+    },
+    "upstreamDiff": {
+      "quests": {
+        "era": 96,
+        "era-coords": 0,
+        "forever-new": 0,
+        "forever-changed": 0
+      },
+      "npcs": {
+        "era": 143,
+        "era-coords": 6,
+        "forever-new": 0,
+        "forever-changed": 0
+      },
+      "objects": {
+        "era": 13,
+        "era-coords": 0,
+        "forever-new": 0,
+        "forever-changed": 0
+      },
+      "items": {
+        "era": 56,
+        "era-coords": 0,
+        "forever-new": 0,
+        "forever-changed": 0
+      }
+    },
+    "corrected": {
+      "quests": 83,
+      "npcs": 27,
+      "objects": 1,
+      "items": 5
+    },
+    "created": {
+      "quests": 0,
+      "npcs": 0,
+      "objects": 1,
+      "items": 0
+    },
+    "forkBase": {
+      "flavour": "Vanilla",
+      "data": [
+        "data/Classic/classicQuestDB.lua",
+        "data/Classic/classicNpcDB.lua",
+        "data/Classic/classicObjectDB.lua",
+        "data/Classic/classicItemDB.lua"
+      ],
+      "layers": [
+        "Era/classicQuestReputationFixes.lua:Load",
+        "Era/classicQuestFixes.lua:Load",
+        "Era/classicNPCFixes.lua:Load",
+        "Era/classicObjectFixes.lua:Load",
+        "Shared/itemStartFixes.lua:LoadAutomaticQuestStarts(noNewEntries,noOverwrites)",
+        "Era/classicItemFixes.lua:Load"
+      ]
+    },
+    "itemStartFixesOnly": [
+      4881,
+      14649
+    ],
+    "threeWayClassifier": "stub"
+  },
+  "foreverContentVerified": false
+}

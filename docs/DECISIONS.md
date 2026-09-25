@@ -169,8 +169,11 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
 
 - **Date:** 2026-09-25
 - **Decided by:** project owner
-- **Facts (no legal conclusion):** A full-history check on 2026-09-25 found that neither
-  `Questie/Questie` nor `Questie/QuestieDB` has ever had a licence file on its default branch.
+- **Facts (no legal conclusion; wording corrected after the Milestone 2 review):** A full-history
+  check on 2026-09-25 found that neither `Questie/Questie` nor `Questie/QuestieDB` has ever had a
+  root licence file on its default branch, meaning none covering Questie's own code or data.
+  Questie's default branch does carry licence files for bundled third-party material such as
+  `Libs/` and `Icons/`.
   Questie's unmerged `license` branch (commits `ce65498c`, 2023-02-13, to `842201bd`,
   2024-05-06) drafts a `LICENSE.md`. The draft says Questie "historically never had a license",
   and that "when in doubt you should consider Questie as 'all rights reserved'". It also says the
@@ -190,8 +193,9 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
 
 - **Date:** 2026-09-25
 - **Supersedes:** part of D-004.
-- **Decision:** Spawns ship exactly as QuestieDB publishes them: 0-100 zone percent, 2 dp,
-  keyed by AreaTable ID. `infra/data` converts them to `WorldPoint`s at load through `src/geo`,
+- **Decision:** Spawns ship exactly as QuestieDB publishes them: 0-100 zone percent, keyed by
+  AreaTable ID, with the precision as published. That is up to 2 dp, except for 7 values with
+  3 dp at the pin (DATA_PROVENANCE §6.5). `infra/data` converts them to `WorldPoint`s at load through `src/geo`,
   so every runtime domain type still sees world points. A route `Location` stores the point as
   authored, as a `SourcedPoint`: either world, or zone percent with its frame and, optionally,
   the original number lexemes. World coordinates are derived at runtime and never persisted.
@@ -342,4 +346,54 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
   semantics, snapshot caching), so it is tested with the store. Keeping it beside the store
   avoids a `ui` file reaching into store internals. The Milestone 1 review (F6) found the
   exception existed only in the test; this entry and ARCHITECTURE §4 now record it.
+
+## D-028: Terrain-aware travel from committed, derived navigation data
+
+- **Date:** 2026-09-25
+- **Decided by:** project owner (scope, publishing, extraction method); architect (design).
+- **Decision:**
+  - Travel time goes through a pluggable `TravelModel` (ARCHITECTURE §9.1).
+  - The straight-line × detour model stays as the labelled fallback.
+  - A navigation model built from the Forever client's world geometry is the preferred model
+    whenever its data is present. That geometry is terrain, liquids and holes, plus the collision
+    of placed objects (WMO and M2): bridges, tunnels, buildings and cities.
+  - The **derived** navigation data (a compact walkability or navmesh representation plus
+    connectors, never raw game files or art) is **committed and deployed** with provenance
+    notices. That is the same posture as the committed DB2 rows (D-018, D-022), and the owner
+    accepts it.
+  - Extraction uses **our own read-only TypeScript CASC reader**. It reads the local install's
+    `Data/` folder only, never `Cache/`, `WTF/` or `Logs/`. It requires no new system
+    software, and it is pinned to a recorded build.
+  - Connectors (bridges, tunnels, elevators, portals) come from client geometry or cited data,
+    never from guesses.
+  - A new **Milestone 3b: Terrain navigation** runs after the map milestone, so simulation (M6)
+    and the optimiser (M7) are built on it. It starts with a research and design step (CASC
+    reading, ADT/WMO/M2 collision, grid vs navmesh, size and query cost), followed by an
+    independent critique.
+- **Why:** The optimiser chooses routes by travel cost. A model that walks through cliffs, lakes
+  and mountains would confidently propose routes no player can walk. Terrain alone is not enough,
+  because bridges, tunnels and cities are object geometry.
+
+## D-029: Reuse of WoWF-QRP code is allowed, with attribution; its data is not
+
+- **Date:** 2026-09-25
+- **Decided by:** project owner
+- **Context:** WoWF-QRP (https://github.com/tyba-dev/WoWF-QRP, a friend's project) declares
+  GPL-3.0 in its `LICENSE` at commit `c1e3fcf31be65d742858c1e87a5ce87b3565da60`. The owner said
+  its code may be reused if needed.
+- **Decision:** Code from WoWF-QRP may be read and ported where it helps, mainly for Milestone 3b
+  navigation and path-finding. Conditions:
+  - Each ported file or block keeps the original copyright and licence notice and names the
+    source path and commit.
+  - Every port is listed under "Ported code" in THIRD_PARTY_NOTICES.md.
+  - Ported files are marked as carrying GPL-3.0 terms. This project is GPL-3.0-or-later; this is
+    a compliance posture, not a legal conclusion.
+- **Excluded:**
+  - WoWF-QRP's data (`data/bundle.b64`, `tiles/`), which its README says is derived from
+    Blizzard game files. We derive our own from the client (D-028).
+  - Its RXP code. `src/rxp` implementers keep working only from RXP.md (D-019).
+- **Note on approach:** Its `tools/nav.py` says it builds a walkability grid from Forever spawn
+  and patrol-path positions. Milestone 3b derives walkability from the client's terrain, liquids
+  and object collision instead (D-028). A spawn-inferred grid may serve as an independent
+  cross-check, not as the source.
 

@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEditorStore, type EditorStore, fixedClock } from '../app';
+import { staticDatasetSource } from '../app/dataset-source';
 import { createPlaceholderWorkspace, PLACEHOLDER_PROJECT_NAME } from '../app/placeholder-project';
 import { sequentialIdSource } from '../app/shell-support';
 import { App } from './App';
@@ -20,7 +21,7 @@ function setup(): { store: EditorStore; stepCount: () => number } {
   const { project, dataset } = createPlaceholderWorkspace({ nowIso: NOW });
   // Deterministic ids for inserted and duplicated steps (collisionFreeIds skips the project's own).
   const store = createEditorStore({ project, ids: sequentialIdSource(1000), clock: fixedClock(NOW) });
-  render(<App store={store} dataset={dataset} projectName={PLACEHOLDER_PROJECT_NAME} version="0.0.0-test" sourceCommit={null} />);
+  render(<App store={store} data={staticDatasetSource(dataset)} projectName={PLACEHOLDER_PROJECT_NAME} version="0.0.0-test" sourceCommit={null} />);
   return { store, stepCount: () => store.getState().project.route.steps.length };
 }
 
@@ -50,7 +51,7 @@ const pressInEditor = (key: string, init: KeyboardEventInit = {}) => {
 
 const isUnavailable = (element: HTMLElement) => element.getAttribute('aria-disabled') === 'true';
 
-describe('App (Milestone 1 shell)', () => {
+describe('App over the Milestone 1 placeholder data (editing behaviour)', () => {
   it('says plainly that the data is a placeholder, with one visible key to "?"', () => {
     setup();
     const banner = screen.getByRole('note');

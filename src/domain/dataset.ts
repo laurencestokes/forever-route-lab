@@ -4,6 +4,12 @@ import type { InstancePresence, SourcedPoint, UnmappedAreaPoint, WorldPoint } fr
 /**
  * Dataset record types (docs/ARCHITECTURE.md §5.3). Records are produced by tools/questiedb and
  * loaded by infra/data. Missing upstream values are `null`, never QuestieDB's pad-to-0.
+ *
+ * **Single ids are never 0.** Where upstream writes 0 for "none" in a single-id field, the
+ * extractor ships `null` (DATA_PROVENANCE §6, "0 → null"): a non-null id below is a positive id,
+ * or a non-zero signed id where the field says so (`zoneOrSort`, `requirements.spell`). Consumers
+ * test `!== null` and never look up id 0. Masks (`races`, `classes`) and values (`rank`,
+ * `itemClass`, levels) are not ids: their 0 is a real value.
  */
 
 export type EntityRef =
@@ -41,7 +47,13 @@ export type ObjectiveDef =
       readonly label: string | null;
       readonly count: number | null;
     }
-  | { readonly kind: 'spell'; readonly spellId: SpellId; readonly itemId: ItemId | null; readonly label: string | null }
+  | {
+      readonly kind: 'spell';
+      readonly spellId: SpellId;
+      /** null when upstream has none (nil or 0). */
+      readonly itemId: ItemId | null;
+      readonly label: string | null;
+    }
   | { readonly kind: 'event'; readonly text: string | null; readonly points: readonly PublishedPoint[] };
 
 /** A point as QuestieDB publishes it, after AreaId → UiMap mapping at load. */
@@ -64,14 +76,20 @@ export interface QuestPrerequisites {
   readonly preQuestSingle: readonly QuestId[];
   readonly preQuestGroup: readonly number[];
   readonly exclusiveTo: readonly QuestId[];
+  /** A positive quest id, or null for none (upstream nil or 0; a faction layer may set it to null). */
   readonly nextQuestInChain: QuestId | null;
+  /** A positive quest id, or null for none (upstream nil or 0). */
   readonly parentQuest: QuestId | null;
   readonly childQuests: readonly QuestId[];
   readonly inGroupWith: readonly QuestId[];
+  /** A positive quest id, or null for none (upstream nil or 0). */
   readonly breadcrumbForQuestId: QuestId | null;
   readonly breadcrumbs: readonly QuestId[];
+  /** A positive quest id, or null for none (upstream nil or 0). */
   readonly availableUntilCompleted: QuestId | null;
+  /** A positive quest id, or null for none (upstream nil or 0). */
   readonly availableStartingWith: QuestId | null;
+  /** A positive quest id, or null for none (upstream nil or 0). */
   readonly disabledByQuest: QuestId | null;
 }
 
@@ -79,9 +97,11 @@ export interface QuestRequirements {
   readonly skill: { readonly skillId: SkillId; readonly value: number } | null;
   readonly minReputation: { readonly factionId: FactionId; readonly value: number } | null;
   readonly maxReputation: { readonly factionId: FactionId; readonly value: number } | null;
-  /** Positive: must know the spell. Negative: must not know it. */
+  /** Positive: must know the spell. Negative: must not know it. Never 0: none is null (upstream nil or 0). */
   readonly spell: number | null;
+  /** A positive id, or null for none (upstream nil or 0). */
   readonly specialization: number | null;
+  /** A positive item id, or null for none (upstream nil or 0). */
   readonly sourceItemId: ItemId | null;
   readonly requiredSourceItems: readonly ItemId[];
 }
@@ -103,7 +123,7 @@ export interface QuestRecord {
   readonly races: number | null;
   /** Class mask; bit (classId - 1). null = any class. */
   readonly classes: number | null;
-  /** >0 AreaTable id, <0 QuestSort id. */
+  /** >0 AreaTable id, <0 QuestSort id; never 0: none is null (upstream nil or 0). */
   readonly zoneOrSort: number | null;
   readonly dungeonQuest: boolean;
   readonly starters: readonly EntityRef[];
@@ -132,6 +152,7 @@ export interface NpcRecord {
   readonly maxLevel: number | null;
   /** Creature rank: 0 normal, 1 elite, 2 rare elite, 3 boss, 4 rare; null when unknown. */
   readonly rank: number | null;
+  /** A positive AreaTable id, or null when upstream gives none or 0 ("unknown or varies"). */
   readonly zoneId: AreaId | null;
   readonly npcFlags: number;
   /** Which factions can interact: 'A', 'H', 'AH', or null when unknown. */
@@ -144,7 +165,9 @@ export interface NpcRecord {
 export interface ObjectRecord {
   readonly id: ObjectId;
   readonly name: string;
+  /** A positive AreaTable id, or null when upstream gives none or 0 ("unknown or varies"). */
   readonly zoneId: AreaId | null;
+  /** A positive faction template id, or null for none (upstream nil or 0). */
   readonly factionId: FactionId | null;
   readonly questStarts: readonly QuestId[];
   readonly questEnds: readonly QuestId[];
@@ -158,6 +181,7 @@ export interface ItemRecord {
   readonly dropNpcs: readonly NpcId[];
   readonly dropObjects: readonly ObjectId[];
   readonly dropItems: readonly ItemId[];
+  /** A positive quest id, or null for none (upstream nil or 0). */
   readonly startsQuest: QuestId | null;
   readonly provenance: RecordProvenance;
 }
@@ -166,6 +190,12 @@ export interface ItemRecord {
 export interface SpawnPoint {
   readonly source: PublishedPoint;
   readonly world: WorldPoint | null;
+  /**
+   * The UiMap its `world` point is on, not the zone the entity is in: for a zone point the UiMap
+   * it was published on, for instance presence (`source.kind === 'instance'`) the UiMap of its
+   * dungeon's entrance, and null when there is no world point. Name a presence spawn's place from
+   * `source`, e.g. "an instance (entrance in Westfall)" (M2 review COORD-2).
+   */
   readonly uiMapId: UiMapId | null;
 }
 

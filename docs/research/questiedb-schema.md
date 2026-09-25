@@ -984,7 +984,7 @@ Muehe/TheCrux(BreakBB)/Drejjmit/Dyaxler/Cheeq/TechnoHunter/Yttrium/Everyone else
 Questie clone at the pinned commits (`git ls-files`; `README.md` has no licence section).
 
 A later full-history check (D-016, 2026-09-25) found that neither `Questie/Questie` nor
-`Questie/QuestieDB` has ever had a licence file on its default branch. Questie's unmerged
+`Questie/QuestieDB` has ever had a root licence file (none covering Questie's own code or data; bundled third-party folders carry their own; wording corrected after the Milestone 2 review) on its default branch. Questie's unmerged
 `license` branch (commits `ce65498c`, 2023-02-13, to `842201bd`, 2024-05-06) drafts a
 `LICENSE.md` saying that Questie historically never had a licence and should, when in doubt, be
 considered "all rights reserved", plus a contributor licence agreement intended to relicense as

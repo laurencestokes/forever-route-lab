@@ -35,6 +35,8 @@ export interface AboutDialogProps {
    * data is a placeholder and leaves out the data notice link, which ships with the data.
    */
   readonly dataUpstreamCommit: string | null;
+  /** The loaded dataset's `dataRevision` and frame build, shown with the data notice; null or omitted when none. */
+  readonly dataIdentity?: { readonly dataRevision: string; readonly frameBuild: string } | null | undefined;
   readonly copyright?: string | undefined;
   readonly repositoryUrl?: string | undefined;
   /** Links to the notices shipped next to the app (relative to the page). */
@@ -62,6 +64,7 @@ export function AboutDialog({
   version,
   sourceCommit,
   dataUpstreamCommit,
+  dataIdentity = null,
   copyright = DEFAULT_COPYRIGHT,
   repositoryUrl = REPOSITORY_URL,
   links = DEFAULT_LINKS,
@@ -172,17 +175,27 @@ export function AboutDialog({
                   This build runs on <strong>placeholder data</strong>: invented quests, NPCs and zones, labelled
                   &ldquo;Placeholder&rdquo;, with no game text, XP values or objective counts. From Milestone 2, quest,
                   NPC, object, item and zone data will be derived from the Questie project&apos;s QuestieDB. Neither
-                  Questie nor QuestieDB has published a licence file. A draft in Questie&apos;s repository says that,
-                  when in doubt, Questie should be considered &ldquo;all rights reserved&rdquo;. The project owner chose
-                  to publish the derived data with a notice and accepts the risk. This is not a legal conclusion.
+                  Questie nor QuestieDB has a root licence file (none covering Questie&apos;s own code or data; Questie
+                  carries licence files only for bundled third-party material). A draft in Questie&apos;s repository
+                  says that, when in doubt, Questie should be considered &ldquo;all rights reserved&rdquo;. The project
+                  owner chose to publish the derived data with a notice and accepts the risk. This is not a legal
+                  conclusion.
                 </p>
               ) : (
                 <p>
                   Quest, NPC, object, item and zone data are derived from the Questie project&apos;s QuestieDB (pinned
-                  commit {dataUpstreamCommit.slice(0, 12)}). Neither Questie nor QuestieDB has published a licence file.
-                  A draft in Questie&apos;s repository says that, when in doubt, Questie should be considered &ldquo;all
-                  rights reserved&rdquo;. The project owner chose to publish the derived data with this notice and
-                  accepts the risk. This is not a legal conclusion.
+                  commit {dataUpstreamCommit.slice(0, 12)}). Neither Questie nor QuestieDB has a root licence file
+                  (none covering Questie&apos;s own code or data; Questie carries licence files only for bundled
+                  third-party material). A draft in Questie&apos;s repository says that, when in doubt, Questie
+                  should be considered &ldquo;all rights reserved&rdquo;. The project owner chose to publish the
+                  derived data with this notice and accepts the risk. This is not a legal conclusion.
+                </p>
+              )}
+              {!placeholderData && dataIdentity !== null && (
+                <p>
+                  Data revision <code>{dataIdentity.dataRevision.slice(0, 12)}</code>, data frame build{' '}
+                  <span className="frl-num">{dataIdentity.frameBuild}</span>. Every file was checked against its manifest hash when it
+                  loaded.
                 </p>
               )}
               <p className="frl-about__carve-out">{DATA_LICENCE_CARVE_OUT}</p>

@@ -23,6 +23,8 @@ export interface AppTopBarProps {
   readonly dataset: DatasetView;
   readonly projectName: string;
   readonly placeholder: boolean;
+  /** The word of the project's placeholder label ("Sample" for the generated sample route). */
+  readonly placeholderLabel?: string | undefined;
   readonly search: string;
   readonly onSearchChange: (value: string) => void;
   readonly onSearchSubmit: () => void;
@@ -37,6 +39,7 @@ export const AppTopBar = memo(function AppTopBar({
   dataset,
   projectName,
   placeholder,
+  placeholderLabel,
   search,
   onSearchChange,
   onSearchSubmit,
@@ -61,6 +64,7 @@ export const AppTopBar = memo(function AppTopBar({
       projectName={projectName}
       routeName={routeName}
       placeholder={placeholder}
+      placeholderLabel={placeholderLabel}
       search={{
         value: search,
         onChange: onSearchChange,

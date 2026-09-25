@@ -17,7 +17,8 @@ describe('AboutDialog data notice', () => {
     expect(text).not.toContain('data are derived from');
     expect(text).not.toContain('pinned commit');
     // The licence finding and the carve-out are stated all the same.
-    expect(text).toContain('Neither Questie nor QuestieDB has published a licence file');
+    expect(text).toContain("Neither Questie nor QuestieDB has a root licence file (none covering Questie's own code or data");
+    expect(text).toContain('licence files only for bundled third-party material');
     expect(text).toContain(DATA_LICENCE_CARVE_OUT);
     expect(within(dialog).queryByRole('link', { name: 'Full data notice' })).toBeNull();
     expect(text).toContain('The full data notice ships with the data from Milestone 2');
@@ -28,6 +29,9 @@ describe('AboutDialog data notice', () => {
     const dialog = screen.getByRole('dialog', { name: 'About Forever Route Lab' });
     expect(dialog.textContent).toContain('derived from the Questie project');
     expect(dialog.textContent).toContain('pinned commit b6f5b07b0acf');
+    // M2 review data-F9: the finding covers root licence files, not Questie's third-party ones.
+    expect(dialog.textContent).toContain("Neither Questie nor QuestieDB has a root licence file (none covering Questie's own code or data");
+    expect(dialog.textContent).not.toContain('has published a licence file');
     expect(dialog.textContent).not.toContain('placeholder data');
     expect(within(dialog).getByRole('link', { name: 'Full data notice' }).getAttribute('href')).toBe('data/NOTICE.md');
   });

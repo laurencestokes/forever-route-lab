@@ -21,6 +21,8 @@ export interface MapPlaceholderProps {
   /** The active step, echoed so selection visibly reaches the centre panel. */
   readonly focus?: { readonly title: string; readonly location: string | null } | null | undefined;
   readonly layers?: readonly MapLayerStub[] | undefined;
+  /** Which map geometry is loaded, in one line (docs/MAPS.md §5.6 step 6); omitted when unknown. */
+  readonly geometry?: string | null | undefined;
 }
 
 /**
@@ -30,7 +32,7 @@ export interface MapPlaceholderProps {
  * The card and the layer stub are laid out side by side in a grid (stacked when the panel is
  * narrow), never on top of each other; the panel scrolls rather than overlap when it is short.
  */
-export function MapPlaceholder({ focus = null, layers = PLANNED_MAP_LAYERS }: MapPlaceholderProps) {
+export function MapPlaceholder({ focus = null, layers = PLANNED_MAP_LAYERS, geometry = null }: MapPlaceholderProps) {
   const headingId = useId();
   const layersId = useId();
   return (
@@ -52,6 +54,7 @@ export function MapPlaceholder({ focus = null, layers = PLANNED_MAP_LAYERS }: Ma
             It will draw the route line, step markers and quest locations over zone maps. Until then this panel only shows
             which step is active.
           </p>
+          {geometry !== null && <p className="frl-mapph__text">{`Geometry loaded: ${geometry}.`}</p>}
           <p className="frl-mapph__focus">
             <Icon name="map-pin" size={14} />
             {focus === null ? (

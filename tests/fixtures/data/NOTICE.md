@@ -1,0 +1,80 @@
+# Notice: generated QuestieDB-derived test fixture
+
+The files in this directory are a slice of the dataset `tools/questiedb` generates from
+[Questie/QuestieDB](https://github.com/Questie/QuestieDB), flavour **Forever**, at commit
+`b6f5b07b0acf1c820993cbb0ce2521c912bb4c92` (2026-09-23T14:13:50+02:00).
+
+Do not edit; regenerate with `pnpm data:extract`. No file here is edited by hand.
+
+## What this slice is
+
+Region: Durotar (UiMap 1411) and its subzones, including the Valley of Trials; AreaIds 14, 362, 363, 364, 365, 366, 367, 368, 369, 370, 371, 372, 373, 374, 375, 393, 407, 410, 638, 639, 640, 814, 816, 817, 1296, 1297, 2320, 2337, 2979.
+Quests: those whose starters or finishers (NPCs or objects) have a spawn point in the region.
+Entities: everything those quests reference (starters, finishers, objective targets, hint
+references, source items, item containers and drop sources, also under the faction and class
+overlays), the NPCs and objects whose questStarts/questEnds name a sliced quest, the items that
+start one, and the flight masters, innkeepers and trainers that spawn in the region. Records and
+spawns are complete; questStarts/questEnds may name quests outside the slice. zones.json keeps
+only the areas, UiMaps, instance areas and dungeons the slice uses.
+
+## Licence finding (no legal conclusion)
+
+- No root licence file (none covering Questie's own code or data) on the default branch of
+  Questie/QuestieDB or Questie/Questie (full-history check of every branch, 2026-09-25;
+  [DATA_PROVENANCE.md §3.1](https://github.com/laurencestokes/forever-route-lab/blob/main/docs/DATA_PROVENANCE.md)).
+- Questie's default branch carries licence files only for bundled third-party material (Libs/,
+  Libs/Krowi_WorldMapButtons/, Icons/, ExternalScripts(DONOTINCLUDEINRELEASE)/slpp/); none is a
+  QuestieDB input.
+- Questie's unmerged `license` branch (commits `ce65498c`, 2023-02-13, to `842201bd`,
+  2024-05-06) drafts a notice saying that Questie historically never had a licence and that,
+  when in doubt, it should be considered "all rights reserved". The same draft proposes a
+  contributor licence agreement to license contributions as MIT, or CC0 where MIT is not
+  applicable.
+- The owner of this repository decided to build, commit and publish this derived dataset with
+  these notices, and accepts the risk (decision D-016).
+
+## Licence posture
+
+> GPL-3.0-or-later applies to this project's contributions and, as a posture, to Questie-derived data; it grants no rights over Blizzard content (names, text, client-derived values) or other third-party material embedded in that data.
+
+This repository's own code is licensed GPL-3.0-or-later. Treating Questie-derived data under
+that licence is a posture, not a legal conclusion; it grants no rights that upstream has not
+granted.
+
+## Authorship and declared origins
+
+- Upstream authorship line (QuestieDB `generate.lua`): "Code: Logonz Data: Muehe/TheCrux(BreakBB)/Drejjmit/Dyaxler/Cheeq/TechnoHunter/Yttrium/Everyone else".
+- Questie/QuestieDB contributors: ids, relations, levels, flags and corrections.
+- Blizzard game content, via QuestieDB: entity names, quest text (`objectivesText`), zone and
+  dungeon names. Objective labels and event text are Blizzard text or text written in
+  QuestieDB's corrections; the two are not distinguished.
+- Blizzard client-derived values, via QuestieDB: AreaID to UiMapID links and the Era to
+  Forever coordinate projection (client DBC exports, builds 1.15.9.69722 and
+  1.60.1.69893).
+- Item quest starts (`startsQuest`) set by QuestieDB `itemStartFixes.lua`, which declares that
+  it was "automatically generated from wowhead data" (owner decision OD-7 pending; shipped by
+  default). The items concerned are listed in `manifest.json` (`provenance.itemStartFixesOnly`).
+- Quest XP (`xp`, basis `era-seed`): an Era seed; upstream does not state where the values
+  come from.
+- Derived by forever-route-lab from QuestieDB data, with rules of its own: `dungeonQuest` (a
+  classification of QuestieDB's dungeon list), the AreaID link classes in `zones.json`, and the
+  entrances' `frameVerified` flags (from QuestieDB's coordinate audit).
+- Not included: QuestieDB's drop-percentage tables (declared Wowhead- and CMaNGOS-generated).
+
+The same origins are listed per file in `manifest.json` (`outputs[].origins`).
+
+## What this data is
+
+The Classic Era QuestieDB baseline with an Era to Forever map-coordinate projection on four
+zones. No Forever-specific quest, NPC, object or item content exists upstream yet: every record
+has `foreverStatus: "unknown"` and the manifest says `foreverContentVerified: false`.
+
+## Non-affiliation
+
+forever-route-lab is not affiliated with or endorsed by Blizzard Entertainment or the Questie
+project. World of Warcraft is a trademark of Blizzard Entertainment, Inc.
+
+## More
+
+- `manifest.json`: the pin, input checksums, layers, per-file hashes, origins and counts.
+- [docs/DATA_PROVENANCE.md](https://github.com/laurencestokes/forever-route-lab/blob/main/docs/DATA_PROVENANCE.md): the full provenance record.

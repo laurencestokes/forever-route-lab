@@ -45,6 +45,8 @@ export interface TopBarProps {
   readonly routeName: string;
   /** The open project is sample content: shows the "Placeholder" label beside its name. */
   readonly placeholder?: boolean | undefined;
+  /** The label's word when `placeholder` is set ("Placeholder" by default; "Sample" for the generated sample). */
+  readonly placeholderLabel?: string | undefined;
   readonly search: {
     readonly value: string;
     readonly onChange: (value: string) => void;
@@ -155,6 +157,7 @@ export function TopBar({
   projectName,
   routeName,
   placeholder = false,
+  placeholderLabel,
   search,
   zones,
   onImport,
@@ -193,7 +196,7 @@ export function TopBar({
           <span className="frl-visually-hidden">Route: </span>
           {routeName}
         </span>
-        {placeholder && <PlaceholderTag what="project" />}
+        {placeholder && <PlaceholderTag what="project" label={placeholderLabel} />}
       </span>
       <span className="frl-topbar__spacer" />
       <div role="search" className="frl-topbar__search">

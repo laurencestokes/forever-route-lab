@@ -8,7 +8,7 @@ Last updated: 2026-09-25
 
 ## Current milestone
 
-**Milestone 1: Foundation**, complete. Next: **Milestone 2: Forever data pipeline**.
+**Milestone 2: Forever data pipeline**, complete. Next: **Milestone 3: Map**, then **3b: Terrain navigation** (D-028).
 
 ## Completed work
 
@@ -47,33 +47,63 @@ Last updated: 2026-09-25
   - README.
   - Independent review: [docs/reviews/review-m1-foundation.md](docs/reviews/review-m1-foundation.md)
     (46 findings, all majors and minors fixed).
+- **Milestone 2 (Forever data pipeline):**
+  - `tools/questiedb`: fetches, extracts, validates and diffs from the pinned QuestieDB
+    (`b6f5b07`), with luaparse and a whitelisted evaluator that fails closed. It reproduces
+    upstream's composed counts (4,257 / 10,122 / 6,666 / 14,899), extraction is byte-reproducible,
+    and the tool works without git.
+  - Committed dataset `public/data/` (`dataRevision` `65c377bc…`, 938.6 kB gzip): 4,257 quests,
+    6,003 NPCs (quest-referenced plus flight masters, innkeepers and trainers), 952 objects,
+    2,962 items and 77,828 points, with a manifest, NOTICE and fixture slice.
+  - `src/geo`: transforms, resolve, era→forever, distances, zone attribution, frame and content
+    hashes.
+  - Committed placeholder geometry: 49 QuestieDB frames plus 12 cited DB2 rows, reproducible from
+    `tools/maps/inputs/`.
+  - `src/infra` loaders: SHA-256-verified data and geometry, a synchronous `DatasetView` with
+    overlays, and spawns converted to world points (76,300 resolved, 1,282 instance-presence).
+  - The app boots on real data with a labelled sample route (Durotar start).
+  - Independent review: [docs/reviews/review-m2-data.md](docs/reviews/review-m2-data.md)
+    (44 findings, all fixed).
 
 ## Branch / commit
 
 - Branch: `main`
-- Commits: `e2e577f` skeleton, `14acc7a` Milestone 0, then the Milestone 1 commit (see `git log`).
+- Commits: `e2e577f` skeleton, `14acc7a` Milestone 0, `374354a` Milestone 1, then the Milestone 2 commit (see `git log`).
 
 ## Build / test status
 
-As of the Milestone 1 commit (`pnpm check`):
+As of the Milestone 2 commit (`pnpm check`):
 
 | Check | Status |
 |---|---|
 | Typecheck (pure, app, node configs) | pass |
 | Lint | pass |
-| Tests | 47 files, 746 tests, pass |
+| Tests | 97 files, 1,221 tests, pass |
+| Data validation (`data:validate`, public/data and fixture) | pass |
+| Reproducibility (`extract --check`, needs the QuestieDB clone) | byte-identical (manual gate until CI, Milestone 9) |
 | Licence gate | pass (8 shipped packages) |
-| Production build + dist audit | pass; entry chunk about 101 kB gzip of a 250 kB budget |
+| Production build + dist audit | pass; entry about 116 kB gzip of 250 kB; data 938.6 kB gzip of 1.2 MB |
 
 ## Known bugs / deferred checks
 
 - No axe-core accessibility run yet (planned with the Playwright smoke test, Milestone 9).
 - "The page never scrolls" (docs/UI.md §6) is a manual check until Playwright exists.
-- The app runs on synthetic placeholder data until Milestone 2.
+- `pnpm data:check` (fetch, `extract --check`, validate) is a manual gate until CI exists
+  (Milestone 9): `pnpm check` runs `data:validate`, which proves the committed data is internally
+  consistent but not that it equals a fresh extraction (DATA_PROVENANCE §7 item 1; M2 review
+  data-F3). `extract.test.ts` is skipped, loudly, without the QuestieDB clone, and fails in CI
+  (`CI` set) without it.
+- `pnpm data:check` (fetch, extract --check, validate) is a manual gate until CI exists (Milestone 9).
+- The planned 4× CPU-throttled startup measurement happens with Playwright (Milestone 9).
 
 ## Blockers
 
 _None._
+
+## Feature backlog (post-MVP or later milestones)
+
+- UX ideas from a community planner, with target milestones: [docs/research/ux-benchmark.md](docs/research/ux-benchmark.md).
+- ~~Terrain-aware walking (post-MVP)~~: promoted to **Milestone 3b** by owner decision (D-028).
 
 ## Owner decisions
 
@@ -89,6 +119,9 @@ _None._
 | OD-8 | Archive the pinned upstream QuestieDB inputs with each release? | **Pending.** Default: not archived (the pinned commit is public) | pending | DATA_PROVENANCE §3.3 |
 | OD-9 | Contact the Questie team about licensing permission? | Owner's call; not required by D-016 | open | D-016 |
 | OD-10 | Any real map art ever deployed publicly? | Default: never; local only | default | D-018 |
+| OD-11 | Terrain-aware walking: derived navigation data committed and deployed? | Commit + deploy with notices | decided (D-028) | owner |
+| OD-12 | Terrain extraction method | Own read-only TypeScript CASC reader over `Data/` | decided (D-028) | owner |
+| OD-13 | Push to the GitHub remote? | Not pushed until the owner says so | open | owner |
 
 ## Open questions (research)
 
@@ -101,33 +134,36 @@ _None._
   labelled default).
 - Riding training level and cost in Forever.
 
-## Exact next tasks (Milestone 2: Forever data pipeline)
+## Exact next tasks (Milestone 3: Map)
 
-1. `tools/questiedb` (ARCHITECTURE §5, DATA_PROVENANCE §4-§9):
-   - `upstream.json` pin, `fetch.ts` (git blobs, LF hashes), `extract.ts` (luaparse plus a
-     whitelisted evaluator; static corrections in upstream order; overlays), `validate.ts` (golden
-     counts 4,257 / 10,122 / 6,666 / 14,899, referential integrity, schema), `diff.ts` (pin-to-pin
-     diff, stub three-way classifier);
-   - output: `public/data/*.json` plus `manifest.json` and `NOTICE.md`, a test fixture slice, and
-     size baselines in `tools/build/dist-requirements.json`.
-2. `src/geo`: `SourcedPoint` resolution, world/percent transforms, `eraToForever`, distances and
-   zone attribution, with the worked-example tests from coordinates.md §7-§9.
-3. `tools/maps import --placeholder`, which builds
-   `public/maps/placeholder/geometry.placeholder.json` and its `NOTICE.md` from the pinned
-   `conversion.json` plus `tools/maps/inputs/db2-rows-1.60.1.70009.json` (12 cited rows; source
-   CSVs in `.cache/experiments/maps/`).
-4. `src/infra/data` loader and synchronous `DatasetView` (spawns converted to world points at load;
-   overlays; custom quests), `src/infra/maps` geometry loader, and the app switched from placeholder
-   to real data with a loading state.
-5. Independent data/provenance, coordinate and code reviews; fix; checks; docs; commit.
+1. `src/map/adapter.ts` (`MapAdapter`, descriptors, view-model inputs) and `src/map/layers.ts`
+   (pure view models → descriptors, memoised per layer, level of detail), per ARCHITECTURE §7.
+2. `src/map/leaflet/`: a `L.CRS.Simple` surface per world map (`latLng = (x, -y)`), the canvas
+   renderer, markers, polylines split per world map, zone frames with labels, grid and scale bar,
+   art overlays for local sets, layer toggles, highlight and focus, click and hover events, diffing
+   by id, and a path cap.
+3. UI: the map panel replaces the placeholder. It adds a surface switcher, a layer panel, the route
+   line, step, available-quest, objective, turn-in and flight-master markers, focus on the selected
+   step, fit route, and jump-to-zone wired to zone frames.
+4. `tools/maps/vite-local-maps.ts` (dev/preview only), a local art manifest and adapter support.
+   Art extraction from the client moves to Milestone 3b, which needs the CASC reader.
+5. Independent rendering/performance, map-coordinate and UI/accessibility reviews; fix; commit.
+
+Then **Milestone 3b** (D-028): a research and design step (CASC reader, ADT/WMO/M2 collision, grid
+vs navmesh, sizes, query cost), then implementation. WoWF-QRP code may be reused with attribution
+(D-029).
 
 ## Important commands
 
 ```bash
 pnpm install        # dependencies (pnpm 10.33, Node >= 22.13)
 pnpm dev            # dev server
-pnpm check          # typecheck, lint, test, build (licence gate, notices, dist audit)
+pnpm check          # typecheck, lint, test, data:validate, build (licence gate, notices, dist audit)
 pnpm test           # tests only
+pnpm data:validate  # validate public/data and the fixture (no clone needed)
+pnpm data:check     # fetch the pinned QuestieDB, extract --check, validate (reproducibility)
+pnpm data:all       # regenerate public/data from the pin (commit with any tools/questiedb change)
+pnpm maps:placeholder  # regenerate public/maps/placeholder from the pin + tools/maps/inputs
 ```
 
 ## Major design decisions

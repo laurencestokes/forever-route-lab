@@ -157,7 +157,7 @@ describe('AboutDialog', () => {
     expect(text).toContain('GPL-3.0-or-later');
     expect(text).toContain('WITHOUT ANY WARRANTY');
     expect(text).toContain(DATA_LICENCE_CARVE_OUT);
-    expect(text).toContain('Neither Questie nor QuestieDB has published a licence file');
+    expect(text).toContain("Neither Questie nor QuestieDB has a root licence file (none covering Questie's own code or data");
     expect(text).toContain('pinned commit b6f5b07b0acf');
     expect(text).toContain('not affiliated with or endorsed by Blizzard Entertainment, the Questie project or RestedXP');
     expect(text).toContain('Not recorded in this build');

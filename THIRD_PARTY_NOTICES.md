@@ -21,27 +21,33 @@ project or RestedXP. World of Warcraft is a trademark of Blizzard Entertainment,
 - **Upstream authorship line** (QuestieDB `generate.lua:90`): "Code: Logonz Data:
   Muehe/TheCrux(BreakBB)/Drejjmit/Dyaxler/Cheeq/TechnoHunter/Yttrium/Everyone else".
 - **Licence finding** (DATA_PROVENANCE §3.1, checked 2026-09-25): neither Questie/QuestieDB nor
-  Questie/Questie has ever had a licence file on its default branch (full-history check; GitHub
-  API `license: null`). Questie's unmerged `license` branch (commits `ce65498c`, 2023-02-13, to
-  `842201bd`, 2024-05-06) drafts a `LICENSE.md` saying that Questie historically never had a
-  licence and that, when in doubt, it should be considered "all rights reserved". The same draft
-  proposes a contributor licence agreement (`CLA.md`) to license contributions as MIT, or CC0
-  where MIT is not applicable, and to allow relicensing under MIT, BSD, GPL-2, GPL-3,
+  Questie/Questie has ever had a root licence file on its default branch, none covering Questie's
+  own code or data (full-history check; GitHub API `license: null`). Questie's default branch
+  carries licence files only for bundled third-party material (`Libs/`, `Icons/` and others), none
+  of which is a QuestieDB input. Questie's unmerged `license` branch (commits `ce65498c`,
+  2023-02-13, to `842201bd`, 2024-05-06) drafts a `LICENSE.md` saying that Questie historically
+  never had a licence and that, when in doubt, it should be considered "all rights reserved". The
+  same draft proposes a contributor licence agreement (`CLA.md`) to license contributions as MIT,
+  or CC0 where MIT is not applicable, and to allow relicensing under MIT, BSD, GPL-2, GPL-3,
   CC BY 4.0 or CC0.
 - **Owner's posture** (D-016): the owner decided to build, commit and publish the derived dataset
   with these notices, and accepts the risk. GPL-3.0-or-later applies to this project's
   contributions and, as a posture, to Questie-derived data; it grants no rights over Blizzard
   content (names, text, client-derived values) or other third-party material embedded in that
   data. This is not a legal conclusion.
-- **Origins embedded in the data**, as declared upstream (listed per output file in the manifest's
-  `origins`, DATA_PROVENANCE §8.2):
-  - Blizzard game content: entity names, quest and objective text (`objectivesText`), zone and
-    dungeon names.
+- **Origins embedded in the data**, declared upstream or attributed by this project (listed per
+  output file in the manifest's `origins`, DATA_PROVENANCE §8.2):
+  - Blizzard game content: entity names, quest text (`objectivesText`), zone and dungeon names.
+    Objective labels and event text are Blizzard text or text written in QuestieDB's corrections;
+    the two are not distinguished.
   - Blizzard client-derived values: AreaID→UiMapID links and the Era→Forever coordinate
     projection, from client DBC exports at builds 1.15.9.69722 and 1.60.1.69893.
   - Item quest starts (`startQuest`) set by QuestieDB's `itemStartFixes.lua`, which declares that
-    it was "automatically generated from wowhead data". Shipped by default with this origin noted;
-    owner decision OD-7 is pending (DATA_PROVENANCE §3.3).
+    it was "automatically generated from wowhead data". Shipped by default with this origin noted,
+    and the items concerned are listed in the manifest (`provenance.itemStartFixesOnly`); owner
+    decision OD-7 is pending (DATA_PROVENANCE §3.3).
+  - Derived by this project from QuestieDB data, with rules of its own: `dungeonQuest`, the
+    AreaID link classes and the entrances' `frameVerified` flags in `zones.json`.
   - Quest XP (`{questLevel, baseXp}`): an Era seed; upstream does not state where the values come
     from.
   - **Not included:** QuestieDB's drop-percentage tables, which declare Wowhead- and
@@ -81,7 +87,9 @@ project or RestedXP. World of Warcraft is a trademark of Blizzard Entertainment,
 
 ## Ported code
 
-None yet.
+None yet. Candidate source, allowed by D-029: WoWF-QRP (https://github.com/tyba-dev/WoWF-QRP,
+declares GPL-3.0, commit `c1e3fcf31be65d742858c1e87a5ce87b3565da60`). Its code only, never its
+data.
 
 Rule: code copied or ported into this repository keeps its original copyright and licence header.
 It also gets an entry here, maintained by hand, giving the source repository, commit, original

@@ -16,10 +16,10 @@
 
 </div>
 
-> **Pre-alpha.** Milestone 1 (Foundation) is a working shell over placeholder data. Nothing in it
-> is real Forever quest data yet, and every number that needs the simulator reads "unknown". Where
-> the project stands, and what comes next, is in [STATUS.md](STATUS.md). Screenshots will be added
-> once the map and the real dataset land.
+> **Pre-alpha.** The shell now runs on the real dataset derived from QuestieDB (Milestone 2), with
+> an auto-generated sample route that is not a recommendation. Every number that needs the
+> simulator still reads "unknown", and there is no map yet. Where the project stands, and what
+> comes next, is in [STATUS.md](STATUS.md). Screenshots will be added once the map lands.
 
 ## What this is
 
@@ -41,8 +41,25 @@ assumptions", never "optimal".
 
 ## Highlights
 
-**Available now (Milestone 1: Foundation)**
+**Available now (Milestones 1 and 2: Foundation, Forever data pipeline)**
 
+- **The real dataset, integrity-checked at load**: 4,257 quests, 6,003 NPCs, 952 objects and
+  2,962 items derived from QuestieDB at a pinned commit, about 0.94 MB gzip. Every file is checked against the
+  SHA-256 in its manifest and against its shape before anything is shown; a mismatch shows an
+  error screen that says what failed, never a partial dataset. On this machine it is ready in
+  about 0.15-0.3 s (budget 1 s).
+- **Spawns placed on the map geometry**: 76,300 spawn points (plus 1,282 instance-presence
+  markers) become world positions through the committed placeholder geometry; instance presence
+  resolves to the dungeon entrance when there is exactly one, and unmapped areas keep their reason
+  instead of a guessed position.
+  Faction and class variants of quests, NPCs and dungeon entrances follow the character.
+- **A sample route built from the data**: "Sample: Durotar start (auto-generated)" for a level-1
+  Horde Orc Warrior, generated at load from the Durotar map's low-level quests (repeatable and
+  holiday quests left out) and labelled "Sample route (auto-generated, not a recommended route)".
+- **Quests and details from real data**: the Available tab lists the quests open to the character
+  (a page of 100 at a time with an honest count, and search), and Details shows a quest's givers
+  and receivers at zone and percent, its objectives and where they are done, its quest text, and
+  where the record came from.
 - **A three-panel editor shell**: route list on the left, a map placeholder in the centre, and
   Available, Quest log, Details and Validation tabs on the right, with a top bar and a status bar.
 - **A route list built for long routes**: fixed one-line rows with in-house virtualisation,
@@ -57,15 +74,14 @@ assumptions", never "optimal".
 - **The domain model and its contract**: branded IDs, the route model (atomic steps plus RXP group
   sidecars), the project format with zod schemas typed against it, and pure, tested route
   operations.
-- **Honest placeholders**: the shell runs on a tiny synthetic dataset (quests and NPCs named
-  "Placeholder ...") and a 40-step placeholder route, both labelled in the UI. Duration, XP per
-  hour and level projections show "unknown, simulation arrives in Milestone 6".
+- **Honest unknowns**: duration, XP per hour and level projections show "unknown, simulation
+  arrives in Milestone 6"; Forever XP is shown as QuestieDB's Era value and says so, and every
+  record's Forever status is "unknown".
 
 **Planned**
 
 | Milestone | Scope |
 |---|---|
-| 2 | Forever data pipeline from QuestieDB at a pinned commit, committed dataset with notices |
 | 3 | Map: Leaflet behind an adapter, placeholder geometry, route lines and markers, no game art |
 | 4 | Route editor and storage: IndexedDB autosave, native JSON import and export |
 | 5 | RestedXP custom guide import and export with lossless round trips |
@@ -140,7 +156,7 @@ the specifications are [docs/SIMULATION.md](docs/SIMULATION.md), [docs/RXP.md](d
 | `src/project/` | zod schemas for the project format, migrations, parse and serialise |
 | `src/app/` | Framework-agnostic editor store: revisions, selection, commands, undo and redo; the React binding lives in `react.ts` |
 | `src/ui/` | React components, design tokens and styles; `App.tsx` composes the kit with the store |
-| `src/infra/` | Browser-facing adapters; today the placeholder dataset, later the dataset loader and IndexedDB |
+| `src/infra/` | Browser-facing adapters: the dataset loader and synchronous `DatasetView` (`data/`), the map geometry loader and local-map probe (`maps/`); IndexedDB later |
 | `src/main.tsx` | Composition root |
 | `tools/build/` | Licence gate, third-party notices and the `dist/` audit |
 | `tests/` | Cross-module tests (architecture rules, project fixtures) and fixtures; unit tests sit next to their modules |
@@ -148,8 +164,9 @@ the specifications are [docs/SIMULATION.md](docs/SIMULATION.md), [docs/RXP.md](d
 | `public/` | Static files copied into the build |
 | `local-maps/`, `assets-source/` | Gitignored folders for map files from your own client; never built or deployed |
 
-Planned modules (`geo`, `engine`, `sim`, `validate`, `rxp`, `diff`, `optimizer`, `map`) and tools
-(`tools/questiedb`, `tools/maps`) arrive with their milestones.
+Milestone 2 added `src/geo/` (coordinate transforms and zone attribution), `tools/questiedb/` (the
+dataset extractor and validator) and `tools/maps/` (the placeholder geometry importer); the planned
+modules (`engine`, `sim`, `validate`, `rxp`, `diff`, `optimizer`, `map`) arrive with their milestones.
 
 ## Development
 
@@ -160,7 +177,7 @@ pnpm test           # Vitest: node for pure modules, happy-dom for components
 pnpm test:watch     # the same, watching
 pnpm licence:check  # shipped dependencies against the SPDX allowlist (also run by build)
 pnpm build          # vite build, licence gate, third-party notices, dist/ audit
-pnpm check          # typecheck, lint, test, build
+pnpm check          # typecheck, lint, test, data:validate (committed data, no clone needed), build
 ```
 
 Tests are deterministic and sit next to the code they test (`*.test.ts`, `*.test.tsx`). Pure
@@ -172,19 +189,29 @@ parity and WCAG contrast pairs.
 
 ## Data and maps
 
-**Quest data.** From Milestone 2 the quest, NPC, object, item and zone data will be derived from
+**Quest data.** The quest, NPC, object, item and zone data are derived from
 [QuestieDB](https://github.com/Questie/QuestieDB) (flavour Forever) at a pinned commit
-(`b6f5b07b0acf1c820993cbb0ce2521c912bb4c92`), by a reproducible extractor, and committed with a
-manifest and notices. Milestone 1 ships no QuestieDB data at all, only the synthetic placeholder
-set.
+(`b6f5b07b0acf1c820993cbb0ce2521c912bb4c92`) by a reproducible extractor (`tools/questiedb`,
+`pnpm data:extract`), and committed in `public/data/` with a manifest and a notice
+([docs/DATA_PROVENANCE.md](docs/DATA_PROVENANCE.md)). Nothing in it is edited by hand.
 
-Neither Questie nor QuestieDB has ever published a licence file on its default branch (checked
-across full history on 2026-09-25). An unmerged draft in Questie's repository says that, when in
-doubt, Questie should be considered "all rights reserved", and proposes a contributor licence
-agreement to relicense contributions. The project owner has chosen to publish the derived data
-with prominent notices and accepts the risk. This records a finding and a decision; it is not a
-legal conclusion. The details are in [docs/DATA_PROVENANCE.md](docs/DATA_PROVENANCE.md) §3 and
-decision D-016.
+At startup the app fetches `data/manifest.json` and then every file it lists, in parallel, from
+the site itself (nothing leaves the origin). It checks each file's size and SHA-256 against the
+manifest, and the manifest's own `dataRevision` against its file list, then checks every record's
+shape. Only then are spawns converted once to world positions through the committed placeholder
+geometry (`public/maps/placeholder/`), which must come from the same QuestieDB pin. A failure
+stops the start with a screen that names the file and the reason; nothing partial is shown. The
+data badge in the status bar shows the loaded `dataRevision`, and About links the full data
+notice. Checking needs WebCrypto, so the site must be served over https (or from localhost).
+
+Neither Questie nor QuestieDB has ever had a root licence file on its default branch, none covering
+Questie's own code or data (checked across full history on 2026-09-25; Questie's default branch
+carries licence files only for bundled third-party material). An unmerged draft in Questie's
+repository says that, when in doubt, Questie should be considered "all rights reserved", and
+proposes a contributor licence agreement to relicense contributions. The project owner has chosen
+to publish the derived data with prominent notices and accepts the risk. This records a finding and
+a decision; it is not a legal conclusion. The details are in
+[docs/DATA_PROVENANCE.md](docs/DATA_PROVENANCE.md) §3 and decision D-016.
 
 At the pinned commit, QuestieDB's Forever data is the Classic Era baseline with re-projected
 coordinates on four zones: it holds no Forever-specific content yet. Every record therefore

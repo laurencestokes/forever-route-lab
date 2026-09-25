@@ -1,0 +1,11 @@
+{
+"_generated":{"by":"tools/questiedb","upstream":"Questie/QuestieDB@b6f5b07b0acf1c820993cbb0ce2521c912bb4c92","notice":"NOTICE.md","manifest":"manifest.json","edit":"do not edit; regenerate with pnpm data:extract"},
+"faction":{
+"Alliance":{"quests":{"8670":{"reputationReward":[{"factionId":469,"value":50}]}},"npcs":{},"objects":{},"items":{},"dungeons":{}},
+"Horde":{"quests":{"8670":{"reputationReward":[{"factionId":67,"value":50}]}},"npcs":{},"objects":{},"items":{},"dungeons":{}}
+},
+"class":{
+"Alliance":{"WARRIOR":{"quests":{}},"PALADIN":{"quests":{}},"HUNTER":{"quests":{}},"ROGUE":{"quests":{}},"PRIEST":{"quests":{}},"SHAMAN":{"quests":{}},"MAGE":{"quests":{}},"WARLOCK":{"quests":{}},"DRUID":{"quests":{}}},
+"Horde":{"WARRIOR":{"quests":{}},"PALADIN":{"quests":{}},"HUNTER":{"quests":{}},"ROGUE":{"quests":{}},"PRIEST":{"quests":{}},"SHAMAN":{"quests":{}},"MAGE":{"quests":{}},"WARLOCK":{"quests":{}},"DRUID":{"quests":{}}}
+}
+}

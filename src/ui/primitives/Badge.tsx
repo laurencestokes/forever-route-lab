@@ -24,17 +24,22 @@ export function Badge({ children, tone = 'neutral', title, className }: BadgePro
 export interface PlaceholderTagProps {
   /** What is a placeholder, for the tooltip and screen readers, e.g. `'route data'`. */
   readonly what?: string | undefined;
+  /**
+   * The visible word, "Placeholder" by default. Stand-in content built from real data (the
+   * auto-generated sample route) says "Sample" instead, in the same style.
+   */
+  readonly label?: string | undefined;
   readonly className?: string | undefined;
 }
 
 /**
  * The visible "Placeholder" label. Anything that stands in for real content (sample routes,
- * the map stub) carries it, so it can never be mistaken for game data.
+ * the map stub) carries it, so it can never be mistaken for game data or advice.
  */
-export function PlaceholderTag({ what, className }: PlaceholderTagProps) {
+export function PlaceholderTag({ what, label = 'Placeholder', className }: PlaceholderTagProps) {
   return (
-    <Badge tone="placeholder" className={className} title={what === undefined ? 'Placeholder' : `Placeholder ${what}`}>
-      Placeholder
+    <Badge tone="placeholder" className={className} title={what === undefined ? label : `${label} ${what}`}>
+      {label}
       {what !== undefined && <span className="frl-visually-hidden"> {what}</span>}
     </Badge>
   );

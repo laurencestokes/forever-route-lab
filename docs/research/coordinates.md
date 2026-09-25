@@ -1,7 +1,8 @@
 # Coordinate systems for WoW Forever (research)
 
 Milestone 0 research, written 2026-09-25 by the map research agent and revised the same day for
-ARCHITECTURE revision 2. It holds the detailed derivations behind [docs/MAPS.md](../MAPS.md):
+ARCHITECTURE revision 2; section 15 was rewritten in Milestone 2 to describe `src/geo` as built.
+It holds the detailed derivations behind [docs/MAPS.md](../MAPS.md):
 
 - axis conventions and the `UiMapAssignment` transform;
 - continent and world maps;
@@ -17,8 +18,9 @@ later rulings replaced are kept and marked **Superseded** with what replaced the
 measurements are unchanged.
 
 Every number below was computed from the pinned inputs in section 1. The scratch scripts are in
-`.cache/experiments/maps/` (gitignored): `csv.js`, `worked.js` and `steps.js` (section 16). Nothing
-here was checked in a live client. Where a fact comes from Classic Era rather than Forever, the
+`.cache/experiments/maps/` (gitignored): `csv.js`, `worked.js` and `steps.js` (section 16). Since
+Milestone 2 the worked examples of sections 7-9 are pinned by the `src/geo` and `tools/maps`
+tests (section 15). Nothing here was checked in a live client. Where a fact comes from Classic Era rather than Forever, the
 text says so.
 
 **Citations.** Client-derived values here (`UiMap`, `UiMapAssignment`, `TaxiNodes` and similar)
@@ -173,7 +175,23 @@ Notes:
   world position.
 - The `UiMin`/`UiMax` reading is the standard interpretation. It matches the data: Kalimdor sits on
   the left of the Azeroth map and Eastern Kingdoms on the right. It was **not** checked in a live
-  client.
+  client. It does reproduce Questie's own Classic world-map calibration. HereBeDragons stores the
+  Azeroth map per continent as `{width, height, left, top}` in world yards (the legacy Classic
+  constants it keeps for when the API gives no rectangle, `HereBeDragons-2.0.lua:274-275` at
+  Questie `40016145`). Deriving the same four numbers from each 947 row
+  (`width = (Ymax − Ymin)/(UiMax_0 − UiMin_0)`, `left = Ymax + width·UiMin_0`,
+  `height = (Xmax − Xmin)/(UiMax_1 − UiMin_1)`, `top = Xmax + height·UiMin_1`) gives every
+  constant to within 0.008 yd (HBD prints two decimals); points anywhere on the map agree to
+  within 0.009 yd (measured 2026-09-25).
+- Since Milestone 2 this reading places one shipped spawn. QuestieDB publishes object 180652 on
+  the synthetic AreaID 10089 (→ 947, §6) at `29.99, 89.15`. That lies in the Kalimdor
+  sub-rectangle and resolves to world `(−11845.68, −4735.15)` on MapID 1, 112 yd south of the
+  Kalimdor frame and outside every zone frame; HBD's constants put it 0.004 yd away. The other
+  five synthetic-alias points (NPCs 9026, 9046, 16033 on 10074 → 1415; NPC 15215 and object
+  180453 on 10073 → 1414) are read in the continent frames. Resolving all six is frame-safe:
+  rows 1414 and 1415 are identical at Era 69722 and Forever 70009, and the 947 rows differ only
+  in assignment 46784's OrderIndex (§6), so no frame changed under them. That is not a claim that
+  QuestieDB placed them accurately; QuestieDB itself leaves them unresolved.
 - Percent values outside 0..100 are legal. They mean "outside this map's frame" (section 7.4).
   QuestieDB never clamps (`tools/dbc/README.md`, "What conversion preserves").
 
@@ -181,7 +199,8 @@ Notes:
 
 For all 58 assignment rows whose map has 1002 × 668 art (including both Azeroth sub-rectangles,
 scaled by their `UiMin`/`UiMax`), `(Ymax − Ymin)/(Xmax − Xmin) = 1.5 = 1002/668` to within 0.2%
-(checked in `.cache/experiments/maps`). So one yard is the same number of pixels in both axes, and a
+(checked in `.cache/experiments/maps`, and on the committed placeholder by `tools/maps/validate.ts`
+check P7). So one yard is the same number of pixels in both axes, and a
 zone image can be placed on a continent (or a world-yard surface) as an axis-aligned rectangle with
 no distortion.
 
@@ -366,19 +385,37 @@ master to world:
 | 2 Stormwind, Elwynn | −8832.77, 478.62 | 1453: 71.61, 72.25 | 352 Dungar Longdrink 70.95, 72.51 | 11.9 yd |
 | 23 Orgrimmar, Durotar | 1677.59, −4315.71 | 1454: 45.28, 63.75 | 3310 Doras 45.12, 63.89 | 2.6 yd |
 | 22 Thunder Bluff, Mulgore | −1197.21, 29.71 | 1456: 46.65, 49.90 | 2995 Tal 47.00, 49.83 | 3.6 yd |
+| 5 Lakeshire, Redridge | −9429.10, −2231.40 | 1433: 25.34, 58.99 | 931 Ariena Stormfeather 25.50, 59.41 | 7.0 yd |
+| 67 Light's Hope Chapel, Eastern Plaguelands | 2271.09, −5340.80 | 1423: 71.70, 49.56 | 12617 Khaelyn Steelwing 71.81, 49.60 | 4.9 yd |
+| 68 Light's Hope Chapel, Eastern Plaguelands | 2327.41, −5286.89 | 1423: 70.45, 47.59 | 12636 Georgia 70.53, 47.55 | 3.8 yd |
 
-If Dungar's Forever `70.95, 72.51` is read with the **Era** Stormwind bounds instead, the error
-grows to **108.9 yd**. This confirms three things:
+Stormwind 1453, Redridge 1433 and Eastern Plaguelands 1423 are changed frames (§11.1). Reading
+each flight master's Forever percent with the **Era** bounds of its zone (`conversion.json`
+`source_bounds`) instead gives:
+
+| TaxiNode | Flight master | Forever frame | Era frame |
+|---|---|---:|---:|
+| 2 Stormwind | 352 Dungar Longdrink | 11.9 yd | **108.9 yd** |
+| 5 Lakeshire | 931 Ariena Stormfeather | 7.0 yd | **107.2 yd** |
+| 67 Light's Hope Chapel | 12617 Khaelyn Steelwing | 4.9 yd | **450.5 yd** |
+| 68 Light's Hope Chapel | 12636 Georgia | 3.8 yd | **445.0 yd** |
+
+This confirms three things:
 
 - The axis convention and formulas.
-- QuestieDB Forever data is in the Forever frame for a changed map.
-- Mixing frames produces errors of about 100 yards.
+- QuestieDB Forever data is in the Forever frame on three of the four changed maps (Mulgore
+  has no flight master of its own; Thunder Bluff is UiMap 1456, unchanged; §8 is its check).
+- Mixing frames produces errors of 100 yards or more.
 
-This check is a good automated validator (MAPS.md §5.5, local-set check L6). The three TaxiNodes
-rows are individual cited client values (`TaxiNodes.ID`, `Pos_0`, `Pos_1` at 1.60.1.70009). By
-D-022 they may be pinned as constants in `src/geo` tests, and ARCHITECTURE §6 requires it. The
-full `TaxiNodes`, `TaxiPath` and `TaxiPathNode` tables stay local, and taxi-derived leg timings
-are local-only by default (D-022, STATUS OD-6).
+This check is a good automated validator (MAPS.md §5.5, local-set check L6). The six TaxiNodes
+rows are individual cited client values (`TaxiNodes.ID`, `ContinentID`, `Pos_0`, `Pos_1` at
+1.60.1.70009; the flight masters are `foreverNpcDB.lua` lines 222, 661, 2462, 2761, 8078 and
+8079 at `b6f5b07b`). By D-022 they may be pinned as constants in `src/geo` tests, and
+ARCHITECTURE §6 requires it (`TAXI_LANDMARKS` in `src/geo/test-fixtures.ts` and
+`tools/maps/lib/local-set.ts`). One more row is cited for the zone-attribution test (§15):
+TaxiNodes 25, Crossroads, The Barrens, `(−441.80, −2596.08)` on MapID 1, which lies in the
+Durotar, Mulgore and The Barrens frames. The full `TaxiNodes`, `TaxiPath` and `TaxiPathNode`
+tables stay local, and taxi-derived leg timings are local-only by default (D-022, STATUS OD-6).
 
 ## 10. QuestieDB `data/Forever/conversion.json`
 
@@ -682,12 +719,11 @@ world frame (sections 4.1 and 5). The practical problems:
 Use the real continent art when it is available. Use zone rectangles only for placeholders,
 hit-testing and "zoom into zone" affordances (MAPS.md section 7).
 
-## 15. Coordinate model (TypeScript sketch)
+## 15. Coordinate model (`src/geo`)
 
-This sketch follows ARCHITECTURE §6 (D-017) and adds the geometry types and function contracts
-`src/geo` needs. The point and spawn types are authoritative in `src/domain/points.ts` and
-`src/domain/dataset.ts` and are repeated here with shortened comments. Where this sketch and
-ARCHITECTURE or the domain types differ, they win.
+Built in Milestone 2. This section describes `src/geo` as implemented; the point and spawn types
+are authoritative in `src/domain/points.ts` and `src/domain/dataset.ts` and are repeated here with
+shortened comments. Where this section and ARCHITECTURE or the domain types differ, they win.
 
 *Superseded by D-017:* revision 1 of this section had a single-object `SourcedPoint` with
 `point`, `frame: 'forever-percent' | 'era-percent' | 'world'` and a free-text `source`. It made
@@ -696,6 +732,9 @@ and gave the render adapter a `ui` surface kind.
 *Superseded by ARCHITECTURE §6 and `src/domain/points.ts`:* the first revision-2 sketch had
 optional `lexemes?`, no `uiMapId` on the world variant, no `Location.radius`, and a two-variant
 `SpawnPoint` for the shipped `spawns.json` rows with no case for AreaIDs that have no UiMap.
+*Superseded by the Milestone 2 implementation:* the Milestone 0 sketch here named
+`zoneToWorld`/`worldToZone`, `frameCanonicalString(g, frameSet)` and an `eraToForever` returning a
+tuple; the built names and shapes follow.
 
 ```ts
 // Branded IDs (src/domain/ids.ts). Separate namespaces; never share a lookup table (§13.1).
@@ -703,119 +742,189 @@ type AreaId = Brand<number, 'AreaId'>;
 type UiMapId = Brand<number, 'UiMapId'>;
 type WorldMapId = Brand<number, 'WorldMapId'>;          // Map.ID: 0, 1, 2991, 2997, …
 
-// src/domain/points.ts
-/** Runtime canonical point. Yards; x = north (Blizzard X), y = west (Blizzard Y). */
-interface WorldPoint { readonly mapId: WorldMapId; readonly x: number; readonly y: number }
-/** Display-only zone percent (labels, hit tests, "zoom to zone"); derived, never persisted. */
-interface MapPoint { readonly uiMapId: UiMapId; readonly x: number; readonly y: number }
-type ZoneFrame = 'forever' | 'era';
-/** A point as authored. This, not a WorldPoint, is what a project persists (D-017). */
+// src/domain/points.ts (unchanged by Milestone 2)
+interface WorldPoint { readonly mapId: WorldMapId; readonly x: number; readonly y: number }   // yards, x north, y west
+interface MapPoint { readonly uiMapId: UiMapId; readonly x: number; readonly y: number }     // percent, display only
 type SourcedPoint =
   | { readonly space: 'world'; readonly mapId: WorldMapId; readonly x: number; readonly y: number;
-      readonly uiMapId: UiMapId | null;                 // the UiMap an RXP world-form goto named
-      readonly lexemes: readonly [string, string] | null }
+      readonly uiMapId: UiMapId | null; readonly lexemes: readonly [string, string] | null }
   | { readonly space: 'zone'; readonly uiMapId: UiMapId; readonly x: number; readonly y: number;
-      readonly frame: ZoneFrame; readonly lexemes: readonly [string, string] | null };
-interface InstancePresence { readonly kind: 'instance'; readonly areaId: AreaId }   // Questie {-1,-1}
-interface UnmappedAreaPoint {                            // published percent, AreaID without a UiMap
-  readonly kind: 'unmapped'; readonly areaId: AreaId; readonly x: number; readonly y: number;
-  readonly reason: 'suppressed' | 'no-uimap' | 'instance-area';
-}
-interface Location {
-  readonly source: SourcedPoint; readonly label: string | null;
-  readonly radius: number | null;                       // arrival radius in yards (RXP `.goto …,radius`)
-}
+      readonly frame: 'forever' | 'era'; readonly lexemes: readonly [string, string] | null };
+interface Location { readonly source: SourcedPoint; readonly label: string | null; readonly radius: number | null }
 
-// src/domain/dataset.ts: what infra/data builds from each shipped spawns.json entry at load.
-type PublishedPoint = SourcedPoint | InstancePresence | UnmappedAreaPoint;
-interface SpawnPoint {
-  readonly source: PublishedPoint; readonly world: WorldPoint | null; readonly uiMapId: UiMapId | null;
-}
-
-// Geometry (MAPS.md §5.3). One shape for the committed placeholder and a merged local set.
-type RowSource = 'questiedb-conversion' | 'db2-csv' | 'local-db2';
-interface Assignment {
-  id: number; mapId: WorldMapId; areaId: AreaId | 0; orderIndex: number;
-  xMin: number; xMax: number; yMin: number; yMax: number;        // Region_0, Region_3, Region_1, Region_4
-  uiMin: [number, number]; uiMax: [number, number];
-  source: RowSource; build: string;                              // every row (D-018)
+// src/geo/types.ts: one shape for the placeholder, a local set and the two merged (MAPS.md §5.3)
+type GeometryRowSource = 'questiedb-conversion' | 'db2-csv' | 'local-db2';
+interface GeometryAssignment {                       // one UiMapAssignment row
+  readonly id: number;                               // UiMapAssignment.ID (provenance only)
+  readonly mapId: WorldMapId;                        // MapID
+  readonly areaId: AreaId;                           // AreaID; 0 for continent/world rows (DB2 value)
+  readonly orderIndex: number;
+  readonly xMin: number; readonly xMax: number;      // Region_0, Region_3 (south, north edges)
+  readonly yMin: number; readonly yMax: number;      // Region_1, Region_4 (east, west edges)
+  readonly uiMin: readonly [number, number];         // (UiMin_0, UiMin_1)
+  readonly uiMax: readonly [number, number];         // (UiMax_0, UiMax_1)
+  readonly source: GeometryRowSource; readonly build: string;
 }
 interface UiMapGeometry {
-  uiMapId: UiMapId; name: string; type: number | null; parent: UiMapId | 0 | null;
-  assignments: readonly Assignment[];
+  readonly uiMapId: UiMapId; readonly name: string; readonly nameSource: GeometryRowSource;
+  readonly type: number | null;                      // UiMap.Type; null for the 49 QuestieDB frames
+  readonly parent: UiMapId | null;                   // ParentUiMapID (0 = root); null where not carried
+  readonly assignments: readonly GeometryAssignment[];   // ≥ 1, ascending OrderIndex
 }
-interface EraToForever { scaleX: number; offsetX: number; scaleY: number; offsetY: number }
+interface EraToForeverCoefficients {
+  readonly scaleX: number; readonly offsetX: number; readonly scaleY: number; readonly offsetY: number;
+  readonly fromBuild: string; readonly toBuild: string; readonly source: 'questiedb-conversion';
+}
 interface MapGeometry {
-  maps: ReadonlyMap<UiMapId, UiMapGeometry>;
-  eraToForever: ReadonlyMap<UiMapId, EraToForever>;   // exactly 1412, 1423, 1433, 1453 (conversion.json)
+  readonly kind: 'placeholder' | 'local' | 'merged';
+  readonly product: string;                          // 'wow_classic_beta'
+  readonly recordedFrameHash: string | null;         // as the file states; always recompute
+  readonly recordedContentHash: string | null;       // `contentHash` as the file states; always recompute
+  readonly maps: ReadonlyMap<UiMapId, UiMapGeometry>;                        // ascending
+  readonly eraToForever: ReadonlyMap<UiMapId, EraToForeverCoefficients>;     // 1412, 1423, 1433, 1453
 }
+interface PercentPair { readonly x: number; readonly y: number }
 
-// Pure functions in src/geo: no DOM, no Leaflet, no I/O, no clock (ARCHITECTURE §17).
-declare function resolve(location: Location, g: MapGeometry): WorldPoint | null;
-declare function resolvePoint(p: SourcedPoint, g: MapGeometry): WorldPoint | null;
-declare function zoneToWorld(uiMapId: UiMapId, x: number, y: number, g: MapGeometry): WorldPoint | null;
-declare function worldToZone(w: WorldPoint, uiMapId: UiMapId, g: MapGeometry): MapPoint | null;
-declare function eraToForever(uiMapId: UiMapId, x: number, y: number, g: MapGeometry): [x: number, y: number];
-declare function distanceYards(a: WorldPoint, b: WorldPoint): number | null;
-declare function frameCanonicalString(g: MapGeometry, frameSet: readonly UiMapId[]): string;
-declare function mergeLocalGeometry(committed: MapGeometry, local: MapGeometry):
+// src/geo/geometry.ts
+function parseGeometryFile(json: unknown): { ok: true; geometry: MapGeometry } | { ok: false; errors: readonly string[] };
+function createMapGeometry(input: MapGeometryInput): MapGeometry;   // sorts; throws on duplicates or degenerate rows
+function geometryProblems(input: MapGeometryInput): readonly string[];
+function allAssignments(g: MapGeometry): readonly { uiMapId: UiMapId; row: GeometryAssignment }[];
+
+// src/geo/transforms.ts
+function mapToWorld(p: MapPoint, g: MapGeometry): WorldPoint | null;
+function worldToMap(p: WorldPoint, uiMapId: UiMapId, g: MapGeometry): MapPoint | null;
+function assignmentPercentToWorld(row: GeometryAssignment, x: number, y: number): WorldPoint;
+function assignmentWorldToPercent(row: GeometryAssignment, worldX: number, worldY: number): PercentPair;
+function assignmentForPercent(g: MapGeometry, uiMapId: UiMapId, x: number, y: number): GeometryAssignment | null;
+function assignmentForWorld(g: MapGeometry, uiMapId: UiMapId, mapId: WorldMapId): GeometryAssignment | null;
+function isFullUiRectangle(row: GeometryAssignment): boolean;
+function uiRectangleContains(row: GeometryAssignment, x: number, y: number): boolean;
+
+// src/geo/era.ts
+const ERA_CHANGED_UIMAP_IDS: readonly UiMapId[];   // [1412, 1423, 1433, 1453]
+function eraToForever(uiMapId: UiMapId, x: number, y: number, g: MapGeometry): PercentPair | null;
+
+// src/geo/resolve.ts
+type UnresolvedReason = 'no-geometry' | 'outside-ui-rectangles' | 'no-era-coefficients' | 'non-finite';
+type Resolution = { kind: 'resolved'; point: WorldPoint } | { kind: 'unresolved'; reason: UnresolvedReason; uiMapId: UiMapId | null };
+function resolve(input: Location | SourcedPoint, g: MapGeometry): WorldPoint | null;
+function resolveDetailed(input: Location | SourcedPoint, g: MapGeometry): Resolution;
+function resolvePoint(p: SourcedPoint, g: MapGeometry): WorldPoint | null;
+function resolvePointDetailed(p: SourcedPoint, g: MapGeometry): Resolution;
+
+// src/geo/distance.ts
+function distanceYards(a: WorldPoint, b: WorldPoint): number | null;
+
+// src/geo/zones.ts
+function attributeZone(p: WorldPoint, hint: UiMapId | null, g: MapGeometry): { uiMapId: UiMapId; basis: 'hint' | 'containment' } | null;
+function zoneFramesContaining(p: WorldPoint, g: MapGeometry): readonly UiMapId[];   // most central first
+function frameCentrality(row: GeometryAssignment, p: WorldPoint): number;           // min(fu, 1 − fu, fv, 1 − fv)
+function rowContainsWorldPoint(row: GeometryAssignment, p: WorldPoint): boolean;
+function worldMapIdOf(uiMapId: UiMapId, g: MapGeometry): WorldMapId | null;
+function worldMapIds(g: MapGeometry): readonly WorldMapId[];
+
+// src/geo/frame.ts
+type FrameTuple = readonly [uiMapId, mapId, xMin, xMax, yMin, yMax, uiMinU, uiMinV, uiMaxU, uiMaxV];   // numbers
+function frameTuple(uiMapId: UiMapId, row: GeometryAssignment): FrameTuple;
+function frameSetOf(g: MapGeometry): readonly UiMapId[];          // UiMaps with questiedb-conversion rows
+function canonicalFrameTuples(g: MapGeometry, frameSet?: readonly UiMapId[]):
+  | { ok: true; tuples: readonly FrameTuple[]; canonical: string } | { ok: false; incompatible: readonly UiMapId[] };
+function canonicalFrameString(tuples: readonly FrameTuple[]): string;   // JSON.stringify
+function mergeLocalGeometry(committed: MapGeometry, local: MapGeometry):
   | { kind: 'merged'; geometry: MapGeometry; added: readonly UiMapId[] }
-  | { kind: 'mismatch'; uiMapIds: readonly UiMapId[] };
+  | { kind: 'mismatch'; frameUiMapIds: readonly UiMapId[]; sharedRowUiMapIds: readonly UiMapId[] };
+
+// src/geo/content.ts (MAPS.md §5.3)
+function canonicalGeometryContent(g: MapGeometry): string;   // every row, name, parent, coefficient
 ```
+
+`src/geo/index.ts` re-exports all of it. The module is pure (ARCHITECTURE §17): no DOM, Node,
+clock, randomness, locale or bitwise operators; `Math.sqrt`, `Math.min` and `Math.fround` only.
+Hashing the canonical frame and content strings is done by `tools/maps` (`node:crypto`) and
+`infra/maps` (WebCrypto).
 
 Contracts:
 
-- **`resolve` / `resolvePoint`:**
-  - `space: 'world'` returns `{ mapId, x, y }` unchanged. The `uiMapId` hint is not used for
-    resolution; it matters only for display and RXP export.
-  - `space: 'zone'` with `frame: 'era'` first applies `eraToForever`, which is identity outside
-    the four changed UiMaps (section 11.1), then `zoneToWorld`.
-  - Nothing is cached on the `Location`. Results are recomputed per project revision in the
-    engine walk, so a project does not depend on which geometry a machine has.
-  - `null` means unknown travel (`Estimated` basis `unknown`) plus an info issue. It is never
-    zero distance (ARCHITECTURE §6).
-- **`zoneToWorld`** uses the UiMap's assignment. A single-row map uses section 4's zone formula.
-  A multi-row map (947) uses the row whose UI sub-rectangle contains `(x/100, y/100)`; outside
-  every sub-rectangle it returns `null`. A UiMap missing from the geometry (for example a new
-  zone before geometry exists) also gives `null`, and its percent point still stores and exports
-  unchanged.
-- **`worldToZone`** returns `null` when `w.mapId` differs from the row's `mapId`. The result may
-  lie outside 0..100 (section 7.4).
+- **`resolve` / `resolvePoint` / `…Detailed`:**
+  - `space: 'world'` returns a new `{ mapId, x, y }`. The `uiMapId` hint is not used for
+    resolution; it matters only for display and RXP export. World points resolve even on world
+    maps the geometry does not know.
+  - `space: 'zone'` with `frame: 'era'` first applies `eraToForever` (the geometry's block;
+    identity outside the four changed UiMaps), then the zone transform.
+  - Unresolved reasons: `no-geometry` (the UiMap has no row), `outside-ui-rectangles` (a
+    multi-row map such as 947 and a point on none of its sub-rectangles), `no-era-coefficients`
+    (an Era point on 1412/1423/1433/1453 and a geometry without that coefficient set: guessing
+    identity would misplace it by about 100 yd, §9), `non-finite`.
+  - Nothing is cached on the `Location`. `null` means unknown travel (`Estimated` basis
+    `unknown`) plus an info issue, never zero distance (ARCHITECTURE §6).
+- **`mapToWorld`:** a UiMap whose only row has the full `(0,0)-(1,1)` UI rectangle (every zone,
+  continent and new map) always uses that row, so percent outside 0..100 extrapolates in the
+  frame (§7.4). Otherwise the point must lie in a row's UI sub-rectangle, edges included; the
+  lowest OrderIndex wins. A UiMap missing from the geometry gives `null`, and its percent point
+  still stores and exports unchanged.
+- **`worldToMap`** uses the lowest-OrderIndex row whose `mapId` equals the point's, and returns
+  `null` when there is none. The result may lie outside 0..100 (§7.4).
 - **World-form axes, UiMap hint and lexemes.** The world variant's `x`/`y` are Blizzard X
-  (north) and Y (west). RXP and HereBeDragons write world pairs as `(Y, X)` (section 13.3), so
-  lowering swaps them. `uiMapId` keeps the `<UiMapID>` prefix of an RXP world-form goto, and is
-  `null` when a world point has none (for example one created in the app). `lexemes` keep the
-  two number strings **in the order written**: `[Y, X]` for RXP world form, `[x%, y%]` for
-  percent form. Export reproduces the original text from them. Export of points created or
-  moved in the app is RXP.md's (§13.4).
+  (north) and Y (west). RXP and HereBeDragons write world pairs as `(Y, X)` (§13.3), so lowering
+  swaps them. `uiMapId` keeps the `<UiMapID>` prefix of an RXP world-form goto and is `null` when
+  a world point has none. `lexemes` keep the two number strings **in the order written**: `[Y, X]`
+  for RXP world form, `[x%, y%]` for percent form. Export of points created or moved in the app is
+  RXP.md's (§13.4).
 - **`frame: 'era'`** comes only from an explicit import option on UiMaps 1412/1423/1433/1453
   (ARCHITECTURE §10). QuestieDB data is already in the Forever frame and is never converted again
-  (section 10.2).
+  (§10.2).
 - **Spawns are not `Location`s.** `infra/data` converts each shipped `spawns.json` entry once at
-  load (ARCHITECTURE §5.2):
-  - a percent point whose AreaId has a UiMap (`zones.json`, direct assignments only, section
-    13.2) becomes a zone `SourcedPoint` in the Forever frame, and `zoneToWorld` gives its world
-    point;
-  - `{-1,-1}` becomes `InstancePresence`, whose world point is the dungeon entrance from
-    `zones.json` when one exists, otherwise `null`;
-  - a percent point whose AreaId has no UiMap (suppressed areas, legacy dungeon compatibility
-    pairs, instance areas) becomes an `UnmappedAreaPoint` with its reason and a `null` world
-    point. Nothing is guessed.
-
-  The in-memory `DatasetView` holds these `SpawnPoint`s; they are never written to a project.
-- **`distanceYards`** returns `null` across world maps. Cross-world moves need a transport step,
-  a hearth, or an instance entrance edge (ARCHITECTURE §9.1-§9.3), never a distance.
-- **`frameCanonicalString`** builds the MAPS.md §5.6 canonical string (pure; encoding ratified in
-  ARCHITECTURE §6). `infra/maps` and `tools/maps` hash it; `src/geo` does not call WebCrypto.
-- **`mergeLocalGeometry`** (pure) runs after `infra/maps` has found the frame hashes equal. It
-  adds every UiMap the committed geometry lacks. For a UiMap both have, the rows must be
-  identical (equal sorted canonical tuples after `Math.fround`; IDs, `source` and `build` are
-  not compared). Any difference returns `mismatch` and the whole local set is rejected, so
-  resolution never differs between machines for a UiMap both know (ARCHITECTURE §6; MAPS.md §5.6
-  step 4).
+  load (ARCHITECTURE §5.2): a percent point whose AreaId has a UiMap becomes a zone `SourcedPoint`
+  in the Forever frame and `resolvePoint` gives its world point; `{-1,-1}` becomes
+  `InstancePresence` (world point: the dungeon entrance from `zones.json`, else `null`); a point
+  whose AreaId has no UiMap becomes an `UnmappedAreaPoint` with its reason and a `null` world
+  point. Nothing is guessed. `worldMapIdOf` gives `ZoneInfo.worldMapId` (null for 947).
+- **`distanceYards`** is `Math.sqrt(dx² + dy²)` in yards, `null` across world maps. Cross-world
+  moves need a transport step, a hearth or an instance entrance edge (ARCHITECTURE §9.1-§9.3).
+- **`attributeZone`** (display only; §5 explains why rectangles are not zone borders): the hint
+  wins when the geometry has it and one of its rows on the point's world map contains the point
+  (`basis: 'hint'`). Otherwise the containing zone frame (a row with AreaID > 0, so never a
+  continent) in which the point is **most central** wins: the largest
+  `frameCentrality = min(fu, 1 − fu, fv, 1 − fv)`, ties by the smaller frame (a city before its
+  zone), then by UiMapId (`basis: 'containment'`). Otherwise `null`. `zoneFramesContaining` lists
+  the containing frames in the same order.
+  *Measured agreement* (2026-09-25, the pinned `spawns.json` and the committed placeholder): over
+  the 76,294 shipped zone spawns on direct frames, with each spawn's published UiMap as truth,
+  the most-central rule agrees 87.6% of the time (NPCs 44,380 of 50,914, 87.2%; objects 22,490
+  of 25,380, 88.6%). The earlier smallest-frame rule agreed 73.3% (NPCs 72.0%): it sent 2,121
+  Barrens spawns to Durotar (542 now) and attributed Crossroads (TaxiNodes 25) to Durotar.
+  Euclidean distance to the frame centre measured 88.2%, within a point of this rule. The rule
+  still misses:
+  Gornek (§7, Valley of Trials) is 0.3275 deep in The Barrens' frame and 0.3167 in Durotar's. So
+  the fallback is for display only; grouping and anything stored use the published or authored
+  UiMap (M2 review COORD-5).
+- **`canonicalGeometryContent`** (MAPS.md §5.3): the canonical string the placeholder's
+  `contentHash` is the SHA-256 of. It covers every row (all 61, the 12 `db2-csv` rows included),
+  every name, name source, type and parent, and the `eraToForever` block, with no `Math.fround`,
+  so any edit changes it. The committed placeholder's string is 10,983 bytes and hashes to
+  `c05a47a2…`.
+- **`canonicalFrameTuples`** builds the MAPS.md §5.6 canonical form: one tuple per frame-set UiMap
+  (default: the geometry's `questiedb-conversion` UiMaps), ascending, from its single OrderIndex 0
+  row, coordinates through `Math.fround`; a frame-set UiMap without exactly one OrderIndex 0 row
+  makes the result `ok: false`. The committed placeholder's canonical string is 4,030 bytes and
+  hashes to `2cb10551…`.
+- **`mergeLocalGeometry`** needs no hash: equal canonical strings are equal frame hashes. Any
+  frame-set UiMap whose local frame differs or is missing is listed in `frameUiMapIds`. Every
+  other UiMap both have must have identical rows (sorted keys: the frame tuple plus OrderIndex
+  and AreaID; assignment IDs, `source` and `build` are not compared), else it is listed in
+  `sharedRowUiMapIds`. Any entry rejects the whole set. Otherwise the result is the committed
+  geometry plus the local set's new UiMaps (`kind: 'merged'`); names, types, parents and the
+  `eraToForever` block of committed UiMaps always come from the committed geometry.
+- **`parseGeometryFile`** reads an already parsed file and fails closed with path-level errors:
+  `schema` 1; `kind` `placeholder` (rows `questiedb-conversion`/`db2-csv`, a `frameHash`, no
+  `redistribution` key) or `local` (rows `local-db2`, `"redistribution": "local-only"`); UiMap keys
+  canonical positive integers; unknown keys inside maps, rows and coefficient sets refused;
+  bounds finite with `min < max`; UI coordinates in 0..1 with `min < max`; builds `a.b.c.d`;
+  unique OrderIndex per UiMap. Other top-level keys (`_generated`, `inputs`, `build`) are
+  provenance and are ignored.
 - **Rendering** is outside `src/geo`. `map/leaflet` maps a `WorldPoint` on surface `world:<mapId>`
-  to `L.latLng(x, −y)` (section 14.1). The `ui` surface kind is deferred with the overview surface
-  (F23).
+  to `L.latLng(x, −y)` (§14.1). The `ui` surface kind is deferred with the overview surface (F23).
 
 *Resolved (ARCHITECTURE §6, `src/domain/points.ts`):* this section used to raise an open point.
 RXP world-form gotos carry a UiMapID (`<UiMapID>/<MapID>`, section 13.4), and the world variant
@@ -824,26 +933,48 @@ prefix (unedited groups re-emit their original lines and were never affected). T
 now carries the optional `uiMapId` hint shown above, so lowering preserves the prefix in the
 model and canonical re-emission writes it back.
 
-Tests (Milestone 2, `src/geo`), all with values cited in this document:
+Tests (Milestone 2), all with values cited in this document. `src/geo/*.test.ts` run on a small
+cited fixture (`src/geo/test-fixtures.ts`); `tools/maps/placeholder-geometry.test.ts` repeats the
+worked examples on the committed 61 rows.
 
 1. Gornek (section 7): `{space:'zone', uiMapId:1411, x:42.06, y:68.33, frame:'forever'}` resolves
    to `(X, Y) = (−600.2992, −4186.4222)` on MapID 1. It is Kalimdor `57.7531, 54.6207` (row 1414)
-   and Azeroth `28.7673, 51.5603` (947 row 46785), both committed `db2-csv` rows.
+   and Azeroth `28.7673, 51.5603` (947 row 46785), and Orgrimmar `36.06, 307.26` (off-frame).
+   (`transforms.test.ts`, `resolve.test.ts`)
 2. Hawkwind (section 8): `{space:'zone', uiMapId:1412, x:44.18, y:76.06, frame:'era'}` resolves via
-   `eraToForever` to Forever `43.888926, 76.659548` and world `(−2877.9715, −221.8308)`.
-3. TaxiNodes landmarks (section 9): the three cited rows lie within 30 yd of their flight masters;
-   with Era Stormwind bounds the error is 108.9 yd (D-022).
-4. Era and Forever differ only on 1412, 1423, 1433 and 1453. The frame hash equals the MAPS.md §5.6
-   reference, and the Era negative vector differs.
-5. World ↔ percent round trip below 1e-9. `resolve` returns `null` for a UiMap without geometry.
-   `distanceYards` returns `null` across world maps.
+   `eraToForever` to Forever `43.888926, 76.659548` and world `(−2877.9715, −221.8308)`, within
+   1e-6 yd of reading the Era percent with the Era bounds; the stored QuestieDB value `43.89,
+   76.66` is world `(−2877.99, −221.90)`, Kalimdor `46.98, 63.90`. (`resolve.test.ts`, `era.test.ts`)
+3. TaxiNodes landmarks (section 9): nodes 2, 23, 22, 5, 67 and 68 lie 11.9, 2.6, 3.6, 7.0, 4.9
+   and 3.8 yd from flight masters 352, 3310, 2995, 931, 12617 and 12636 (all under 30 yd); with
+   the Era bounds of 1453, 1433 and 1423 the errors are 108.9, 107.2, 450.5 and 445.0 yd; a node
+   on another world map has no distance (D-022). (`distance.test.ts`; the committed geometry in
+   `tools/maps/placeholder-geometry.test.ts`)
+4. Era and Forever frames differ only on the changed UiMaps. The committed placeholder's frame
+   hash equals the MAPS.md §5.6 reference `2cb10551…` (`frame.test.ts`,
+   `tools/maps/placeholder-geometry.test.ts`). The Era negative vector `b94bf685…` needs the Era
+   CSV, which is local only; the fixture test checks that Era bounds change exactly the changed
+   UiMaps' tuples.
+5. World ↔ percent round trip below 1e-9 (fixture rows and all 61 committed rows, inside and
+   outside 0..100). `resolve` returns `null` for a UiMap without geometry. `distanceYards` returns
+   `null` across world maps.
 6. A type-level test that `Location` has no derived world field, so nothing derived can be
-   persisted.
+   persisted. (`resolve.test.ts`)
 7. World hint: the synthetic world point of section 13.4 (`mapId 1, x −500, y −4000,
    uiMapId 1411`) resolves to the same `WorldPoint` with and without its `uiMapId`, and is
-   Durotar `38.5343, 65.4846` through row 46721.
+   Durotar `38.5343, 65.4846` through row 46721. (`resolve.test.ts`)
 8. `mergeLocalGeometry`: a local UiMap the placeholder lacks is added; a local row for a
-   committed `db2-csv` UiMap that differs in one value returns `mismatch` (ARCHITECTURE §6).
+   committed `db2-csv` UiMap that differs in one value (or in OrderIndex or AreaID) returns
+   `mismatch`; decimal spellings of the same float32 and different assignment IDs, sources and
+   builds are accepted; a moved or missing frame is a frame mismatch. (`frame.test.ts`)
+9. Zone attribution: TaxiNodes 25 (Crossroads) lies in the 1411, 1412 and 1413 frames and is
+   attributed to The Barrens 1413 (centrality 0.304, against 0.173 and 0.120); the Orgrimmar node
+   goes to Orgrimmar 1454; Gornek without a hint goes to The Barrens (the documented miss); a
+   centrality tie goes to the smaller frame. (`zones.test.ts`)
+10. Content hash: the canonical string has the documented form, does not depend on build order,
+   changes with every row, map and coefficient field (the `db2-csv` rows and the Era block
+   included) and ignores the recorded hashes and provenance; the committed placeholder records
+   the hash its content gives. (`content.test.ts`, `tools/maps/placeholder-geometry.test.ts`)
 
 ## 16. Reproducing these numbers
 
@@ -855,18 +986,16 @@ Tests (Milestone 2, `src/geo`), all with values cited in this document:
    CSVs, use a developer-local extraction at the same build (its parsed rows must agree after
    `Math.fround`), or fetch the tables again as individual requests. Never script wago.tools
    (D-011).
-2. Scripts: `worked.js` prints sections 7-9, `steps.js` the intermediates of section 7, and
-   `csv.js` is their CSV parser. They are CommonJS. The repository's `package.json` declares
-   `"type": "module"`, so Node treats `.js` files under the repository as ES modules, and running
-   them in place fails with `require is not defined`. Run copies outside
-   the repository, or renamed to `.cjs` with the `./csv.js` require updated. `worked.js` also
-   requires `../../questiedb/data/Forever/conversion.json`. Verified 2026-09-25: the `.cjs` copies
-   print the values in sections 7-9.
+2. Since Milestone 2 the numbers of sections 7-9 and 10.3 are reproduced by the tests listed in
+   section 15 (`pnpm test`), and by `pnpm maps:validate` for the committed geometry (P1-P8,
+   MAPS.md §5.5). The Milestone 0 scratch scripts (`worked.js`, `steps.js`, `csv.js` in
+   `.cache/experiments/maps/`, CommonJS, not committed) are no longer needed; to run them anyway,
+   use copies renamed to `.cjs` outside the repository, because its `package.json` declares
+   `"type": "module"`.
 3. Compare `UiMapAssignment` against `conversion.json` `target_bounds` (section 10.3), and compute
-   the frame hash (MAPS.md §5.6).
-
-The scratch scripts are not committed. Milestone 2 replaces them with the `src/geo` tests in
-section 15.
+   the frame hash (MAPS.md §5.6): `pnpm maps:validate` does both for the committed file
+   (P1, P4); `tools/maps/lib/make-db2-rows.ts --check` checks the rows file against the CSVs where
+   they exist.
 
 ## 17. Open questions
 
@@ -876,7 +1005,7 @@ section 15.
 | C2 | What are UiMaps 1463 and 1464 (512² continent maps with parent 0) for? | Only relevant if they are ever shown |
 | C3 | Were the 98 RXP Forever percent-form `.goto` lines on changed zones authored in the Forever frame? | ~100 yd errors if they are Era-framed (section 9). Handled by the import frame option and `RXP030-frame-ambiguous`. |
 | C4 | Do later betas change `UiMapAssignment`? | For the 49 shared frames, the frame hash detects it: local sets fall back, and a QuestieDB pin bump re-validates. For the 12 DB2-only rows, a local set with a differing row is rejected (C8); adopting a later build's rows needs a new committed rows file and owner review. |
-| C5 | Is the `UiMin`/`UiMax` interpretation for 947 exact in-game? | Only affects the deferred Azeroth overview |
-| C6 | Did landmarks actually stay put on the four changed maps? Only 3 flight nodes and 1 RXP point were checked. | QuestieDB and this doc both assume it |
+| C5 | Is the `UiMin`/`UiMax` interpretation for 947 exact in-game? | Not checked in a live client, but it reproduces Questie's HereBeDragons Classic world-map constants to within 0.008 yd (section 4). It affects the deferred Azeroth overview and, since Milestone 2, one shipped spawn: object 180652 on synthetic AreaID 10089 → 947, which resolves through the Kalimdor sub-rectangle (section 4). |
+| C6 | Did landmarks actually stay put on the four changed maps? | QuestieDB and this doc both assume it. **Partly answered:** six TaxiNodes landmarks were checked, four of them on three changed frames (Stormwind 1453, Redridge 1433, Eastern Plaguelands 1423): all lie within 12 yd in the Forever frame and 107-451 yd off in the Era frame (section 9). Mulgore 1412 has only the RXP point of section 8. |
 | C7 | Should the world `SourcedPoint` carry the RXP UiMapID (section 15)? | **Decided** (ARCHITECTURE §6, `src/domain/points.ts`): yes, as the optional `uiMapId` hint, so RXP world-form UiMapIDs are preserved in the model and in canonical export of edited groups (sections 13.4, 15). |
 | C8 | When a frame-compatible local set disagrees with a committed `db2-csv` row, which row wins? | **Decided** (ARCHITECTURE §6): the committed row. Local geometry may only add UiMaps the committed file lacks; a local row for a UiMap it already has must be identical, otherwise the whole local set is rejected as a frame mismatch (section 10.4; MAPS.md §5.6 step 4). *Superseded:* the proposal that local rows win on that machine, with a layer-panel notice. |

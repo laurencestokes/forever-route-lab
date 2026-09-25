@@ -1,0 +1,508 @@
+{
+  "$comment": [
+    "The 12 DB2-only UiMapAssignment rows (11 UiMaps; Azeroth 947 has two) and the 11 UiMaps' Name_lang, Type and ParentUiMapID,",
+    "Blizzard client values at build 1.60.1.70009, each cited by table, build, row ID and CSV line, values kept as the CSV's decimal strings.",
+    "Committed by owner decision (D-018; cited individual values, D-022; exception to bulk tables staying local, D-026).",
+    "The CSVs were fetched on 2026-09-25 from wago.tools as individual requests during research, not by scripted crawling (D-011).",
+    "Written once by tools/maps/lib/make-db2-rows.ts from those CSVs (docs/MAPS.md §8.3). Do not edit by hand.",
+    "Read by tools/maps/import.ts --placeholder; checked by tools/maps/validate.ts (P2)."
+  ],
+  "schema": 1,
+  "product": "wow_classic_beta",
+  "build": "1.60.1.70009",
+  "sources": {
+    "UiMapAssignment": {
+      "url": "https://wago.tools/db2/UiMapAssignment/csv?build=1.60.1.70009",
+      "fetched": "2026-09-25",
+      "obtained": "individual research request, not scripted (D-011)",
+      "file": "UiMapAssignment_1.60.1.70009.csv",
+      "bytes": 6778,
+      "rows": 61,
+      "sha256": "79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a",
+      "header": [
+        "UiMin_0",
+        "UiMin_1",
+        "UiMax_0",
+        "UiMax_1",
+        "Region_0",
+        "Region_1",
+        "Region_2",
+        "Region_3",
+        "Region_4",
+        "Region_5",
+        "ID",
+        "UiMapID",
+        "OrderIndex",
+        "MapID",
+        "AreaID",
+        "WMODoodadPlacementID",
+        "WMOGroupID",
+        "Field_11_2_5_62687_010"
+      ]
+    },
+    "UiMap": {
+      "url": "https://wago.tools/db2/UiMap/csv?build=1.60.1.70009",
+      "fetched": "2026-09-25",
+      "obtained": "individual research request, not scripted (D-011)",
+      "file": "UiMap_1.60.1.70009.csv",
+      "bytes": 3097,
+      "rows": 60,
+      "sha256": "1f4aac70eaac015b1d2d0ea0faf6e3d7fb2cf7afdf45e5bb6772d9b80a72346b",
+      "header": [
+        "Name_lang",
+        "ID",
+        "ParentUiMapID",
+        "Flags",
+        "System",
+        "Type",
+        "BountySetID",
+        "BountyDisplayLocation",
+        "VisibilityPlayerConditionID",
+        "HelpTextPosition",
+        "BkgAtlasID",
+        "AlternateUiMapGroup",
+        "ContentTuningID",
+        "AdventureMapTextureKitID",
+        "MapArtZoneTextPosition"
+      ]
+    }
+  },
+  "rawLinesSha256": "0aff6391a197d4ff33a2f56bd3388ca72f305a5543fc646682580437646870bb",
+  "assignments": [
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 46785,
+      "csvLine": 56,
+      "columns": {
+        "UiMin_0": "0.03990000114",
+        "UiMin_1": "0.08550000191",
+        "UiMax_0": "0.40830001235",
+        "UiMax_1": "0.92339998484",
+        "Region_0": "-12800",
+        "Region_1": "-9600",
+        "Region_2": "-1000000",
+        "Region_3": "12266.700195312",
+        "Region_4": "6933.2998046875",
+        "Region_5": "1000000",
+        "ID": "46785",
+        "UiMapID": "947",
+        "OrderIndex": "0",
+        "MapID": "1",
+        "AreaID": "0",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 46784,
+      "csvLine": 55,
+      "columns": {
+        "UiMin_0": "0.55049997568",
+        "UiMin_1": "0.09939999878",
+        "UiMax_0": "0.89660000801",
+        "UiMax_1": "0.86909997463",
+        "Region_0": "-16000",
+        "Region_1": "-7466.7001953125",
+        "Region_2": "-1000000",
+        "Region_3": "6933.2998046875",
+        "Region_4": "8000",
+        "Region_5": "1000000",
+        "ID": "46784",
+        "UiMapID": "947",
+        "OrderIndex": "1",
+        "MapID": "0",
+        "AreaID": "0",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 46724,
+      "csvLine": 5,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "-11733.299804688",
+        "Region_1": "-19733.2109375",
+        "Region_2": "-1000000",
+        "Region_3": "12799.900390625",
+        "Region_4": "17066.599609375",
+        "Region_5": "1000000",
+        "ID": "46724",
+        "UiMapID": "1414",
+        "OrderIndex": "0",
+        "MapID": "1",
+        "AreaID": "0",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 46725,
+      "csvLine": 6,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "-16000",
+        "Region_1": "-19199.900390625",
+        "Region_2": "-1000000",
+        "Region_3": "7466.6000976562",
+        "Region_4": "16000",
+        "Region_5": "1000000",
+        "ID": "46725",
+        "UiMapID": "1415",
+        "OrderIndex": "0",
+        "MapID": "0",
+        "AreaID": "0",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 46774,
+      "csvLine": 53,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "-15980",
+        "Region_1": "-11880",
+        "Region_2": "-1000000",
+        "Region_3": "5817",
+        "Region_4": "9917",
+        "Region_5": "1000000",
+        "ID": "46774",
+        "UiMapID": "1463",
+        "OrderIndex": "0",
+        "MapID": "0",
+        "AreaID": "0",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 46775,
+      "csvLine": 54,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "-11870",
+        "Region_1": "-13370",
+        "Region_2": "-1000000",
+        "Region_3": "12470",
+        "Region_4": "10970",
+        "Region_5": "1000000",
+        "ID": "46775",
+        "UiMapID": "1464",
+        "OrderIndex": "0",
+        "MapID": "1",
+        "AreaID": "0",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 69032,
+      "csvLine": 57,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "3989.5830078125",
+        "Region_1": "-4395.833984375",
+        "Region_2": "-1000000",
+        "Region_3": "6304.166015625",
+        "Region_4": "-922.916015625",
+        "Region_5": "1000000",
+        "ID": "69032",
+        "UiMapID": "2482",
+        "OrderIndex": "0",
+        "MapID": "1",
+        "AreaID": "616",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 69208,
+      "csvLine": 58,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "1247.9169921875",
+        "Region_1": "-1331.25",
+        "Region_2": "-1000000",
+        "Region_3": "4956.25",
+        "Region_4": "4231.25",
+        "Region_5": "1000000",
+        "ID": "69208",
+        "UiMapID": "2521",
+        "OrderIndex": "0",
+        "MapID": "2991",
+        "AreaID": "16593",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 69219,
+      "csvLine": 59,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "-835.416015625",
+        "Region_1": "993.75",
+        "Region_2": "-1000000",
+        "Region_3": "447.916015625",
+        "Region_4": "2918.75",
+        "Region_5": "1000000",
+        "ID": "69219",
+        "UiMapID": "2524",
+        "OrderIndex": "0",
+        "MapID": "2997",
+        "AreaID": "16606",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 69323,
+      "csvLine": 60,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "-9700",
+        "Region_1": "-6741.666015625",
+        "Region_2": "-1000000",
+        "Region_3": "-6466.666015625",
+        "Region_4": "-1891.666015625",
+        "Region_5": "1000000",
+        "ID": "69323",
+        "UiMapID": "2548",
+        "OrderIndex": "0",
+        "MapID": "0",
+        "AreaID": "16591",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 69778,
+      "csvLine": 61,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "-3266.666015625",
+        "Region_1": "-25",
+        "Region_2": "-1000000",
+        "Region_3": "-1900",
+        "Region_4": "2025",
+        "Region_5": "1000000",
+        "ID": "69778",
+        "UiMapID": "2652",
+        "OrderIndex": "0",
+        "MapID": "1",
+        "AreaID": "16651",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    },
+    {
+      "table": "UiMapAssignment",
+      "build": "1.60.1.70009",
+      "id": 69852,
+      "csvLine": 62,
+      "columns": {
+        "UiMin_0": "0",
+        "UiMin_1": "0",
+        "UiMax_0": "1",
+        "UiMax_1": "1",
+        "Region_0": "1247.9200439453",
+        "Region_1": "-1331.25",
+        "Region_2": "-1000000",
+        "Region_3": "4956.25",
+        "Region_4": "4231.25",
+        "Region_5": "1000000",
+        "ID": "69852",
+        "UiMapID": "2665",
+        "OrderIndex": "0",
+        "MapID": "2991",
+        "AreaID": "0",
+        "WMODoodadPlacementID": "0",
+        "WMOGroupID": "0",
+        "Field_11_2_5_62687_010": "0"
+      }
+    }
+  ],
+  "uiMaps": [
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 947,
+      "csvLine": 2,
+      "columns": {
+        "Name_lang": "Azeroth",
+        "Type": "1",
+        "ParentUiMapID": "0"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 1414,
+      "csvLine": 6,
+      "columns": {
+        "Name_lang": "Kalimdor",
+        "Type": "2",
+        "ParentUiMapID": "947"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 1415,
+      "csvLine": 7,
+      "columns": {
+        "Name_lang": "Eastern Kingdoms",
+        "Type": "2",
+        "ParentUiMapID": "947"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 1463,
+      "csvLine": 54,
+      "columns": {
+        "Name_lang": "Eastern Kingdoms",
+        "Type": "2",
+        "ParentUiMapID": "0"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 1464,
+      "csvLine": 55,
+      "columns": {
+        "Name_lang": "Kalimdor",
+        "Type": "2",
+        "ParentUiMapID": "0"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 2482,
+      "csvLine": 56,
+      "columns": {
+        "Name_lang": "Mount Hyjal",
+        "Type": "3",
+        "ParentUiMapID": "1414"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 2521,
+      "csvLine": 57,
+      "columns": {
+        "Name_lang": "Zephras Isle",
+        "Type": "3",
+        "ParentUiMapID": "947"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 2524,
+      "csvLine": 58,
+      "columns": {
+        "Name_lang": "Darkspear Islands",
+        "Type": "6",
+        "ParentUiMapID": "1414"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 2548,
+      "csvLine": 59,
+      "columns": {
+        "Name_lang": "Riverglades",
+        "Type": "3",
+        "ParentUiMapID": "1415"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 2652,
+      "csvLine": 60,
+      "columns": {
+        "Name_lang": "Shen'dralas",
+        "Type": "3",
+        "ParentUiMapID": "1414"
+      }
+    },
+    {
+      "table": "UiMap",
+      "build": "1.60.1.70009",
+      "id": 2665,
+      "csvLine": 61,
+      "columns": {
+        "Name_lang": "Zephras Isle",
+        "Type": "3",
+        "ParentUiMapID": "0"
+      }
+    }
+  ]
+}

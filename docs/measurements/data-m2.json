@@ -1,0 +1,512 @@
+{
+  "$comment": [
+    "Milestone 2 measurements of tools/questiedb (docs/ARCHITECTURE.md §14; docs/DATA_PROVENANCE.md §5, §6.8), re-recorded after the fixes of the Milestone 2 reviews from one run: the sizes below and the baselines in tools/build/dist-requirements.json are the same numbers (code-F16).",
+    "Sizes: bytes of each file as written. gzip6 = zlib level 6, the measure of the dist audit (tools/build/lib/audit.ts gzipSize) and of the baselines in tools/build/dist-requirements.json; gzip9 = zlib level 9; brotli11 = Node zlib brotli quality 11. Each file is compressed on its own.",
+    "jsonParseMinMs: JSON.parse of the file as a UTF-8 string in Node, minimum of 7 runs in one process (a rough guide for the loader; the browser budget is measured later with Playwright).",
+    "Timings: three runs of each command on the machine below. Extract figures are the tool's own performance.now() spans (generated/questiedb-report.json cliTimingsMs and timingsMs); wall figures include pnpm and tsx start-up (bash date +%s%N around the command). Cached clone, no network, except fetchColdWall.",
+    "fetchColdWall: pnpm data:fetch into an empty cache directory (a copy of the repository without the clone): one shallow fetch of the pinned commit from github.com over the network (git 2.44.0.windows.1); fetchColdToolMs is the tool's own span. Before the data-F4 fix the cold fetch fetched each input blob lazily and took 7 min 33 s (the data review's measurement)."
+  ],
+  "date": "2026-09-25",
+  "upstream": {
+    "repository": "https://github.com/Questie/QuestieDB",
+    "commit": "b6f5b07b0acf1c820993cbb0ce2521c912bb4c92"
+  },
+  "dataRevision": "65c377bccf19f41759780b0d3052e1f972e317135d17ae763edd13b768866ab6",
+  "sliceDataRevision": "695c41df5635b456ca1b9698814e7a07fd40db2c83dd721181e1a46b8cec6cad",
+  "measuredManifest": {
+    "sha256": "36caef2075a3fcf1f88d2d38b1f7b31440f601a9e340ab889fb082fe50e20336",
+    "toolTree": "1d614236d71b9cf7f2fd0768ce9ae83667575e88"
+  },
+  "machine": {
+    "os": "Windows 11 Home 10.0.26200",
+    "node": "v22.13.1",
+    "arch": "x64",
+    "luaparse": "0.3.1"
+  },
+  "budget": {
+    "totalGzipBudgetBytes": 1200000,
+    "totalGzip6": 938640,
+    "headroomBytes": 261360,
+    "estimateBeforeExtraction": "about 905 KB gzip -9 of separately compressed parts (DATA_PROVENANCE §6.8, revision 2)"
+  },
+  "sizes": {
+    "public/data": {
+      "files": {
+        "NOTICE.md": {
+          "bytes": 4135,
+          "gzip6": 2023,
+          "gzip9": 2023,
+          "brotli11": 1684
+        },
+        "entities.json": {
+          "bytes": 1965914,
+          "gzip6": 157135,
+          "gzip9": 150487,
+          "brotli11": 110873,
+          "jsonParseMinMs": 7
+        },
+        "items.json": {
+          "bytes": 808298,
+          "gzip6": 81428,
+          "gzip9": 79122,
+          "brotli11": 53637,
+          "jsonParseMinMs": 2.8
+        },
+        "manifest.json": {
+          "bytes": 34419,
+          "gzip6": 9029,
+          "gzip9": 8957,
+          "brotli11": 7357,
+          "jsonParseMinMs": 0.1
+        },
+        "overlays.json": {
+          "bytes": 38157,
+          "gzip6": 2878,
+          "gzip9": 2762,
+          "brotli11": 2095,
+          "jsonParseMinMs": 0.2
+        },
+        "quests.json": {
+          "bytes": 4916450,
+          "gzip6": 315711,
+          "gzip9": 303974,
+          "brotli11": 206684,
+          "jsonParseMinMs": 18.3
+        },
+        "spawns.json": {
+          "bytes": 1171006,
+          "gzip6": 360429,
+          "gzip9": 358038,
+          "brotli11": 282186,
+          "jsonParseMinMs": 13.1
+        },
+        "zones.json": {
+          "bytes": 72979,
+          "gzip6": 10007,
+          "gzip9": 9068,
+          "brotli11": 6364,
+          "jsonParseMinMs": 0.4
+        }
+      },
+      "total": {
+        "bytes": 9011358,
+        "gzip6": 938640,
+        "gzip9": 914431,
+        "brotli11": 670880
+      }
+    },
+    "tests/fixtures/data": {
+      "files": {
+        "NOTICE.md": {
+          "bytes": 5053,
+          "gzip6": 2461,
+          "gzip9": 2461,
+          "brotli11": 2032
+        },
+        "entities.json": {
+          "bytes": 46947,
+          "gzip6": 4838,
+          "gzip9": 4671,
+          "brotli11": 3801,
+          "jsonParseMinMs": 0.2
+        },
+        "items.json": {
+          "bytes": 13753,
+          "gzip6": 1437,
+          "gzip9": 1421,
+          "brotli11": 1192,
+          "jsonParseMinMs": 0
+        },
+        "manifest.json": {
+          "bytes": 32107,
+          "gzip6": 8490,
+          "gzip9": 8421,
+          "brotli11": 7140,
+          "jsonParseMinMs": 0.1
+        },
+        "overlays.json": {
+          "bytes": 941,
+          "gzip6": 372,
+          "gzip9": 372,
+          "brotli11": 315,
+          "jsonParseMinMs": 0
+        },
+        "quests.json": {
+          "bytes": 106688,
+          "gzip6": 7925,
+          "gzip9": 7667,
+          "brotli11": 6058,
+          "jsonParseMinMs": 0.4
+        },
+        "spawns.json": {
+          "bytes": 21429,
+          "gzip6": 7765,
+          "gzip9": 7748,
+          "brotli11": 6301,
+          "jsonParseMinMs": 0.2
+        },
+        "zones.json": {
+          "bytes": 3870,
+          "gzip6": 809,
+          "gzip9": 789,
+          "brotli11": 666,
+          "jsonParseMinMs": 0
+        }
+      },
+      "total": {
+        "bytes": 230788,
+        "gzip6": 34097,
+        "gzip9": 33550,
+        "brotli11": 27505
+      }
+    }
+  },
+  "timingsMs": {
+    "extract": {
+      "runs": [
+        {
+          "readInputs": 326,
+          "pipeline": 1972,
+          "cliTotal": 2448,
+          "wall": 3188
+        },
+        {
+          "readInputs": 333,
+          "pipeline": 1990,
+          "cliTotal": 2476,
+          "wall": 3226
+        },
+        {
+          "readInputs": 325,
+          "pipeline": 1989,
+          "cliTotal": 2470,
+          "wall": 3202
+        }
+      ],
+      "pipelineBreakdownLastRun": {
+        "composeForever": 689,
+        "composeForkBaseEra": 630,
+        "parseForever": {
+          "quest": 111.5,
+          "npc": 183,
+          "object": 117.4,
+          "item": 154.6
+        },
+        "loadCorrections": 58.7,
+        "staticCorrections": 28.2,
+        "derivedRequiredRaces": 3.1,
+        "dynamicLayers": 9.3,
+        "dynamicLayersForkBase": 7,
+        "projectAndProvenance": 351.8,
+        "overlayPatches": 6.8,
+        "selection": 27.7,
+        "render": 127
+      }
+    },
+    "validateWall": [
+      1193,
+      1196,
+      1198
+    ],
+    "fetchCachedWall": [
+      1220
+    ],
+    "fetchColdWall": [
+      24494
+    ],
+    "fetchColdToolMs": [
+      23827
+    ],
+    "toolTestsVitestDuration": 6300
+  },
+  "counts": {
+    "raw": {
+      "quests": 4244,
+      "npcs": 10119,
+      "objects": 6645,
+      "items": 14889
+    },
+    "composed": {
+      "quests": 4257,
+      "npcs": 10122,
+      "objects": 6666,
+      "items": 14899
+    },
+    "shipped": {
+      "quests": 4257,
+      "npcs": 6003,
+      "objects": 952,
+      "items": 2962
+    },
+    "spawnEntities": {
+      "npc": 5862,
+      "object": 918
+    },
+    "spawnPoints": {
+      "drawable": 76300,
+      "instancePresence": 1282
+    },
+    "createdByCorrection": {
+      "quests": 13,
+      "npcs": 3,
+      "objects": 21,
+      "items": 10
+    },
+    "npcSelection": {
+      "questReferenced": 5598,
+      "flightMaster": 63,
+      "trainer": 499,
+      "innkeeper": 47,
+      "flightMasterNotQuestReferenced": 51,
+      "trainerNotQuestReferenced": 323,
+      "innkeeperNotQuestReferenced": 31,
+      "flagOnly": 405
+    },
+    "questsWithNullLevel": 0,
+    "questsWithNullXp": 763,
+    "dungeonQuests": 557,
+    "dungeonQuestAreas": 217,
+    "itemStartFixesOnly": 199,
+    "derivedRequiredRaces": 1,
+    "uiMaps": {
+      "named": 57,
+      "unnamed": 0
+    },
+    "areas": 1111,
+    "unresolvedReferences": 0
+  },
+  "provenance": {
+    "upstreamDiff": {
+      "quests": {
+        "era": 4245,
+        "era-coords": 12,
+        "forever-new": 0,
+        "forever-changed": 0
+      },
+      "npcs": {
+        "era": 5538,
+        "era-coords": 465,
+        "forever-new": 0,
+        "forever-changed": 0
+      },
+      "objects": {
+        "era": 879,
+        "era-coords": 73,
+        "forever-new": 0,
+        "forever-changed": 0
+      },
+      "items": {
+        "era": 2962,
+        "era-coords": 0,
+        "forever-new": 0,
+        "forever-changed": 0
+      }
+    },
+    "taggedByPersonaLayers": {
+      "quests": 0,
+      "npcs": 3,
+      "objects": 1,
+      "items": 0
+    },
+    "corrected": {
+      "quests": 3168,
+      "npcs": 833,
+      "objects": 126,
+      "items": 502
+    },
+    "created": {
+      "quests": 13,
+      "npcs": 3,
+      "objects": 19,
+      "items": 9
+    }
+  },
+  "loader": {
+    "$comment": [
+      "Milestone 2 measurements of the runtime loader (src/infra/data/loader.ts, dataset-view.ts; src/infra/maps/geometry-loader.ts; src/app/workspace.ts) against the ARCHITECTURE §14 budget: dataset fetch to ready <= 1 s, no long task > 100 ms.",
+      "node: tests/bench/loader.bench.ts (pnpm exec tsx tests/bench/loader.bench.ts --runs 9) runs loadWorkspace against a fake fetch serving the committed public/data and placeholder geometry from memory: CPU cost only, no network or disk. performance.now() spans inside the loader; median, min and max of 9 runs in one process (the first run is JIT-cold, hence the max). hashMs is the wall time of an awaited WebCrypto digest while the other files are in flight, not main-thread time. retainedHeapMb: node --expose-gc --import tsx tests/bench/loader.bench.ts, heapUsed after gc with one workspace kept, minus before.",
+      "browser: Chromium 152 (the Claude desktop app browser pane, Windows 11) on this machine, localhost, the frl:workspace-ready performance mark set by src/main.tsx (its startTime is navigation start to ready; its detail the report). previewCold: pnpm build + vite preview, first load in a fresh tab (gzip transfer on). previewWarm: 5 same-origin iframe reloads (fresh JS realm, HTTP cache warm) with a PerformanceObserver for longtask (> 50 ms) attached at load. devInPage: 5 loadWorkspace calls from the dev server page (unminified modules, warm cache) with a longtask observer.",
+      "Not yet measured: CPU-throttled runs (Playwright, 4x, Milestone 9) and a cold network.",
+      "node was re-run after the Milestone 2 review fixes, on the data and geometry it names (dataRevision; geometryMs now includes the content-hash check). browser was measured before those fixes, on dataRevision f01c454d, and has not been re-run; entryChunkGzipBytes is from the current build."
+    ],
+    "date": "2026-09-25",
+    "machine": {
+      "os": "Windows 11 Home 10.0.26200",
+      "node": "v22.13.1",
+      "arch": "x64",
+      "luaparse": "0.3.1"
+    },
+    "node": {
+      "dataRevision": "65c377bccf19f41759780b0d3052e1f972e317135d17ae763edd13b768866ab6",
+      "runs": 9,
+      "totalMs": {
+        "median": 117.2,
+        "min": 107.9,
+        "max": 202.1
+      },
+      "datasetMs": {
+        "median": 92,
+        "min": 89.1,
+        "max": 154.5
+      },
+      "geometryMs": {
+        "median": 8.9,
+        "min": 7.8,
+        "max": 39.8
+      },
+      "prepareMs": {
+        "median": 21.6,
+        "min": 17.8,
+        "max": 43.7
+      },
+      "viewMs": {
+        "median": 0.4,
+        "min": 0.4,
+        "max": 0.7
+      },
+      "sampleMs": {
+        "median": 0.8,
+        "min": 0.5,
+        "max": 2.6
+      },
+      "longestSyncMs": {
+        "median": 37.5,
+        "min": 36.6,
+        "max": 43.7
+      },
+      "perFile": {
+        "NOTICE.md": {
+          "bytes": 4135,
+          "hashMsMedian": 1.4,
+          "parseMsMedian": 0,
+          "checkMsMedian": 0
+        },
+        "entities.json": {
+          "bytes": 1965914,
+          "hashMsMedian": 8.5,
+          "parseMsMedian": 7.1,
+          "checkMsMedian": 9.5
+        },
+        "items.json": {
+          "bytes": 808298,
+          "hashMsMedian": 1.7,
+          "parseMsMedian": 3.1,
+          "checkMsMedian": 3
+        },
+        "overlays.json": {
+          "bytes": 38157,
+          "hashMsMedian": 0.9,
+          "parseMsMedian": 0.2,
+          "checkMsMedian": 0.4
+        },
+        "quests.json": {
+          "bytes": 4916450,
+          "hashMsMedian": 46.1,
+          "parseMsMedian": 19.8,
+          "checkMsMedian": 18
+        },
+        "spawns.json": {
+          "bytes": 1171006,
+          "hashMsMedian": 24.8,
+          "parseMsMedian": 12.3,
+          "checkMsMedian": 8.3
+        },
+        "zones.json": {
+          "bytes": 72979,
+          "hashMsMedian": 23.1,
+          "parseMsMedian": 0.5,
+          "checkMsMedian": 0.3
+        }
+      },
+      "retainedHeapMb": 30,
+      "fixtureSliceTotalMsMedian": 5
+    },
+    "browser": {
+      "dataRevision": "f01c454de08394eac2496d8c90582fbe825f5a2629f9d48dbce58b5a84e63176",
+      "engine": "Chromium 152.0.7977.130 (Claude desktop app browser pane)",
+      "previewCold": {
+        "readyAtMs": 288,
+        "totalMs": 241,
+        "datasetMs": 174,
+        "prepareMs": 64,
+        "questsParseMs": 14.6,
+        "questsCheckMs": 43.5
+      },
+      "previewWarm": {
+        "runs": 5,
+        "readyAtMs": [
+          167,
+          150,
+          149,
+          136,
+          141
+        ],
+        "totalMs": [
+          138,
+          115,
+          122,
+          113,
+          117
+        ],
+        "prepareMs": [
+          25,
+          19,
+          22,
+          21,
+          25
+        ],
+        "questsParseMs": [
+          11,
+          10,
+          9,
+          10,
+          9
+        ],
+        "questsCheckMs": [
+          24,
+          22,
+          17,
+          17,
+          17
+        ],
+        "longTasksOver50Ms": 0
+      },
+      "devInPage": {
+        "runs": 5,
+        "totalMs": [
+          129,
+          101,
+          93,
+          91,
+          95
+        ],
+        "prepareMs": [
+          25,
+          18,
+          13,
+          12,
+          14
+        ],
+        "longTasksOver50Ms": 0
+      }
+    },
+    "spawnConversion": {
+      "points": 77582,
+      "resolved": 76300,
+      "zoneWithoutGeometry": 0,
+      "presence": 1282,
+      "presenceAtEntrance": 902,
+      "unmapped": {
+        "suppressed": 0,
+        "instance-area": 0,
+        "no-uimap": 0
+      }
+    },
+    "entryChunkGzipBytes": 115846,
+    "verdict": [
+      "Ready within budget: about 0.12 s in Node and 0.14-0.29 s in the browser on this machine, against 1 s.",
+      "Longest synchronous stretch: the cold first prepareDataset (64 ms in the browser) and the quests.json decode + parse + check (about 38 ms in Node, 25-58 ms in the browser). Both are under 100 ms here but have no margin under the planned 4x CPU throttle (about 150-250 ms).",
+      "Proposal if the throttled run misses: (1) split the check of quests.json and the spawn conversion into slices with a yield between them (the phases are already separate functions); (2) or move decode, parse, check and prepare into a worker and post the prepared tables back. Not done now: nothing measured here needs it."
+    ]
+  }
+}

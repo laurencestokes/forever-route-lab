@@ -28,8 +28,10 @@ import {
 } from '../../domain';
 
 /**
- * A tiny, in-memory DatasetView for the Milestone 1 shell. The real loader (public/data/, built by
- * tools/questiedb) arrives in Milestone 2 and replaces this file.
+ * A tiny, in-memory DatasetView, now a TEST FIXTURE only: the Milestone 1 shell ran on it, and the
+ * shell's editing tests (src/ui/App.test.tsx and the panel tests) still do, because their
+ * assertions are about editing, not data. The running app loads the real dataset instead
+ * (loader.ts, dataset-view.ts); tests/placeholder-usage.test.ts keeps this file out of it.
  *
  * Everything here is synthetic and says so: every name starts with "Placeholder", every id sits in
  * the reserved range 900001 and up (far above any real quest, NPC, object, item or UiMap id), the

@@ -33,10 +33,12 @@ import {
 } from '../infra/data/placeholder-dataset';
 
 /**
- * The sample project the Milestone 1 shell opens with: about forty steps over the placeholder
- * dataset (src/infra/data/placeholder-dataset.ts), built with the step factories. It covers every
- * common step kind, one locked step and one group, and it is labelled "Placeholder" throughout.
- * Nothing in it is real quest data. It goes away once projects load from storage (Milestone 4).
+ * The Milestone 1 placeholder project, now a TEST FIXTURE only: about forty steps over the
+ * placeholder dataset (src/infra/data/placeholder-dataset.ts), built with the step factories. It
+ * covers every common step kind, one locked step and one group, and it is labelled "Placeholder"
+ * throughout; nothing in it is real quest data. The shell's editing tests use it. The running app
+ * opens the sample project built from the real dataset instead (sample-route.ts, workspace.ts), and
+ * tests/placeholder-usage.test.ts keeps this file out of it.
  */
 
 /** Shown as the project name in the top bar; ProjectV1 itself has no name, only its route. */
@@ -154,15 +156,15 @@ export function createPlaceholderProject(opts: PlaceholderProjectOptions): Proje
   };
 }
 
-/** What the shell opens with until storage and the real dataset exist. */
+/** The placeholder project and dataset (test fixture). */
 export interface PlaceholderWorkspace {
   readonly project: ProjectV1;
   readonly dataset: DatasetView;
 }
 
 /**
- * The placeholder project together with the placeholder dataset it refers to. The composition
- * root (src/main.tsx) uses this: ui may not import infra itself (ARCHITECTURE §4).
+ * The placeholder project together with the placeholder dataset it refers to, for the shell's
+ * tests: ui may not import infra itself (ARCHITECTURE §4).
  */
 export function createPlaceholderWorkspace(opts: PlaceholderProjectOptions): PlaceholderWorkspace {
   return { project: createPlaceholderProject(opts), dataset: createPlaceholderDataset() };

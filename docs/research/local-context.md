@@ -354,7 +354,7 @@ observed local build.
   legal effect of this process (D-019). This is not a legal conclusion.
 - **Questie**: the installed AddOn has no `LICENSE` file, and no licence line in its `README.md`
   or `.toc`. This matches the upstream finding in D-016: neither `Questie/Questie` nor
-  `Questie/QuestieDB` has ever had a licence file on its default branch, and an unmerged Questie
+  `Questie/QuestieDB` has ever had a root licence file (none covering Questie's own code or data; bundled third-party folders carry their own; wording corrected after the Milestone 2 review) on its default branch, and an unmerged Questie
   `license` branch drafts "all rights reserved" wording plus a contributor licence agreement. The
   owner publishes the Questie-derived dataset with notices of this finding (D-016). This is not a
   legal conclusion.

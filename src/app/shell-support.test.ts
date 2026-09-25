@@ -15,7 +15,9 @@ import {
   isQuestStep,
   questDifficultyAt,
   questOpenTo,
+  questSortLevel,
   questsForCharacter,
+  requiredLevelAbove,
   SCALING_QUEST_LEVEL,
   stepQuestIds,
 } from './shell-support';
@@ -100,8 +102,44 @@ describe('questsForCharacter', () => {
     expect(closed.map((q) => q.id)).toEqual([PLACEHOLDER_QUEST_IDS.allianceOnly]);
     expect(open.map((q) => q.id)).toContain(PLACEHOLDER_QUEST_IDS.hordeOnly);
     expect(unknown).toEqual([]);
-    const keys = open.map((q) => [q.level ?? Infinity, q.id] as const);
+    const keys = open.map((q) => [questSortLevel(q), q.id] as const);
     expect(keys).toEqual([...keys].sort((a, b) => a[0] - b[0] || a[1] - b[1]));
+  });
+
+  it('sorts a quest by the higher of its level and its required level (code-F9: Rocknot’s Ale)', () => {
+    const base = createPlaceholderDataset();
+    const [template] = base.quests();
+    if (template === undefined) throw new Error('placeholder quests missing');
+    const extra: QuestRecord[] = [
+      { ...template, id: questId(990_010), name: 'Level 1, needs 42', level: 1, minLevel: 42, races: null, classes: null },
+      { ...template, id: questId(990_011), name: 'Level 41', level: 41, minLevel: 30, races: null, classes: null },
+      { ...template, id: questId(990_012), name: 'Level 43', level: 43, minLevel: 40, races: null, classes: null },
+    ];
+    const dataset = { ...base, quests: () => [...base.quests(), ...extra] };
+    const order = questsForCharacter(dataset, { race: 'Orc', class: 'WARRIOR' }).open.map((q) => q.id).filter((id) => id >= 990_000);
+    expect(order).toEqual([990_011, 990_010, 990_012]);
+  });
+});
+
+describe('questSortLevel and requiredLevelAbove', () => {
+  it('takes max(level, minLevel), a scaling quest at its required level, and an unknown level last', () => {
+    expect(questSortLevel({ level: 1, minLevel: 42 })).toBe(42);
+    expect(questSortLevel({ level: 10, minLevel: 4 })).toBe(10);
+    expect(questSortLevel({ level: 10, minLevel: null })).toBe(10);
+    expect(questSortLevel({ level: SCALING_QUEST_LEVEL, minLevel: 15 })).toBe(15);
+    expect(questSortLevel({ level: SCALING_QUEST_LEVEL, minLevel: null })).toBe(1);
+    expect(questSortLevel({ level: 0, minLevel: 5 })).toBe(Number.POSITIVE_INFINITY);
+    expect(questSortLevel({ level: null, minLevel: 5 })).toBe(Number.POSITIVE_INFINITY);
+    // An invalid required level is ignored rather than trusted.
+    expect(questSortLevel({ level: 12, minLevel: 0 })).toBe(12);
+  });
+
+  it('gives the required level only when it is above the character’s', () => {
+    expect(requiredLevelAbove({ minLevel: 42 }, 1)).toBe(42);
+    expect(requiredLevelAbove({ minLevel: 1 }, 1)).toBeNull();
+    expect(requiredLevelAbove({ minLevel: null }, 1)).toBeNull();
+    expect(requiredLevelAbove({ minLevel: 42 }, null)).toBeNull();
+    expect(requiredLevelAbove({ minLevel: 0 }, -3)).toBeNull();
   });
 
   it('puts quests with an unreadable mask in unknown, never in open', () => {

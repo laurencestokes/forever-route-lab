@@ -1,0 +1,131 @@
+/* Loading and failed-start screens (src/ui/shell/BootScreen.tsx). Tokens only. */
+
+.frl-boot {
+  /* The document never scrolls above 720px (AppShell.css), so this screen scrolls itself; the card
+     is centred with auto margins, which, unlike grid centring, never clips a tall card's top. */
+  display: flex;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--frl-space-5) var(--frl-space-4);
+  background: var(--frl-bg);
+  color: var(--frl-fg);
+}
+
+.frl-boot__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-3);
+  width: min(520px, 100%);
+  margin: auto;
+  padding: var(--frl-space-5);
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius-lg);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+}
+
+.frl-boot__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+  color: var(--frl-accent);
+}
+
+.frl-boot__name {
+  color: var(--frl-fg);
+  font-size: var(--frl-text-lg);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-boot__lead,
+.frl-boot__muted {
+  color: var(--frl-fg-muted);
+}
+
+.frl-boot__status {
+  color: var(--frl-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.frl-boot__progress {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--frl-radius-sm);
+  background: var(--frl-xp-track);
+}
+
+.frl-boot__progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--frl-accent);
+  transition: width var(--frl-duration) var(--frl-ease);
+}
+
+.frl-boot__progress-fill.is-indeterminate {
+  width: 40%;
+  animation: frl-boot-indeterminate 1.2s var(--frl-ease) infinite;
+}
+
+@keyframes frl-boot-indeterminate {
+  from {
+    left: -40%;
+  }
+
+  to {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frl-boot__progress-fill.is-indeterminate {
+    left: 0;
+    width: 100%;
+    animation: none;
+    background: repeating-linear-gradient(-45deg, var(--frl-unknown-hatch) 0 2px, transparent 2px 4px);
+  }
+}
+
+.frl-boot__error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+}
+
+.frl-boot__title {
+  color: var(--frl-severity-error);
+  font-size: var(--frl-text-lg);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-boot__title:focus {
+  outline: none;
+}
+
+.frl-boot__title:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 2px;
+}
+
+.frl-boot__details {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-boot__details ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  margin-top: var(--frl-space-2);
+  padding-left: var(--frl-space-4);
+}
+
+.frl-boot__details code {
+  font-family: var(--frl-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.frl-boot__actions {
+  display: flex;
+  justify-content: flex-end;
+}

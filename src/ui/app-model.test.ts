@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { fixtureView } from '../../tests/support/fixture-dataset';
 import { createPlaceholderWorkspace } from '../app/placeholder-project';
-import type { QuestId, StepId, UiMapId } from '../domain/ids';
-import type { Location } from '../domain/points';
+import type { AreaId, NpcId, QuestId, StepId, UiMapId, WorldMapId } from '../domain/ids';
+import type { Location, SourcedPoint } from '../domain/points';
 import type { Route, RouteStep } from '../domain/route';
-import type { DatasetIdentity, DatasetView, QuestRecord } from '../domain/dataset';
+import type { DatasetIdentity, DatasetView, EntityRef, QuestRecord, SpawnPoint } from '../domain/dataset';
 import {
   NO_ACTIVE_TARGET,
   PLACEHOLDER_DATA_NOTICE,
@@ -12,17 +13,22 @@ import {
   characterName,
   dataBadgeDetail,
   dropToIndex,
+  entityWhereText,
   grindTargetText,
   locationDetail,
   locationText,
+  objectiveWhere,
   panelTabOf,
+  publishedPointText,
   questName,
+  questZoneName,
   resolveActiveTarget,
   rightTabOf,
   routeQuestIds,
   sameItems,
   selectedRowKeys,
   selectionMessage,
+  spawnSummary,
   stepRowModel,
   stepTitle,
   type RouteView,
@@ -189,10 +195,62 @@ describe('texts', () => {
     expect(locationText(null, dataset)).toBeNull();
   });
 
+  it('names the axes of world points, swapping RXP world-form lexemes back to X, Y (COORD-7)', () => {
+    const world = (lexemes: readonly [string, string] | null): Location => ({
+      source: { space: 'world', mapId: 1 as WorldMapId, x: -500, y: -4000, uiMapId: null, lexemes },
+      label: null,
+      radius: null,
+    });
+    // Written by RXP as `1411/1,-4000.00,-500.00`: Y first, then X (coordinates.md §15).
+    expect(locationText(world(['-4000.00', '-500.00']), dataset)).toBe('World map 1: X -500.00, Y -4000.00 yd');
+    // The same point created in the app has no lexemes, and reads the same way round.
+    expect(locationText(world(null), dataset)).toBe('World map 1: X -500, Y -4000 yd');
+    const published: SourcedPoint = { space: 'world', mapId: 0 as WorldMapId, x: -8835.74, y: 490.16, uiMapId: null, lexemes: null };
+    expect(publishedPointText(dataset, published)).toBe('World map 0: X -8835.74, Y 490.16 yd');
+  });
+
   it('names the character and maps the side-panel tabs both ways', () => {
     expect(characterName(project.character)).toBe('Orc Warrior');
     expect(characterName({ race: 'Scourge', class: 'MAGE' })).toBe('Undead Mage');
     for (const tab of SIDE_PANEL_TAB_ORDER) expect(panelTabOf(rightTabOf(tab))).toBe(tab);
+  });
+});
+
+describe('instance-presence spawns (COORD-2, code-F5)', () => {
+  const base = fixtureView();
+  const GORNEK: EntityRef = { kind: 'npc', id: 3143 as NpcId };
+  const cutting = base.quest(788 as QuestId);
+  if (cutting === undefined) throw new Error('fixture quest 788 missing');
+  /** The fixture view with Gornek inside an instance (area 491, Razorfen Kraul), entrance known or not. */
+  const inside = (entrance: UiMapId | null): DatasetView => {
+    const spawn: SpawnPoint = {
+      source: { kind: 'instance', areaId: 491 as AreaId },
+      world: entrance === null ? null : { mapId: 1 as WorldMapId, x: -4470, y: -1680 },
+      uiMapId: entrance,
+    };
+    return { ...base, spawns: (ref) => (ref.kind === 'npc' && ref.id === GORNEK.id ? [spawn] : base.spawns(ref)) };
+  };
+
+  it('says the entity is inside an instance, never in the entrance’s zone', () => {
+    const view = inside(1413 as UiMapId);
+    expect(spawnSummary(view, GORNEK)).toBe('1 spawn in an instance (entrance in The Barrens)');
+    expect(questZoneName(view, cutting)).toBe('Inside an instance (entrance in The Barrens)');
+    expect(entityWhereText(view, GORNEK)).toBe('Gornek (NPC) · Inside an instance (area 491), entrance in The Barrens');
+    const kill = cutting.objectives.find((o) => o.kind === 'kill');
+    if (kill === undefined) throw new Error('fixture quest 788 has no kill objective');
+    expect(objectiveWhere(view, { ...kill, npcId: GORNEK.id })).toBe('1 spawn in an instance (entrance in The Barrens)');
+  });
+
+  it('says only "an instance" when the entrance is unknown', () => {
+    const view = inside(null);
+    expect(spawnSummary(view, GORNEK)).toBe('1 spawn in an instance');
+    expect(questZoneName(view, cutting)).toBe('Inside an instance');
+    expect(entityWhereText(view, GORNEK)).toBe('Gornek (NPC) · Inside an instance (area 491), entrance unknown');
+  });
+
+  it('keeps naming the zone of an ordinary zone spawn', () => {
+    expect(spawnSummary(base, GORNEK)).toBe('1 spawn in Durotar');
+    expect(questZoneName(base, cutting)).toBe('Durotar');
   });
 });
 
@@ -268,7 +326,10 @@ describe('slices and texts', () => {
       upstreamCommit: 'b6f5b07b0acf',
       foreverContentVerified: false,
     };
-    expect(dataBadgeDetail(real)).toBe('Data revision r-2026-10-01, frame build 1.60.1.70009, QuestieDB commit b6f5b07b0acf.');
+    expect(dataBadgeDetail(real)).toBe(
+      "Data revision r-2026-10-01, frame build 1.60.1.70009, QuestieDB commit b6f5b07b0acf. Forever content is not verified: every record's Forever status is unknown.",
+    );
+    expect(dataBadgeDetail({ ...real, foreverContentVerified: true })).toBe('Data revision r-2026-10-01, frame build 1.60.1.70009, QuestieDB commit b6f5b07b0acf.');
   });
 
   it('words selection counts', () => {

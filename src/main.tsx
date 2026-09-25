@@ -1,15 +1,17 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createEditorStore, randomIdSource, systemClock } from './app';
-import { createPlaceholderWorkspace, PLACEHOLDER_PROJECT_NAME } from './app/placeholder-project';
+import { createEditorStore, type EditorStore, randomIdSource, systemClock } from './app';
+import { browserSha256, loadWorkspace, type Workspace, type WorkspaceProgress } from './app/workspace';
 import { App } from './ui/App';
+import { Boot } from './ui/Boot';
 import { applyThemePreference, isThemePreference, type ThemePreference } from './ui/kit';
 import './ui/styles/tokens.css';
 import './ui/styles/base.css';
 
 /**
- * Composition root. Milestone 1 opens the placeholder project over the placeholder dataset; storage
- * (Milestone 4) and the real dataset (Milestone 2) replace both.
+ * Composition root. The page shows a loading screen while the Forever dataset (public/data/) and
+ * the map geometry load and verify, then opens the sample project built from them (storage
+ * arrives in Milestone 4). A failed load shows what failed, with a retry.
  */
 
 /** Also read by the inline script in index.html, which applies the theme before first paint. */
@@ -42,24 +44,54 @@ function appVersion(): string {
 const initialTheme = readStoredTheme();
 applyThemePreference(document.documentElement, initialTheme);
 
-const { project, dataset } = createPlaceholderWorkspace({ nowIso: systemClock.nowIso() });
-const store = createEditorStore({ project, ids: randomIdSource(), clock: systemClock, view: { theme: initialTheme } });
+interface Started {
+  readonly workspace: Workspace;
+  readonly store: EditorStore;
+}
 
-// The theme lives in the store's view state; apply and remember every change.
-let appliedTheme = initialTheme;
-store.subscribe(() => {
-  const theme = store.getState().view.theme;
-  if (theme === appliedTheme) return;
-  appliedTheme = theme;
-  applyThemePreference(document.documentElement, theme);
-  storeTheme(theme);
-});
+/** One start: load and verify everything, then open the workspace's project in a store. */
+async function start(onProgress: (progress: WorkspaceProgress) => void): Promise<Started> {
+  const workspace = await loadWorkspace({
+    fetch: (url, init) => window.fetch(url, init),
+    baseUrl: import.meta.env.BASE_URL,
+    sha256: browserSha256(),
+    nowIso: systemClock.nowIso(),
+    now: () => performance.now(),
+    onProgress,
+  });
+  // For the startup budget (ARCHITECTURE §14): the mark's time is navigation start to ready, and
+  // its detail the measured phases (docs/measurements/data-m2.json, `loader`).
+  performance.mark('frl:workspace-ready', { detail: workspace.report });
+  const store = createEditorStore({ project: workspace.project, ids: randomIdSource(), clock: systemClock, view: { theme: initialTheme } });
+  // The theme lives in the store's view state; apply and remember every change.
+  let appliedTheme = initialTheme;
+  store.subscribe(() => {
+    const theme = store.getState().view.theme;
+    if (theme === appliedTheme) return;
+    appliedTheme = theme;
+    applyThemePreference(document.documentElement, theme);
+    storeTheme(theme);
+  });
+  return { workspace, store };
+}
 
 const container = document.getElementById('root');
 if (container === null) throw new Error('index.html has no #root element');
 
 createRoot(container).render(
   <StrictMode>
-    <App store={store} dataset={dataset} projectName={PLACEHOLDER_PROJECT_NAME} version={appVersion()} sourceCommit={null} />
+    <Boot load={start}>
+      {({ workspace, store }) => (
+        <App
+          store={store}
+          data={workspace.data}
+          projectName={workspace.projectName}
+          routeNotice={workspace.routeNotice}
+          geometrySummary={workspace.geometrySummary}
+          version={appVersion()}
+          sourceCommit={null}
+        />
+      )}
+    </Boot>
   </StrictMode>,
 );

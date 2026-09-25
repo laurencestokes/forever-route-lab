@@ -1,9 +1,10 @@
 import type { RightTab } from '../app';
+import { characterName } from '../app/character-names';
+import { SAMPLE_ORIGIN_REF } from '../app/sample-route';
 import { routeGroup } from '../app/rules-exports';
 import { effectiveQuestLevel, questDifficultyAt, stepQuestIds } from '../app/shell-support';
-import type { ClassToken, RaceToken } from '../domain/character';
-import type { DatasetIdentity, DatasetView, EntityRef, ObjectiveDef, QuestRecord } from '../domain/dataset';
-import type { GroupId, QuestId, StepId } from '../domain/ids';
+import type { DatasetIdentity, DatasetView, EntityRef, ObjectiveDef, PublishedPoint, QuestRecord, RecordProvenance, SpawnPoint } from '../domain/dataset';
+import type { GroupId, QuestId, StepId, UiMapId } from '../domain/ids';
 import type { Location } from '../domain/points';
 import type { GrindTarget, Route, RouteStep, StepOrigin, TaxiNodeRef } from '../domain/route';
 import { formatDuration, formatInteger, formatPercent, plural } from './lib/format';
@@ -48,34 +49,8 @@ export const rightTabOf = (tab: SidePanelTabId): RightTab => RIGHT_TAB[tab];
 
 // Names -----------------------------------------------------------------------------------------
 
-const RACE_NAMES: Readonly<Record<RaceToken, string>> = {
-  Human: 'Human',
-  Orc: 'Orc',
-  Dwarf: 'Dwarf',
-  NightElf: 'Night Elf',
-  Scourge: 'Undead',
-  Tauren: 'Tauren',
-  Gnome: 'Gnome',
-  Troll: 'Troll',
-  HighOrderSkyborne: 'High Order Skyborne',
-  WindshaperSkyborne: 'Windshaper Skyborne',
-};
-
-const CLASS_NAMES: Readonly<Record<ClassToken, string>> = {
-  WARRIOR: 'Warrior',
-  PALADIN: 'Paladin',
-  HUNTER: 'Hunter',
-  ROGUE: 'Rogue',
-  PRIEST: 'Priest',
-  SHAMAN: 'Shaman',
-  MAGE: 'Mage',
-  WARLOCK: 'Warlock',
-  DRUID: 'Druid',
-};
-
-export function characterName(character: { readonly race: RaceToken; readonly class: ClassToken }): string {
-  return `${RACE_NAMES[character.race]} ${CLASS_NAMES[character.class]}`;
-}
+/** "Orc Warrior" (the names live in app, where the sample route uses them too). */
+export { characterName };
 
 export function questName(dataset: DatasetView, id: QuestId): string {
   return dataset.quest(id)?.name ?? `Quest ${String(id)} (not in the dataset)`;
@@ -92,10 +67,27 @@ export function entityName(dataset: DatasetView, ref: EntityRef): string {
   }
 }
 
-/** The zone a quest is picked up in, from its first starter's first spawn; null when unknown. */
+/** A spawn inside an instance (QuestieDB's `[-1, -1]` presence). */
+const isInstanceSpawn = (spawn: SpawnPoint): boolean => !('space' in spawn.source) && spawn.source.kind === 'instance';
+
+/**
+ * Where an instance-presence spawn is, in words: `an instance (entrance in Westfall)`, or `an
+ * instance` when the entrance is unknown. Its `uiMapId` is the entrance's (where its world point
+ * is), never the zone the entity is in (M2 review COORD-2, code-F5).
+ */
+function instanceWhere(dataset: DatasetView, spawn: SpawnPoint): string {
+  return spawn.uiMapId === null ? 'an instance' : `an instance (entrance in ${zoneLabel(dataset, spawn.uiMapId)})`;
+}
+
+/**
+ * Where a quest is picked up, from its starters' spawns in order: the first spawn's zone name, or
+ * `Inside an instance (entrance in The Barrens)` when that spawn is inside an instance; null when
+ * no spawn says.
+ */
 export function questZoneName(dataset: DatasetView, quest: QuestRecord): string | null {
   for (const starter of quest.starters) {
     for (const spawn of dataset.spawns(starter)) {
+      if (isInstanceSpawn(spawn)) return `Inside ${instanceWhere(dataset, spawn)}`;
       if (spawn.uiMapId === null) continue;
       const name = dataset.zone(spawn.uiMapId)?.name ?? null;
       if (name !== null) return name;
@@ -124,17 +116,159 @@ export function objectiveText(dataset: DatasetView, objective: ObjectiveDef): st
   }
 }
 
+// Locations -------------------------------------------------------------------------------------
+
+/** A UiMap's validated name, else its id. */
+export function zoneLabel(dataset: DatasetView, id: UiMapId): string {
+  return dataset.zone(id)?.name ?? `UiMap ${String(id)}`;
+}
+
+type UnmappedReason = Extract<PublishedPoint, { readonly kind: 'unmapped' }>['reason'];
+
+const UNMAPPED_TEXT: Readonly<Record<UnmappedReason, string>> = {
+  suppressed: 'an area no map shows',
+  'instance-area': 'inside an instance, on no world map',
+  'no-uimap': 'an area with no map',
+};
+
+/**
+ * A world point with its axes named, `World map 1: X -500, Y -4000 yd` (Blizzard X north, Y west;
+ * coordinates.md §2). The axes are always labelled, because RXP writes world points as `Y, X`
+ * (coordinates.md §15) and an unlabelled pair reads either way (M2 review COORD-7).
+ */
+function worldPointText(mapId: number, x: string, y: string): string {
+  return `World map ${String(mapId)}: X ${x}, Y ${y} yd`;
+}
+
+/**
+ * A published point as zone name and percent, exactly as published (`Durotar 42.06, 68.33`).
+ * Instance presence and unmapped areas say what they are instead of inventing a position.
+ */
+export function publishedPointText(dataset: DatasetView, point: PublishedPoint): string {
+  if ('space' in point) {
+    if (point.space === 'zone') {
+      return `${zoneLabel(dataset, point.uiMapId)} ${String(point.x)}, ${String(point.y)}${point.frame === 'era' ? ' (Era frame)' : ''}`;
+    }
+    return worldPointText(point.mapId, String(point.x), String(point.y));
+  }
+  if (point.kind === 'instance') return `Inside an instance (area ${String(point.areaId)})`;
+  return `Area ${String(point.areaId)} ${String(point.x)}, ${String(point.y)} (${UNMAPPED_TEXT[point.reason]})`;
+}
+
+/** A spawn: its published point, and for instance presence the entrance's zone when one is known. */
+export function spawnText(dataset: DatasetView, spawn: SpawnPoint): string {
+  const text = publishedPointText(dataset, spawn.source);
+  if ('space' in spawn.source || spawn.source.kind !== 'instance') return text;
+  return spawn.uiMapId === null ? `${text}, entrance unknown` : `${text}, entrance in ${zoneLabel(dataset, spawn.uiMapId)}`;
+}
+
+const KIND_WORD: Readonly<Record<EntityRef['kind'], string>> = { npc: 'NPC', object: 'object', item: 'item' };
+
+/**
+ * Where a quest giver or receiver is: `Gornek (NPC) · Durotar 42.06, 68.33`, with the number of
+ * further spawns. Items have no spawns; an entity without a published point says so.
+ */
+export function entityWhereText(dataset: DatasetView, ref: EntityRef): string {
+  const name = `${entityName(dataset, ref)} (${KIND_WORD[ref.kind]})`;
+  if (ref.kind === 'item') return `${name} · an item, no map position`;
+  const spawns = dataset.spawns(ref);
+  const [first] = spawns;
+  if (first === undefined) return `${name} · no published spawn`;
+  const more = spawns.length > 1 ? ` (+${plural(spawns.length - 1, 'more spawn')})` : '';
+  return `${name} · ${spawnText(dataset, first)}${more}`;
+}
+
+/** Where one spawn is, for the summary: its zone, `an instance (entrance in …)`, or `unmapped areas`. */
+const spawnZone = (dataset: DatasetView, spawn: SpawnPoint): string => {
+  if (isInstanceSpawn(spawn)) return instanceWhere(dataset, spawn);
+  if (spawn.uiMapId !== null) return zoneLabel(dataset, spawn.uiMapId);
+  return 'unmapped areas';
+};
+
+/**
+ * The zones an entity spawns in, most spawns first: `45 spawns in Durotar`, `3 spawns in Durotar
+ * and 1 in The Barrens`, `1 spawn in an instance (entrance in Westfall)`.
+ */
+export function spawnSummary(dataset: DatasetView, ref: EntityRef): string | null {
+  const spawns = dataset.spawns(ref);
+  if (spawns.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const spawn of spawns) {
+    const where = spawnZone(dataset, spawn);
+    counts.set(where, (counts.get(where) ?? 0) + 1);
+  }
+  const parts = [...counts]
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([where, n], i) => (i === 0 ? `${plural(n, 'spawn')} in ${where}` : `${formatInteger(n)} in ${where}`));
+  const shown = parts.slice(0, 3);
+  const rest = parts.length - shown.length;
+  if (rest > 0) return `${shown.join(', ')} and ${plural(rest, 'other zone')}`;
+  return shown.length === 2 ? shown.join(' and ') : shown.join(', ');
+}
+
+/** Where an objective is done, from the dataset: its target's spawns, its item's drop sources, its event points. */
+export function objectiveWhere(dataset: DatasetView, objective: ObjectiveDef): string | null {
+  switch (objective.kind) {
+    case 'kill':
+      return spawnSummary(dataset, { kind: 'npc', id: objective.npcId });
+    case 'killCredit':
+      return spawnSummary(dataset, { kind: 'npc', id: objective.rootNpcId });
+    case 'object':
+      return spawnSummary(dataset, { kind: 'object', id: objective.objectId });
+    case 'item': {
+      const item = dataset.item(objective.itemId);
+      if (item === undefined) return null;
+      const sources = [
+        ...item.dropNpcs.map((id) => entityName(dataset, { kind: 'npc', id })),
+        ...item.dropObjects.map((id) => entityName(dataset, { kind: 'object', id })),
+        ...item.dropItems.map((id) => entityName(dataset, { kind: 'item', id })),
+      ];
+      if (sources.length === 0) return 'No drop source in the dataset';
+      const shown = sources.slice(0, 3).join(', ');
+      return sources.length > 3 ? `From ${shown} and ${plural(sources.length - 3, 'other source')}` : `From ${shown}`;
+    }
+    case 'event': {
+      const [first] = objective.points;
+      if (first === undefined) return null;
+      const more = objective.points.length > 1 ? ` (+${plural(objective.points.length - 1, 'more point')})` : '';
+      return `${publishedPointText(dataset, first)}${more}`;
+    }
+    case 'reputation':
+    case 'spell':
+      return null;
+  }
+}
+
+const UPSTREAM_DIFF_TEXT: Readonly<Record<RecordProvenance['upstreamDiff'], string>> = {
+  era: 'Era baseline',
+  'era-coords': 'Era baseline, coordinates re-projected for Forever',
+  'forever-new': "New in QuestieDB's Forever data",
+  'forever-changed': "Changed in QuestieDB's Forever data",
+};
+
+/** What QuestieDB says about a record (DATA_PROVENANCE §9.3), in words. A fact about the source, not about the game. */
+export function upstreamProvenanceText(provenance: RecordProvenance): string {
+  if (provenance.source === 'custom') return 'Custom: entered in this project';
+  const correction = provenance.created ? '; created by a QuestieDB correction' : provenance.corrected ? '; changed by a QuestieDB correction' : '';
+  return `${UPSTREAM_DIFF_TEXT[provenance.upstreamDiff]}${correction}`;
+}
+
 // Texts -----------------------------------------------------------------------------------------
 
-/** A point as authored: RXP lexemes when present, else the stored numbers. */
+/**
+ * A point as authored: RXP lexemes when present, else the stored numbers. Zone lexemes are
+ * `[x, y]` in written order; world lexemes are `[Y, X]` (RXP writes `UiMapID/instance,Y,X`,
+ * coordinates.md §15), so they are swapped back and the axes named (`X -500.00, Y -4000.00`).
+ */
 function pointText(location: Location, dataset: DatasetView): string {
   const p = location.source;
-  const [x, y] = p.lexemes ?? [String(p.x), String(p.y)];
   if (p.space === 'zone') {
+    const [x, y] = p.lexemes ?? [String(p.x), String(p.y)];
     const zone = dataset.zone(p.uiMapId)?.name ?? `UiMap ${String(p.uiMapId)}`;
     return `${zone} ${x}, ${y}${p.frame === 'era' ? ' (Era frame)' : ''}`;
   }
-  return `World map ${String(p.mapId)}: ${x}, ${y} yd`;
+  const [x, y] = p.lexemes === null ? [String(p.x), String(p.y)] : [p.lexemes[1], p.lexemes[0]];
+  return worldPointText(p.mapId, x, y);
 }
 
 /** The location's label, else its point. */
@@ -214,7 +348,7 @@ export function originText(origin: StepOrigin): string {
   const from = origin.ref === null ? '' : ` of ${origin.ref}`;
   switch (origin.source) {
     case 'manual':
-      return 'Added by hand';
+      return origin.ref === SAMPLE_ORIGIN_REF ? 'Generated for the sample route' : 'Added by hand';
     case 'rxp':
       return origin.ref === null ? 'Imported from an RXP guide' : `Imported from an RXP guide (${origin.ref})`;
     case 'optimizer':
@@ -413,7 +547,13 @@ export function dataBadgeDetail(identity: DatasetIdentity): string {
   if (identity.dataRevision === 'placeholder') {
     return `${PLACEHOLDER_DATA_NOTICE}. The records are invented, not taken from any game build or QuestieDB commit.`;
   }
-  return `Data revision ${identity.dataRevision}, frame build ${identity.frameBuild}, QuestieDB commit ${identity.upstreamCommit}.`;
+  const verified = identity.foreverContentVerified ? '' : " Forever content is not verified: every record's Forever status is unknown.";
+  return `Data revision ${identity.dataRevision}, frame build ${identity.frameBuild}, QuestieDB commit ${identity.upstreamCommit}.${verified}`;
+}
+
+/** The data badge's label: the first 8 hex digits of the revision (the tooltip has all of it). */
+export function dataBadgeLabel(identity: DatasetIdentity): string {
+  return identity.dataRevision === 'placeholder' ? 'placeholder' : identity.dataRevision.slice(0, 8);
 }
 
 /** What the live region says after a selection change (debounced by the caller). */

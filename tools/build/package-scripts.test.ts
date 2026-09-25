@@ -31,8 +31,8 @@ describe('package.json scripts', () => {
     ]);
   });
 
-  it('check runs every gate, the build last', () => {
-    expect(steps(scripts['check'])).toEqual(['pnpm typecheck', 'pnpm lint', 'pnpm test', 'pnpm build']);
+  it('check runs every gate, the committed-data validation before the build, the build last', () => {
+    expect(steps(scripts['check'])).toEqual(['pnpm typecheck', 'pnpm lint', 'pnpm test', 'pnpm data:validate', 'pnpm build']);
     expect(scripts['licence:check']).toBe('tsx tools/build/licence-gate.ts');
   });
 });

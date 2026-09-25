@@ -1,8 +1,12 @@
 # Maps
 
 Status: **Milestone 0 research (2026-09-25), revised for ARCHITECTURE revision 2 and the
-architect's rulings on the Milestone 0 consistency check.** No map code or map assets exist yet.
-This file covers:
+architect's rulings on the Milestone 0 consistency check; updated in Milestone 2 for what was
+built.** Milestone 2 built `src/geo` (coordinates and geometry, [coordinates §15](research/coordinates.md#15-coordinate-model-srcgeo)),
+`tools/maps/import.ts --placeholder`, `tools/maps/validate.ts` (placeholder checks, local-set
+checks and `--activate`), the committed rows file and the committed placeholder
+(`tools/maps/README.md` is the operator's guide). The local extraction pipeline (`import.ts
+--build`, `convert.ts`, `vite-local-maps.ts`) is Milestone 3. No map art exists. This file covers:
 
 - where map data comes from and how a developer extracts it locally;
 - what is committed (the placeholder geometry) and how Milestone 2 reproduces it;
@@ -42,7 +46,7 @@ Rule: **never copy maps, tiles, geometry or code from any other WoW route-planne
 | Raw file types | `.db2` (WDC5, per WoWDBDefs), `.blp` (BLP2: palette, DXT1/3/5 or BGRA) | §3 |
 | Local map set | One local extraction set in `local-maps/` at the repository root: `maps.manifest.json`, `geometry.local.json`, `art/<uiMapId>.webp` and, optionally, `taxi.local.json`. It is gitignored and **outside `public/`**. `tools/maps/validate.ts --activate` writes `maps.manifest.json` after the checks pass; that file is the one `infra/maps` probes. Only `tools/maps/vite-local-maps.ts` serves the folder, in `dev` and `preview`; `vite build` never emits it (D-018, ARCHITECTURE §7.3). | §5.2, §5.7 |
 | Committed geometry | `public/maps/placeholder/geometry.placeholder.json` plus `NOTICE.md`, produced only by `tools/maps/import.ts --placeholder` from the pinned QuestieDB `conversion.json` and the committed `tools/maps/inputs/db2-rows-1.60.1.70009.json`, so it is reproducible. It holds 49 zone frames (`source: 'questiedb-conversion'`, build 1.60.1.69893) and 12 DB2-only rows for 11 UiMaps (`source: 'db2-csv'`, build 1.60.1.70009), taken from CSVs fetched as individual requests during research (not scripted crawling). Every row records its source and build (D-018, D-026). | §8 |
-| Coordinates | Dataset spawns ship as published zone percent and are converted to `WorldPoint` at load. A route `Location` stores the authored `SourcedPoint`; `resolve()` derives world coordinates at runtime, and nothing derived is persisted (D-017). | §6; [coordinates §15](research/coordinates.md#15-coordinate-model-typescript-sketch) |
+| Coordinates | Dataset spawns ship as published zone percent and are converted to `WorldPoint` at load. A route `Location` stores the authored `SourcedPoint`; `resolve()` derives world coordinates at runtime, and nothing derived is persisted (D-017). | §6; [coordinates §15](research/coordinates.md#15-coordinate-model-srcgeo) |
 | Renderer | Leaflet 1.9.4 (declares BSD-2-Clause) behind `MapAdapter`, `L.CRS.Simple`, **one surface per world map**. Canvas renderer with level of detail. The combined overview surface is deferred until after the MVP (F23). No react-leaflet (D-005). | §7 |
 | Images | One image per UiMap at native `LayerWidth × LayerHeight` (1002 × 668), **WebP** (lossy, q≈90), optional PNG. No tile pyramid is needed at this size. Local only. | §5.4 |
 
@@ -196,9 +200,11 @@ tools/maps/
   inputs/db2-rows-1.60.1.70009.json   # committed: the 12 cited DB2 rows and their UiMap rows (§8.3)
   import.ts              # --placeholder: pinned conversion.json + inputs/db2-rows-…json → public/maps/placeholder/ (M2)
                          # --build <b>: csv/ → local-maps/geometry.local.json; writes extract-list.txt (M3)
-  convert.ts             # BLP decode → stitch → crop → overlays → local-maps/art/ (WebP/PNG)
-  validate.ts            # §5.5 checks; --activate writes local-maps/maps.manifest.json after a pass
-  vite-local-maps.ts     # dev/preview-only Vite plugin (§5.7)
+  convert.ts             # BLP decode → stitch → crop → overlays → local-maps/art/ (WebP/PNG) (M3)
+  validate.ts            # §5.5 checks; --activate writes local-maps/maps.manifest.json after a pass (M2)
+  vite-local-maps.ts     # dev/preview-only Vite plugin (§5.7) (M3)
+  lib/                   # M2: checks, local-set, placeholder, notice, db2-rows, make-db2-rows (rows file), pin,
+                         #     conversion, csv, git, hash, json, args, inputs; tools/maps/README.md lists them
 public/maps/placeholder/                        # committed (§8.2)
   geometry.placeholder.json
   NOTICE.md
@@ -235,72 +241,138 @@ the committed geometry at the gitignored path `public/maps/geometry.json`.
 
 ### 5.3 File formats
 
-**Geometry** has one schema for both files. `geometry.placeholder.json` is shown; §8.2 lists its
-full content. `geometry.local.json` has `"kind": "local"`, rows with `source: "local-db2"` and
-the set's build, its own inputs, and `"redistribution": "local-only"` (§5.7).
+**Geometry** has one schema for both files, parsed by `parseGeometryFile` in `src/geo/geometry.ts`
+(pure; the caller reads and `JSON.parse`s the file). This is the committed
+`geometry.placeholder.json` as `tools/maps/import.ts --placeholder` writes it (Milestone 2), with
+one zone and one continent shown; §8.2 lists its full content. The file is formatted by
+`tools/maps/lib/json.ts`: fixed key order, two-space indentation, each assignment row on one line,
+LF, final newline.
 
 ```jsonc
-{ "schema": 1, "kind": "placeholder", "product": "wow_classic_beta",
+{
+  "_generated": {                                        // first key (DATA_PROVENANCE §7); loaders ignore it
+    "by": "tools/maps import --placeholder",
+    "upstream": "Questie/QuestieDB@b6f5b07b0acf1c820993cbb0ce2521c912bb4c92 data/Forever/conversion.json; UiMapAssignment and UiMap @ 1.60.1.70009 (CSV SHA-256 79267e8b…, 1f4aac70…) via tools/maps/inputs/db2-rows-1.60.1.70009.json",
+    "notice": "NOTICE.md",
+    "edit": "do not edit; regenerate with pnpm maps:placeholder"
+  },
+  "schema": 1,
+  "kind": "placeholder",
+  "product": "wow_classic_beta",
   "frameHash": "2cb10551b1502b652e4d54922e8b3a1ecb48057fbfb7cf9c77863edd7efea78f",   // §5.6
-  "inputs": {
-    "questiedb-conversion": { "repo": "https://github.com/Questie/QuestieDB",
-        "commit": "b6f5b07b0acf1c820993cbb0ce2521c912bb4c92", "path": "data/Forever/conversion.json",
-        "sha256": "f4477d6c575575152225f2a9d40858029bf9d2d5fdf6b083c06557fce8b5984b",   // LF git blob
-        "build": "1.60.1.69893" },
-    "db2-csv": { "path": "tools/maps/inputs/db2-rows-1.60.1.70009.json",
-        "sha256": "…",                                                                   // LF bytes of the committed file
-        "build": "1.60.1.70009",
-        "csvSha256": { "UiMapAssignment": "79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a",
-                       "UiMap": "1f4aac70eaac015b1d2d0ea0faf6e3d7fb2cf7afdf45e5bb6772d9b80a72346b" } } },
-  "maps": {
-    "1411": { "name": "Durotar", "nameSource": "questiedb-conversion", "type": null, "parent": null,
-      "assignments": [ { "id": 46721, "mapId": 1, "areaId": 14, "orderIndex": 0,
-          "xMin": -1716.6666259766, "xMax": 1808.3332519531, "yMin": -7249.9995117188, "yMax": -1962.4998779297,
-          "uiMin": [0, 0], "uiMax": [1, 1], "source": "questiedb-conversion", "build": "1.60.1.69893" } ] },
-    "1414": { "name": "Kalimdor", "nameSource": "db2-csv", "type": 2, "parent": 947,
-      "assignments": [ { "id": 46724, "mapId": 1, "areaId": 0, "orderIndex": 0,
-          "xMin": -11733.299804688, "xMax": 12799.900390625, "yMin": -19733.2109375, "yMax": 17066.599609375,
-          "uiMin": [0, 0], "uiMax": [1, 1], "source": "db2-csv", "build": "1.60.1.70009" } ] } },
-  "eraToForever": {
-    "1412": { "scaleX": 0.8348002068275978, "offsetX": 7.007453108736848,
-              "scaleY": 0.8349418225477033, "offsetY": 13.15387327724201,
-              "fromBuild": "1.15.9.69722", "toBuild": "1.60.1.69893", "source": "questiedb-conversion" } } }
+  "contentHash": "c05a47a276295348a5b40a98dbe13c39ddc6fb4a899c21c821714ebf51c4e6ca", // content hash, below
+  "inputs": {                                            // provenance; the parser ignores it
+    "questiedb-conversion": {
+      "repo": "https://github.com/Questie/QuestieDB",
+      "commit": "b6f5b07b0acf1c820993cbb0ce2521c912bb4c92",
+      "path": "data/Forever/conversion.json",
+      "sha256": "f4477d6c575575152225f2a9d40858029bf9d2d5fdf6b083c06557fce8b5984b",   // LF git blob
+      "gitBlob": "7cbcf66b224e77a4ed794f50055bdc68a7abc913",
+      "build": "1.60.1.69893",                           // geometry.target_build
+      "eraBuild": "1.15.9.69722",                        // geometry.source_build
+      "implied": { "orderIndex": 0, "uiMin": [0, 0], "uiMax": [1, 1],
+                   "evidence": "QuestieDB tools/dbc/coordinates.py:33-47 (Bounds.from_assignment accepts only …)" }
+    },
+    "db2-csv": {
+      "path": "tools/maps/inputs/db2-rows-1.60.1.70009.json",
+      "sha256": "c3dd1fb5615f19ef4614d6504cf47fffbe2582f4eaaebb594fc879341df70dc4",   // LF bytes of the committed file
+      "build": "1.60.1.70009",
+      "csvSha256": { "UiMapAssignment": "79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a",
+                     "UiMap": "1f4aac70eaac015b1d2d0ea0faf6e3d7fb2cf7afdf45e5bb6772d9b80a72346b" }
+    }
+  },
+  "maps": {                                              // keys: UiMapIDs, ascending
+    "1411": {
+      "name": "Durotar", "nameSource": "questiedb-conversion", "type": null, "parent": null,
+      "assignments": [
+        { "id": 46721, "mapId": 1, "areaId": 14, "orderIndex": 0, "xMin": -1716.6666259766, "xMax": 1808.3332519531, "yMin": -7249.9995117188, "yMax": -1962.4998779297, "uiMin": [0, 0], "uiMax": [1, 1], "source": "questiedb-conversion", "build": "1.60.1.69893" }
+      ]
+    },
+    "1414": {
+      "name": "Kalimdor", "nameSource": "db2-csv", "type": 2, "parent": 947,
+      "assignments": [
+        { "id": 46724, "mapId": 1, "areaId": 0, "orderIndex": 0, "xMin": -11733.299804688, "xMax": 12799.900390625, "yMin": -19733.2109375, "yMax": 17066.599609375, "uiMin": [0, 0], "uiMax": [1, 1], "source": "db2-csv", "build": "1.60.1.70009" }
+      ]
+    }
+  },
+  "eraToForever": {                                      // keys: UiMapIDs, ascending
+    "1412": { "scaleX": 0.8348002068275978, "offsetX": 7.007453108736848, "scaleY": 0.8349418225477033,
+              "offsetY": 13.15387327724201, "fromBuild": "1.15.9.69722", "toBuild": "1.60.1.69893",
+              "source": "questiedb-conversion" }
+  }
+}
 ```
 
 - `xMin`, `xMax`, `yMin`, `yMax` are `Region_0`, `Region_3`, `Region_1`, `Region_4` (world X is
   north, Y is west; [coordinates §3](research/coordinates.md#3-uimapassignment-the-map-to-world-link)).
   QuestieDB's `bottom`, `top`, `right`, `left` are the same values.
-- Numbers are written exactly as the source decimal strings parse, so the 49 rows equal
-  `conversion.json` value for value.
+- Numbers are written in ECMAScript's shortest round-trip form of the parsed source decimal, so
+  the 49 rows equal `conversion.json` value for value (P1) and the 12 rows equal the rows file's
+  decimal strings after `Number()` (P2).
 - `type` and `parent` are `null` for the 49 QuestieDB rows, because `conversion.json` does not
-  carry them. Surfaces group maps by `mapId`, so the placeholder does not need them.
-- `eraToForever` holds `conversion.json` `coefficients` for exactly 1412, 1423, 1433 and 1453. The
-  other 45 are identity. ARCHITECTURE §6 names this block as the coefficients' source.
+  carry them. Surfaces group maps by `mapId`, so the placeholder does not need them. `parent` 0
+  is the DB2 value for a root map (947, 1463, 1464, 2665); `areaId` 0 is the DB2 value for
+  continent and world rows, which name no AreaTable zone.
+- `conversion.json` carries no OrderIndex or UI rectangle. The 49 rows record `orderIndex` 0 and
+  `(0,0)-(1,1)` because QuestieDB derives a transform only from such a row
+  (`tools/dbc/coordinates.py:33-47` at the pin; the Milestone 0 check found all 49 so in the
+  1.60.1.70009 CSV). `inputs.questiedb-conversion.implied` records this, with the evidence.
+- `eraToForever` holds `conversion.json` `coefficients` for exactly 1412, 1423, 1433 and 1453 (the
+  `changed` transforms). The importer refuses an unchanged transform with non-identity
+  coefficients. ARCHITECTURE §6 names this block as the coefficients' source.
 - `inputs.db2-csv` names the committed rows file and its hash. `csvSha256` repeats the hashes of
   the full research CSVs that the rows file records (§8.3); the importer does not read the CSVs.
+- The placeholder carries **no** `redistribution` key; the parser refuses one.
+- **Content hash** (`contentHash`, M2 review code-F2). The frame hash covers only the 49 frames,
+  so it cannot notice an edited AreaID, Era coefficient, continent row, name or parent. The content
+  hash covers everything a consumer reads from the parsed geometry. `canonicalGeometryContent(g)`
+  in `src/geo/content.ts` (pure) builds its string: `JSON.stringify` of
+  `["frl-geometry-content", 1, kind, product, maps, era]`, where `maps` is
+  `[[uiMapId, name, nameSource, type, parent, rows], …]` ascending by UiMapId, each row is
+  `[id, mapId, areaId, orderIndex, xMin, xMax, yMin, yMax, uiMinU, uiMinV, uiMaxU, uiMaxV, source, build]`
+  ascending by (OrderIndex, id), and `era` is
+  `[[uiMapId, scaleX, offsetX, scaleY, offsetY, fromBuild, toBuild, source], …]` ascending. Numbers
+  are the parsed doubles in shortest round-trip form, with no `Math.fround`, so any edit counts. It
+  leaves out `frameHash`, `contentHash` and the provenance keys the parser ignores (`_generated`,
+  `inputs`, a local set's `build`). The hash is the lowercase hex SHA-256 of the UTF-8 bytes:
+  `tools/maps` writes it, `validate.ts` P8 checks it, and `infra/maps` recomputes it with WebCrypto
+  and refuses the file on a mismatch, in addition to the frame hash (§5.6). The committed
+  placeholder's canonical string is 10,983 bytes and hashes to `c05a47a2…`. A local set may record
+  one (informational, like its `frameHash`); a merged geometry records none.
+
+`geometry.local.json` has the same `maps` and `eraToForever` shape with `"kind": "local"`,
+`"redistribution": "local-only"`, a top-level `"build"` (the set's client build), rows with
+`source: "local-db2"`, an optional informational `frameHash` and `contentHash`, `eraToForever` usually `{}` (a DB2
+extraction cannot derive Era coefficients; the committed block is always used), and optionally
+`inputs.tables` (`{ "<Table>": { "rows", "sha256" } }`), which activation copies into the
+manifest. Milestone 3's `import.ts --build` writes it; Milestone 2's `validate.ts` checks it.
 
 **Set manifest** (`local-maps/maps.manifest.json`). `validate.ts --activate` writes it only after
 every local-set check passes (§5.5); its presence is what makes the set active (ARCHITECTURE
-§7.3). File paths are relative to `local-maps/`. `set` is a label, `<product>-<build>`.
+§7.3). A failing `--activate` removes an existing manifest. File paths are relative to
+`local-maps/`. `set` is a label, `<product>-<build>`. As built (`tools/maps/lib/local-set.ts`):
 
 ```jsonc
 { "schema": 1, "redistribution": "local-only", "set": "wow_classic_beta-1.60.1.70009",
   "product": "wow_classic_beta", "build": "1.60.1.70009", "buildKey": "05215079e3905ef5922ae0b03ffefb73",
   "source": { "method": "tacttool-local | tacttool-cdn | wow.export-gui",
               "tools": { "TACTTool": "<commit/version>", "DBC2CSV": "<version>" },
-              "wowdbdefs": "cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd" },
-  "generator": { "repoCommit": "<sha>", "node": "22.x" },
-  "tables": { "UiMapAssignment": { "rows": 61, "sha256": "…" } /* every input table */ },
-  "frameHash": "…",                  // informational; infra/maps recomputes it from geometry.local.json
-  "geometry": { "file": "geometry.local.json", "sha256": "…" },
-  "images": { "1411": { "file": "art/1411.webp", "width": 1002, "height": 668, "sha256": "…", "tileFdids": [8073638] } },
-  "taxi": { "file": "taxi.local.json", "sha256": "…" },          // optional
-  "validation": { "passed": true, "checks": ["L1", "L2", "L3", "L4", "L5", "L6", "L7"] } }
+              "wowdbdefs": "cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd" },     // from assets-source/…/source.json
+  "generator": { "repoCommit": "<sha> | null", "node": "22.x" },
+  "tables": { "UiMapAssignment": { "rows": 61, "sha256": "…" } },   // geometry.local.json inputs.tables, or null (unknown)
+  "frameHash": "…",                  // recomputed by validate.ts; infra/maps recomputes it again
+  "geometry": { "file": "geometry.local.json", "sha256": "…" },   // LF bytes
+  "images": {},                      // Milestone 2: always empty (any file under art/ fails L3)
+  "taxi": { "file": "taxi.local.json", "sha256": "…" },          // only when the file exists
+  "validation": { "passed": true, "checks": ["L0", "L1", "L2", "L3", "L4", "L7"],
+                  "notRun": { "L5": "no local TaxiNodes CSV given (--taxi-nodes <csv>)", "L6": "…" } } }
 ```
 
 `redistribution` is always `local-only`, in the manifest, `geometry.local.json` and
 `taxi.local.json` alike, and `audit-dist` fails on any file that carries it (§5.7). Revision 1's
-`generatedAt` field is dropped because it made identical inputs produce different bytes.
+`generatedAt` field is dropped because it made identical inputs produce different bytes. The
+Milestone 3 art pipeline fills `images` (`{ "<uiMapId>": { "file", "width", "height", "sha256",
+"tileFdids" } }`).
 
 ### 5.4 Extraction steps (local sets, Milestone 3)
 
@@ -357,29 +429,39 @@ Zones tab only as a visual reference.
 
 ### 5.5 `validate.ts` checks
 
-**Placeholder checks** run in CI from Milestone 2. Any failure fails the build.
+**Placeholder checks** run in CI from Milestone 2 (`pnpm maps:validate`, implemented in
+`tools/maps/validate.ts` and `tools/maps/lib/checks.ts`). Any failure fails the build. The
+placeholder is first rebuilt in memory from the pinned inputs; every check then compares the
+committed file with the inputs directly, not only with the importer's output.
 
 | # | Check |
 |---|---|
-| P1 | Exactly 49 UiMaps have `source: "questiedb-conversion"` rows. They are the `ui_map_id`s of `conversion.json` `geometry.transforms`, and each row equals its `target_bounds`, `target_assignment_id`, `map_id` and `area_id` at the pinned commit. The input hash is the LF git blob (`f4477d6c…`, ARCHITECTURE §5.1). |
-| P2 | Exactly the 12 `db2-csv` rows of §8.3 exist, 12 rows for 11 UiMaps because Azeroth 947 has two (assignment IDs 46724, 46725, 46774, 46775, 46784, 46785, 69032, 69208, 69219, 69323, 69778, 69852). Each row, and each of the 11 UiMaps' name, type and parent, equals its entry in `tools/maps/inputs/db2-rows-1.60.1.70009.json`, and that file's SHA-256 (LF bytes) equals `inputs.db2-csv.sha256`. CI needs no CSV and no network request. |
-| P3 | Every row has `source` and `build`, and no other UiMap or row is present (60 UiMaps, 61 rows). |
-| P4 | `frameHash` equals the value recomputed from the 49 rows (§5.6). |
+| R1 | Both committed files are byte-identical to a fresh `import.ts --placeholder` (reproducibility; also `import.ts --placeholder --check`). |
+| P0 | The committed file parses (`parseGeometryFile`). |
+| P1 | Exactly 49 UiMaps have `source: "questiedb-conversion"` rows. They are the `ui_map_id`s of `conversion.json` `geometry.transforms`, and each row equals its `target_bounds`, `target_assignment_id`, `map_id` and `area_id` at the pinned commit (with OrderIndex 0, the full UI rectangle and build `target_build`); the name equals `target_name`, type and parent are null. The input hash is the LF git blob (`f4477d6c…`, ARCHITECTURE §5.1), required by the pin (`tools/questiedb/upstream.json` when it records one, else DATA_PROVENANCE §4.1). |
+| P2 | Exactly the 12 `db2-csv` rows of §8.3 exist, 12 rows for 11 UiMaps because Azeroth 947 has two (assignment IDs 46724, 46725, 46774, 46775, 46784, 46785, 69032, 69208, 69219, 69323, 69778, 69852). Each row, and each of the 11 UiMaps' name, type and parent, equals its entry in `tools/maps/inputs/db2-rows-1.60.1.70009.json`, and that file's SHA-256 (LF bytes) equals `inputs.db2-csv.sha256`; `csvSha256` equals the rows file's source hashes; the rows file equals the §8.3 reference table. CI needs no CSV and no network request. |
+| P3 | Every row has `source` and `build` (`questiedb-conversion` rows at 1.60.1.69893, `db2-csv` rows at 1.60.1.70009), and no other UiMap or row is present (60 UiMaps, 61 rows). |
+| P4 | `frameHash` equals the value recomputed from the 49 rows (§5.6), and, when the file was built at the reference commit `b6f5b07b`, also the §5.6 reference `2cb10551…`. |
 | P5 | `eraToForever` has exactly 1412, 1423, 1433 and 1453, each equal to `conversion.json` `coefficients`, and the other 45 `conversion.json` coefficients are identity. |
-| P6 | `git ls-files --error-unmatch public/maps/placeholder/geometry.placeholder.json public/maps/placeholder/NOTICE.md` succeeds (F05). `audit-dist` requires both files in `dist/maps/placeholder/`, byte-equal to the tracked files (PERF-12). |
+| P6 | `git ls-files --error-unmatch public/maps/placeholder/geometry.placeholder.json public/maps/placeholder/NOTICE.md` succeeds (F05). `audit-dist` requires both files in `dist/maps/placeholder/`, byte-equal to the tracked files (PERF-12). `--skip-tracking` skips P6 (reported as SKIP) before the files are first committed. |
+| P7 | Isotropy (coordinates §4.1): `(Ymax−Ymin)/(Xmax−Xmin)`, scaled by the UI rectangle, equals the art aspect within 0.2%: 1.5 (1002 × 668 art) for every UiMap except 1463 and 1464 (1.0: 512 × 512 art, square regions); 2665 (a 1.5 region on 512 × 512 art) is exempt. All 60 applicable rows pass. |
+| P8 | `contentHash` equals the SHA-256 of `canonicalGeometryContent` of the committed file (§5.3), recomputed exactly as `infra/maps` does at load, and equals a fresh import's content hash. A hand edit that also rewrites `contentHash` passes the loader's self-check but fails P8 (and P1, P2 or P5). |
 
-**Local-set checks** run on the developer's machine, in `validate.ts --activate`. Any failure
-leaves the set inactive.
+**Local-set checks** run on the developer's machine, in `validate.ts --local [dir]` (report
+only) or `validate.ts --activate` (writes the manifest on a pass, removes an existing one on a
+failure), implemented in `tools/maps/lib/local-set.ts` and tested with synthetic sets. They run
+only after the placeholder checks pass. Any failure leaves the set inactive.
 
 | # | Check |
 |---|---|
-| L1 | Every Type 3/6 UiMap with art has exactly one `OrderIndex 0` assignment with `UiMin (0,0)`, `UiMax (1,1)`, WMO 0 and Z `±1e6`. Anything else is reported. |
-| L2 | Isotropy: `(Ymax−Ymin)/(Xmax−Xmin)` equals `LayerWidth/LayerHeight` to within 0.2%. |
-| L3 | Image dimensions equal `LayerWidth × LayerHeight`, and every tile listed in `extract-list.txt` decoded. (`validate.ts` then hashes the set files into the manifest; `infra/maps` checks those hashes at runtime, §5.6.) |
+| L0 | `geometry.local.json` exists and parses as a local geometry: `"kind": "local"`, `"redistribution": "local-only"`, a top-level `build`, rows `local-db2`, the placeholder's product. |
+| L1 | Every Type 3/6 UiMap with art has exactly one `OrderIndex 0` assignment with `UiMin (0,0)`, `UiMax (1,1)`, WMO 0 and Z `±1e6`. Anything else is reported. *As built (Milestone 2):* the geometry format has no WMO or Z columns, so L1 checks the OrderIndex 0 row and the UI rectangle of every Type 3/6 UiMap; WMO and Z are for `import.ts --build` to check when it reads the CSVs (Milestone 3), as the placeholder importer already does for the 12 rows. |
+| L2 | Isotropy: `(Ymax−Ymin)/(Xmax−Xmin)` equals `LayerWidth/LayerHeight` to within 0.2%. *As built (Milestone 2):* against the same art-aspect table as P7, since art dimensions are unknown before Milestone 3. |
+| L3 | Image dimensions equal `LayerWidth × LayerHeight`, and every tile listed in `extract-list.txt` decoded. (`validate.ts` then hashes the set files into the manifest; `infra/maps` checks those hashes at runtime, §5.6.) *As built (Milestone 2):* fails closed when any file exists under `art/`, because art cannot be verified until `convert.ts` exists; a geometry-only set passes. |
 | L4 | **Frame compatibility** (§5.6). The frame hash of the set's rows for the 49 shared UiMaps equals the committed `frameHash`, and every row for a UiMap the placeholder already has is identical to the committed row (§5.6 step 4). On a hash mismatch the build's geometry has changed, so QuestieDB percentages would be read in the wrong frame. On a shared-row mismatch, resolution would differ between machines. Either way the set is not activated. *Superseded by D-018:* revision 1 compared DB2 bounds with `target_bounds` directly; the hash is the same test in a form `infra/maps` can also run. |
-| L5 | Every `TaxiNodes` position on MapID *m* falls inside 0..100 of at least one zone on *m*. |
-| L6 | Landmarks: each QuestieDB flight master is within 30 yd of a TaxiNode on the same MapID. The measured values are 2.6, 3.6 and 11.9 yd; reading in the Era frame gives 108.9 yd ([coordinates §9](research/coordinates.md#9-independent-cross-check-flight-masters-vs-taxinodes)). The TaxiNodes inputs are local. The three landmark rows are cited client values that `src/geo` tests pin (D-022, ARCHITECTURE §6). |
-| L7 | World ↔ percent round-trip error is below 1e-9 for all spawn points. |
+| L5 | Every `TaxiNodes` position on MapID *m* falls inside 0..100 of at least one zone on *m*. *As built:* runs with `--taxi-nodes <TaxiNodes.csv>` (a local CSV at the set's build, read by column name: `ID`, `ContinentID`, `Pos_0`, `Pos_1`) against the merged geometry's zone rows (AreaID > 0). Without the CSV, L5 and L6 are recorded under `validation.notRun` in the manifest and do not block activation. |
+| L6 | Landmarks: each QuestieDB flight master is within 30 yd of a TaxiNode on the same MapID. Six landmarks (`TAXI_LANDMARKS` in `tools/maps/lib/local-set.ts`): nodes 2, 22 and 23 (Stormwind, Thunder Bluff, Orgrimmar) at 11.9, 3.6 and 2.6 yd, and nodes 5 (Lakeshire), 67 and 68 (Light's Hope Chapel) at 7.0, 4.9 and 3.8 yd. Four of them sit on three of the four changed frames (1453, 1433, 1423); reading their Forever percent in the Era frame gives 108.9, 107.2, 450.5 and 445.0 yd ([coordinates §9](research/coordinates.md#9-independent-cross-check-flight-masters-vs-taxinodes)). The TaxiNodes inputs are local. The six landmark rows are cited client values that `src/geo` tests pin (D-022, ARCHITECTURE §6). |
+| L7 | World ↔ percent round-trip error is below 1e-9 for all spawn points. *As built (Milestone 2):* on a 5 × 5 grid of percent points, inside and outside 0..100, on every row of the merged geometry. |
 
 ### 5.6 Frame compatibility (D-018, F09)
 
@@ -392,14 +474,17 @@ QuestieDB commit: 1411-1413 and 1416-1461. The dataset's spawn percentages are i
 - Build one tuple per UiMap in F, sorted ascending by UiMapID:
   `[uiMapId, mapId, xMin, xMax, yMin, yMax, uiMin_u, uiMin_v, uiMax_u, uiMax_v]`. Assignment IDs
   are excluded, because they are provenance, not frame.
-- Pass every coordinate through `Math.fround`. DB2 stores float32, so exporters that print
+- Pass every coordinate through `Math.fround` (the two IDs are integers and are written as they
+  are). DB2 stores float32, so exporters that print
   different decimal strings for the same float (wago CSV, DBC2CSV, wow.export) agree. The largest
   gap between a Milestone 0 CSV value and its float32 is 5e-10.
 - Serialise the array with `JSON.stringify` (ECMAScript number formatting, no whitespace). The
   hash is the lowercase hex SHA-256 of its UTF-8 bytes.
 - A UiMap in F without exactly one `OrderIndex 0` row makes the geometry incompatible.
-- `src/geo` builds the canonical string (pure); `infra/maps` hashes it with WebCrypto;
-  `tools/maps` hashes it with `node:crypto`.
+- `src/geo` builds the canonical string (pure: `canonicalFrameTuples` and `canonicalFrameString`
+  in `src/geo/frame.ts`); `infra/maps` hashes it with WebCrypto; `tools/maps` hashes it with
+  `node:crypto`. The committed placeholder reproduces the reference below (4,030 bytes of JSON,
+  `2cb10551…`; `tools/maps/placeholder-geometry.test.ts`).
 
 **Reference values** at the Milestone 0 inputs:
 
@@ -411,7 +496,9 @@ QuestieDB commit: 1411-1413 and 1416-1461. The dataset's spawn percentages are i
 
 **Runtime behaviour** (`infra/maps`, ARCHITECTURE §7.3):
 
-1. Load `maps/placeholder/geometry.placeholder.json`. It is always required.
+1. Load `maps/placeholder/geometry.placeholder.json`. It is always required. Its frame hash and
+   its content hash (§5.3) are recomputed with WebCrypto and must equal the ones it records;
+   otherwise the file is refused.
 2. Fetch `local-maps/maps.manifest.json`. A 404 (every deployed site), a non-JSON body (for
    example an SPA fallback page served with status 200) or a schema failure means "no local set";
    this is not an error.
@@ -422,7 +509,9 @@ QuestieDB commit: 1411-1413 and 1416-1461. The dataset's spawn percentages are i
    - a UiMap the committed file already has (one of the 11 `db2-csv` UiMaps) must have
      **identical** rows: the sorted lists of canonical tuples (one tuple per row, as above) are
      equal after `Math.fround`. Assignment IDs, `source` and `build` are provenance and are not
-     compared;
+     compared. *As built* (`mergeLocalGeometry`, `src/geo/frame.ts`): each row's key is the tuple
+     plus its OrderIndex and AreaID, because row selection and zone attribution use them, and the
+     comparison also covers the frame-set UiMaps, so extra rows for one of them are rejected too;
    - if any such row differs, the whole local set is rejected as a frame mismatch (step 5).
 
    Resolution therefore never differs between machines for a UiMap both know.
@@ -466,6 +555,8 @@ Deployable builds come only from CI on a clean checkout, and release builds refu
 ## 6. Coordinate transforms (summary)
 
 Full derivations and numeric examples: [research/coordinates.md](research/coordinates.md).
+Implemented in Milestone 2 by the pure `src/geo` module; its API and tests are listed in
+[coordinates §15](research/coordinates.md#15-coordinate-model-srcgeo).
 
 - **Storage (D-017).** Dataset spawns ship exactly as QuestieDB publishes them: 0-100 zone
   percent, 2 dp, keyed by AreaTable ID, in the Forever frame. `infra/data` converts them once at
@@ -623,10 +714,20 @@ uses an original visual style, not a Blizzard-style parchment look or game icons
 - **Producer:** `tools/maps/import.ts --placeholder` (Milestone 2) is the only producer. The
   files are never edited by hand. It reads:
   - QuestieDB `data/Forever/conversion.json` as the **LF git blob** at the pinned commit, from
-    the checkout that `tools/questiedb/fetch.ts` provides. Blob SHA-256:
+    the checkout that `tools/questiedb/fetch.ts` provides (`git cat-file blob`, default
+    `.cache/questiedb`, `--questiedb-repo` to override). Blob SHA-256:
     `f4477d6c575575152225f2a9d40858029bf9d2d5fdf6b083c06557fce8b5984b`. A Windows worktree copy
     with `core.autocrlf=true` hashes differently (`6613032214aa517b…` was observed), which is why
-    ARCHITECTURE §5.1 hashes LF blobs.
+    ARCHITECTURE §5.1 hashes LF blobs. The importer refuses a blob with any other hash. The pin
+    comes only from `tools/questiedb/upstream.json`, read with the data pipeline's own
+    `parseUpstream` (`tools/questiedb/lib/upstream.ts`): its `commit`, `repository`, `cachePath`
+    (the default checkout) and the SHA-256 of its `data/Forever/conversion.json` input
+    (`tools/maps/lib/pin.ts`). The file and that input are required. A `--commit` other than the
+    pinned one is refused, because no hash is recorded for it. The values DATA_PROVENANCE §2 and
+    §4.1 record are kept only as a test oracle (`tools/maps/lib/test-support.ts`). Git runs with
+    `GIT_NO_LAZY_FETCH=1` and `windowsHide` (`tools/maps/lib/git.ts`), so a partial clone that
+    lacks the blob fails instead of fetching it; git versions that predate the variable ignore
+    it, and the blob must then already be in the checkout (`pnpm data:fetch`).
   - The committed `tools/maps/inputs/db2-rows-1.60.1.70009.json`, which holds the 12 cited rows
     and the 11 UiMaps' names, types and parents (§8.3).
 
@@ -640,8 +741,11 @@ uses an original visual style, not a Blizzard-style parchment look or game icons
     69893 it was Type 3, parent 947).
 
   Together the 61 rows equal the full `UiMapAssignment` table at 1.60.1.70009. Also included:
-  `eraToForever` for the four changed maps, the input identities, and `frameHash`. The file is
-  small (tens of KB).
+  `eraToForever` for the four changed maps, the input identities, `frameHash` and `contentHash`.
+  As built: 28,277 bytes (4,195 bytes gzip -9); `NOTICE.md` 4,199 bytes (measured with Node's
+  `fs` and `zlib.gzipSync` at level 9, 2026-09-25, after the content hash was added). The importer
+  builds both in about 80 ms, excluding `tsx` start-up (`performance.now()` around the build in
+  `import.ts`).
 - **`NOTICE.md`** states:
   - What the files are: zone frames and map metadata for the procedural placeholder, no art.
   - Origin 1: the 49 frames and the four coefficient sets, copied from `conversion.json` at the
@@ -651,8 +755,10 @@ uses an original visual style, not a Blizzard-style parchment look or game icons
     individual requests during research (not scripted crawling). The rows are committed with
     citations in `tools/maps/inputs/db2-rows-1.60.1.70009.json`, with both CSV hashes, by owner
     decision (D-018, D-022, D-026).
-  - The D-016 finding: Questie/QuestieDB publish no licence file; the draft on Questie's
-    `license` branch says to consider Questie "all rights reserved".
+  - The D-016 finding: Questie/QuestieDB have no root licence file (none covering Questie's own
+    code or data), and never had one on their default branches; the licence files in Questie's
+    subfolders cover bundled third-party material only (M2 review data-F9). The draft on
+    Questie's `license` branch says to consider Questie "all rights reserved".
   - The owner's posture (publish with notices, accepting the risk).
   - The carve-out, verbatim from [DATA_PROVENANCE.md](DATA_PROVENANCE.md) §3.2, as in
     `public/data/NOTICE.md`:
@@ -663,7 +769,11 @@ uses an original visual style, not a Blizzard-style parchment look or game icons
 
   - Non-affiliation with Blizzard Entertainment and the Questie project.
   - "This is not a legal conclusion."
-  - The regeneration command, `pnpm tsx tools/maps/import.ts --placeholder`.
+  - The regeneration command, `pnpm maps:placeholder` (`pnpm tsx tools/maps/import.ts
+    --placeholder`), and `pnpm maps:validate`.
+  - The input hashes: the `conversion.json` blob, both research CSVs and the rows file, the
+    frame hash and the content hash. It has no timestamp; `import.ts` generates it with the geometry
+    (`tools/maps/lib/notice.ts`), so R1 checks it byte for byte.
 
   *Superseded by DATA_PROVENANCE §3.2 (LIC-10):* the first revision-2 text of this list said the
   licence "covers this project's contributions (the format and the generator)" and left out the
@@ -684,25 +794,40 @@ once in Milestone 2 from the two research CSVs below. It holds:
 - per table, the full CSV's SHA-256, the request URL, the fetch date, and how it was obtained:
   fetched as an individual request during research, not by scripted crawling (D-011).
 
-Proposed shape (one row shown):
+As built (13,054 bytes; one row of each kind shown; `tools/maps/lib/db2-rows.ts` defines and
+parses it):
 
 ```jsonc
-{ "schema": 1, "product": "wow_classic_beta", "build": "1.60.1.70009",
+{
+  "$comment": ["The 12 DB2-only UiMapAssignment rows (11 UiMaps; Azeroth 947 has two) …", "…"],
+  "schema": 1, "product": "wow_classic_beta", "build": "1.60.1.70009",
   "sources": {
     "UiMapAssignment": { "url": "https://wago.tools/db2/UiMapAssignment/csv?build=1.60.1.70009",
         "fetched": "2026-09-25", "obtained": "individual research request, not scripted (D-011)",
-        "rows": 61, "sha256": "79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a" },
-    "UiMap": { "url": "https://wago.tools/db2/UiMap/csv?build=1.60.1.70009",
-        "fetched": "2026-09-25", "obtained": "individual research request, not scripted (D-011)",
-        "rows": 60, "sha256": "1f4aac70eaac015b1d2d0ea0faf6e3d7fb2cf7afdf45e5bb6772d9b80a72346b" } },
-  "assignments": [
-    { "table": "UiMapAssignment", "id": 46724, "columns": { "UiMapID": "1414", "OrderIndex": "0",
-        "MapID": "1", "AreaID": "0", "Region_0": "-11733.299804688", "…": "…" } } ],
-  "uiMaps": [ { "table": "UiMap", "id": 1414, "Name_lang": "Kalimdor", "Type": 2, "ParentUiMapID": 947 } ] }
+        "file": "UiMapAssignment_1.60.1.70009.csv", "bytes": 6778, "rows": 61,
+        "sha256": "79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a",
+        "header": ["UiMin_0", "UiMin_1", "UiMax_0", "UiMax_1", "Region_0", "…", "Field_11_2_5_62687_010"] },
+    "UiMap": { "url": "https://wago.tools/db2/UiMap/csv?build=1.60.1.70009", "…": "…", "rows": 60,
+        "sha256": "1f4aac70eaac015b1d2d0ea0faf6e3d7fb2cf7afdf45e5bb6772d9b80a72346b", "header": ["Name_lang", "ID", "…"] } },
+  "rawLinesSha256": "0aff6391a197d4ff33a2f56bd3388ca72f305a5543fc646682580437646870bb",
+  "assignments": [                                     // ascending (UiMapID, OrderIndex)
+    { "table": "UiMapAssignment", "build": "1.60.1.70009", "id": 46724, "csvLine": 5,
+      "columns": { "UiMin_0": "0", "UiMin_1": "0", "UiMax_0": "1", "UiMax_1": "1", "Region_0": "-11733.299804688",
+                   "Region_1": "-19733.2109375", "Region_2": "-1000000", "Region_3": "12799.900390625",
+                   "Region_4": "17066.599609375", "Region_5": "1000000", "ID": "46724", "UiMapID": "1414",
+                   "OrderIndex": "0", "MapID": "1", "AreaID": "0", "WMODoodadPlacementID": "0", "WMOGroupID": "0",
+                   "Field_11_2_5_62687_010": "0" } } ],   // all 18 columns, in CSV header order, as CSV strings
+  "uiMaps": [                                          // ascending ID
+    { "table": "UiMap", "build": "1.60.1.70009", "id": 1414, "csvLine": 6,
+      "columns": { "Name_lang": "Kalimdor", "Type": "2", "ParentUiMapID": "947" } } ] }
 ```
 
-The file is hashed as LF bytes, the way ARCHITECTURE §5.1 hashes upstream inputs
-(`.gitattributes` already sets `* text=auto eol=lf`). Only the importer and P2 read it.
+`csvLine` is the 1-based line of the row in the full CSV (the header is line 1). The file is
+hashed as LF bytes, the way ARCHITECTURE §5.1 hashes upstream inputs (`.gitattributes` already
+sets `* text=auto eol=lf`); a CRLF copy is normalised before hashing. Only the importer, P2 and
+the tests read it. The importer refuses any of its rows with a Z restriction (`Region_2`/`_5`
+other than ∓1,000,000), a WMO restriction or a non-zero `Field_11_2_5_62687_010`, which the
+geometry format cannot carry.
 
 **Milestone 0 CSVs.** They still exist on the research machine (checked 2026-09-25) under
 `<repo>/.cache/experiments/maps/`, which is gitignored and local. They were fetched on
@@ -768,12 +893,17 @@ The 49 remaining rows equal `conversion.json` `target_bounds` bit for bit (check
 
 **Reproduction (Milestone 2 onward, any machine, CI included).**
 
-1. `pnpm tsx tools/maps/import.ts --placeholder` reads the pinned `conversion.json` LF blob (from
-   the `tools/questiedb/fetch.ts` checkout) and `tools/maps/inputs/db2-rows-1.60.1.70009.json`,
-   and writes both placeholder files. It reads no CSV and makes no request to wago.tools.
-2. `validate.ts` runs P1-P6.
+1. `pnpm maps:placeholder` (`tsx tools/maps/import.ts --placeholder`) reads the pinned
+   `conversion.json` LF blob (from the `tools/questiedb/fetch.ts` checkout) and
+   `tools/maps/inputs/db2-rows-1.60.1.70009.json`, and writes both placeholder files. It reads no
+   CSV and makes no request to wago.tools. `--check` compares instead of writing.
+2. `pnpm maps:validate` runs R1, P0-P7 (§5.5).
 
-**Writing the rows file (once, Milestone 2).**
+**Writing the rows file (once, Milestone 2; done).** `tools/maps/lib/make-db2-rows.ts`
+implements steps 1-2 (and, with the QuestieDB checkout, checks that the other 49 CSV rows are
+exactly the `conversion.json` UiMaps); `--check` compares with the committed file. It never
+downloads anything. The committed file was written with it on 2026-09-25 from the research CSVs
+listed above.
 
 1. Generate it from `UiMapAssignment_1.60.1.70009.csv` and `UiMap_1.60.1.70009.csv` in
    `.cache/experiments/maps/`, parsing by column name, after checking both SHA-256 values
@@ -834,8 +964,9 @@ conclusions.
    *Superseded by D-018:* revision 1 limited the placeholder to what the QuestieDB lineage
    already contained.
 6. **Questie lineage.** The 49 frames and the Era→Forever coefficients come from QuestieDB
-   `conversion.json`. Neither `Questie/Questie` nor `Questie/QuestieDB` has ever had a licence
-   file on its default branch. Questie's unmerged `license` branch (commits `ce65498c`,
+   `conversion.json`. `Questie/Questie` and `Questie/QuestieDB` have no root licence file (none
+   covering Questie's own code or data), and never had one on their default branches; the
+   licence files in Questie's subfolders cover bundled third-party material only. Questie's unmerged `license` branch (commits `ce65498c`,
    2023-02-13, to `842201bd`, 2024-05-06) drafts a `LICENSE.md`. The draft says that, when in
    doubt, Questie should be considered "all rights reserved". It also drafts a CLA to relicense
    contributions as MIT (CC0 where MIT does not apply). The owner's posture is to publish the
@@ -879,7 +1010,7 @@ conclusions.
 | M8 | A frame-compatible local set has different rows for one of the 11 `db2-csv` UiMaps (a later build) | **Decided** (ARCHITECTURE §6): local geometry may only add UiMaps. A differing row for a UiMap the committed file has rejects the whole local set as a frame mismatch (§5.6 step 4). *Superseded:* the proposal that local rows win on that machine. A later build that really changes these rows needs a new committed rows file and owner review. |
 | M9 | wago.tools may not serve exactly the requested build | Not verified (§8.3 caveat). Mitigated by row-level comparison and the frame hash. |
 | M10 | The path cap and the zone-zoom threshold are unmeasured | Milestone 3 measurement against the ARCHITECTURE §14 map budgets |
-| M11 | RXP world-form gotos carry a UiMapID (`<UiMap>/<MapID>`) that the world `SourcedPoint` could not hold | **Decided** (ARCHITECTURE §6, `src/domain/points.ts`): the world variant has a `uiMapId: UiMapId \| null` hint, so the prefix survives lowering and canonical re-emission (§6; [coordinates §15](research/coordinates.md#15-coordinate-model-typescript-sketch)) |
+| M11 | RXP world-form gotos carry a UiMapID (`<UiMap>/<MapID>`) that the world `SourcedPoint` could not hold | **Decided** (ARCHITECTURE §6, `src/domain/points.ts`): the world variant has a `uiMapId: UiMapId \| null` hint, so the prefix survives lowering and canonical re-emission (§6; [coordinates §15](research/coordinates.md#15-coordinate-model-srcgeo)) |
 
 ## 11. Sources
 

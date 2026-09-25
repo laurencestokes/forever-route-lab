@@ -243,7 +243,7 @@ All exported from `src/ui/kit.ts`.
 | Component | File | Purpose and key props |
 |---|---|---|
 | `AppShell` | `shell/AppShell.tsx` | Grid frame: `top`, `left`, `centre`, `right`, `bottom`; `leftWidth`, `onLeftWidthChange` |
-| `TopBar` | `shell/TopBar.tsx` | Product, project › route (with `placeholder` label), quest search (`search`), jump to zone (`zones`), Import, Export, Settings, theme toggle, About |
+| `TopBar` | `shell/TopBar.tsx` | Product, project › route (with `placeholder` label; `placeholderLabel` "Sample" for the generated sample route), quest search (`search`), jump to zone (`zones`), Import, Export, Settings, theme toggle, About |
 | `RouteList` | `route/RouteList.tsx` | Virtualised listbox of `RouteRowModel`s; controlled `activeIndex` and `selectedKeys`; selection, editing and drag callbacks by index (§8) |
 | `StepRow`, `GroupRow` | `route/StepRow.tsx` | One 28px row: number, step glyph, title and detail, provenance, difficulty, issue marker, projected level, lock toggle; duplicate and delete on hover or when active (pointer-only affordances, §8); `groupLabel` for the spoken "in group …" |
 | `StepTypeGlyph` | `markers/StepTypeGlyph.tsx` | Original glyphs for accept, complete, turnin, abandon, travel, grind, hearth, flight, train, vendor, note |
@@ -257,13 +257,14 @@ All exported from `src/ui/kit.ts`.
 | `PanelSection`, `EmptyState`, `DetailList`, `IssueList`, `QuestListItem` | `shell/PanelContent.tsx` | Side-panel building blocks |
 | `StatusBar` | `shell/StatusBar.tsx` | XP bar, current step, duration, XP/hour, optimiser state and progress, data and ruleset badges |
 | `XpBar` | `shell/XpBar.tsx` | Level and XP progressbar with lower-bound, unknown and cap states |
-| `MapPlaceholder` | `shell/MapPlaceholder.tsx` | Centre panel until Milestone 3, labelled Placeholder, with a disabled layer-panel stub beside the card, never over it (§6) |
-| `AboutDialog` | `shell/AboutDialog.tsx` | Licence (GPL-3.0-or-later) and no-warranty line, data notice (D-016, with the LIC-10 carve-out verbatim), non-affiliation, source commit link |
+| `MapPlaceholder` | `shell/MapPlaceholder.tsx` | Centre panel until Milestone 3, labelled Placeholder, with a disabled layer-panel stub beside the card, never over it (§6); `geometry` states the loaded map geometry in one line (MAPS.md §5.6 step 6) |
+| `AboutDialog` | `shell/AboutDialog.tsx` | Licence (GPL-3.0-or-later) and no-warranty line, data notice (D-016, with the LIC-10 carve-out verbatim; with `dataUpstreamCommit` set it is the real-data notice with the pinned commit, `dataIdentity`'s revision and frame build, and the "Full data notice" link to `data/NOTICE.md`), non-affiliation, source commit link |
+| `LoadingScreen`, `LoadErrorScreen` | `shell/BootScreen.tsx` | The screens before the shell (Milestone 2): loading the dataset and geometry, with a progress bar and a `status` line ("Fetching and verifying data files: 3 of 7 (2.9 MB of 9.0 MB)"), then "placing … on the map geometry"; a failed start as an `alert` with title, message, a details disclosure and what can fix it (`remedy`): "Try again" for `reload`, or a sentence instead of the button for `redeploy` ("the deployed files need to be regenerated and redeployed") and `open-over-https` (no WebCrypto: "open the site over https (or on localhost)"). The heading takes focus. `src/ui/Boot.tsx` drives them |
 | `Button`, `IconButton` | `primitives/` | Text and icon buttons; `IconButton` requires `label`, supports `pressed` and `shortcut` (tooltip text and `aria-keyshortcuts`, §9 rule 3). Both style `disabled` and `aria-disabled="true"` alike |
 | `Select`, `TextInput` | `primitives/` | Native controls, restyled, always labelled (`hideLabel` keeps the label for assistive technology) |
 | `Toolbar`, `ToolbarSeparator` | `primitives/Toolbar.tsx` | `role="toolbar"` with one tab stop and arrow-key movement |
 | `PanelHeader` | `primitives/PanelHeader.tsx` | 32px header: title, meta, actions |
-| `Badge`, `PlaceholderTag`, `VisuallyHidden` | `primitives/Badge.tsx` | Identity badges; the "Placeholder" label |
+| `Badge`, `PlaceholderTag`, `VisuallyHidden` | `primitives/Badge.tsx` | Identity badges; the "Placeholder" label (`label` "Sample" for stand-in content built from real data, same style) |
 | `Icon` | `primitives/Icon.tsx` | Interface icons in `currentColor` |
 
 View-model types: `StepRowModel`, `GroupRowModel`, `RouteRowModel` (`route/rows.ts`, with
@@ -409,6 +410,37 @@ and truncate rather than round up (level 12.99 reads 12.9).
   is open.
 - Anything that stands in for real content (sample routes, the map) carries the Placeholder
   label: `TopBar placeholder`, `PlaceholderTag`, `EmptyState placeholder`, `MapPlaceholder`, and a
-  `StatusBar` data badge with `placeholder: true`.
-- `AboutDialog` takes `version`, `sourceCommit` (injected at build; null otherwise) and
-  `dataUpstreamCommit` (from the loaded dataset's identity; null when none is loaded).
+  `StatusBar` data badge with `placeholder: true`. The auto-generated sample route over the real
+  dataset (Milestone 2) says "Sample" instead of "Placeholder": `TopBar placeholderLabel="Sample"`
+  and a banner line "Sample route (auto-generated, not a recommended route)" above the route
+  (`RoutePanel notice`, from `App routeNotice`).
+- `AboutDialog` takes `version`, `sourceCommit` (injected at build; null otherwise),
+  `dataUpstreamCommit` (from the loaded dataset's identity; null when none is loaded or the data is
+  the placeholder test set) and `dataIdentity`.
+- *Milestone 2:* `src/main.tsx` renders `Boot` (`src/ui/Boot.tsx`), which shows `LoadingScreen`
+  while `loadWorkspace` (`src/app/workspace.ts`) fetches and verifies the dataset and the geometry,
+  then `App`, or `LoadErrorScreen` with the reason and the remedy `describeLoadFailure` gives
+  (`reload` for network, server and cache problems; `redeploy` for a malformed or inconsistent
+  file, the fixture slice deployed as data, or data and geometry that do not pair even after the
+  geometry is fetched again past the cache; `open-over-https` without WebCrypto). `App` takes a `DatasetSource`
+  (`src/app/dataset-source.ts`), not a `DatasetView`: it asks the source for the view of the
+  project's faction, class, custom quests and overrides, memoised, so the overlays follow the
+  character. The data badge label is the first 8 hex digits of the `dataRevision` (full identity
+  in its tooltip).
+- *Milestone 2:* the Available tab renders at most `AVAILABLE_PAGE_SIZE` (100) quests, by level
+  (the required level when it is higher: a level-1 quest that needs level 42 sorts at 42) and then
+  id, with the count of the rest ("Showing 100 of 2,202 quests open to Orc Warrior") and a
+  "Show 100 more" button. Any change of the search, clearing it included, starts over at one page.
+  A row says "requires N" when the quest's required level is above the character's start level.
+  Rows are memoised, so "Show more" renders only the rows it adds.
+  Details lists a quest's givers and receivers with where they are (zone name and percent as
+  published, `Gornek (NPC) · Durotar 42.06, 68.33`; "inside an instance" or "no map position" when
+  there is no point), its objectives with where they are done, its quest text, and QuestieDB's
+  provenance of the record.
+- *Milestone 2:* a spawn inside an instance (QuestieDB's `[-1, -1]` presence) is never shown as
+  being in its entrance's zone: summaries say "1 spawn in an instance (entrance in Westfall)", the
+  quest's zone "Inside an instance (entrance in The Barrens)", and "an instance" alone when the
+  entrance is unknown. World points always name their axes ("World map 1: X -500.00, Y -4000.00
+  yd"), with RXP's written `Y, X` order swapped back.
+- *Milestone 2:* the map panel's geometry line says why a local map set is not used ("local set:
+  refused (… changed after the set was activated …)"), except when there is none at all.

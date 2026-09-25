@@ -18,7 +18,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "licence:check": "tsx tools/build/licence-gate.ts",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
+    "data:fetch": "tsx tools/questiedb/fetch.ts",
+    "data:extract": "tsx tools/questiedb/extract.ts",
+    "data:validate": "tsx tools/questiedb/validate.ts",
+    "data:diff": "tsx tools/questiedb/diff.ts",
+    "data:all": "pnpm data:fetch && pnpm data:extract && pnpm data:validate",
+    "data:check": "pnpm data:fetch && pnpm data:extract --check && pnpm data:validate",
+    "maps:placeholder": "tsx tools/maps/import.ts --placeholder",
+    "maps:validate": "tsx tools/maps/validate.ts",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm data:validate && pnpm build"
   },
   "dependencies": {
     "idb": "^8.0.3",
