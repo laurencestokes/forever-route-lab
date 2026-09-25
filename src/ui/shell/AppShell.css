@@ -1,0 +1,153 @@
+/*
+ * Application frame. Panels are separated by 1px of --frl-bg showing through the grid gap.
+ *
+ * Every area is a containing block (position: relative), so nothing absolutely positioned inside
+ * a panel (in particular .frl-visually-hidden text) can slip past the panels' overflow clips to
+ * the initial containing block and lengthen the page. Above 720px the shell owns all scrolling,
+ * so the document itself never scrolls either (docs/UI.md §6).
+ */
+
+@media (width > 720px) {
+  html,
+  body {
+    overflow: hidden;
+  }
+}
+
+.frl-shell {
+  display: grid;
+  grid-template-areas:
+    'top top top'
+    'left centre right'
+    'bottom bottom bottom';
+  grid-template-columns: var(--frl-left-width) minmax(0, 1fr) var(--frl-right-width);
+  grid-template-rows: var(--frl-topbar-height) minmax(0, 1fr) var(--frl-statusbar-height);
+  gap: var(--frl-gap);
+  height: 100vh;
+  height: 100dvh;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--frl-bg);
+}
+
+.frl-shell__top {
+  position: relative;
+  grid-area: top;
+  min-width: 0;
+}
+
+.frl-shell__left {
+  position: relative;
+  grid-area: left;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--frl-surface);
+}
+
+.frl-shell__centre {
+  position: relative;
+  grid-area: centre;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--frl-surface-sunken);
+}
+
+.frl-shell__right {
+  position: relative;
+  grid-area: right;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--frl-surface);
+}
+
+.frl-shell__bottom {
+  position: relative;
+  grid-area: bottom;
+  min-width: 0;
+}
+
+/* Splitter on the route panel's right edge: 7px hit area, 2px visible line on hover/focus. */
+.frl-shell__resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: var(--frl-z-sticky);
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.frl-shell__resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 3px;
+  background: transparent;
+  transition: background-color var(--frl-duration-fast) var(--frl-ease);
+}
+
+.frl-shell__resize:hover::after,
+.frl-shell__resize.is-dragging::after,
+.frl-shell__resize:focus-visible::after {
+  background: var(--frl-accent);
+}
+
+.frl-shell__resize:focus-visible {
+  outline: none;
+}
+
+/* Forced colours drop author backgrounds, and with them the splitter's hover and focus line. */
+@media (forced-colors: active) {
+  .frl-shell__resize:hover::after,
+  .frl-shell__resize.is-dragging::after,
+  .frl-shell__resize:focus-visible::after {
+    background: Highlight;
+  }
+}
+
+/* ~1024px: the side panel moves under the map; the route panel keeps the full height. */
+@media (max-width: 1024px) {
+  .frl-shell {
+    grid-template-areas:
+      'top top'
+      'left centre'
+      'left right'
+      'bottom bottom';
+    grid-template-columns: minmax(280px, 36%) minmax(0, 1fr);
+    grid-template-rows: var(--frl-topbar-height) minmax(0, 1.2fr) minmax(0, 1fr) var(--frl-statusbar-height);
+  }
+
+  .frl-shell__resize {
+    display: none;
+  }
+}
+
+/* Narrow windows: stack everything and let the page scroll. */
+@media (max-width: 720px) {
+  .frl-shell {
+    grid-template-areas:
+      'top'
+      'centre'
+      'left'
+      'right'
+      'bottom';
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 280px 60vh auto auto;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .frl-shell__right {
+    min-height: 360px;
+  }
+}

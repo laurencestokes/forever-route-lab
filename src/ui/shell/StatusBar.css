@@ -1,0 +1,232 @@
+/* Bottom status bar and the XP bar. */
+
+.frl-statusbar {
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-3);
+  height: var(--frl-statusbar-height);
+  min-width: 0;
+  padding: 0 var(--frl-space-3);
+  overflow: hidden;
+  border-top: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+  white-space: nowrap;
+}
+
+.frl-statusbar__sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--frl-border);
+}
+
+.frl-statusbar__spacer {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.frl-statusbar__item {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.frl-statusbar__label {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.frl-statusbar__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.frl-statusbar__step {
+  flex: 0 1 auto;
+  max-width: 320px;
+  overflow: hidden;
+}
+
+.frl-statusbar__step-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.frl-statusbar__none {
+  color: var(--frl-fg-subtle);
+}
+
+.frl-statusbar__optimizer {
+  align-items: center;
+}
+
+.frl-statusbar__optimizer.is-unavailable .frl-statusbar__optimizer-state {
+  color: var(--frl-fg-subtle);
+}
+
+.frl-statusbar__progress {
+  position: relative;
+  display: inline-block;
+  width: 56px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--frl-xp-track);
+}
+
+.frl-statusbar__progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--frl-accent);
+}
+
+.frl-statusbar__progress-fill.is-indeterminate {
+  width: 40%;
+  animation: frl-indeterminate 1.2s var(--frl-ease) infinite;
+}
+
+@keyframes frl-indeterminate {
+  from {
+    left: -40%;
+  }
+
+  to {
+    left: 100%;
+  }
+}
+
+/* Without motion a sliding 40% bar would freeze and read as "40% done". Progress is unknown, so
+   draw the unknown pattern across the whole track instead: never a partial fill without a value. */
+@media (prefers-reduced-motion: reduce) {
+  .frl-statusbar__progress-fill.is-indeterminate {
+    left: 0;
+    width: 100%;
+    animation: none;
+    background: repeating-linear-gradient(-45deg, var(--frl-unknown-hatch) 0 2px, transparent 2px 4px);
+  }
+}
+
+.frl-statusbar__badges {
+  display: inline-flex;
+  flex: none;
+  gap: var(--frl-space-1);
+}
+
+/* XP bar ----------------------------------------------------------------------------------- */
+.frl-xpbar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.frl-xpbar__level {
+  min-width: 42px;
+  font-size: var(--frl-text);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-xpbar__bound {
+  margin-right: 1px;
+  color: var(--frl-fg-muted);
+}
+
+.frl-xpbar__track {
+  position: relative;
+  width: 160px;
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid var(--frl-border-strong);
+  border-radius: 5px;
+  background: var(--frl-xp-track);
+}
+
+.frl-xpbar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--frl-xp-fill);
+  transition: width var(--frl-duration) var(--frl-ease);
+}
+
+/* Lower bound: hatching after the known amount (the true value lies somewhere at or beyond the
+   marker) and a notch at the known amount. */
+.frl-xpbar__beyond {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(-45deg, var(--frl-xp-hatch) 0 3px, transparent 3px 6px);
+}
+
+.frl-xpbar__marker {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--frl-fg);
+}
+
+/* Unknown: hatched all the way (at 3:1 against the track, so it can never pass for an empty
+   bar), with a dashed edge, and "XP ?" stays visible at every width (below). */
+.frl-xpbar--unknown .frl-xpbar__track {
+  border-style: dashed;
+  background: repeating-linear-gradient(-45deg, var(--frl-unknown-hatch) 0 3px, transparent 3px 6px),
+    var(--frl-xp-track);
+}
+
+.frl-xpbar__text {
+  color: var(--frl-fg-muted);
+}
+
+.frl-xpbar.is-lower-bound .frl-xpbar__text {
+  color: var(--frl-fg);
+}
+
+/* Narrower windows drop the XP numbers, but never the "?" of an unknown value. */
+@media (max-width: 1180px) {
+  .frl-xpbar:not(.frl-xpbar--unknown) .frl-xpbar__text {
+    display: none;
+  }
+
+  .frl-xpbar__track {
+    width: 120px;
+  }
+}
+
+@media (max-width: 720px) {
+  .frl-statusbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding-top: var(--frl-space-1);
+    padding-bottom: var(--frl-space-1);
+    white-space: normal;
+  }
+
+  .frl-statusbar__spacer,
+  .frl-statusbar__sep {
+    display: none;
+  }
+}
+
+/* Forced colours drop author backgrounds: draw fills and the notch in system colours. */
+@media (forced-colors: active) {
+  .frl-xpbar__fill,
+  .frl-statusbar__progress-fill {
+    background: Highlight;
+  }
+
+  .frl-xpbar__marker {
+    background: CanvasText;
+  }
+}

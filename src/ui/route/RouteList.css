@@ -1,0 +1,330 @@
+/* Route list and rows. Every row is exactly --frl-row-height (28px) tall and one line. */
+
+.frl-routelist {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--frl-surface);
+}
+
+.frl-routelist__viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The active row carries the focus ring while the list has focus; the list itself shows one
+   only when there is no active row to show it on. */
+.frl-routelist__viewport:focus-visible {
+  outline: none;
+}
+
+.frl-routelist__viewport:focus-visible:not([aria-activedescendant]) {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: calc(-1 * var(--frl-focus-width));
+}
+
+.frl-routelist__canvas {
+  position: relative;
+  width: 100%;
+}
+
+.frl-routelist__drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: var(--frl-z-drag);
+  height: 2px;
+  margin-top: -1px;
+  background: var(--frl-drop-indicator);
+  pointer-events: none;
+}
+
+.frl-routelist__drop::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--frl-drop-indicator);
+  border-radius: 50%;
+  background: var(--frl-surface);
+}
+
+.frl-routelist.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.frl-routelist__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--frl-space-4);
+  color: var(--frl-fg-muted);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Rows --------------------------------------------------------------------------------------- */
+.frl-row {
+  --frl-row-bg: var(--frl-surface);
+  --frl-row-bar: transparent;
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--frl-row-height);
+  padding-right: 6px;
+  overflow: hidden;
+  background: var(--frl-row-bg);
+  box-shadow:
+    inset 3px 0 0 var(--frl-row-bar),
+    inset 0 -1px 0 var(--frl-border);
+  color: var(--frl-fg);
+  font-size: var(--frl-text);
+  line-height: var(--frl-row-height);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.frl-row:hover {
+  --frl-row-bg: var(--frl-surface-hover);
+}
+
+.frl-row.is-selected {
+  --frl-row-bg: var(--frl-selection-bg);
+  --frl-row-bar: var(--frl-selection-bar);
+}
+
+.frl-routelist__viewport:focus .frl-row.is-active {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: calc(-1 * var(--frl-focus-width));
+}
+
+.frl-row.is-dragging {
+  opacity: 0.45;
+}
+
+.frl-row__handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 100%;
+  color: var(--frl-fg-subtle);
+  cursor: grab;
+  opacity: 0;
+  touch-action: none;
+}
+
+.frl-row__handle--none {
+  cursor: default;
+}
+
+.frl-row:hover .frl-row__handle,
+.frl-row.is-active .frl-row__handle {
+  opacity: 1;
+}
+
+.frl-row__handle--none,
+.frl-row:hover .frl-row__handle--none {
+  opacity: 0;
+}
+
+/* Step row ----------------------------------------------------------------------------------- */
+.frl-steprow__number {
+  flex: none;
+  min-width: 26px;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-sm);
+  text-align: right;
+}
+
+.frl-steprow__glyph {
+  flex: none;
+}
+
+.frl-steprow__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.frl-steprow__detail {
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-steprow[data-step-kind='note'] .frl-steprow__title {
+  color: var(--frl-fg-muted);
+  font-style: italic;
+}
+
+.frl-steprow__provenance,
+.frl-steprow__difficulty {
+  flex: none;
+}
+
+.frl-steprow__issues {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-steprow__issues[data-severity='error'] {
+  color: var(--frl-severity-error);
+}
+
+.frl-steprow__issues[data-severity='warning'] {
+  color: var(--frl-severity-warning);
+}
+
+.frl-steprow__issues[data-severity='info'] {
+  color: var(--frl-severity-info);
+}
+
+/* Numbers align on the right edge; markers hang in a fixed 10px gutter after them. */
+.frl-steprow__level {
+  position: relative;
+  flex: none;
+  justify-content: flex-end;
+  min-width: 42px;
+  padding-right: 10px;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-steprow__level .frl-assumed {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin: 0;
+  line-height: 14px;
+}
+
+.frl-steprow__lock {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  color: var(--frl-fg-muted);
+}
+
+.frl-steprow__lock .frl-row__action {
+  opacity: 0;
+}
+
+.frl-steprow.is-locked .frl-steprow__lock .frl-row__action,
+.frl-row:hover .frl-steprow__lock .frl-row__action,
+.frl-row.is-active .frl-steprow__lock .frl-row__action {
+  opacity: 1;
+}
+
+.frl-steprow.is-locked .frl-steprow__lock .frl-row__action {
+  color: var(--frl-fg);
+}
+
+/* Duplicate and delete: in the flow after the title, collapsed until hover or active. The title
+   gives way; nothing else is covered. */
+.frl-steprow__actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  width: 0;
+  overflow: hidden;
+  transition: width var(--frl-duration-fast) var(--frl-ease);
+}
+
+.frl-row:hover .frl-steprow__actions,
+.frl-row.is-active .frl-steprow__actions {
+  width: 44px;
+}
+
+/* In-row affordances (duplicate, delete, lock): pointer-only spans, not buttons. The row is an
+   option with presentational children, so they are hidden from assistive technology and never
+   take focus; every action also has a list key and a toolbar button (docs/UI.md §8). */
+.frl-row__action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--frl-control-height-sm);
+  height: var(--frl-control-height-sm);
+  border-radius: var(--frl-radius);
+  color: var(--frl-fg-muted);
+  cursor: pointer;
+  transition: color var(--frl-duration-fast) var(--frl-ease);
+}
+
+.frl-row__action:hover {
+  color: var(--frl-fg);
+}
+
+.frl-row__action.is-disabled,
+.frl-row__action.is-disabled:hover {
+  color: var(--frl-fg-disabled);
+  cursor: default;
+}
+
+/* Group header row ----------------------------------------------------------------------------- */
+.frl-grouprow {
+  --frl-row-bg: var(--frl-surface-raised);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-grouprow__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 32px;
+  text-overflow: ellipsis;
+}
+
+.frl-grouprow__count {
+  flex: none;
+  color: var(--frl-fg-subtle);
+  font-weight: var(--frl-weight-regular);
+}
+
+/* Forced colours drop box shadows and author backgrounds: the selection bar becomes a system
+   Highlight strip, and the drop line is drawn in Highlight. The focus ring (an outline) stays. */
+@media (forced-colors: active) {
+  .frl-row.is-selected::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 4px;
+    background: Highlight;
+  }
+
+  .frl-routelist__drop {
+    background: Highlight;
+  }
+
+  .frl-routelist__drop::before {
+    border-color: Highlight;
+    background: Canvas;
+  }
+}

@@ -1,0 +1,110 @@
+/* About and licences dialog (native <dialog>). */
+
+.frl-about {
+  width: min(600px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius-lg);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+  color: var(--frl-fg);
+}
+
+.frl-about::backdrop {
+  background: rgb(15 18 24 / 0.5);
+  background: var(--frl-overlay, rgb(15 18 24 / 0.5));
+}
+
+.frl-about[open] {
+  display: flex;
+}
+
+.frl-about__content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: inherit;
+}
+
+.frl-about__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-2);
+  padding: var(--frl-space-2) var(--frl-space-2) var(--frl-space-2) var(--frl-space-4);
+  border-bottom: 1px solid var(--frl-border);
+}
+
+.frl-about__title {
+  font-size: var(--frl-text-lg);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-about__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--frl-space-3);
+  min-height: 0;
+  padding: var(--frl-space-3) var(--frl-space-4) var(--frl-space-4);
+  overflow-y: auto;
+}
+
+.frl-about__body p + p {
+  margin-top: var(--frl-space-2);
+}
+
+.frl-about__facts {
+  display: grid;
+  gap: 2px;
+  padding: var(--frl-space-2) var(--frl-space-3);
+  border-radius: var(--frl-radius);
+  background: var(--frl-surface-raised);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-about__facts > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: var(--frl-space-2);
+}
+
+.frl-about__facts dt {
+  color: var(--frl-fg-muted);
+}
+
+.frl-about__facts code {
+  font-family: var(--frl-font-mono);
+}
+
+.frl-about__muted {
+  color: var(--frl-fg-muted);
+}
+
+.frl-about__section h3 {
+  margin-bottom: var(--frl-space-1);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.frl-about__carve-out {
+  padding-left: var(--frl-space-3);
+  border-left: 3px solid var(--frl-border-strong);
+  color: var(--frl-fg-muted);
+}
+
+.frl-about__footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  padding: var(--frl-space-2) var(--frl-space-4);
+  border-top: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+}

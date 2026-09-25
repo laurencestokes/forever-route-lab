@@ -1,0 +1,11 @@
+{
+  "$comment": [
+    "Reviewed exceptions to the SPDX licence allowlist (docs/ARCHITECTURE.md §16, D-025).",
+    "tools/build/licence-gate.ts applies an entry only while the package still declares exactly",
+    "the recorded licence. Each entry needs every field below; 'decision' must name an existing",
+    "docs/DECISIONS.md entry that accepted the licence. 'version' is an exact version or '*'.",
+    "Example: { \"package\": \"example\", \"version\": \"1.2.3\", \"licence\": \"MPL-2.0\",",
+    "           \"reason\": \"why it is acceptable and how it is used\", \"decision\": \"D-0nn\" }"
+  ],
+  "exceptions": []
+}

@@ -1,0 +1,205 @@
+/*
+ * Forever Route Lab design tokens. docs/UI.md is the reference: every token below is listed
+ * there with its purpose. Components use only these custom properties, never raw colours.
+ *
+ * Themes: the light values are the default. The dark values apply when the operating system
+ * prefers dark and nothing forces light, or wherever `data-theme="dark"` is set (on <html> or on
+ * any subtree). `data-theme="light"` forces light. The two dark blocks must stay identical.
+ *
+ * tests/ui-tokens.test.ts parses this file and fails when: the two dark blocks differ; the light
+ * and dark token names differ; a theme block redefines a theme-independent token; a difficulty
+ * token differs from DIFFICULTY_COLORS (src/rules/difficulty.ts); a documented foreground and
+ * background pair falls below WCAG AA (4.5:1 text, 3:1 edges, rings, bars, meters and hatching);
+ * a reserved hue comes too close to another signal's; or --frl-row-height is not ROUTE_ROW_HEIGHT.
+ * Drawing a new foreground on a new background means adding the pair there (docs/UI.md §9).
+ */
+
+:root {
+  /* Typography ----------------------------------------------------------------------------- */
+  --frl-font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --frl-font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --frl-text-xs: 11px;
+  --frl-text-sm: 12px;
+  --frl-text: 13px;
+  --frl-text-lg: 15px;
+  --frl-leading: 18px;
+  --frl-leading-tight: 16px;
+  --frl-weight-regular: 400;
+  --frl-weight-medium: 500;
+  --frl-weight-bold: 650;
+
+  /* Spacing: a 4px grid with a 2px half step ----------------------------------------------- */
+  --frl-space-half: 2px;
+  --frl-space-1: 4px;
+  --frl-space-2: 8px;
+  --frl-space-3: 12px;
+  --frl-space-4: 16px;
+  --frl-space-5: 24px;
+  --frl-space-6: 32px;
+
+  /* Density and fixed heights --------------------------------------------------------------- */
+  --frl-row-height: 28px;
+  --frl-control-height: 26px;
+  --frl-control-height-sm: 22px;
+  --frl-topbar-height: 44px;
+  --frl-statusbar-height: 32px;
+  --frl-tab-height: 32px;
+  --frl-panel-header-height: 32px;
+
+  /* Layout ---------------------------------------------------------------------------------- */
+  --frl-left-width: 340px;
+  --frl-right-width: 340px;
+  --frl-gap: 1px;
+
+  /* Shape ----------------------------------------------------------------------------------- */
+  --frl-radius-sm: 3px;
+  --frl-radius: 4px;
+  --frl-radius-lg: 8px;
+  --frl-focus-width: 2px;
+
+  /* Motion (reduced to zero under prefers-reduced-motion, see base.css) --------------------- */
+  --frl-duration-fast: 90ms;
+  --frl-duration: 140ms;
+  --frl-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Stacking -------------------------------------------------------------------------------- */
+  --frl-z-sticky: 10;
+  --frl-z-drag: 20;
+
+  /*
+   * RESERVED: quest difficulty. These five values mirror DIFFICULTY_COLORS in
+   * src/rules/difficulty.ts exactly (tests/ui-tokens.test.ts compares them). They mean quest
+   * difficulty and nothing else, and they are the same in both themes: they are always drawn on
+   * the dark difficulty well so each one reaches 4.5:1, and each lit pip reaches 3:1 against
+   * an unlit one.
+   */
+  --frl-difficulty-trivial: #808080;
+  --frl-difficulty-standard: #40bf40;
+  --frl-difficulty-difficult: #ffff00;
+  --frl-difficulty-verydifficult: #ff8040;
+  --frl-difficulty-impossible: #ff1a1a;
+  --frl-difficulty-well: #101216;
+  /* Not difficulties: the unlit pip and the neutral used when difficulty is unknown. */
+  --frl-difficulty-pip-off: #2a3039;
+  --frl-difficulty-unknown: #c9ced6;
+}
+
+/* Light theme (default) ------------------------------------------------------------------------ */
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  --frl-bg: #dfe3e9;
+  --frl-surface: #ffffff;
+  --frl-surface-raised: #f5f6f8;
+  --frl-surface-hover: #eceff3;
+  --frl-surface-sunken: #e9ecf0;
+  --frl-border: #d5dae1;
+  --frl-border-strong: #737d8b;
+  --frl-fg: #14181e;
+  --frl-fg-muted: #4b5563;
+  --frl-fg-subtle: #5f6978;
+  --frl-fg-disabled: #9aa2ad;
+  --frl-accent: #3a4fc4;
+  --frl-accent-hover: #2e40a8;
+  --frl-accent-fg: #ffffff;
+  --frl-focus: #3a4fc4;
+  --frl-selection-bg: #e3e8fb;
+  --frl-selection-bar: #3a4fc4;
+  --frl-drop-indicator: #3a4fc4;
+  --frl-severity-error: #b0157f;
+  --frl-severity-warning: #7a3fc2;
+  --frl-severity-info: #2560b0;
+  --frl-forever: #006d7d;
+  --frl-forever-bg: #e0f3f6;
+  --frl-assumed: #5f6978;
+  --frl-xp-track: #dde2ea;
+  --frl-xp-fill: #3a4fc4;
+  --frl-xp-hatch: rgb(58 79 196 / 0.35);
+  --frl-unknown-hatch: #737d8b;
+  --frl-placeholder-stripe: rgb(20 24 30 / 0.06);
+  --frl-map-grid: rgb(20 24 30 / 0.08);
+  --frl-overlay: rgb(15 18 24 / 0.45);
+  --frl-shadow: 0 1px 2px rgb(15 18 24 / 0.08), 0 4px 16px rgb(15 18 24 / 0.12);
+  --frl-difficulty-well-border: #101216;
+}
+
+/* Dark theme: follows the operating system unless light is forced ------------------------------ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --frl-bg: #0b0d11;
+    --frl-surface: #151920;
+    --frl-surface-raised: #1b2029;
+    --frl-surface-hover: #232a35;
+    --frl-surface-sunken: #11151b;
+    --frl-border: #2a313c;
+    --frl-border-strong: #707c8e;
+    --frl-fg: #e5e8ed;
+    --frl-fg-muted: #a7b0bd;
+    --frl-fg-subtle: #8d97a5;
+    --frl-fg-disabled: #58616e;
+    --frl-accent: #8ea2ff;
+    --frl-accent-hover: #a9b8ff;
+    --frl-accent-fg: #0d1014;
+    --frl-focus: #8ea2ff;
+    --frl-selection-bg: #1f2a52;
+    --frl-selection-bar: #8ea2ff;
+    --frl-drop-indicator: #8ea2ff;
+    --frl-severity-error: #ff7ac8;
+    --frl-severity-warning: #c3a2ff;
+    --frl-severity-info: #7fb0ff;
+    --frl-forever: #3ccfe0;
+    --frl-forever-bg: #0f2f35;
+    --frl-assumed: #a7b0bd;
+    --frl-xp-track: #262d38;
+    --frl-xp-fill: #8ea2ff;
+    --frl-xp-hatch: rgb(142 162 255 / 0.35);
+    --frl-unknown-hatch: #707c8e;
+    --frl-placeholder-stripe: rgb(229 232 237 / 0.05);
+    --frl-map-grid: rgb(229 232 237 / 0.07);
+    --frl-overlay: rgb(0 0 0 / 0.6);
+    --frl-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.5);
+    --frl-difficulty-well-border: #3a4350;
+  }
+}
+
+/* Dark theme: forced (keep identical to the block above) --------------------------------------- */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --frl-bg: #0b0d11;
+  --frl-surface: #151920;
+  --frl-surface-raised: #1b2029;
+  --frl-surface-hover: #232a35;
+  --frl-surface-sunken: #11151b;
+  --frl-border: #2a313c;
+  --frl-border-strong: #707c8e;
+  --frl-fg: #e5e8ed;
+  --frl-fg-muted: #a7b0bd;
+  --frl-fg-subtle: #8d97a5;
+  --frl-fg-disabled: #58616e;
+  --frl-accent: #8ea2ff;
+  --frl-accent-hover: #a9b8ff;
+  --frl-accent-fg: #0d1014;
+  --frl-focus: #8ea2ff;
+  --frl-selection-bg: #1f2a52;
+  --frl-selection-bar: #8ea2ff;
+  --frl-drop-indicator: #8ea2ff;
+  --frl-severity-error: #ff7ac8;
+  --frl-severity-warning: #c3a2ff;
+  --frl-severity-info: #7fb0ff;
+  --frl-forever: #3ccfe0;
+  --frl-forever-bg: #0f2f35;
+  --frl-assumed: #a7b0bd;
+  --frl-xp-track: #262d38;
+  --frl-xp-fill: #8ea2ff;
+  --frl-xp-hatch: rgb(142 162 255 / 0.35);
+  --frl-unknown-hatch: #707c8e;
+  --frl-placeholder-stripe: rgb(229 232 237 / 0.05);
+  --frl-map-grid: rgb(229 232 237 / 0.07);
+  --frl-overlay: rgb(0 0 0 / 0.6);
+  --frl-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.5);
+  --frl-difficulty-well-border: #3a4350;
+}

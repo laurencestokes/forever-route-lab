@@ -1,0 +1,279 @@
+import { describe, expect, it } from 'vitest';
+import { createPlaceholderWorkspace } from '../app/placeholder-project';
+import type { QuestId, StepId, UiMapId } from '../domain/ids';
+import type { Location } from '../domain/points';
+import type { Route, RouteStep } from '../domain/route';
+import type { DatasetIdentity, DatasetView, QuestRecord } from '../domain/dataset';
+import {
+  NO_ACTIVE_TARGET,
+  PLACEHOLDER_DATA_NOTICE,
+  SIMULATION_PENDING,
+  buildRouteView,
+  characterName,
+  dataBadgeDetail,
+  dropToIndex,
+  grindTargetText,
+  locationDetail,
+  locationText,
+  panelTabOf,
+  questName,
+  resolveActiveTarget,
+  rightTabOf,
+  routeQuestIds,
+  sameItems,
+  selectedRowKeys,
+  selectionMessage,
+  stepRowModel,
+  stepTitle,
+  type RouteView,
+} from './app-model';
+import { SIDE_PANEL_TAB_ORDER } from './shell/SidePanel';
+
+const { project, dataset } = createPlaceholderWorkspace({ nowIso: '2026-09-25T12:00:00.000Z' });
+const route = project.route;
+const view = buildRouteView(route, dataset, project.character.startLevel);
+
+const find = (predicate: (s: RouteStep) => boolean): RouteStep => {
+  const step = route.steps.find(predicate);
+  if (step === undefined) throw new Error('fixture step missing');
+  return step;
+};
+
+/** A minimal route of note steps `a`, `b`, ... with the given group per step (null: none). */
+function notesRoute(groups: readonly (string | null)[]): Route {
+  const steps = groups.map(
+    (group, i): RouteStep => ({
+      id: `s-${String.fromCharCode(97 + i)}` as StepId,
+      kind: 'note',
+      text: `Placeholder ${String(i)}`,
+      preserved: null,
+      location: null,
+      note: null,
+      locked: false,
+      groupId: group as RouteStep['groupId'],
+      condition: null,
+      durationOverride: null,
+      origin: { source: 'manual', ref: null },
+      rxp: null,
+      ext: null,
+    }),
+  );
+  return { id: 'route-1' as Route['id'], name: 'Placeholder', description: '', steps, groups: {} };
+}
+
+const ids = (view: RouteView, rows: readonly number[]): Set<StepId> =>
+  new Set(rows.flatMap((row) => view.rowSteps[row] ?? []));
+
+describe('buildRouteView', () => {
+  it('has one row per step plus a header before the group run', () => {
+    const headers = view.rows.filter((row) => row.type === 'group');
+    expect(headers).toHaveLength(1);
+    expect(view.rows).toHaveLength(route.steps.length + 1);
+    const headerIndex = view.rows.findIndex((row) => row.type === 'group');
+    const header = view.rows[headerIndex];
+    expect(header?.type === 'group' ? header.stepCount : null).toBe(3);
+    expect(view.rowSteps[headerIndex]).toEqual(route.steps.filter((s) => s.groupId !== null).map((s) => s.id));
+  });
+
+  it('numbers steps 1..n and maps ids to rows both ways', () => {
+    route.steps.forEach((step, i) => {
+      expect(view.numberOfStep.get(step.id)).toBe(i + 1);
+      const row = view.rowOfStep.get(step.id);
+      expect(row === undefined ? undefined : view.rows[row]?.key).toBe(step.id);
+    });
+    view.rows.forEach((row, i) => {
+      expect(view.rowOfKey.get(row.key)).toBe(i);
+    });
+  });
+
+  it('leaves derived numbers unknown and marks difficulty as taken from a lower-bound level', () => {
+    for (const row of view.rows) {
+      if (row.type !== 'step') continue;
+      expect(row.projectedLevel.value).toBeNull();
+      expect(row.projectedLevel.unknownReason).toBe(SIMULATION_PENDING);
+      if (row.quest !== null) {
+        expect(row.quest.uncertain).toBe(true);
+        expect(row.quest.difficulty).not.toBeNull();
+        expect(row.quest.provenance).toEqual({ claim: 'unknown', declaredBy: null });
+      }
+    }
+    const locked = view.rows.filter((row) => row.type === 'step' && row.locked);
+    expect(locked).toHaveLength(1);
+  });
+
+  it('labels a group that is missing from route.groups, even when its id names an Object.prototype member', () => {
+    const view = buildRouteView(notesRoute(['toString', 'toString', 'constructor']), dataset, 1);
+    const labels = view.rows.flatMap((row) => (row.type === 'group' ? [row.label] : []));
+    expect(labels).toEqual(['Step group', 'Step group']);
+  });
+
+  it('keeps the steps it was built from', () => {
+    expect(view.steps).toBe(route.steps);
+  });
+
+  it('gives a group split by editing one header per run', () => {
+    const split = buildRouteView(notesRoute(['g', 'g', null, 'g']), dataset, 1);
+    expect(split.rows.map((row) => row.type)).toEqual(['group', 'step', 'step', 'step', 'group', 'step']);
+    expect(new Set(split.rows.map((row) => row.key)).size).toBe(split.rows.length);
+  });
+});
+
+describe('selectedRowKeys', () => {
+  it('selects a header only when its whole run is selected', () => {
+    const small = buildRouteView(notesRoute([null, 'g', 'g']), dataset, 1);
+    expect([...selectedRowKeys(small, ids(small, [2]))]).toEqual(['s-b']);
+    expect([...selectedRowKeys(small, ids(small, [2, 3]))].sort()).toEqual(['group:g:s-b', 's-b', 's-c']);
+    expect(selectedRowKeys(small, new Set()).size).toBe(0);
+  });
+});
+
+describe('dropToIndex', () => {
+  const flat = buildRouteView(notesRoute([null, null, null, null, null]), dataset, 1);
+
+  it('converts RouteList drop indices into a position among the steps that stay', () => {
+    // Row 1 (b) dropped to end at index 3: b goes after d.
+    expect(dropToIndex(flat, ids(flat, [1]), 1, 3)).toBe(3);
+    // Row 4 (e) dropped to index 1: e goes after a.
+    expect(dropToIndex(flat, ids(flat, [4]), 4, 1)).toBe(1);
+    expect(dropToIndex(flat, ids(flat, [0]), 0, 4)).toBe(4);
+  });
+
+  it('counts only steps that are not moving, and never header rows', () => {
+    // A selection {b, c} dragged by b down to index 3: the gap is above row 4 (e); a and d stay above it.
+    expect(dropToIndex(flat, ids(flat, [1, 2]), 1, 3)).toBe(2);
+    const grouped = buildRouteView(notesRoute([null, 'g', 'g', null]), dataset, 1);
+    // Rows: a, [header], b, c, d. Dragging d (row 4) to index 1 lands it above the header.
+    expect(dropToIndex(grouped, ids(grouped, [4]), 4, 1)).toBe(1);
+  });
+});
+
+describe('texts', () => {
+  it('titles steps from the dataset and the step itself', () => {
+    const acceptStep = find((s) => s.kind === 'accept');
+    expect(stepTitle(acceptStep, dataset)).toMatch(/^Placeholder Quest 1/);
+    expect(stepTitle(find((s) => s.kind === 'travel'), dataset)).toBe('To Placeholder meadow');
+    expect(stepTitle(find((s) => s.kind === 'grind'), dataset)).toBe('Until level 2');
+    expect(stepTitle(find((s) => s.kind === 'hearth' && s.mode === 'bind'), dataset)).toBe('Set hearthstone');
+    expect(stepTitle(find((s) => s.kind === 'flight' && s.mode === 'take'), dataset)).toBe('Fly to Placeholder Ridge');
+    const group = find((s) => s.kind === 'complete' && s.targets.length === 2);
+    expect(stepTitle(group, dataset)).toBe('Placeholder Quest 3: object objective (objective 1) + Placeholder Quest 4: follow-up to Quest 1 (objective 1)');
+  });
+
+  it('names unknown quests without inventing anything', () => {
+    expect(questName(dataset, 5 as QuestId)).toBe('Quest 5 (not in the dataset)');
+  });
+
+  it('describes grind targets, including offsets', () => {
+    expect(grindTargetText({ kind: 'duration', seconds: 900 })).toBe('For 15m 00s');
+    expect(grindTargetText({ kind: 'level', level: 10, offset: { kind: 'xpInto', xp: 2500 } })).toBe('Until level 10 + 2,500 XP');
+    expect(grindTargetText({ kind: 'level', level: 10, offset: { kind: 'xpShort', xp: 300 } })).toBe('Until 300 XP short of level 10');
+    expect(grindTargetText({ kind: 'level', level: 10, offset: { kind: 'fraction', fraction: 0.5 } })).toBe('Until level 10 and 50%');
+  });
+
+  it('prints grind fractions without floating-point loss (RXP .xp 10.29, 10.57)', () => {
+    // 0.29 * 100 is 28.999999999999996 and 0.57 * 100 is 56.99999999999999 in IEEE doubles.
+    expect(grindTargetText({ kind: 'level', level: 10, offset: { kind: 'fraction', fraction: 0.29 } })).toBe('Until level 10 and 29%');
+    expect(grindTargetText({ kind: 'level', level: 10, offset: { kind: 'fraction', fraction: 0.57 } })).toBe('Until level 10 and 57%');
+    expect(grindTargetText({ kind: 'level', level: 10, offset: { kind: 'fraction', fraction: 0.999 } })).toBe('Until level 10 and 99%');
+  });
+
+  it('prints locations with their zone and keeps authored lexemes', () => {
+    const step = find((s) => s.kind === 'travel');
+    expect(locationDetail(step.location, dataset)).toBe('Placeholder meadow · Placeholder Vale 38, 61.5');
+    const authored: Location = {
+      source: { space: 'zone', uiMapId: 900_902 as UiMapId, x: 1, y: 2, frame: 'forever', lexemes: ['1.00', '2.0'] },
+      label: null,
+      radius: null,
+    };
+    expect(locationText(authored, dataset)).toBe('Placeholder Ridge 1.00, 2.0');
+    expect(locationText(null, dataset)).toBeNull();
+  });
+
+  it('names the character and maps the side-panel tabs both ways', () => {
+    expect(characterName(project.character)).toBe('Orc Warrior');
+    expect(characterName({ race: 'Scourge', class: 'MAGE' })).toBe('Undead Mage');
+    for (const tab of SIDE_PANEL_TAB_ORDER) expect(panelTabOf(rightTabOf(tab))).toBe(tab);
+  });
+});
+
+describe('scaling quests in rows', () => {
+  const quest = (patch: Partial<QuestRecord>): DatasetView => {
+    const base = dataset.quests()[0];
+    if (base === undefined) throw new Error('placeholder quest missing');
+    const record: QuestRecord = { ...base, ...patch };
+    return { ...dataset, quest: (id) => (id === record.id ? record : dataset.quest(id)) };
+  };
+  const accept = find((s) => s.kind === 'accept');
+  const firstQuest = accept.kind === 'accept' ? accept.questId : (0 as QuestId);
+
+  it('shows a level -1 quest at its effective level, never as -1 (QXP-7)', () => {
+    const row = stepRowModel(accept, 2, quest({ id: firstQuest, level: -1, minLevel: 4 }), 10);
+    expect(row.quest?.level).toBe(10);
+    expect(row.quest?.difficulty).toBe('difficult');
+    const low = stepRowModel(accept, 2, quest({ id: firstQuest, level: -1, minLevel: 4 }), 1);
+    expect(low.quest?.level).toBe(4);
+    expect(low.quest?.difficulty).toBe('verydifficult');
+  });
+
+  it('leaves other levels of 0 and below unknown', () => {
+    const row = stepRowModel(accept, 2, quest({ id: firstQuest, level: 0 }), 10);
+    expect(row.quest?.level).toBeNull();
+    expect(row.quest?.difficulty).toBeNull();
+  });
+});
+
+describe('resolveActiveTarget', () => {
+  const small = buildRouteView(notesRoute([null, 'g', 'g']), dataset, 1);
+  const [a, b] = small.steps;
+  if (a === undefined || b === undefined) throw new Error('fixture steps missing');
+
+  it('follows the store focus by default', () => {
+    expect(resolveActiveTarget(small, null, null)).toBe(NO_ACTIVE_TARGET);
+    expect(resolveActiveTarget(small, null, a.id)).toEqual({ index: 0, step: a, number: 1, header: false });
+    expect(resolveActiveTarget(small, null, b.id)).toEqual({ index: 2, step: b, number: 2, header: false });
+  });
+
+  it('keeps the row the list moved to while the focus it was set under holds', () => {
+    const header = { key: 'group:g:s-b', focus: a.id };
+    expect(resolveActiveTarget(small, header, a.id)).toEqual({ index: 1, step: b, number: 2, header: true });
+    // The focus moved on (a command, undo, a click elsewhere): the focused step's row wins.
+    expect(resolveActiveTarget(small, header, b.id).index).toBe(2);
+    // A remembered row that no longer exists falls back as well.
+    expect(resolveActiveTarget(small, { key: 'gone', focus: a.id }, a.id).index).toBe(0);
+  });
+});
+
+describe('slices and texts', () => {
+  it('lists the quests the route acts on, once each, ascending', () => {
+    const ids = routeQuestIds(route.steps);
+    expect(ids.length).toBeGreaterThan(0);
+    expect([...ids]).toEqual([...new Set(ids)].sort((x, y) => x - y));
+    expect(routeQuestIds([])).toEqual([]);
+  });
+
+  it('compares arrays element by element', () => {
+    expect(sameItems([1, 2], [1, 2])).toBe(true);
+    expect(sameItems([1, 2], [2, 1])).toBe(false);
+    expect(sameItems([1], [1, 1])).toBe(false);
+    expect(sameItems([], [])).toBe(true);
+  });
+
+  it('gives placeholder data no build stamp, and real data its full identity', () => {
+    const placeholder = dataBadgeDetail(dataset.identity);
+    expect(placeholder.startsWith(PLACEHOLDER_DATA_NOTICE)).toBe(true);
+    expect(placeholder).not.toMatch(/frame build/);
+    const real: DatasetIdentity = {
+      dataRevision: 'r-2026-10-01',
+      frameBuild: '1.60.1.70009',
+      upstreamCommit: 'b6f5b07b0acf',
+      foreverContentVerified: false,
+    };
+    expect(dataBadgeDetail(real)).toBe('Data revision r-2026-10-01, frame build 1.60.1.70009, QuestieDB commit b6f5b07b0acf.');
+  });
+
+  it('words selection counts', () => {
+    expect(selectionMessage(0)).toBe('Selection cleared');
+    expect(selectionMessage(1)).toBe('1 step selected');
+    expect(selectionMessage(1200)).toBe('1,200 steps selected');
+  });
+});

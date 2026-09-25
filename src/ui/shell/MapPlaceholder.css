@@ -1,0 +1,178 @@
+/*
+ * Map placeholder: a neutral grid, a statement card and the layer-panel stub. The card and the
+ * stub share one grid and never overlap: the card is centred in a column of up to 400px, and the
+ * stub's column never gets narrower than the stub (the card gives way first). A narrow panel
+ * stacks them; a short one scrolls. docs/UI.md §6 lists the sizes checked by hand.
+ */
+
+.frl-mapph {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  container: frl-mapph / inline-size;
+  background-color: var(--frl-surface-sunken);
+  background-image:
+    linear-gradient(var(--frl-map-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--frl-map-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.frl-mapph__art {
+  position: absolute;
+  inset: 12% 10%;
+  width: 80%;
+  height: 76%;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.frl-mapph__layout {
+  position: relative;
+  display: grid;
+  flex: 1 0 auto;
+  grid-template-areas: '. card layers';
+  grid-template-columns: minmax(0, 1fr) minmax(0, 400px) minmax(max-content, 1fr);
+  align-items: center;
+  gap: var(--frl-space-4);
+  padding: var(--frl-space-2);
+}
+
+/* Too narrow for both side by side: the stub goes above the card. */
+@container frl-mapph (width < 520px) {
+  .frl-mapph__layout {
+    grid-template-areas:
+      'layers'
+      'card';
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+  }
+
+  .frl-mapph__layers {
+    justify-self: end;
+  }
+}
+
+.frl-mapph__line {
+  fill: none;
+  stroke: var(--frl-border-strong);
+  stroke-dasharray: 2 6;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+}
+
+.frl-mapph__node {
+  fill: var(--frl-surface);
+  stroke: var(--frl-border-strong);
+  stroke-width: 2;
+}
+
+.frl-mapph__card {
+  position: relative;
+  grid-area: card;
+  justify-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--frl-space-2);
+  max-width: 400px;
+  padding: var(--frl-space-4);
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius-lg);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+}
+
+.frl-mapph__title {
+  font-size: var(--frl-text-lg);
+  font-weight: var(--frl-weight-bold);
+  line-height: 20px;
+}
+
+.frl-mapph__text {
+  color: var(--frl-fg-muted);
+}
+
+.frl-mapph__focus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding-top: var(--frl-space-2);
+  border-top: 1px solid var(--frl-border);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  align-self: stretch;
+}
+
+.frl-mapph__focus > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-mapph__focus-title {
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-mapph__layers {
+  position: relative;
+  grid-area: layers;
+  align-self: start;
+  justify-self: end;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 172px;
+  margin: 0;
+  padding: var(--frl-space-2);
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-mapph__layers-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  float: left;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.frl-mapph__layer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  clear: both;
+  min-height: 22px;
+  color: var(--frl-fg-muted);
+}
+
+.frl-mapph__layer input {
+  margin: 0;
+}
+
+.frl-mapph__layers-note {
+  margin-top: 4px;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+}
+
+@media (max-width: 1024px) {
+  .frl-mapph__layers {
+    display: none;
+  }
+}

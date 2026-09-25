@@ -1,0 +1,32 @@
+{
+  "$comment": [
+    "Rules for tools/build/audit-dist.ts (docs/ARCHITECTURE.md §14, §16; docs/MAPS.md §5.7).",
+    "Paths are relative to dist/ with '/' separators. Sizes are bytes; 1 kB = 1000 bytes, as Vite reports."
+  ],
+  "required": ["index.html", "LICENSE.txt", "third-party-notices.txt"],
+  "milestone2": {
+    "$comment": [
+      "Milestone 2 (Forever data pipeline): these become required automatically once the repository",
+      "has 'activatedBy'. Every outputs[].path listed in dist/data/manifest.json is then required under",
+      "data/ as well (DATA_PROVENANCE §8.1)."
+    ],
+    "activatedBy": "public/data/manifest.json",
+    "required": [
+      "data/NOTICE.md",
+      "data/manifest.json",
+      "maps/placeholder/geometry.placeholder.json",
+      "maps/placeholder/NOTICE.md"
+    ]
+  },
+  "allowedImages": [
+    { "glob": "favicon.svg", "reason": "Original app icon from public/." },
+    { "glob": "assets/*.svg", "reason": "Original UI icons imported by src/ui and hashed by Vite." }
+  ],
+  "entryChunkGzipBudgetBytes": 250000,
+  "data": {
+    "$comment": "Each data/ file may grow to its recorded gzip baseline + tolerance. Baselines are recorded in Milestone 2; once the milestone2 list is active, a data/ file without a baseline fails the audit.",
+    "totalGzipBudgetBytes": 1200000,
+    "baselineTolerance": 0.1,
+    "baselines": {}
+  }
+}

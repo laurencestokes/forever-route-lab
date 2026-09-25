@@ -1,0 +1,205 @@
+/* Markers: step glyphs, difficulty, provenance, assumed, severity, readouts. */
+
+/* Step type glyph: neutral; shape carries the meaning. */
+.frl-step-glyph {
+  color: var(--frl-fg-muted);
+}
+
+/* Difficulty (reserved hues) ---------------------------------------------------------------- */
+.frl-difficulty {
+  --frl-difficulty-colour: var(--frl-fg-subtle);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  min-width: 30px;
+  padding: 0 5px 0 4px;
+  border: 1px solid var(--frl-difficulty-well-border);
+  border-radius: var(--frl-radius-sm);
+  background: var(--frl-difficulty-well);
+  color: var(--frl-difficulty-colour);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-bold);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.frl-difficulty--trivial {
+  --frl-difficulty-colour: var(--frl-difficulty-trivial);
+}
+
+.frl-difficulty--standard {
+  --frl-difficulty-colour: var(--frl-difficulty-standard);
+}
+
+.frl-difficulty--difficult {
+  --frl-difficulty-colour: var(--frl-difficulty-difficult);
+}
+
+.frl-difficulty--verydifficult {
+  --frl-difficulty-colour: var(--frl-difficulty-verydifficult);
+}
+
+.frl-difficulty--impossible {
+  --frl-difficulty-colour: var(--frl-difficulty-impossible);
+}
+
+/* Unknown difficulty: a neutral light grey that is not the trivial grey. */
+.frl-difficulty--unknown {
+  --frl-difficulty-colour: var(--frl-difficulty-unknown);
+}
+
+/* The dashed edge is the only visual cue for "lower-bound level, may be easier": border-strong
+   reaches 3:1 on every row background (plain, hover, selected) and against the well in its gaps. */
+.frl-difficulty--uncertain {
+  border-style: dashed;
+  border-color: var(--frl-border-strong);
+}
+
+/* Forced colours: the chip keeps its own dark well, reserved colours and pips (they carry the
+   meaning, and the well gives them their contrast whatever the system palette). */
+@media (forced-colors: active) {
+  .frl-difficulty {
+    forced-color-adjust: none;
+  }
+}
+
+.frl-difficulty__pip {
+  fill: var(--frl-difficulty-pip-off);
+}
+
+.frl-difficulty__pip.is-on {
+  fill: var(--frl-difficulty-colour);
+}
+
+.frl-difficulty__text {
+  font-weight: var(--frl-weight-medium);
+}
+
+/* Forever provenance (reserved cyan) -------------------------------------------------------- */
+.frl-provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--frl-forever);
+  font-size: var(--frl-text-sm);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.frl-provenance__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-size: 11px;
+}
+
+/* User-declared: dashed frame around the glyph (shape cue, not colour). */
+.frl-provenance--user .frl-provenance__glyph {
+  border-style: dashed;
+  border-color: var(--frl-forever);
+}
+
+.frl-provenance--full {
+  padding: 2px 6px 2px 3px;
+  border-radius: var(--frl-radius-sm);
+  background: var(--frl-forever-bg);
+}
+
+.frl-provenance__who {
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-provenance--unknown {
+  color: var(--frl-fg-muted);
+}
+
+/* Assumed / Era fallback: neutral, small, with a dotted underline --------------------------- */
+.frl-assumed {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+  color: var(--frl-assumed);
+  font-size: var(--frl-text-xs);
+  line-height: 1;
+  cursor: help;
+  vertical-align: super;
+}
+
+.frl-assumed__glyph {
+  border-bottom: 1px dotted currentColor;
+}
+
+.frl-assumed--era-fallback .frl-assumed__glyph {
+  padding: 0 2px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-size: 9px;
+  font-weight: var(--frl-weight-bold);
+  line-height: 10px;
+}
+
+/* Severity ---------------------------------------------------------------------------------- */
+.frl-severity-icon {
+  vertical-align: -2px;
+}
+
+.frl-severity-icon--error {
+  color: var(--frl-severity-error);
+}
+
+.frl-severity-icon--warning {
+  color: var(--frl-severity-warning);
+}
+
+.frl-severity-icon--info {
+  color: var(--frl-severity-info);
+}
+
+.frl-severity-icon__shape {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.frl-severity-icon__mark {
+  fill: none;
+  stroke: var(--frl-surface);
+  stroke-width: 1.6;
+}
+
+.frl-severity-icon__dot {
+  fill: var(--frl-surface);
+}
+
+/* Forced colours paint shape and mark alike; cut the mark out of the shape in the canvas colour. */
+@media (forced-colors: active) {
+  .frl-severity-icon__mark {
+    stroke: Canvas;
+  }
+
+  .frl-severity-icon__dot {
+    fill: Canvas;
+  }
+}
+
+/* Readouts ---------------------------------------------------------------------------------- */
+.frl-readout {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.frl-readout--unknown {
+  color: var(--frl-fg-subtle);
+  cursor: help;
+}
+
+.frl-readout__bound {
+  margin-right: 1px;
+  color: var(--frl-fg-muted);
+}

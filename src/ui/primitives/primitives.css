@@ -1,0 +1,310 @@
+/* Primitives: buttons, icon buttons, fields, toolbar, badges. Naming: frl-<block>__<element>--<modifier>. */
+
+/* Button ----------------------------------------------------------------------------------- */
+.frl-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--frl-control-height);
+  padding: 0 10px;
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius);
+  background: var(--frl-surface);
+  color: var(--frl-fg);
+  font-size: var(--frl-text);
+  font-weight: var(--frl-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color var(--frl-duration-fast) var(--frl-ease),
+    border-color var(--frl-duration-fast) var(--frl-ease);
+}
+
+.frl-button:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--frl-surface-hover);
+}
+
+.frl-button--sm {
+  height: var(--frl-control-height-sm);
+  padding: 0 8px;
+  font-size: var(--frl-text-sm);
+}
+
+.frl-button--primary {
+  border-color: var(--frl-accent);
+  background: var(--frl-accent);
+  color: var(--frl-accent-fg);
+}
+
+.frl-button--primary:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--frl-accent-hover);
+  background: var(--frl-accent-hover);
+}
+
+.frl-button--ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* Unavailable: the disabled attribute, or aria-disabled for controls that must keep focus (a
+   toolbar item that disables itself when used). Both look the same. */
+.frl-button:disabled,
+.frl-button[aria-disabled='true'] {
+  cursor: default;
+  border-color: var(--frl-border);
+  background: transparent;
+  color: var(--frl-fg-disabled);
+}
+
+/* A ghost button has no edge when enabled, so it gains none when disabled: an unavailable
+   control must not look more like a button than an available one. */
+.frl-button--ghost:disabled,
+.frl-button--ghost[aria-disabled='true'] {
+  border-color: transparent;
+}
+
+/* Icon button ------------------------------------------------------------------------------ */
+.frl-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--frl-control-height);
+  height: var(--frl-control-height);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--frl-radius);
+  background: transparent;
+  color: var(--frl-fg-muted);
+  transition:
+    background-color var(--frl-duration-fast) var(--frl-ease),
+    color var(--frl-duration-fast) var(--frl-ease);
+}
+
+.frl-icon-button--sm {
+  width: var(--frl-control-height-sm);
+  height: var(--frl-control-height-sm);
+}
+
+.frl-icon-button--secondary {
+  border-color: var(--frl-border-strong);
+  background: var(--frl-surface);
+}
+
+.frl-icon-button:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--frl-surface-hover);
+  color: var(--frl-fg);
+}
+
+.frl-icon-button.is-pressed {
+  background: var(--frl-selection-bg);
+  color: var(--frl-accent);
+}
+
+.frl-icon-button:disabled,
+.frl-icon-button[aria-disabled='true'] {
+  cursor: default;
+  color: var(--frl-fg-disabled);
+}
+
+/* Forced colours drop the pressed background: mark a pressed toggle with a Highlight edge, and
+   disabled controls in the system's disabled colour. */
+@media (forced-colors: active) {
+  .frl-icon-button.is-pressed {
+    border-color: Highlight;
+  }
+
+  .frl-button:disabled,
+  .frl-button[aria-disabled='true'],
+  .frl-icon-button:disabled,
+  .frl-icon-button[aria-disabled='true'] {
+    color: GrayText;
+  }
+}
+
+/* Fields ----------------------------------------------------------------------------------- */
+.frl-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--frl-space-half);
+  min-width: 0;
+}
+
+.frl-field--inline {
+  flex-direction: row;
+  align-items: center;
+}
+
+.frl-field__label {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-select,
+.frl-input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+}
+
+.frl-select select,
+.frl-input input {
+  width: 100%;
+  min-width: 0;
+  height: var(--frl-control-height);
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius);
+  background: var(--frl-surface);
+  color: var(--frl-fg);
+  font-size: var(--frl-text);
+}
+
+.frl-select select {
+  appearance: none;
+  padding: 0 24px 0 8px;
+  text-overflow: ellipsis;
+}
+
+.frl-select--sm select,
+.frl-input--sm input {
+  height: var(--frl-control-height-sm);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-select__chevron {
+  position: absolute;
+  right: 6px;
+  color: var(--frl-fg-muted);
+  pointer-events: none;
+}
+
+.frl-input input {
+  padding: 0 8px;
+}
+
+.frl-input--with-icon input {
+  padding-left: 26px;
+}
+
+.frl-input__icon {
+  position: absolute;
+  left: 8px;
+  color: var(--frl-fg-muted);
+  pointer-events: none;
+}
+
+.frl-input input::placeholder {
+  color: var(--frl-fg-subtle);
+  opacity: 1;
+}
+
+.frl-select select:disabled,
+.frl-input input:disabled {
+  border-color: var(--frl-border);
+  color: var(--frl-fg-disabled);
+}
+
+.frl-select select:focus-visible,
+.frl-input input:focus-visible {
+  outline-offset: 0;
+  border-color: var(--frl-focus);
+}
+
+/* Toolbar ---------------------------------------------------------------------------------- */
+.frl-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--frl-space-half);
+}
+
+.frl-toolbar__separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--frl-space-1);
+  background: var(--frl-border);
+}
+
+/* Badge ------------------------------------------------------------------------------------ */
+.frl-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--frl-space-1);
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius-sm);
+  background: var(--frl-surface-raised);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.frl-badge--accent {
+  border-color: var(--frl-accent);
+  color: var(--frl-accent);
+}
+
+/* Placeholder: dashed edge and diagonal hatching, never a reserved hue. */
+.frl-badge--placeholder {
+  border-style: dashed;
+  border-color: var(--frl-border-strong);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--frl-placeholder-stripe) 0 4px,
+    transparent 4px 8px
+  );
+  color: var(--frl-fg);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Panel header ----------------------------------------------------------------------------- */
+.frl-panel-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--frl-space-2);
+  height: var(--frl-panel-header-height);
+  min-width: 0;
+  padding: 0 var(--frl-space-1) 0 var(--frl-space-3);
+  border-bottom: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+}
+
+.frl-panel-header__title {
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--frl-text);
+  font-weight: var(--frl-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-panel-header__meta {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--frl-space-1);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.frl-panel-header__spacer {
+  flex: 1 1 0;
+}
+
+.frl-panel-header__actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}

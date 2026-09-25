@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": [
+    "Solution file for editors and ESLint's projectService: each file is checked under the project",
+    "that includes it first (pure, then app, then node). `pnpm typecheck` runs all three."
+  ],
+  "files": [],
+  "references": [{ "path": "./tsconfig.pure.json" }, { "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+}

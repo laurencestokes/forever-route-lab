@@ -1,0 +1,414 @@
+# UI
+
+The visual system and component kit of Forever Route Lab: tokens, reserved hues, typography,
+density, layout, the component inventory, accessibility rules, and how to add a component.
+Authoritative for everything under `src/ui/` except `src/ui/App.tsx`, which wires the kit to the
+store. Related: [ARCHITECTURE.md](ARCHITECTURE.md) §12.4 (layout and visual rules), §4
+(dependency rules).
+
+## 1. Principles
+
+1. **Original.** The product is "Forever Route Lab". The information architecture follows common
+   route-planner practice: a dense numbered route list on the left, a large map in the centre,
+   quests and details on the right, a toolbar at the top and a status bar at the bottom. No name,
+   branding, parchment or gold look, icons or assets are taken from any other planner or from the
+   game. Every icon and glyph here is an original inline SVG.
+2. **Dense and desktop-first.** 13px interface text, 28px one-line route rows, 26px controls. The
+   layout degrades in steps below 1280px and stacks below 720px.
+3. **Meaning is never carried by colour alone.** Every coloured signal also has a shape, a glyph
+   or text, and a spoken form.
+4. **Reserved hues mean one thing each.** The five difficulty colours mean quest difficulty and
+   nothing else. Cyan means Forever provenance and nothing else.
+5. **Unknown stays unknown.** An unknown number renders as `?` with its reason (tooltip and
+   screen-reader text), never as `0` or an empty bar. Lower bounds read `≥`. Numbers that depend
+   on assumptions carry the assumed marker.
+6. **Presentational.** Components take typed props and callbacks. They never read the store,
+   the dataset or IndexedDB, and they import only *types* from pure modules (`domain`, `rules`).
+   The few pure values the kit needs (the difficulty labels) come re-exported through `app`
+   (`src/app/rules-exports.ts`), never copied.
+
+## 2. Styles
+
+| File | Contents |
+|---|---|
+| `src/ui/styles/tokens.css` | Every design token, both themes |
+| `src/ui/styles/base.css` | Reset, document typography, focus ring, reduced motion, utilities (`frl-visually-hidden`, `frl-num`) |
+| `src/ui/**/<Component>.css` or `<area>.css` | Component styles, next to the component and imported by it |
+
+- **Convention: plain CSS with BEM-like class names under an `frl-` prefix**, not CSS modules:
+  `frl-<block>`, `frl-<block>__<element>`, `frl-<block>--<modifier>`, and `is-<state>` for
+  runtime states (`is-selected`, `is-active`, `is-locked`, `is-dragging`). Plain classes keep
+  selectors stable for tests and theming, and avoid `string | undefined` class maps under
+  `noUncheckedIndexedAccess`. The prefix is the scope.
+- Components use tokens only (`var(--frl-…)`), never raw colours. The exceptions are
+  `tokens.css` itself and the CSS system colours (`Highlight`, `Canvas`, `CanvasText`,
+  `GrayText`) inside `@media (forced-colors: active)` blocks (§9 rule 9).
+  `tests/ui-tokens.test.ts` fails on any `var(--frl-…)` that no stylesheet defines.
+- Colours for SVG parts are set from CSS classes, not from `fill="var(…)"` attributes.
+- Load order: `tokens.css`, `base.css`, then component styles. `AppShell` imports the first two,
+  so any page that renders the shell has them; the entry point may import them first as well
+  (Vite deduplicates).
+
+### 2.1 Themes
+
+Light is the default. Dark applies when the operating system prefers dark and `data-theme` does
+not force light, or wherever `data-theme="dark"` is set (on `<html>` or on any subtree).
+`data-theme="light"` forces light. `lib/theme.ts` has `applyThemePreference(root, pref)` for
+`'system' | 'light' | 'dark'` (system removes the attribute) and `nextThemePreference` for the
+toggle. Persisting the preference belongs to the app's settings store.
+
+`tokens.css` holds the dark values twice (the `prefers-color-scheme` block and the forced
+block). `tests/ui-tokens.test.ts` parses the file and fails if it has any block but the four
+documented ones (theme-independent `:root`, light, the two dark), if the two dark blocks differ,
+if the light and dark token names differ, or if a theme block redefines a theme-independent
+token.
+
+## 3. Tokens
+
+### 3.1 Colour (theme-dependent)
+
+| Token | Light | Dark | Purpose |
+|---|---|---|---|
+| `--frl-bg` | `#dfe3e9` | `#0b0d11` | App backdrop; shows as 1px gutters between panels |
+| `--frl-surface` | `#ffffff` | `#151920` | Panel and row background |
+| `--frl-surface-raised` | `#f5f6f8` | `#1b2029` | Top bar, panel headers, tab strip, status bar, group rows |
+| `--frl-surface-hover` | `#eceff3` | `#232a35` | Row and button hover |
+| `--frl-surface-sunken` | `#e9ecf0` | `#11151b` | Map area |
+| `--frl-border` | `#d5dae1` | `#2a313c` | Hairlines and row separators (decorative) |
+| `--frl-border-strong` | `#737d8b` | `#707c8e` | Control edges and the dashed edge of an uncertain difficulty chip (3:1 on every surface, hovered row and selected row, and against the difficulty well) |
+| `--frl-fg` | `#14181e` | `#e5e8ed` | Primary text |
+| `--frl-fg-muted` | `#4b5563` | `#a7b0bd` | Secondary text, labels, glyphs |
+| `--frl-fg-subtle` | `#5f6978` | `#8d97a5` | Tertiary text: step numbers, details (still 4.5:1) |
+| `--frl-fg-disabled` | `#9aa2ad` | `#58616e` | Disabled controls only (exempt from contrast) |
+| `--frl-accent` | `#3a4fc4` | `#8ea2ff` | Interactive accent: primary buttons, links, selected tab, brand mark |
+| `--frl-accent-hover` | `#2e40a8` | `#a9b8ff` | Hover of the above |
+| `--frl-accent-fg` | `#ffffff` | `#0d1014` | Text on accent |
+| `--frl-focus` | `#3a4fc4` | `#8ea2ff` | Focus ring |
+| `--frl-selection-bg` | `#e3e8fb` | `#1f2a52` | Selected rows, pressed toggles, text selection |
+| `--frl-selection-bar` | `#3a4fc4` | `#8ea2ff` | 3px left bar on selected rows (the non-colour cue is the bar) |
+| `--frl-drop-indicator` | `#3a4fc4` | `#8ea2ff` | Drag-and-drop insertion line |
+| `--frl-severity-error` | `#b0157f` | `#ff7ac8` | Error (magenta) |
+| `--frl-severity-warning` | `#7a3fc2` | `#c3a2ff` | Warning (violet) |
+| `--frl-severity-info` | `#2560b0` | `#7fb0ff` | Info (blue) |
+| `--frl-forever` | `#006d7d` | `#3ccfe0` | **Reserved:** Forever provenance glyphs and text |
+| `--frl-forever-bg` | `#e0f3f6` | `#0f2f35` | Background of the full provenance badge |
+| `--frl-assumed` | `#5f6978` | `#a7b0bd` | Assumed and Era-fallback markers (neutral on purpose) |
+| `--frl-xp-track` | `#dde2ea` | `#262d38` | XP and progress bar track |
+| `--frl-xp-fill` | `#3a4fc4` | `#8ea2ff` | XP and progress bar fill |
+| `--frl-xp-hatch` | accent at 35% | accent at 35% | Lower-bound hatching beyond the known XP (supplementary: the notch and `≥` carry the lower bound) |
+| `--frl-unknown-hatch` | `#737d8b` | `#707c8e` | Hatching of unknown bars: unknown XP, and indeterminate progress under reduced motion (3:1 on the track, so an unknown bar never passes for an empty one) |
+| `--frl-placeholder-stripe` | ink at 6% | ink at 5% | Hatching of the Placeholder label (decorative: the dashed edge and the word carry it) |
+| `--frl-map-grid` | ink at 8% | ink at 7% | Grid of the map placeholder |
+| `--frl-overlay` | ink at 45% | black at 60% | Dialog backdrop |
+| `--frl-shadow` | soft | deeper | Floating cards and dialogs |
+| `--frl-difficulty-well-border` | `#101216` | `#3a4350` | Edge of the difficulty chip |
+
+### 3.2 Colour (theme-independent)
+
+| Token | Value | Purpose |
+|---|---|---|
+| `--frl-difficulty-trivial` | `#808080` | **Reserved:** trivial (grey) |
+| `--frl-difficulty-standard` | `#40bf40` | **Reserved:** standard (green) |
+| `--frl-difficulty-difficult` | `#ffff00` | **Reserved:** difficult (yellow) |
+| `--frl-difficulty-verydifficult` | `#ff8040` | **Reserved:** very difficult (orange) |
+| `--frl-difficulty-impossible` | `#ff1a1a` | **Reserved:** impossible (red) |
+| `--frl-difficulty-well` | `#101216` | Dark chip behind difficulty colours, in both themes |
+| `--frl-difficulty-pip-off` | `#2a3039` | Unlit difficulty pips (every lit pip reaches 3:1 against it) |
+| `--frl-difficulty-unknown` | `#c9ced6` | Level text when difficulty is unknown (not a difficulty) |
+
+The five difficulty values **mirror `DIFFICULTY_COLORS` in `src/rules/difficulty.ts`** (the
+Era client's `QuestDifficultyColors`, SIMULATION.md COL-1). A stylesheet cannot import a
+TypeScript constant, so the values are written out here, and `tests/ui-tokens.test.ts` (a
+cross-module test, free of the §4 import rules) compares them with `DIFFICULTY_COLORS`, case
+aside, and fails on any mismatch. Change both files together. The test also fails if a theme
+block redefines a difficulty colour or if a new `--frl-difficulty-*` token appears. The
+difficulty *words* are not duplicated: `DifficultyLabel` uses the rules module's
+`DIFFICULTY_LABELS`, re-exported through `src/app/rules-exports.ts` (the kit's `DIFFICULTY_TEXT`
+is the same object, kept for the kit's export list).
+
+### 3.3 Type, space, size, motion
+
+| Token | Value | Purpose |
+|---|---|---|
+| `--frl-font-ui` | system UI stack | All interface text. No web fonts: nothing is fetched from another origin |
+| `--frl-font-mono` | system monospace stack | Issue codes, commit hashes |
+| `--frl-text-xs` / `-sm` / `--frl-text` / `-lg` | 11 / 12 / 13 / 15px | Badges and small caps / secondary / **interface default** / titles |
+| `--frl-leading` / `-tight` | 18 / 16px | Line heights |
+| `--frl-weight-regular` / `-medium` / `-bold` | 400 / 500 / 650 | |
+| `--frl-space-half`, `--frl-space-1` … `-6` | 2, 4, 8, 12, 16, 24, 32px | 4px grid with a 2px half step |
+| `--frl-row-height` | 28px | Route rows (fixed; the virtualiser relies on it) |
+| `--frl-control-height` / `-sm` | 26 / 22px | Buttons, inputs, selects / small buttons and in-row affordances |
+| `--frl-topbar-height`, `--frl-statusbar-height` | 44px, 32px | Shell bars |
+| `--frl-tab-height`, `--frl-panel-header-height` | 32px, 32px | Tab strip, panel headers |
+| `--frl-left-width`, `--frl-right-width` | 340px, 340px | Route panel (320-380px, set by `AppShell`), side panel |
+| `--frl-gap` | 1px | Panel gutters |
+| `--frl-radius-sm` / `--frl-radius` / `-lg` | 3 / 4 / 8px | Badges / controls / cards and dialogs |
+| `--frl-focus-width` | 2px | Focus ring width |
+| `--frl-duration-fast` / `--frl-duration` / `--frl-ease` | 90 / 140ms, ease-out | Transitions; 0 under reduced motion |
+| `--frl-z-sticky` / `--frl-z-drag` | 10 / 20 | Splitter / drop line |
+
+`ROUTE_ROW_HEIGHT` in `src/ui/route/virtual.ts` must equal `--frl-row-height`;
+`tests/ui-tokens.test.ts` checks it.
+
+## 4. Reserved and semantic signals
+
+| Signal | Colour | Non-colour cue | Text |
+|---|---|---|---|
+| Quest difficulty | the five reserved colours, on the dark difficulty well | 1-5 filled pips (trivial 1 … impossible 5): 2px bars with 1px gaps on whole pixels, crisp edges, lit 3:1 against unlit | "Difficult (yellow)" in the tooltip and screen-reader text; visible word in `full` variant |
+| Difficulty from a lower-bound level | same | dashed chip edge in `--frl-border-strong` (3:1 on every row state) | "…from a lower-bound level: may be easier" |
+| New in Forever | cyan | ◆ glyph | "New in Forever (per the dataset)" |
+| Changed in Forever | cyan | ◇ glyph | "Changed in Forever (per the dataset)" |
+| …declared by the user | cyan | dashed frame around the glyph | "(user-declared)"; "· user-declared" in `full` |
+| Forever status unknown | none | nothing in rows | "Forever status: unknown" in Details (`full` variant) |
+| Assumption-dependent number | neutral | `≈` with dotted underline | "Depends on assumptions: …" |
+| Era value standing in for Forever | neutral | boxed `E` | "Uses Era values where Forever values are unknown" |
+| Lower bound | neutral | `≥` prefix; XP bar notch and hatching beyond it | "at least …", "(lower bound: …)" |
+| Unknown number | neutral | `?` (for XP, "XP ?" at every width); XP bar hatched at 3:1 with a dashed edge; indeterminate progress never drawn as a partial fill | "Unknown: <reason>" |
+| Error / warning / info | magenta / violet / blue | octagon × / triangle ! / circle i | "Error", "Warning", "Info"; counts in words |
+| Selection | accent tint | 3px left bar (a 4px `Highlight` strip under forced colours) | `aria-selected` |
+| Keyboard focus | accent | 2px ring (active row: inset ring) | — |
+| Placeholder content | none | dashed, hatched "PLACEHOLDER" label | "Placeholder <what>" |
+
+Rules:
+
+- Difficulty colours appear only through `DifficultyLabel` (or components built on it).
+- Cyan appears only through `ProvenanceBadge`.
+- Severity, accent and provenance hues sit at least 30° of hue away from every difficulty hue, and
+  the severity, accent and XP hues at least 25° away from the provenance cyan; `tests/ui-tokens.test.ts`
+  checks both in each theme.
+- Validation never borrows difficulty red or orange, and difficulty never uses the severity icons.
+
+## 5. Typography, spacing and density
+
+- Interface text is 13px on an 18px line; secondary text 12px; small caps labels (panel
+  sections, status bar labels) 11px bold with letter spacing.
+- Numbers that line up use tabular figures (`frl-num`).
+- Route rows are exactly 28px and one line: long titles ellipsise, details live in the right
+  panel. Group headers are rows of the same height.
+- Controls are 26px (22px inside rows). Icon buttons are square.
+- Panels are separated by 1px gutters of `--frl-bg`, not by borders, so the panel edges stay crisp
+  in both themes.
+
+## 6. Layout
+
+`AppShell` is a CSS grid:
+
+```
+┌────────────────────────── top (44px) ──────────────────────────┐
+│ left 320-380px  │           centre (flexible)       │ right 340px │
+│ route editor    │           map / placeholder       │ side panel  │
+├────────────────────────── bottom (32px) ───────────────────────┤
+```
+
+| Width | Behaviour |
+|---|---|
+| > 1200px | Everything visible; action buttons show icon and word |
+| ≤ 1200px | Top-bar action words become visually hidden (icon buttons with names and tooltips) |
+| ≤ 1180px | XP numbers in the status bar hide (the bar and its spoken value stay, and an unknown value keeps its visible "XP ?") |
+| ≤ 1024px | Two columns: the route panel keeps the full height (36%, min 280px); the side panel moves under the map; the splitter hides; the map's layer stub hides |
+| ≤ 900px | The product name hides (the mark stays) |
+| ≤ 720px | One column; the page scrolls; top and status bars wrap |
+
+The route panel is resizable-ready: pass `leftWidth` and `onLeftWidthChange` and `AppShell`
+renders a `separator` on its right edge (pointer drag; ←/→ by 4px, Shift for 20px, Home/End for
+the limits). Widths are clamped to 320-380px (`clampLeftWidth`).
+
+Landmarks: the top bar is a `header` (banner); the route editor is `main` ("Route editor"); the
+map is a region ("Map"); the side panel is an `aside` ("Quests and details"); the status bar is a
+region ("Route status").
+
+**Scrolling.** Above 720px the shell owns all scrolling and the document never scrolls: `html`
+and `body` clip overflow (`AppShell.css`), every shell area and the tab panel is a containing
+block (`position: relative`), and the panels scroll or clip their own content. Without the
+containing blocks, absolutely positioned content such as `.frl-visually-hidden` text escapes to
+the initial containing block and lengthens the page (the M1 review measured a 176px page scroll
+at 1366×657 with Details open). At 720px and below the page scrolls as a whole.
+
+**Map placeholder.** The statement card and the layer stub share one grid: the card is centred in
+a column of up to 400px and the stub's column never gets narrower than the stub, so the card gives
+way instead of being covered. Below 520px of panel width (a container query) the stub goes above
+the card; a panel too short for its content scrolls.
+
+**Checked by hand.** happy-dom has no layout, so the tests check the mechanism (containing blocks,
+overflow, grid areas; `tests/ui-tokens.test.ts`) and these results are checked in a browser after
+layout changes: at 1920×1080, 1366×657, 1280×600, 1201×700, 1100×700 and 1024×768, in both
+themes, with Details open on a quest step, `document.documentElement.scrollHeight` equals
+`innerHeight`, `window.scrollTo(0, 500)` moves nothing, and the bounding rectangles of
+`.frl-mapph__card` and `.frl-mapph__layers` do not intersect.
+
+## 7. Component inventory
+
+All exported from `src/ui/kit.ts`.
+
+| Component | File | Purpose and key props |
+|---|---|---|
+| `AppShell` | `shell/AppShell.tsx` | Grid frame: `top`, `left`, `centre`, `right`, `bottom`; `leftWidth`, `onLeftWidthChange` |
+| `TopBar` | `shell/TopBar.tsx` | Product, project › route (with `placeholder` label), quest search (`search`), jump to zone (`zones`), Import, Export, Settings, theme toggle, About |
+| `RouteList` | `route/RouteList.tsx` | Virtualised listbox of `RouteRowModel`s; controlled `activeIndex` and `selectedKeys`; selection, editing and drag callbacks by index (§8) |
+| `StepRow`, `GroupRow` | `route/StepRow.tsx` | One 28px row: number, step glyph, title and detail, provenance, difficulty, issue marker, projected level, lock toggle; duplicate and delete on hover or when active (pointer-only affordances, §8); `groupLabel` for the spoken "in group …" |
+| `StepTypeGlyph` | `markers/StepTypeGlyph.tsx` | Original glyphs for accept, complete, turnin, abandon, travel, grind, hearth, flight, train, vendor, note |
+| `DifficultyLabel` | `markers/DifficultyLabel.tsx` | Quest level chip with difficulty colour, pips and text; `uncertain` for lower-bound levels |
+| `ProvenanceBadge` | `markers/ProvenanceBadge.tsx` | ◆ / ◇ in cyan, user-declared variant; `compact` or `full`. `foreverProvenanceOf(record.provenance)` derives its input |
+| `AssumedMarker` | `markers/AssumedMarker.tsx` | `≈` (assumption) or `E` (Era fallback) with text |
+| `ReadoutValue` | `markers/ReadoutValue.tsx` | Renders a `Readout<T>`: `≥`, markers, `?` with reason |
+| `SeverityIcon` | `markers/SeverityIcon.tsx` | Error, warning, info shapes |
+| `SidePanel` | `shell/SidePanel.tsx` | Tabs Available, Quest log, Details, Validation with counts; one content node per tab |
+| `Tabs` | `shell/Tabs.tsx` | Accessible tablist, controlled, automatic activation; one tabpanel that every tab controls |
+| `PanelSection`, `EmptyState`, `DetailList`, `IssueList`, `QuestListItem` | `shell/PanelContent.tsx` | Side-panel building blocks |
+| `StatusBar` | `shell/StatusBar.tsx` | XP bar, current step, duration, XP/hour, optimiser state and progress, data and ruleset badges |
+| `XpBar` | `shell/XpBar.tsx` | Level and XP progressbar with lower-bound, unknown and cap states |
+| `MapPlaceholder` | `shell/MapPlaceholder.tsx` | Centre panel until Milestone 3, labelled Placeholder, with a disabled layer-panel stub beside the card, never over it (§6) |
+| `AboutDialog` | `shell/AboutDialog.tsx` | Licence (GPL-3.0-or-later) and no-warranty line, data notice (D-016, with the LIC-10 carve-out verbatim), non-affiliation, source commit link |
+| `Button`, `IconButton` | `primitives/` | Text and icon buttons; `IconButton` requires `label`, supports `pressed` and `shortcut` (tooltip text and `aria-keyshortcuts`, §9 rule 3). Both style `disabled` and `aria-disabled="true"` alike |
+| `Select`, `TextInput` | `primitives/` | Native controls, restyled, always labelled (`hideLabel` keeps the label for assistive technology) |
+| `Toolbar`, `ToolbarSeparator` | `primitives/Toolbar.tsx` | `role="toolbar"` with one tab stop and arrow-key movement |
+| `PanelHeader` | `primitives/PanelHeader.tsx` | 32px header: title, meta, actions |
+| `Badge`, `PlaceholderTag`, `VisuallyHidden` | `primitives/Badge.tsx` | Identity badges; the "Placeholder" label |
+| `Icon` | `primitives/Icon.tsx` | Interface icons in `currentColor` |
+
+View-model types: `StepRowModel`, `GroupRowModel`, `RouteRowModel` (`route/rows.ts`, with
+`routeRowContext` for step positions and group membership),
+`Readout<T>` (`lib/readout.ts`, with `knownReadout`, `unknownReadout`, `readoutFromEstimate`),
+`IssueCounts` (`lib/issues.ts`, with `countIssues`), `ForeverProvenance`, `OptimizerStatus`,
+`SidePanelTabId`, `ThemePreference`. Formatting helpers (`lib/format.ts`) are locale-independent
+and truncate rather than round up (level 12.99 reads 12.9).
+
+## 8. Route list
+
+- **Virtualisation.** Index arithmetic over a fixed 28px row (`route/virtual.ts`):
+  `computeVirtualWindow` renders the visible rows plus 8 rows of overscan each side; the canvas
+  is `rows × 28px` tall and rows are absolutely positioned at `index × 28px`. The active row is
+  always mounted, even when scrolled away, so `aria-activedescendant` never dangles.
+- **Semantics.** `role="listbox"`, `aria-multiselectable`, one tab stop, focus stays on the
+  list and `aria-activedescendant` names the active row. Every row is an `option` with
+  `aria-selected` and an `aria-label` that states the whole row in words.
+  - **Ids** come from the row's stable key (`routeRowDomId`), not its index, so the active
+    descendant changes whenever the active item does (a delete or undo that keeps the index) and
+    stays put when only its index moves.
+  - **Positions.** Step rows carry `aria-posinset` and `aria-setsize` among the *steps* only
+    (rows outside the window are unmounted, so the browser cannot count them): "16. Travel …"
+    is also "16 of 40". Group header rows carry neither, so no row is announced with two
+    conflicting numbers. A step under a header adds ", in group <label>" to its name
+    (`routeRowContext` works out the membership from each header's `stepCount`).
+  - **In-row affordances.** Option children are presentational, so duplicate, delete and the
+    lock toggle are not buttons: they are `aria-hidden` spans with pointer handlers and a
+    tooltip, never focusable, and pressing one keeps focus on the list without selecting the
+    row. Every action also has a list key (below) and a route-toolbar button. Component tests
+    assert that no option contains focusable or interactive content (axe-core's
+    nested-interactive rule; axe itself is not a dependency yet, so the planned Playwright
+    smoke test is where it will run).
+- **Keys.**
+
+  | Keys | Action |
+  |---|---|
+  | ↑ ↓ Home End PageUp PageDown | Move the active row; the selection follows |
+  | Shift + those | Extend the selection from the anchor (`onSelect(i, 'range')`) |
+  | Ctrl/Cmd + those | Move the active row only |
+  | Space / Shift+Space | Toggle / extend to the active row |
+  | Ctrl/Cmd+A | Select all |
+  | Enter (or double-click) | Activate (open in Details) |
+  | Alt+↑ / Alt+↓ | Move the step up / down |
+  | Delete | Delete |
+  | L | Lock or unlock |
+  | Ctrl/Cmd+D | Duplicate |
+
+  Click selects (`replace`), Ctrl/Cmd+click toggles, Shift+click extends. The caller owns the
+  selection anchor and applies `range`. `readOnly` (optimiser running, proposal open) turns off
+  every editing key and affordance; navigation keeps working.
+- **Drag.** Pointer drag from the grip. The preview is local: the dragged row dims and an
+  insertion line follows the nearest gap; the list auto-scrolls near its edges. On release,
+  `onDrop(from, to)` receives the final index (`move(from, to)` semantics); Escape, pointer
+  cancel or a drop in place calls `onDragCancel`. Keyboard users move steps with Alt+↑/↓.
+
+## 9. Accessibility rules
+
+1. WCAG 2.2 AA. Text pairs reach 4.5:1, and UI edges, focus rings, selection and tab bars,
+   meters, the lower-bound notch, lit against unlit difficulty pips and the unknown hatching
+   reach 3:1, in both themes. `tests/ui-tokens.test.ts` computes every documented pair from
+   `tokens.css` (alpha colours painted over their background first): each text colour on
+   surface, raised, hovered and selected backgrounds; `--frl-border-strong` on those, on the
+   sunken map area and on the difficulty well (the uncertain chip's dashes and gaps);
+   `--frl-unknown-hatch` and the fills on the XP track; the difficulty colours on the well and
+   on an unlit pip. Add a pair there when you draw a new foreground on a new background.
+2. Visible focus everywhere: the 2px accent ring from `base.css`; components that manage focus
+   themselves (route rows, tabs, splitter) draw the same ring.
+3. No meaning by colour alone (§4). Every icon-only control has an accessible name and a tooltip;
+   decorative SVGs are `aria-hidden`. `IconButton`'s tooltip is the native `title` (the kit has
+   no custom tooltip): `aria-label` is the name and the title adds the shortcut
+   ("Delete selected steps (Delete)"). Some screen readers also read the title as a description,
+   repeating the name; that is accepted knowingly, since it is also how the shortcut is heard.
+   The shortcut is exposed as `aria-keyshortcuts` too, converted from the `shortcut` text by
+   `lib/keys.ts` (`'Ctrl+D'` → `'Control+D'`, `'Alt+↑'` → `'Alt+ArrowUp'`).
+4. Everything works from the keyboard: one tab stop per composite widget (list, tablist,
+   toolbar), arrow keys inside, documented shortcuts for row actions.
+5. `prefers-reduced-motion` zeroes the duration tokens and suppresses animations and smooth
+   scrolling. Nothing may freeze into a false value when its animation stops: the indeterminate
+   optimiser bar then shows the unknown hatching across the whole track instead of a still 40%
+   bar that would read as "40% done".
+6. Live regions stay quiet and polite, and never announce percentages. Two exist: the status
+   bar's optimiser state, and the shell's one app region (`src/ui/app/LiveAnnouncer.tsx`),
+   mounted empty at startup and never remounted, because a region inserted together with its
+   text is often not read. The app region says only the result of what the user just did:
+   the selection count once it settles ("12 steps selected", "Selection cleared"; arrowing,
+   which keeps one step selected, says nothing), and brief results of row commands, inserts,
+   undo and redo ("3 steps deleted. Undo with Ctrl+Z."). Unavailable actions are not
+   announced: they render `aria-disabled` (focusable, and in toolbars in the arrow-key order),
+   with the reason as their description and tooltip ("Arrives in Milestone 4 …"), and their
+   handlers do nothing.
+7. Dialogs are native modal `<dialog>`s: focus moves in, Escape closes, focus returns.
+8. Placeholder content is labelled "Placeholder" visibly and in text, and must not resemble real
+   quest data.
+9. Forced colours (Windows high contrast) drop author backgrounds, background gradients and box
+   shadows, so every state drawn with them has a system-colour fallback under
+   `@media (forced-colors: active)`: selected rows get a 4px `Highlight` strip (a pseudo-element,
+   so rows do not shift); the selected tab's bar, the XP and progress fills, the drop line and
+   the splitter's hover and focus line are `Highlight`; the lower-bound notch is `CanvasText`;
+   issue severity bars become `CanvasText` borders (the icon shape and word still say which);
+   pressed toggles get a `Highlight` edge; severity marks are cut out of their shapes in
+   `Canvas`; disabled controls are `GrayText`. The difficulty chip opts out
+   (`forced-color-adjust: none`): its reserved colours and pips carry the meaning and its own
+   dark well gives them their contrast. Unknown XP loses its hatching there but keeps the
+   dashed edge and "XP ?".
+10. Tabs have one `tabpanel` element with a stable id whose content changes with the selection;
+    every tab names it in `aria-controls`, and it is labelled by the selected tab.
+11. A long name in a list ellipsises in its own element and never pushes out the signal after
+    it: in `QuestListItem` the name is `.frl-quest-item__label` (with the full name as its
+    tooltip) and the provenance badge after it does not shrink.
+
+## 10. Adding a component
+
+1. Decide where it belongs: `primitives/` (generic control), `markers/` (a signal from §4),
+   `route/`, or `shell/` (a panel or bar).
+2. Write it presentational: typed `readonly` props, callbacks for intent, no store or dataset
+   access, and only `import type` from `domain` or `rules` (a value it needs from them comes
+   re-exported through `app`, as `DIFFICULTY_LABELS` does). Optional props are typed
+   `?: T | undefined` so callers can pass conditional values under `exactOptionalPropertyTypes`.
+3. Style it in a co-located CSS file imported by the component, with `frl-<block>` classes and
+   tokens only. If you need a new token, add it to both themes in `tokens.css`, document it in §3
+   and, for colours, add its contrast pairs to `tests/ui-tokens.test.ts`. If a state is drawn
+   with a background, gradient or box shadow, give it a forced-colours fallback (§9 rule 9). If
+   the component sits in a scroll container, make sure that container is positioned (§6).
+4. Name it for assistive technology (roles, labels, spoken forms of abbreviated numbers) and give
+   every coloured signal its non-colour cue.
+5. Test it next to the file (`// @vitest-environment happy-dom` for components): behaviour,
+   keyboard, accessible names, and the unknown and lower-bound states where they apply.
+6. Export it from `src/ui/kit.ts` and add it to §7.
+
+## 11. Wiring the kit (for `src/ui/App.tsx`)
+
+- Import from `src/ui/kit.ts`. Rendering `AppShell` loads `tokens.css` and `base.css`.
+- Apply the stored theme at startup with `applyThemePreference(document.documentElement, pref)`
+  and again from `TopBar`'s `onThemeChange`; persist it in the settings store.
+- Map each route step to a `StepRowModel` (and each RXP group to a `GroupRowModel` header row):
+  `number` is the 1-based step number, `title` one line, `projectedLevel` a `Readout<number>`
+  (`unknownReadout(reason)` until the simulator exists; never 0), `quest` only for quest steps,
+  `issues` from `countIssues`, `provenance` from `foreverProvenanceOf`.
+- `RouteList` is controlled: keep `activeIndex` and the selection (with its anchor) in the store,
+  apply `onSelect(index, mode)` there (`replace`, `toggle`, `range` from the anchor), and turn
+  `onDrop(from, to)` into one move command. Pass `readOnly` while an optimiser run or a proposal
+  is open.
+- Anything that stands in for real content (sample routes, the map) carries the Placeholder
+  label: `TopBar placeholder`, `PlaceholderTag`, `EmptyState placeholder`, `MapPlaceholder`, and a
+  `StatusBar` data badge with `placeholder: true`.
+- `AboutDialog` takes `version`, `sourceCommit` (injected at build; null otherwise) and
+  `dataUpstreamCommit` (from the loaded dataset's identity; null when none is loaded).

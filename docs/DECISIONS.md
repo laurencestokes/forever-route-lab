@@ -331,3 +331,15 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
     local".
 - **Why:** The Milestone 0 consistency check found the older wording contradicting
   ARCHITECTURE revision 2 and DATA_PROVENANCE.
+
+## D-027: The store's React binding lives in `src/app/react.ts`
+
+- **Date:** 2026-09-25
+- **Decision:** `src/app/react.ts` (`useEditor`, the store context) is the one file in `app` that
+  imports React. Everything else in `app` stays framework-agnostic, and the architecture test
+  allows React in that file only.
+- **Why:** The binding is about the store's subscription contract (`useSyncExternalStore`
+  semantics, snapshot caching), so it is tested with the store. Keeping it beside the store
+  avoids a `ui` file reaching into store internals. The Milestone 1 review (F6) found the
+  exception existed only in the test; this entry and ARCHITECTURE §4 now record it.
+

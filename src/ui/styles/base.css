@@ -1,0 +1,142 @@
+/*
+ * Base styles: a small reset, document typography, the shared focus ring, reduced motion and a
+ * few utilities. Load after tokens.css and before component styles (docs/UI.md, "Styles").
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: var(--frl-bg);
+  color: var(--frl-fg);
+  font-family: var(--frl-font-ui);
+  font-size: var(--frl-text);
+  line-height: var(--frl-leading);
+  font-weight: var(--frl-weight-regular);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+a {
+  color: var(--frl-accent);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--frl-accent-hover);
+}
+
+svg {
+  flex: none;
+}
+
+::selection {
+  background: var(--frl-selection-bg);
+  color: var(--frl-fg);
+}
+
+/* One focus ring everywhere: 2px, accent, visible on both themes. Components that manage focus
+   themselves (the route list's active row, tabs) reuse the same tokens. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 1px;
+}
+
+/* Numbers that line up in columns. */
+.frl-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visually hidden but read by assistive technology. */
+.frl-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Thin scrollbars in dense panels. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--frl-border-strong) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --frl-duration-fast: 0ms;
+    --frl-duration: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

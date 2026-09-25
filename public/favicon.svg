@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Forever Route Lab app icon: an original route line through waypoints to a flag. -->
+  <rect width="32" height="32" rx="7" fill="#3a4fc4"/>
+  <path d="M7 24.5c5.5 0 4.7-9 10.2-9s5.3-1.6 7.8-4" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="0.1 4.2"/>
+  <circle cx="7" cy="24.5" r="3.2" fill="#ffffff"/>
+  <circle cx="17.2" cy="15.5" r="2.6" fill="#3a4fc4" stroke="#ffffff" stroke-width="2"/>
+  <path d="M25 5.5v12" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <path d="M25 5.5l4 2.3-4 2.3z" fill="#ffffff" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+</svg>

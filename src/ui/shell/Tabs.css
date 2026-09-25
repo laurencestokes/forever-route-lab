@@ -1,0 +1,114 @@
+.frl-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.frl-tabs__list {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  height: var(--frl-tab-height);
+  padding: 0 2px;
+  border-bottom: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.frl-tabs__tab {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-medium);
+  white-space: nowrap;
+}
+
+/* Labels give way (ellipsis) before badges when a narrow panel cannot fit every tab. */
+.frl-tabs__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.frl-tabs__badge {
+  flex: none;
+}
+
+.frl-tabs__tab:hover:not(:disabled) {
+  color: var(--frl-fg);
+}
+
+/* Selected: accent text, bold and a 2px bar (a shape cue as well as a colour). */
+.frl-tabs__tab.is-selected {
+  color: var(--frl-accent);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-tabs__tab.is-selected::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px 1px 0 0;
+  background: var(--frl-accent);
+}
+
+.frl-tabs__tab:focus-visible {
+  outline-offset: -3px;
+}
+
+.frl-tabs__tab:disabled {
+  color: var(--frl-fg-disabled);
+}
+
+.frl-tabs__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--frl-surface-hover);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  font-variant-numeric: tabular-nums;
+  justify-content: center;
+}
+
+/* The panel scrolls, and is the containing block of anything absolutely positioned inside it
+   (visually hidden text included), so its content can never extend the page. */
+.frl-tabs__panel {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.frl-tabs__panel:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Forced colours drop the bar's background; draw it in the system highlight colour instead. */
+@media (forced-colors: active) {
+  .frl-tabs__tab.is-selected::after {
+    background: Highlight;
+  }
+
+  .frl-tabs__tab:disabled {
+    color: GrayText;
+  }
+}

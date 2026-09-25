@@ -1,0 +1,49 @@
+{
+  "id": "project-1",
+  "assumptions": {},
+  "character": {
+    "class": "WARRIOR",
+    "faction": "Horde",
+    "hearthLocation": null,
+    "knownFlightPaths": [],
+    "priorCompletedQuests": [],
+    "priorHistory": "fresh",
+    "priorQuestLog": [],
+    "professions": {},
+    "race": "Orc",
+    "reputation": null,
+    "riding": 0,
+    "sex": null,
+    "startLevel": 1,
+    "startLocation": null,
+    "startXp": 0
+  },
+  "createdAt": "2026-09-25T09:00:00.000Z",
+  "customQuests": [],
+  "dataRevision": "none",
+  "ext": {},
+  "game": "wow-forever",
+  "gameBuild": "1.60.1.69893",
+  "imports": [],
+  "questOverrides": {},
+  "route": {
+    "id": "route-2",
+    "description": "",
+    "groups": {},
+    "name": "Placeholder minimal route",
+    "steps": []
+  },
+  "routeProfile": {
+    "dungeons": [],
+    "groupQuests": false,
+    "hardcore": false,
+    "locale": "enUS",
+    "phase": 6,
+    "season": null,
+    "ssf": false,
+    "xpRate": 1,
+    "xpStepSkipping": true
+  },
+  "rulesetId": "forever-beta",
+  "updatedAt": "2026-09-25T09:00:00.000Z"
+}

@@ -1,0 +1,160 @@
+/* Top bar. */
+
+.frl-topbar {
+  /* Contains its visually hidden texts (the h1 at narrow widths, "Route: "). */
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+  height: var(--frl-topbar-height);
+  min-width: 0;
+  padding: 0 var(--frl-space-2) 0 var(--frl-space-3);
+  border-bottom: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+}
+
+.frl-brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  color: var(--frl-accent);
+}
+
+.frl-brand__node {
+  fill: var(--frl-surface-raised);
+}
+
+/* The page's h1 (the product name), styled as a label. */
+.frl-brand__name {
+  color: var(--frl-fg);
+  font-size: var(--frl-text-lg);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.frl-topbar__sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--frl-space-1);
+  background: var(--frl-border);
+}
+
+.frl-topbar__project {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.frl-topbar__project-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--frl-fg-muted);
+  text-overflow: ellipsis;
+}
+
+.frl-topbar__crumb {
+  color: var(--frl-fg-subtle);
+}
+
+.frl-topbar__route-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--frl-weight-medium);
+  text-overflow: ellipsis;
+}
+
+.frl-topbar__spacer {
+  flex: 1 1 0;
+  min-width: var(--frl-space-2);
+}
+
+.frl-topbar__search {
+  flex: 0 1 240px;
+  min-width: 140px;
+}
+
+.frl-topbar__search .frl-field {
+  width: 100%;
+}
+
+.frl-topbar__zone {
+  display: inline-flex;
+  flex: 0 1 220px;
+  align-items: center;
+  gap: var(--frl-space-1);
+  min-width: 160px;
+}
+
+.frl-topbar__zone-select {
+  flex: 1 1 auto;
+}
+
+.frl-topbar__zone-go {
+  flex: none;
+}
+
+.frl-topbar__actions {
+  flex: none;
+}
+
+/* Below 1200px the action buttons keep their icons; the words stay for assistive technology. */
+@media (max-width: 1200px) {
+  .frl-topbar__button-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .frl-topbar__actions .frl-button {
+    width: var(--frl-control-height);
+    padding: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  /* The name leaves the layout but stays the page's heading for assistive technology. */
+  .frl-brand__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .frl-topbar__sep {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .frl-topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--frl-topbar-height);
+    padding-top: var(--frl-space-1);
+    padding-bottom: var(--frl-space-1);
+  }
+
+  .frl-topbar__spacer {
+    display: none;
+  }
+
+  .frl-topbar__search {
+    flex: 1 1 160px;
+  }
+}

@@ -138,7 +138,7 @@ any pure module is allowed everywhere.
 | `infra/*` | pure modules, `idb`, browser APIs |
 | `map/adapter`, `map/layers` | `domain`, `geo` |
 | `map/leaflet` | `map/adapter`, `leaflet` |
-| `app` | everything except `ui` and `map/leaflet` |
+| `app` | everything except `ui` and `map/leaflet`; React only in `src/app/react.ts`, the store binding (D-027) |
 | `ui` | `app`, `map/adapter`, React; `map/leaflet` only in the composition root |
 
 ## 5. Dataset
@@ -580,8 +580,8 @@ interface Estimated<T> { value: T | null; basis: 'source' | 'assumption' | 'deri
 interface ValidationIssue {
   code: string;            // registry in src/validate/codes.ts, e.g. 'VAL004-min-level'
   severity: 'info' | 'warning' | 'error';
-  stepId?: StepId; questId?: QuestId; message: string;
-  data?: Record<string, string | number | boolean | null>;
+  stepId: StepId | null; questId: QuestId | null; message: string;   // explicit nulls, fixed shape
+  data: Record<string, string | number | boolean | null> | null;
 }
 ```
 
@@ -816,6 +816,10 @@ interface EditorState {
   is memoised on (dataset, customQuests, questOverrides, character overlays).
 - **MVP rule:** while an optimiser run is active or a proposal is open, route editing and
   undo/redo are disabled; Reject re-enables them. Accept requires `revision === baseRevision`.
+  The lock is a set of reasons (`'optimizer' | 'proposal'`, `acquireLock`/`releaseLock`), so one
+  holder cannot release another's lock; `editingLocked` is derived from it. `replaceProject`
+  (load or import) is refused while any lock is held and clears history, selection and clipboard.
+  Copying stays allowed while locked.
 - Lazy boundaries (dynamic `import()`): RXP import/export, diff and proposal review, optimiser
   client and worker, migrations. zod stays in the entry chunk to validate restored projects.
 

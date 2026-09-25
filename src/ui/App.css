@@ -1,0 +1,110 @@
+/* Composition styles for src/ui/App.tsx: layout glue between kit components. Tokens only. */
+
+/* Route panel: header, placeholder banner, toolbar, then the list takes the rest. */
+.frl-app-route {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.frl-app-route__toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: var(--frl-panel-header-height);
+  padding: 0 var(--frl-space-1);
+  border-bottom: 1px solid var(--frl-border);
+  background: var(--frl-surface);
+}
+
+.frl-app-route__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/*
+ * The banner above the route: the "Placeholder data" line while placeholder data is loaded, and the
+ * one visible key to every "?" in rows and the status bar.
+ */
+.frl-app-banner {
+  /* Contains the legend's visually hidden spoken form. */
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--frl-space-half);
+  padding: var(--frl-space-1) var(--frl-space-3);
+  border-bottom: 1px dashed var(--frl-border-strong);
+  background: repeating-linear-gradient(-45deg, var(--frl-placeholder-stripe) 0 4px, transparent 4px 8px);
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-app-banner__line {
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+}
+
+.frl-app-banner__legend {
+  color: var(--frl-fg-muted);
+}
+
+/* Side-panel content. */
+.frl-app-hint {
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-panel-section__body > .frl-app-hint {
+  padding: var(--frl-space-1) 0 var(--frl-space-2);
+}
+
+.frl-app-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--frl-space-1);
+  color: var(--frl-fg);
+}
+
+.frl-app-inline .frl-step-glyph {
+  color: var(--frl-fg-muted);
+}
+
+.frl-app-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--frl-space-1);
+}
+
+.frl-app-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-half);
+  list-style: none;
+}
+
+.frl-app-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+  padding-top: var(--frl-space-3);
+}
+
+.frl-app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--frl-space-1);
+  padding-top: var(--frl-space-3);
+}
+
+.frl-app-quests {
+  margin: 0 calc(-1 * var(--frl-space-3));
+  list-style: none;
+}

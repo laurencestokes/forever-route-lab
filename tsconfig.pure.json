@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": [
+    "The pure set (docs/ARCHITECTURE.md §17): ES2023 only, no DOM lib and no @types, so the compiler",
+    "rejects any browser, worker or Node global. tests/architecture.test.ts also scans these files for",
+    "globals every lib declares (eval, Intl, locale methods). Tests are checked by tsconfig.node.json."
+  ],
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": [],
+    "jsx": "preserve"
+  },
+  "include": [
+    "src/domain",
+    "src/geo",
+    "src/rules",
+    "src/engine",
+    "src/sim",
+    "src/validate",
+    "src/rxp",
+    "src/diff",
+    "src/project",
+    "src/optimizer/core",
+    "src/map/adapter.ts",
+    "src/map/layers.ts"
+  ],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

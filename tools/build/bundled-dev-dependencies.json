@@ -1,0 +1,20 @@
+{
+  "$comment": [
+    "Development dependencies whose own code the bundler injects into dist/ (docs/ARCHITECTURE.md",
+    "§16, THIRD_PARTY_NOTICES.md). licence-gate checks them and third-party-notices lists them",
+    "alongside the production dependencies. Only the named package is included, not its",
+    "dependencies. Checked against a Vite 8.3.1 production build.",
+    "'licenceTextUntil' (optional) ends the notices copy of a licence file at that exact line."
+  ],
+  "packages": [
+    {
+      "name": "vite",
+      "reason": "Vite injects its module-preload polyfill and dynamic-import preload helper into the entry chunk.",
+      "licenceTextUntil": "# Licenses of bundled dependencies"
+    },
+    {
+      "name": "rolldown",
+      "reason": "Rolldown, Vite 8's bundler, injects its runtime helpers (for example CommonJS interop) into output chunks."
+    }
+  ]
+}

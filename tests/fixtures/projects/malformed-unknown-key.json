@@ -1,0 +1,1256 @@
+{
+  "schemaVersion": 1,
+  "id": "project-1",
+  "assumptions": {
+    "dungeonQuestXpMultiplier": 2,
+    "groupSize": 2,
+    "groupXp": true,
+    "interactionSeconds": 4,
+    "killXpMultiplier": 0.75,
+    "killsPerObjective": 6,
+    "lootSeconds": 2.5,
+    "maxLevel": 40,
+    "objectiveConcurrency": 0.5,
+    "questLogCapacity": 25,
+    "questXpMultiplier": 1.25,
+    "runSpeedYps": 7,
+    "secondsPerKill": 12,
+    "secondsPerObjective": 45,
+    "taxiDetourFactor": 1.5,
+    "taxiSpeedYps": 30,
+    "transportRideSeconds": 90,
+    "transportWaitSeconds": 60,
+    "travelDetourFactor": 1.3
+  },
+  "character": {
+    "class": "SHAMAN",
+    "faction": "Horde",
+    "hearthLocation": {
+      "label": null,
+      "radius": 3.5,
+      "source": {
+        "frame": "era",
+        "lexemes": null,
+        "space": "zone",
+        "uiMapId": 1412,
+        "x": 25.5,
+        "y": 75.25
+      }
+    },
+    "knownFlightPaths": [
+      {
+        "name": null,
+        "npcId": -301,
+        "taxiNodeId": null
+      },
+      {
+        "name": "Placeholder node B",
+        "npcId": null,
+        "taxiNodeId": -1
+      }
+    ],
+    "priorCompletedQuests": [
+      -7
+    ],
+    "priorHistory": "listed",
+    "priorQuestLog": [
+      -8
+    ],
+    "professions": {
+      "-501": 75
+    },
+    "race": "WindshaperSkyborne",
+    "reputation": {
+      "-701": 1200,
+      "-702": -500
+    },
+    "riding": 1,
+    "sex": "female",
+    "startLevel": 12,
+    "startLocation": {
+      "label": "Placeholder zone location",
+      "radius": null,
+      "source": {
+        "frame": "forever",
+        "lexemes": [
+          "50.00",
+          "50.00"
+        ],
+        "space": "zone",
+        "uiMapId": 1411,
+        "x": 50,
+        "y": 50
+      }
+    },
+    "startXp": 1500
+  },
+  "createdAt": "2026-09-25T09:00:00.000Z",
+  "customQuests": [
+    {
+      "id": -1,
+      "classes": 1,
+      "dungeonQuest": false,
+      "finisherLocation": null,
+      "finishers": [
+        {
+          "id": -201,
+          "kind": "object"
+        },
+        {
+          "id": -601,
+          "kind": "item"
+        }
+      ],
+      "flags": {
+        "needsEvent": true,
+        "questFlags": 8,
+        "repeatable": false,
+        "specialFlags": 2
+      },
+      "level": 10,
+      "maxLevel": null,
+      "minLevel": 8,
+      "name": "Placeholder quest one",
+      "objectiveHints": [
+        {
+          "objectiveIndex": 0,
+          "points": [
+            {
+              "kind": "unmapped",
+              "areaId": -802,
+              "reason": "no-uimap",
+              "x": 12.5,
+              "y": 87.5
+            },
+            {
+              "lexemes": null,
+              "mapId": 1,
+              "space": "world",
+              "uiMapId": null,
+              "x": 1,
+              "y": 2
+            }
+          ],
+          "refs": [
+            {
+              "id": -102,
+              "kind": "npc"
+            }
+          ],
+          "text": "Placeholder hint"
+        }
+      ],
+      "objectives": [
+        {
+          "kind": "kill",
+          "count": 8,
+          "label": "Placeholder creature",
+          "npcId": -102
+        },
+        {
+          "kind": "object",
+          "count": null,
+          "label": null,
+          "objectId": -202
+        },
+        {
+          "kind": "item",
+          "count": 5,
+          "itemId": -602,
+          "label": "Placeholder item"
+        },
+        {
+          "kind": "reputation",
+          "factionId": -701,
+          "value": 3000
+        },
+        {
+          "kind": "killCredit",
+          "count": 1,
+          "label": null,
+          "npcIds": [
+            -103,
+            -104
+          ],
+          "rootNpcId": -103
+        },
+        {
+          "kind": "spell",
+          "itemId": null,
+          "label": "Placeholder spell",
+          "spellId": -402
+        },
+        {
+          "kind": "event",
+          "points": [
+            {
+              "frame": "forever",
+              "lexemes": null,
+              "space": "zone",
+              "uiMapId": 1411,
+              "x": 10,
+              "y": 20
+            },
+            {
+              "kind": "instance",
+              "areaId": -801
+            }
+          ],
+          "text": "Placeholder event"
+        }
+      ],
+      "objectivesText": [
+        "Placeholder objective text."
+      ],
+      "prerequisites": {
+        "availableStartingWith": null,
+        "availableUntilCompleted": null,
+        "breadcrumbForQuestId": null,
+        "breadcrumbs": [
+          -6
+        ],
+        "childQuests": [],
+        "disabledByQuest": null,
+        "exclusiveTo": [
+          -5
+        ],
+        "inGroupWith": [],
+        "nextQuestInChain": -2,
+        "parentQuest": null,
+        "preQuestGroup": [
+          -3,
+          4
+        ],
+        "preQuestSingle": []
+      },
+      "provenance": {
+        "corrected": false,
+        "created": false,
+        "foreverStatus": "user-declared-new",
+        "source": "custom",
+        "upstreamDiff": "forever-new"
+      },
+      "races": 4294967373,
+      "reputationReward": [
+        {
+          "factionId": -701,
+          "value": 250
+        }
+      ],
+      "requirements": {
+        "maxReputation": null,
+        "minReputation": {
+          "factionId": -701,
+          "value": 0
+        },
+        "requiredSourceItems": [
+          -604
+        ],
+        "skill": {
+          "skillId": -501,
+          "value": 75
+        },
+        "sourceItemId": -603,
+        "specialization": null,
+        "spell": -403
+      },
+      "starterLocation": {
+        "label": "Placeholder zone location",
+        "radius": null,
+        "source": {
+          "frame": "forever",
+          "lexemes": [
+            "50.00",
+            "50.00"
+          ],
+          "space": "zone",
+          "uiMapId": 1411,
+          "x": 50,
+          "y": 50
+        }
+      },
+      "starters": [
+        {
+          "id": -101,
+          "kind": "npc"
+        }
+      ],
+      "xp": {
+        "baseXp": 850,
+        "basis": "user",
+        "questLevel": 10
+      },
+      "zoneOrSort": -1
+    },
+    {
+      "id": -2,
+      "classes": null,
+      "dungeonQuest": false,
+      "finisherLocation": {
+        "label": "Placeholder world location",
+        "radius": 8,
+        "source": {
+          "lexemes": [
+            "-2000.75",
+            "1000.25"
+          ],
+          "mapId": 1,
+          "space": "world",
+          "uiMapId": 1411,
+          "x": 1000.25,
+          "y": -2000.75
+        }
+      },
+      "finishers": [],
+      "flags": {
+        "needsEvent": false,
+        "questFlags": 0,
+        "repeatable": true,
+        "specialFlags": 1
+      },
+      "level": null,
+      "maxLevel": null,
+      "minLevel": null,
+      "name": "Placeholder quest two",
+      "objectiveHints": [],
+      "objectives": [],
+      "objectivesText": null,
+      "prerequisites": {
+        "availableStartingWith": null,
+        "availableUntilCompleted": null,
+        "breadcrumbForQuestId": null,
+        "breadcrumbs": [],
+        "childQuests": [],
+        "disabledByQuest": null,
+        "exclusiveTo": [],
+        "inGroupWith": [],
+        "nextQuestInChain": null,
+        "parentQuest": null,
+        "preQuestGroup": [],
+        "preQuestSingle": []
+      },
+      "provenance": {
+        "corrected": true,
+        "created": true,
+        "foreverStatus": "unknown",
+        "source": "custom",
+        "upstreamDiff": "era"
+      },
+      "races": null,
+      "reputationReward": [],
+      "requirements": {
+        "maxReputation": null,
+        "minReputation": null,
+        "requiredSourceItems": [],
+        "skill": null,
+        "sourceItemId": null,
+        "specialization": null,
+        "spell": null
+      },
+      "starterLocation": null,
+      "starters": [],
+      "xp": null,
+      "zoneOrSort": null
+    }
+  ],
+  "dataRevision": "placeholder-data-revision",
+  "ext": {
+    "emptyArray": [],
+    "emptyObject": {},
+    "placeholder": {
+      "nested": [
+        1,
+        "two",
+        null,
+        true,
+        {
+          "deep": -0.5
+        }
+      ]
+    }
+  },
+  "game": "wow-forever",
+  "gameBuild": "1.60.1.69893",
+  "imports": [
+    {
+      "id": "import-1",
+      "name": "Placeholder guide",
+      "options": {
+        "changedZoneFrame": "forever",
+        "lua": {
+          "defaultFor": null,
+          "groupArg": "Placeholder group"
+        }
+      },
+      "sourceHash": "2811358a21a4070f9819514963967f827c7a5331e282e32ef0ec26346ea6ef25",
+      "text": "#forever\n#name Placeholder guide\n\nstep << Horde\n    #sticky\n    #label placeholder-start\n    .goto 1411,50.00,50.00\n    .accept -1 >> Placeholder accept text\n    .complete -1,1\n    .turnin -1\n"
+    },
+    {
+      "id": "import-2",
+      "name": "Placeholder empty guide",
+      "options": {
+        "changedZoneFrame": "era",
+        "lua": null
+      },
+      "sourceHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "text": ""
+    }
+  ],
+  "questOverrides": {
+    "-1": {
+      "foreverStatus": null,
+      "objectiveCounts": [
+        8,
+        null,
+        5
+      ],
+      "xp": {
+        "baseXp": 900,
+        "basis": "forever-observed",
+        "questLevel": 10
+      }
+    },
+    "-2": {
+      "foreverStatus": "user-declared-changed",
+      "objectiveCounts": null,
+      "xp": null
+    }
+  },
+  "route": {
+    "id": "route-2",
+    "description": "Placeholder fixture covering every step kind and sidecar. Not real quest data.",
+    "groups": {
+      "group-1": {
+        "id": "group-1",
+        "rxp": {
+          "annotations": [
+            {
+              "args": [
+                "Placeholder creature",
+                ""
+              ],
+              "command": "placeholdertarget",
+              "filter": null,
+              "line": {
+                "firstLine": 7,
+                "importId": "import-1",
+                "lastLine": 7
+              },
+              "text": null
+            },
+            {
+              "args": [],
+              "command": "placeholderuse",
+              "filter": {
+                "kind": "or",
+                "exprs": [
+                  {
+                    "kind": "and",
+                    "exprs": [
+                      {
+                        "kind": "word",
+                        "word": "Horde"
+                      },
+                      {
+                        "kind": "minLevel",
+                        "level": 10
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "not",
+                    "expr": {
+                      "kind": "word",
+                      "word": "PLACEHOLDER"
+                    }
+                  }
+                ]
+              },
+              "line": {
+                "firstLine": 8,
+                "importId": "import-1",
+                "lastLine": 9
+              },
+              "text": "Placeholder use text"
+            }
+          ],
+          "condition": {
+            "filter": {
+              "kind": "word",
+              "word": "Horde"
+            },
+            "skipIf": [
+              {
+                "kind": "questState",
+                "match": "any",
+                "negate": true,
+                "questIds": [
+                  -1,
+                  -2
+                ],
+                "state": "turnedIn"
+              },
+              {
+                "kind": "levelAtLeast",
+                "level": 11,
+                "negate": false,
+                "xp": 250
+              },
+              {
+                "kind": "opaque",
+                "raw": ".placeholder-predicate 1"
+              }
+            ],
+            "variant": [
+              {
+                "filter": null,
+                "name": "xprate",
+                "value": "<1.5"
+              },
+              {
+                "filter": {
+                  "kind": "word",
+                  "word": "Orc"
+                },
+                "name": "softcore",
+                "value": null
+              }
+            ]
+          },
+          "fingerprint": "7d64fa01ccc5ff1c95165f376bcdb74177517d1d6c8f55c2eba4bd267773862d",
+          "importId": "import-1",
+          "stepIndex": 0,
+          "tags": [
+            {
+              "assignment": false,
+              "line": {
+                "firstLine": 5,
+                "importId": "import-1",
+                "lastLine": 5
+              },
+              "name": "sticky",
+              "value": null
+            },
+            {
+              "assignment": false,
+              "line": {
+                "firstLine": 6,
+                "importId": "import-1",
+                "lastLine": 6
+              },
+              "name": "label",
+              "value": "placeholder-start"
+            },
+            {
+              "assignment": true,
+              "line": null,
+              "name": "placeholder",
+              "value": "value"
+            }
+          ],
+          "waypoints": [
+            {
+              "filter": null,
+              "line": {
+                "firstLine": 7,
+                "importId": "import-1",
+                "lastLine": 7
+              },
+              "point": {
+                "lexemes": [
+                  "-2000.75",
+                  "1000.25"
+                ],
+                "mapId": 1,
+                "space": "world",
+                "uiMapId": 1411,
+                "x": 1000.25,
+                "y": -2000.75
+              },
+              "radius": 5,
+              "role": "leg"
+            },
+            {
+              "filter": {
+                "kind": "word",
+                "word": "Horde"
+              },
+              "line": null,
+              "point": {
+                "frame": "forever",
+                "lexemes": [
+                  "50.00",
+                  "50.00"
+                ],
+                "space": "zone",
+                "uiMapId": 1411,
+                "x": 50,
+                "y": 50
+              },
+              "radius": 0,
+              "role": "pin"
+            },
+            {
+              "filter": null,
+              "line": null,
+              "point": {
+                "frame": "era",
+                "lexemes": null,
+                "space": "zone",
+                "uiMapId": 1412,
+                "x": 25.5,
+                "y": 75.25
+              },
+              "radius": -1,
+              "role": "closest"
+            }
+          ]
+        }
+      },
+      "group-2": {
+        "id": "group-2",
+        "rxp": null
+      },
+      "group-unused": {
+        "id": "group-unused",
+        "rxp": null
+      }
+    },
+    "name": "Placeholder rich route",
+    "steps": [
+      {
+        "id": "step-100",
+        "kind": "accept",
+        "anyOf": [
+          -1,
+          -2
+        ],
+        "condition": {
+          "filter": {
+            "kind": "or",
+            "exprs": [
+              {
+                "kind": "and",
+                "exprs": [
+                  {
+                    "kind": "word",
+                    "word": "Horde"
+                  },
+                  {
+                    "kind": "minLevel",
+                    "level": 10
+                  }
+                ]
+              },
+              {
+                "kind": "not",
+                "expr": {
+                  "kind": "word",
+                  "word": "PLACEHOLDER"
+                }
+              }
+            ]
+          },
+          "skipIf": [],
+          "variant": null
+        },
+        "durationOverride": null,
+        "ext": null,
+        "groupId": "group-1",
+        "location": {
+          "label": "Placeholder zone location",
+          "radius": null,
+          "source": {
+            "frame": "forever",
+            "lexemes": [
+              "50.00",
+              "50.00"
+            ],
+            "space": "zone",
+            "uiMapId": 1411,
+            "x": 50,
+            "y": 50
+          }
+        },
+        "locked": false,
+        "note": null,
+        "origin": {
+          "ref": "import-1",
+          "source": "rxp"
+        },
+        "questId": -1,
+        "rxp": {
+          "line": {
+            "firstLine": 8,
+            "importId": "import-1",
+            "lastLine": 8
+          },
+          "text": "Placeholder accept text"
+        },
+        "via": {
+          "id": -101,
+          "kind": "npc"
+        },
+        "colour": "red"
+      },
+      {
+        "id": "step-101",
+        "kind": "complete",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": "group-1",
+        "location": {
+          "label": "Placeholder zone location",
+          "radius": null,
+          "source": {
+            "frame": "forever",
+            "lexemes": [
+              "50.00",
+              "50.00"
+            ],
+            "space": "zone",
+            "uiMapId": 1411,
+            "x": 50,
+            "y": 50
+          }
+        },
+        "locked": false,
+        "note": null,
+        "origin": {
+          "ref": "import-1",
+          "source": "rxp"
+        },
+        "progress": "partial",
+        "rxp": {
+          "line": {
+            "firstLine": 9,
+            "importId": "import-1",
+            "lastLine": 9
+          },
+          "text": null
+        },
+        "targets": [
+          {
+            "objective": 0,
+            "questId": -1
+          },
+          {
+            "objective": null,
+            "questId": -2
+          }
+        ]
+      },
+      {
+        "id": "step-102",
+        "kind": "turnin",
+        "anyOf": null,
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": "group-1",
+        "location": {
+          "label": "Placeholder zone location",
+          "radius": null,
+          "source": {
+            "frame": "forever",
+            "lexemes": [
+              "50.00",
+              "50.00"
+            ],
+            "space": "zone",
+            "uiMapId": 1411,
+            "x": 50,
+            "y": 50
+          }
+        },
+        "locked": true,
+        "note": null,
+        "origin": {
+          "ref": "import-1",
+          "source": "rxp"
+        },
+        "questId": -1,
+        "rewardIndex": 2,
+        "rxp": {
+          "line": {
+            "firstLine": 10,
+            "importId": "import-1",
+            "lastLine": 10
+          },
+          "text": null
+        },
+        "skipIfMissing": true,
+        "via": {
+          "id": -201,
+          "kind": "object"
+        }
+      },
+      {
+        "id": "step-103",
+        "kind": "abandon",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": "group-2",
+        "location": null,
+        "locked": false,
+        "note": "Placeholder: abandon the second quest",
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "questId": -2,
+        "rxp": null
+      },
+      {
+        "id": "step-104",
+        "kind": "travel",
+        "condition": null,
+        "durationOverride": 120,
+        "ext": null,
+        "groupId": null,
+        "location": {
+          "label": "Placeholder world location",
+          "radius": 8,
+          "source": {
+            "lexemes": [
+              "-2000.75",
+              "1000.25"
+            ],
+            "mapId": 1,
+            "space": "world",
+            "uiMapId": 1411,
+            "x": 1000.25,
+            "y": -2000.75
+          }
+        },
+        "locked": false,
+        "mode": "transport",
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "transport": {
+          "id": "placeholder-transport",
+          "dock": {
+            "label": null,
+            "radius": 3.5,
+            "source": {
+              "frame": "era",
+              "lexemes": null,
+              "space": "zone",
+              "uiMapId": 1412,
+              "x": 25.5,
+              "y": 75.25
+            }
+          }
+        }
+      },
+      {
+        "id": "step-105",
+        "kind": "travel",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "mode": "walk",
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "transport": null
+      },
+      {
+        "id": "step-106",
+        "kind": "travel",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": {
+          "label": null,
+          "radius": null,
+          "source": {
+            "lexemes": null,
+            "mapId": 0,
+            "space": "world",
+            "uiMapId": null,
+            "x": 0,
+            "y": 0
+          }
+        },
+        "locked": false,
+        "mode": "mount",
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "transport": null
+      },
+      {
+        "id": "step-107",
+        "kind": "grind",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "mobLevel": 11,
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "until": {
+          "kind": "level",
+          "level": 12,
+          "offset": {
+            "kind": "xpInto",
+            "xp": 2500
+          }
+        },
+        "xpPerHour": 20000
+      },
+      {
+        "id": "step-108",
+        "kind": "grind",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "mobLevel": null,
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "until": {
+          "kind": "level",
+          "level": 13,
+          "offset": {
+            "kind": "xpShort",
+            "xp": 300
+          }
+        },
+        "xpPerHour": null
+      },
+      {
+        "id": "step-109",
+        "kind": "grind",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "mobLevel": null,
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "until": {
+          "kind": "level",
+          "level": 13,
+          "offset": {
+            "kind": "fraction",
+            "fraction": 0.5
+          }
+        },
+        "xpPerHour": null
+      },
+      {
+        "id": "step-110",
+        "kind": "grind",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "mobLevel": null,
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "until": {
+          "kind": "duration",
+          "seconds": 900
+        },
+        "xpPerHour": null
+      },
+      {
+        "id": "step-111",
+        "kind": "hearth",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": {
+          "label": null,
+          "radius": 3.5,
+          "source": {
+            "frame": "era",
+            "lexemes": null,
+            "space": "zone",
+            "uiMapId": 1412,
+            "x": 25.5,
+            "y": 75.25
+          }
+        },
+        "locked": false,
+        "mode": "bind",
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null
+      },
+      {
+        "id": "step-112",
+        "kind": "hearth",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "mode": "use",
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null
+      },
+      {
+        "id": "step-113",
+        "kind": "flight",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "from": {
+          "name": "Placeholder node A",
+          "npcId": -301,
+          "taxiNodeId": null
+        },
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "mode": "take",
+        "nodeQuery": "Placeholder node B",
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "to": {
+          "name": null,
+          "npcId": null,
+          "taxiNodeId": -1
+        }
+      },
+      {
+        "id": "step-114",
+        "kind": "flight",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "from": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "mode": "discover",
+        "nodeQuery": "Placeholder node A",
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "to": null
+      },
+      {
+        "id": "step-115",
+        "kind": "train",
+        "condition": null,
+        "cost": 0,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rank": 1,
+        "rxp": null,
+        "skill": "riding",
+        "skillId": null,
+        "spellId": -401,
+        "what": "Placeholder training"
+      },
+      {
+        "id": "step-116",
+        "kind": "train",
+        "condition": null,
+        "cost": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rank": null,
+        "rxp": null,
+        "skill": "profession",
+        "skillId": -501,
+        "spellId": null,
+        "what": "Placeholder profession"
+      },
+      {
+        "id": "step-117",
+        "kind": "vendor",
+        "condition": null,
+        "durationOverride": null,
+        "ext": {
+          "placeholderTelemetry": {
+            "actual": null,
+            "plannedSeconds": 30
+          }
+        },
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "rxp": null,
+        "what": "Placeholder goods"
+      },
+      {
+        "id": "step-118",
+        "kind": "note",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "manual"
+        },
+        "preserved": null,
+        "rxp": null,
+        "text": "Placeholder note step"
+      },
+      {
+        "id": "step-119",
+        "kind": "note",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "note": null,
+        "origin": {
+          "ref": "step-1",
+          "source": "paste"
+        },
+        "preserved": {
+          "format": "rxp",
+          "lines": [
+            "    .placeholdercommand 1,2"
+          ]
+        },
+        "rxp": null,
+        "text": ".placeholdercommand 1,2"
+      },
+      {
+        "id": "step-120",
+        "kind": "note",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "note": null,
+        "origin": {
+          "ref": "step-2",
+          "source": "duplicate"
+        },
+        "preserved": {
+          "format": "rxp",
+          "lines": []
+        },
+        "rxp": null,
+        "text": ""
+      },
+      {
+        "id": "step-121",
+        "kind": "note",
+        "condition": null,
+        "durationOverride": null,
+        "ext": null,
+        "groupId": null,
+        "location": null,
+        "locked": false,
+        "note": null,
+        "origin": {
+          "ref": null,
+          "source": "optimizer"
+        },
+        "preserved": null,
+        "rxp": null,
+        "text": "Placeholder optimiser note"
+      }
+    ]
+  },
+  "routeProfile": {
+    "dungeons": [
+      "PLACEHOLDER"
+    ],
+    "groupQuests": true,
+    "hardcore": true,
+    "locale": "deDE",
+    "phase": null,
+    "season": 2,
+    "ssf": true,
+    "xpRate": 1.5,
+    "xpStepSkipping": false
+  },
+  "rulesetId": "era-1.15",
+  "updatedAt": "2026-09-25T11:30:00+01:00",
+  "notes": "Placeholder"
+}

@@ -8,7 +8,7 @@ Last updated: 2026-09-25
 
 ## Current milestone
 
-**Milestone 0: Research, architecture, critique**, finishing. Next: **Milestone 1: Foundation**.
+**Milestone 1: Foundation**, complete. Next: **Milestone 2: Forever data pipeline**.
 
 ## Completed work
 
@@ -30,24 +30,46 @@ Last updated: 2026-09-25
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) revision 2, after an independent four-lens critique
   ([docs/reviews/review-m0-architecture.md](docs/reviews/review-m0-architecture.md): 68 findings,
   all blockers and majors resolved).
-- Decisions D-001 to D-026 in [docs/DECISIONS.md](docs/DECISIONS.md), with Status lines on superseded entries.
+- Decisions D-001 to D-027 in [docs/DECISIONS.md](docs/DECISIONS.md), with Status lines on superseded entries.
+- **Milestone 1 (Foundation):**
+  - Toolchain: pnpm, Vite 8, React 19.3, TypeScript 6.0 with three strict configs, ESLint 10
+    (including `no-bitwise`) and Vitest 5.
+  - Canonical domain types and pure route operations (`src/domain`); race/class masks without
+    bitwise operators; the quest difficulty table (`src/rules`).
+  - zod project schema (type-equal to `ProjectV1`), deterministic import/export and a
+    migration registry (`src/project`).
+  - Framework-agnostic editor store with undo/redo, coalescing, selection, a clipboard and
+    edit-lock reasons (`src/app`).
+  - Original UI kit and three-panel shell running on clearly labelled placeholder data
+    (`src/ui`, `docs/UI.md`).
+  - Build gates: the architecture test, the token/contrast test, an SPDX licence gate,
+    third-party notices and a dist audit (`tests/`, `tools/build`).
+  - README.
+  - Independent review: [docs/reviews/review-m1-foundation.md](docs/reviews/review-m1-foundation.md)
+    (46 findings, all majors and minors fixed).
 
 ## Branch / commit
 
 - Branch: `main`
-- Commits: `e2e577f` (skeleton), then the Milestone 0 research/architecture commit (see `git log`).
+- Commits: `e2e577f` skeleton, `14acc7a` Milestone 0, then the Milestone 1 commit (see `git log`).
 
 ## Build / test status
 
+As of the Milestone 1 commit (`pnpm check`):
+
 | Check | Status |
 |---|---|
-| Tests | not yet set up (Milestone 1) |
-| Typecheck | not yet set up (Milestone 1) |
-| Production build | not yet set up (Milestone 1) |
+| Typecheck (pure, app, node configs) | pass |
+| Lint | pass |
+| Tests | 47 files, 746 tests, pass |
+| Licence gate | pass (8 shipped packages) |
+| Production build + dist audit | pass; entry chunk about 101 kB gzip of a 250 kB budget |
 
-## Known bugs
+## Known bugs / deferred checks
 
-_None (no code yet)._
+- No axe-core accessibility run yet (planned with the Playwright smoke test, Milestone 9).
+- "The page never scrolls" (docs/UI.md §6) is a manual check until Playwright exists.
+- The app runs on synthetic placeholder data until Milestone 2.
 
 ## Blockers
 
@@ -79,33 +101,33 @@ _None._
   labelled default).
 - Riding training level and cost in Forever.
 
-## Exact next tasks (Milestone 1: Foundation)
+## Exact next tasks (Milestone 2: Forever data pipeline)
 
-1. Toolchain with pnpm: Vite 8, React 19.3, TypeScript `~6.0.3` strict (with
-   `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`,
-   `verbatimModuleSyntax`), ESLint 10 + typescript-eslint (type-aware) + react-hooks, Vitest 5
-   (node + happy-dom), `package.json` `"license": "GPL-3.0-or-later"`, Node `>=22.13`.
-2. Scripts: `dev`, `build`, `preview`, `test`, `typecheck`, `lint`, `check` (all of them).
-3. Domain types from ARCHITECTURE §5.3, §6, §8 in `src/domain` (branded IDs, records, route,
-   project, conditions AST), pure route operations with tests, zod schemas typed against them in
-   `src/project` with a type-equality test (schema v1 unstable until M6).
-4. `src/app` store with revisions, commands and undo/redo history (framework-agnostic, tested).
-5. Three-panel shell (top bar, route list, map placeholder, right tabs, status bar) on placeholder
-   data, original visual system with design tokens and light/dark themes.
-6. `tests/architecture.test.ts` (allowlist matrix, pure-set globals, path hygiene).
-7. `tools/build/licence-gate.ts`, `tools/build/audit-dist.ts`, `tools/build/third-party-notices.ts`
-   wired into `build`/`check`.
-8. `README.md` in the style of the owner's reference README: what it is, highlights, quick start,
-   architecture summary, project layout, development commands, licence section with the
-   copyright line and the D-016 data notice.
-9. Critique, fix, run checks, update docs and this file, commit.
+1. `tools/questiedb` (ARCHITECTURE §5, DATA_PROVENANCE §4-§9):
+   - `upstream.json` pin, `fetch.ts` (git blobs, LF hashes), `extract.ts` (luaparse plus a
+     whitelisted evaluator; static corrections in upstream order; overlays), `validate.ts` (golden
+     counts 4,257 / 10,122 / 6,666 / 14,899, referential integrity, schema), `diff.ts` (pin-to-pin
+     diff, stub three-way classifier);
+   - output: `public/data/*.json` plus `manifest.json` and `NOTICE.md`, a test fixture slice, and
+     size baselines in `tools/build/dist-requirements.json`.
+2. `src/geo`: `SourcedPoint` resolution, world/percent transforms, `eraToForever`, distances and
+   zone attribution, with the worked-example tests from coordinates.md §7-§9.
+3. `tools/maps import --placeholder`, which builds
+   `public/maps/placeholder/geometry.placeholder.json` and its `NOTICE.md` from the pinned
+   `conversion.json` plus `tools/maps/inputs/db2-rows-1.60.1.70009.json` (12 cited rows; source
+   CSVs in `.cache/experiments/maps/`).
+4. `src/infra/data` loader and synchronous `DatasetView` (spawns converted to world points at load;
+   overlays; custom quests), `src/infra/maps` geometry loader, and the app switched from placeholder
+   to real data with a loading state.
+5. Independent data/provenance, coordinate and code reviews; fix; checks; docs; commit.
 
 ## Important commands
 
-_Added in Milestone 1._ Research tooling used so far:
-
 ```bash
-git clone --depth 1 https://github.com/Questie/QuestieDB.git .cache/questiedb   # pinned: b6f5b07
+pnpm install        # dependencies (pnpm 10.33, Node >= 22.13)
+pnpm dev            # dev server
+pnpm check          # typecheck, lint, test, build (licence gate, notices, dist audit)
+pnpm test           # tests only
 ```
 
 ## Major design decisions

@@ -1,0 +1,231 @@
+/* Right panel and its content blocks. */
+
+.frl-sidepanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--frl-surface);
+}
+
+/* Section --------------------------------------------------------------------------------- */
+.frl-panel-section + .frl-panel-section {
+  border-top: 1px solid var(--frl-border);
+}
+
+.frl-panel-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-2);
+  height: 28px;
+  padding: 0 var(--frl-space-3);
+}
+
+.frl-panel-section__title {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.frl-panel-section__aside {
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-panel-section__body {
+  padding: 0 var(--frl-space-3) var(--frl-space-3);
+}
+
+/* Empty state ------------------------------------------------------------------------------ */
+.frl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--frl-space-2);
+  padding: var(--frl-space-4) var(--frl-space-3);
+  color: var(--frl-fg-muted);
+}
+
+.frl-empty__title {
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-empty__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  font-size: var(--frl-text-sm);
+}
+
+/* Details ---------------------------------------------------------------------------------- */
+.frl-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.frl-details__row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--frl-space-2);
+  min-height: 24px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--frl-border);
+  align-items: baseline;
+}
+
+.frl-details__row dt {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-details__row dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Issues ----------------------------------------------------------------------------------- */
+.frl-issues {
+  list-style: none;
+}
+
+.frl-issues__item {
+  border-bottom: 1px solid var(--frl-border);
+  box-shadow: inset 3px 0 0 var(--frl-issue-bar, transparent);
+}
+
+.frl-issues__item--error {
+  --frl-issue-bar: var(--frl-severity-error);
+}
+
+.frl-issues__item--warning {
+  --frl-issue-bar: var(--frl-severity-warning);
+}
+
+.frl-issues__item--info {
+  --frl-issue-bar: var(--frl-severity-info);
+}
+
+.frl-issues__body {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-areas:
+    'severity message'
+    'severity meta';
+  column-gap: var(--frl-space-2);
+  width: 100%;
+  padding: 5px var(--frl-space-3) 5px var(--frl-space-3);
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+button.frl-issues__body:hover {
+  background: var(--frl-surface-hover);
+}
+
+button.frl-issues__body:focus-visible {
+  outline-offset: -2px;
+}
+
+.frl-issues__severity {
+  grid-area: severity;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: start;
+  height: var(--frl-leading);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-issues__item--error .frl-issues__severity {
+  color: var(--frl-severity-error);
+}
+
+.frl-issues__item--warning .frl-issues__severity {
+  color: var(--frl-severity-warning);
+}
+
+.frl-issues__item--info .frl-issues__severity {
+  color: var(--frl-severity-info);
+}
+
+.frl-issues__message {
+  grid-area: message;
+}
+
+.frl-issues__meta {
+  grid-area: meta;
+  display: flex;
+  gap: var(--frl-space-2);
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+}
+
+.frl-issues__meta code {
+  font-family: var(--frl-font-mono);
+}
+
+.frl-issues__empty {
+  padding: var(--frl-space-3);
+  color: var(--frl-fg-muted);
+}
+
+/* Quest list item -------------------------------------------------------------------------- */
+.frl-quest-item {
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+  min-height: 36px;
+  padding: 4px var(--frl-space-3);
+  border-bottom: 1px solid var(--frl-border);
+  list-style: none;
+}
+
+.frl-quest-item__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The name gives way (ellipsis) and the provenance badge after it never does: it is the list's
+   only visual Forever cue. */
+.frl-quest-item__name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.frl-quest-item__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.frl-quest-item__name .frl-provenance {
+  flex: none;
+}
+
+.frl-quest-item__detail {
+  overflow: hidden;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Forced colours drop box shadows, and with them the severity bars: draw them as borders. The
+   severity itself is still carried by the icon shape and the word. */
+@media (forced-colors: active) {
+  .frl-issues__item {
+    border-left: 3px solid CanvasText;
+  }
+}

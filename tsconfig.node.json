@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": [
+    "Code that runs in Node: tests (unit tests beside their modules included), tools and config files.",
+    "Node types, plus the DOM libs for happy-dom component tests and Vite's client types for the src/",
+    "files the tests import."
+  ],
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"]
+  },
+  "include": ["tests", "tools", "src/**/*.test.ts", "src/**/*.test.tsx", "vite.config.ts", "vitest.config.ts", "eslint.config.js"]
+}
