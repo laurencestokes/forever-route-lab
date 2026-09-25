@@ -1,0 +1,34 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Local caches (upstream clones, downloads). Never committed.
+.cache/
+
+# Raw local map exports from a developer's own WoW client (see docs/MAPS.md).
+# Game artwork is NOT redistributed from this repository.
+assets-source/*
+!assets-source/README.md
+
+# Generated map tiles/images produced locally from assets-source/.
+public/maps/*
+!public/maps/README.md
+!public/maps/placeholder/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local env
+.env
+.env.*
+!.env.example
