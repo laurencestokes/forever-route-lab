@@ -1,8 +1,10 @@
 import type { RightTab } from '../app';
 import { characterName } from '../app/character-names';
+import { withChainLabel } from '../app/quest-chains';
 import { SAMPLE_ORIGIN_REF } from '../app/sample-route';
 import { routeGroup } from '../app/rules-exports';
 import { effectiveQuestLevel, questDifficultyAt, stepQuestIds } from '../app/shell-support';
+import { plainGuideText } from '../app/ui-text';
 import type { DatasetIdentity, DatasetView, EntityRef, ObjectiveDef, PublishedPoint, QuestRecord, RecordProvenance, SpawnPoint } from '../domain/dataset';
 import type { GroupId, QuestId, StepId, UiMapId } from '../domain/ids';
 import type { Location } from '../domain/points';
@@ -55,6 +57,12 @@ export { characterName };
 
 export function questName(dataset: DatasetView, id: QuestId): string {
   return dataset.quest(id)?.name ?? `Quest ${String(id)} (not in the dataset)`;
+}
+
+/** The quest's name with its chain position, `Cutting Teeth (2/3)` (src/app/quest-chains.ts); a quest in no chain has none. */
+export function questTitle(dataset: DatasetView, id: QuestId): string {
+  const record = dataset.quest(id);
+  return record === undefined ? questName(dataset, id) : withChainLabel(dataset, id, record.name);
 }
 
 export function entityName(dataset: DatasetView, ref: EntityRef): string {
@@ -259,7 +267,9 @@ export function upstreamProvenanceText(provenance: RecordProvenance): string {
 /**
  * A point as authored: RXP lexemes when present, else the stored numbers. Zone lexemes are
  * `[x, y]` in written order; world lexemes are `[Y, X]` (RXP writes `UiMapID/instance,Y,X`,
- * coordinates.md §15), so they are swapped back and the axes named (`X -500.00, Y -4000.00`).
+ * coordinates.md §15), so they are swapped back and the axes named (`X -500.00, Y -4000.00`). A
+ * world point that names its UiMap (an RXP world-form goto, a point picked on the map with its
+ * zone hint) says it after: `World map 1: X -500, Y -4000 yd (Durotar)`.
  */
 function pointText(location: Location, dataset: DatasetView): string {
   const p = location.source;
@@ -269,7 +279,8 @@ function pointText(location: Location, dataset: DatasetView): string {
     return `${zone} ${x}, ${y}${p.frame === 'era' ? ' (Era frame)' : ''}`;
   }
   const [x, y] = p.lexemes === null ? [String(p.x), String(p.y)] : [p.lexemes[1], p.lexemes[0]];
-  return worldPointText(p.mapId, x, y);
+  const text = worldPointText(p.mapId, x, y);
+  return p.uiMapId === null ? text : `${text} (${zoneLabel(dataset, p.uiMapId)})`;
 }
 
 /** The location's label, else its point. */
@@ -302,16 +313,26 @@ export function grindTargetText(until: GrindTarget): string {
 
 const nodeName = (node: TaxiNodeRef | null, query: string | null): string | null => node?.name ?? query;
 
-/** The one-line title of a step. */
+/**
+ * The one-line title of a step, as plain text: RXP colour tokens and the game's colour and texture
+ * escapes in imported guide text are removed for display (`plainGuideText`, docs/RXP.md §12 row
+ * 32); the step keeps its text as written, for export.
+ */
 export function stepTitle(step: RouteStep, dataset: DatasetView): string {
+  const plain = plainGuideText(rawStepTitle(step, dataset));
+  // A note of nothing but icon or colour codes still says what it is.
+  return plain === '' ? '(note with only icon or colour codes)' : plain;
+}
+
+function rawStepTitle(step: RouteStep, dataset: DatasetView): string {
   switch (step.kind) {
     case 'accept':
     case 'turnin':
     case 'abandon':
-      return questName(dataset, step.questId);
+      return questTitle(dataset, step.questId);
     case 'complete': {
       const parts = step.targets.map((t) =>
-        t.objective === null ? questName(dataset, t.questId) : `${questName(dataset, t.questId)} (objective ${String(t.objective + 1)})`,
+        t.objective === null ? questTitle(dataset, t.questId) : `${questTitle(dataset, t.questId)} (objective ${String(t.objective + 1)})`,
       );
       const text = parts.length === 0 ? 'No objectives set' : parts.join(' + ');
       return step.progress === 'partial' ? `Partly: ${text}` : text;
@@ -344,10 +365,11 @@ export function mapStepLabel(step: RouteStep, index: number, dataset: DatasetVie
   return `${formatInteger(index + 1)} · ${STEP_KIND_LABELS[step.kind]}: ${stepTitle(step, dataset)}`;
 }
 
-/** Dimmed text after the title: where the step happens (travel titles already say it). */
+/** Dimmed text after the title: where the step happens (travel titles already say it). Plain text, as `stepTitle`. */
 export function stepDetail(step: RouteStep, dataset: DatasetView): string | null {
   if (step.kind === 'travel') return null;
-  return locationText(step.location, dataset);
+  const text = locationText(step.location, dataset);
+  return text === null ? null : plainGuideText(text);
 }
 
 export function originText(origin: StepOrigin): string {
@@ -384,7 +406,8 @@ function groupLabel(route: Route, groupKey: GroupId, importNames: ReadonlyMap<st
   // routeGroup reads own keys only: a group id such as "toString" is never Object.prototype's.
   const rxp = routeGroup(route, groupKey)?.rxp ?? null;
   if (rxp === null) return 'Step group';
-  const name = importNames.get(rxp.importId) ?? 'RXP guide';
+  // A guide's #name may carry colour tokens (RXP's #displayname does): shown plain.
+  const name = plainGuideText(importNames.get(rxp.importId) ?? 'RXP guide');
   return `${name}, step ${String(rxp.stepIndex + 1)}`;
 }
 

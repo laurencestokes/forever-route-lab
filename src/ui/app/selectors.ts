@@ -29,6 +29,9 @@ export const selectSelectionCount = (s: EditorState) => s.selection.stepIds.size
 export const selectEditingLocked = (s: EditorState) => s.editingLocked;
 export const selectHistory = (s: EditorState) => s.history;
 export const selectRightTab = (s: EditorState) => s.view.rightTab;
+export const selectClipboardCount = (s: EditorState) => s.clipboard.steps.length;
+export const selectRouteProfile = (s: EditorState) => s.project.routeProfile;
+export const selectAssumptions = (s: EditorState) => s.project.assumptions;
 export const selectTheme = (s: EditorState) => s.view.theme;
 
 /** routeQuestIds, cached on the step array: typing in a note keeps the array's content, not its identity. */

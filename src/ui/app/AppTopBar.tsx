@@ -1,20 +1,31 @@
-import { memo, useCallback, useMemo, type RefObject } from 'react';
+import { memo, useCallback, useMemo, useState, type RefObject } from 'react';
 import type { EditorState, EditorStore } from '../../app';
+import type { DatasetSource } from '../../app/dataset-source';
 import type { MapController } from '../../app/map-exports';
+import type { DownloadFile } from '../../app/persistence';
 import { useEditor } from '../../app/react';
+import { RXP_EXPORT_LABEL, RXP_IMPORT_LABEL } from '../../app/rxp-options';
 import type { DatasetView } from '../../domain/dataset';
-import type { UiMapId } from '../../domain/ids';
+import type { QuestId, UiMapId } from '../../domain/ids';
+import type { MapGeometry } from '../../geo/types';
 import { TopBar, type TopBarUnavailable } from '../shell/TopBar';
+import { ExportDialog, ImportDialog } from './ImportExport';
+import { LazyDialogFallback, loadRxpExportDialog, loadRxpImportDialog, useLazy } from './lazy';
 import type { Announce } from './LiveAnnouncer';
+import { ProjectBar } from './ProjectMenu';
+import { useProjectSession } from './ProjectMenuContext';
+import { RxpExportEntry, RxpImportEntry } from './RxpEntries';
 import { selectEditingLocked, selectRouteName, selectTheme } from './selectors';
 
 /**
- * Why the unfinished top-bar actions cannot be used yet. They render aria-disabled with this text
- * as their description and tooltip (docs/UI.md §9 rule 6), instead of opening a notice.
+ * Why top-bar actions cannot be used. They render aria-disabled with this text as their
+ * description and tooltip (docs/UI.md §9 rule 6), instead of opening a notice. Import and export
+ * need the project session (src/main.tsx provides it; a shell without one, as in component tests,
+ * has no project storage).
  */
 export const NOT_YET = {
-  import: 'Arrives in Milestone 4 (project files) and Milestone 5 (RXP guides)',
-  export: 'Arrives in Milestone 4 (project files) and Milestone 5 (RXP guides)',
+  import: 'No project storage is connected here, so nothing can be imported',
+  export: 'No project storage is connected here, so nothing can be exported',
   settings: 'Arrives with rules and simulation in Milestone 6',
 } as const;
 
@@ -38,7 +49,23 @@ export interface AppTopBarProps {
   /** Jump-to-zone fits the zone's frame on the map; null: there is no map, so it is unavailable. */
   readonly mapController?: MapController | null | undefined;
   readonly announce?: Announce | undefined;
+  /** Replaces the browser download of exported files (tests). */
+  readonly download?: ((file: DownloadFile) => void) | undefined;
+  /** Opens the Settings dialog (the editor's, src/ui/app/SettingsDialog.tsx); omitted: Settings stays unavailable. */
+  readonly onOpenSettings?: (() => void) | undefined;
+  /**
+   * The map geometry, for the RXP custom-guide import (`RXP035`) and export (points made in the
+   * app); null or omitted: without it (docs/UI.md §15).
+   */
+  readonly geometry?: MapGeometry | null | undefined;
+  /**
+   * The loaded dataset, so an RXP guide imported as a new project is checked against the data
+   * alone (without the open project's custom quests); null or omitted: the open project's view.
+   */
+  readonly data?: DatasetSource | null | undefined;
 }
+
+type FileDialog = 'import' | 'export' | 'rxp-import' | 'rxp-export';
 
 const selectZone = (s: EditorState) => s.view.map.zone;
 
@@ -57,7 +84,16 @@ export const AppTopBar = memo(function AppTopBar({
   onAbout,
   mapController = null,
   announce,
+  download,
+  onOpenSettings,
+  geometry = null,
+  data = null,
 }: AppTopBarProps) {
+  const session = useProjectSession();
+  const [fileDialog, setFileDialog] = useState<FileDialog | null>(null);
+  // The RXP dialogs load on first use (lazy.tsx, CR-19).
+  const rxpImport = useLazy(loadRxpImportDialog, fileDialog === 'rxp-import');
+  const rxpExport = useLazy(loadRxpExportDialog, fileDialog === 'rxp-export');
   const routeName = useEditor(store, selectRouteName);
   const theme = useEditor(store, selectTheme);
   const editingLocked = useEditor(store, selectEditingLocked);
@@ -87,13 +123,30 @@ export const AppTopBar = memo(function AppTopBar({
     },
     [mapController, announce, zoneLabel],
   );
+  const questName = useCallback((id: QuestId) => dataset.quest(id)?.name ?? null, [dataset]);
+  const openImport = useCallback(() => {
+    setFileDialog('import');
+  }, []);
+  const openExport = useCallback(() => {
+    setFileDialog('export');
+  }, []);
+  const closeFileDialog = useCallback(() => {
+    setFileDialog(null);
+  }, []);
+  // The RXP dialogs replace the Import or Export dialog they are opened from.
+  const openRxpImport = useCallback(() => {
+    setFileDialog('rxp-import');
+  }, []);
+  const openRxpExport = useCallback(() => {
+    setFileDialog('rxp-export');
+  }, []);
   const unavailable: TopBarUnavailable = {
     // Import replaces the project, which the store refuses while a lock is held.
-    import: editingLocked ? `${LOCKED_REASON}. ${NOT_YET.import}` : NOT_YET.import,
-    export: NOT_YET.export,
-    settings: NOT_YET.settings,
+    import: session === null ? (editingLocked ? `${LOCKED_REASON}. ${NOT_YET.import}` : NOT_YET.import) : editingLocked ? LOCKED_REASON : null,
+    export: session === null ? NOT_YET.export : null,
+    settings: onOpenSettings === undefined ? NOT_YET.settings : null,
   };
-  return (
+  const bar = (
     <TopBar
       projectName={projectName}
       routeName={routeName}
@@ -112,9 +165,9 @@ export const AppTopBar = memo(function AppTopBar({
         onJump,
         unavailableReason: mapController === null ? NO_MAP_FOR_ZONES : null,
       }}
-      onImport={noop}
-      onExport={noop}
-      onSettings={noop}
+      onImport={session === null ? noop : openImport}
+      onExport={session === null ? noop : openExport}
+      onSettings={onOpenSettings ?? noop}
       onAbout={onAbout}
       theme={theme}
       onThemeChange={(next) => {
@@ -122,5 +175,50 @@ export const AppTopBar = memo(function AppTopBar({
       }}
       unavailable={unavailable}
     />
+  );
+  if (session === null) return bar;
+  return (
+    <div className="frl-apptop">
+      {bar}
+      <ProjectBar session={session} announce={announce} questName={questName} download={download} />
+      <ImportDialog
+        open={fileDialog === 'import'}
+        onClose={closeFileDialog}
+        session={session}
+        announce={announce}
+        unavailableReason={editingLocked ? LOCKED_REASON : null}
+        rxp={<RxpImportEntry onOpen={openRxpImport} unavailableReason={editingLocked ? LOCKED_REASON : null} />}
+      />
+      <ExportDialog open={fileDialog === 'export'} onClose={closeFileDialog} session={session} announce={announce} download={download} rxp={<RxpExportEntry onOpen={openRxpExport} />} />
+      {rxpImport.kind === 'ready' ? (
+        <rxpImport.value.RxpImportDialog
+          open={fileDialog === 'rxp-import'}
+          onClose={closeFileDialog}
+          store={store}
+          session={session}
+          dataset={dataset}
+          data={data}
+          geometry={geometry}
+          announce={announce}
+          unavailableReason={editingLocked ? LOCKED_REASON : null}
+        />
+      ) : (
+        <LazyDialogFallback title={RXP_IMPORT_LABEL} state={rxpImport} onClose={closeFileDialog} />
+      )}
+      {rxpExport.kind === 'ready' ? (
+        <rxpExport.value.RxpExportDialog
+          open={fileDialog === 'rxp-export'}
+          onClose={closeFileDialog}
+          store={store}
+          dataset={dataset}
+          geometry={geometry}
+          projectName={projectName}
+          announce={announce}
+          download={download}
+        />
+      ) : (
+        <LazyDialogFallback title={RXP_EXPORT_LABEL} state={rxpExport} onClose={closeFileDialog} />
+      )}
+    </div>
   );
 });

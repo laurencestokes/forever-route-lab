@@ -8,14 +8,14 @@ import { createRouteActions, DEFAULT_GRIND_SECONDS, UNDO_HINT } from './route-ac
 const NOW = '2026-09-25T12:00:00.000Z';
 
 function setup() {
-  const { project } = createPlaceholderWorkspace({ nowIso: NOW });
+  const { project, dataset } = createPlaceholderWorkspace({ nowIso: NOW });
   const store = createEditorStore({ project, ids: sequentialIdSource(1000), clock: fixedClock(NOW) });
   const announce = vi.fn<(message: string) => void>();
   const actions = createRouteActions(store, announce);
   const ids = (...positions: number[]): ReadonlySet<StepId> =>
     new Set(positions.map((p) => store.getState().project.route.steps[p - 1]?.id).filter((id) => id !== undefined));
   const last = () => announce.mock.calls.at(-1)?.[0];
-  return { store, actions, announce, ids, last };
+  return { store, actions, announce, ids, last, dataset };
 }
 
 describe('createRouteActions', () => {
@@ -83,5 +83,50 @@ describe('createRouteActions', () => {
     expect(last()).toBe('Undone: Delete steps.');
     actions.redo();
     expect(last()).toBe('Redone: Delete steps.');
+  });
+
+  it('announces cut, copy, paste and join, and says nothing when they change nothing', () => {
+    const { store, actions, announce, ids, last } = setup();
+    expect(actions.cutSteps(ids(2, 3))).toBe(true);
+    expect(last()).toBe('2 steps cut. Paste with Ctrl+V; undo with Ctrl+Z.');
+    store.select({ kind: 'single', id: [...ids(1)][0] as StepId });
+    actions.pasteSteps();
+    expect(last()).toBe('2 steps pasted as steps 2 to 3.');
+    actions.copySteps(ids(5));
+    expect(last()).toBe('1 step copied. Paste with Ctrl+V.');
+    store.select({ kind: 'set', ids: [...ids(1, 4, 7)] });
+    actions.joinSections();
+    expect(last()).toBe('3 sections joined: now steps 1 to 3.');
+    const calls = announce.mock.calls.length;
+    store.select({ kind: 'set', ids: [...ids(1, 2)] });
+    actions.joinSections();
+    actions.copySteps(new Set());
+    expect(announce.mock.calls.length).toBe(calls);
+  });
+
+  it('adds a quest’s steps with where they are, and says which have no location', () => {
+    const { store, actions, dataset, last } = setup();
+    store.select({ kind: 'none' });
+    const quest = dataset.quests()[0];
+    if (quest === undefined) throw new Error('quest missing');
+    expect(actions.addQuest(dataset, quest.id, ['accept', 'turnin'])).toBe(true);
+    expect(last()).toBe(`${quest.name}: accept quest, turn in quest added as steps 41 to 42.`);
+    expect(actions.addQuest(dataset, 424242 as never, ['accept'])).toBe(true);
+    expect(last()).toBe('Quest 424242: accept quest added as step 43. 1 step has no location: the dataset has no usable spawn for it.');
+  });
+
+  it('announces location and duration edits', () => {
+    const { store, actions, last } = setup();
+    const first = store.getState().project.route.steps[0];
+    if (first === undefined) throw new Error('step missing');
+    actions.setDuration(first.id, 90);
+    expect(last()).toBe('Duration of step 1 set to 1 minute 30 seconds.');
+    actions.setDuration(first.id, null);
+    expect(last()).toBe('Duration override of step 1 cleared: the estimate applies.');
+    const location = store.getState().project.route.steps[1]?.location ?? null;
+    actions.setLocation(first.id, location);
+    expect(last()).toBe('Location of step 1 set.');
+    actions.setLocation(first.id, null);
+    expect(last()).toBe('Location of step 1 cleared.');
   });
 });

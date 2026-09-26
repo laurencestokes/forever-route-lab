@@ -24,11 +24,15 @@ import {
   insertStep,
   insertTravel,
   joinSections,
+  joinSelectedSections,
   moveSelected,
   paste,
   patchStep,
   renameRoute,
+  selectionRuns,
+  setDurationOverride,
   setLockedSelected,
+  setStepLocation,
   toggleLockSelected,
   updateStepNote,
 } from './commands';
@@ -318,5 +322,49 @@ describe('field edits', () => {
     expect(patchStep(sid('b'), {}).apply(p, ctx())).toBe(p);
     const custom = patchStep(sid('a'), { note: 'n' }, { label: 'Custom', coalesceKey: 'k' });
     expect([custom.label, custom.coalesceKey]).toEqual(['Custom', 'k']);
+  });
+});
+
+describe('joining the sections of a selection', () => {
+  it('splits a selection into its contiguous runs in route order', () => {
+    const steps = notesProject('abcdefg').route.steps;
+    expect(selectionRuns(steps, idSet('f', 'b', 'c', 'e', 'zz')).map((run) => run.map(String))).toEqual([['s-b', 's-c'], ['s-e', 's-f']]);
+    expect(selectionRuns(steps, new Set())).toEqual([]);
+  });
+
+  it('moves every later run to follow the first one, and needs two runs', () => {
+    const p = frozenProject(notesProject('abcdefg'));
+    expect(order(joinSelectedSections().apply(p, ctx({ selected: 'bcfg' })))).toBe('abcfgde');
+    expect(order(joinSelectedSections().apply(p, ctx({ selected: 'aceg' })))).toBe('acegbdf');
+    expect(order(joinSelectedSections(idSet('a', 'g')).apply(p, ctx()))).toBe('agbcdef');
+    expect(joinSelectedSections().apply(p, ctx({ selected: 'bcd' }))).toBe(p);
+    expect(joinSelectedSections().apply(p, ctx())).toBe(p);
+    expect(joinSelectedSections().label).toBe('Join sections');
+  });
+});
+
+describe('step field commands', () => {
+  const location = { source: zoneSourcedPoint(uiMapId(1411), 42.06, 68.33), label: null, radius: null };
+
+  it('sets and clears a location', () => {
+    const p = frozenProject(notesProject('ab'));
+    const placed = setStepLocation(sid('a'), location).apply(p, ctx());
+    expect(placed.route.steps[0]?.location).toBe(location);
+    expect(placed.route.steps[1]).toBe(p.route.steps[1]);
+    expect(setStepLocation(sid('a'), location).label).toBe('Set location');
+    expect(setStepLocation(sid('a'), null).apply(placed, ctx()).route.steps[0]?.location).toBeNull();
+    expect(setStepLocation(sid('a'), null).label).toBe('Clear location');
+    expect(setStepLocation(sid('b'), null).apply(p, ctx())).toBe(p);
+    expect(setStepLocation(sid('zz'), location).apply(p, ctx())).toBe(p);
+  });
+
+  it('sets a non-negative duration override in seconds and refuses anything else', () => {
+    const p = frozenProject(notesProject('a'));
+    const set = setDurationOverride(sid('a'), 90).apply(p, ctx());
+    expect(set.route.steps[0]?.durationOverride).toBe(90);
+    expect(setDurationOverride(sid('a'), 0).apply(p, ctx()).route.steps[0]?.durationOverride).toBe(0);
+    expect(setDurationOverride(sid('a'), null).apply(set, ctx()).route.steps[0]?.durationOverride).toBeNull();
+    for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) expect(setDurationOverride(sid('a'), bad).apply(p, ctx())).toBe(p);
+    expect(setDurationOverride(sid('a'), null).label).toBe('Clear duration');
   });
 });

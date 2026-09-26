@@ -207,10 +207,41 @@
   color: var(--frl-fg-disabled);
 }
 
+/* Read-only: the value stays readable at full contrast; the raised background and the dashed edge say it cannot be changed. */
+.frl-input input:read-only:not(:disabled) {
+  border-style: dashed;
+  background: var(--frl-surface-raised);
+}
+
 .frl-select select:focus-visible,
 .frl-input input:focus-visible {
   outline-offset: 0;
   border-color: var(--frl-focus);
+}
+
+.frl-input input[aria-invalid='true'] {
+  border-color: var(--frl-severity-error);
+}
+
+/* Checkbox --------------------------------------------------------------------------------- */
+.frl-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+  min-height: var(--frl-control-height-sm);
+  color: var(--frl-fg);
+  font-size: var(--frl-text);
+}
+
+.frl-checkbox input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--frl-accent);
+}
+
+.frl-checkbox input:disabled + label {
+  color: var(--frl-fg-disabled);
 }
 
 /* Toolbar ---------------------------------------------------------------------------------- */

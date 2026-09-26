@@ -1,5 +1,6 @@
 import {
   type IdSource,
+  type Location,
   type ProjectV1,
   type Route,
   type RouteGroup,
@@ -286,6 +287,42 @@ export function joinSections(first: ReadonlySet<StepId>, second: ReadonlySet<Ste
   };
 }
 
+/**
+ * The contiguous runs of `ids` in route order (ids not in the route are ignored): the sections a
+ * multi-selection is made of.
+ */
+export function selectionRuns(steps: readonly RouteStep[], ids: ReadonlySet<StepId>): StepId[][] {
+  const runs: StepId[][] = [];
+  let current: StepId[] | null = null;
+  for (const step of steps) {
+    if (!ids.has(step.id)) {
+      current = null;
+      continue;
+    }
+    if (current === null) {
+      current = [];
+      runs.push(current);
+    }
+    current.push(step.id);
+  }
+  return runs;
+}
+
+/**
+ * Joins the sections of a selection (ARCHITECTURE §8.1): every later run of selected steps moves,
+ * in route order, to directly follow the first run. With fewer than two runs nothing changes.
+ */
+export function joinSelectedSections(ids?: ReadonlySet<StepId>): Command {
+  return {
+    label: 'Join sections',
+    apply(project, ctx) {
+      const [first, ...rest] = selectionRuns(project.route.steps, targetIds(ids, ctx));
+      if (first === undefined || rest.length === 0) return project;
+      return joinSections(new Set(first), new Set(rest.flat())).apply(project, ctx);
+    },
+  };
+}
+
 // Field edits ----------------------------------------------------------------------------------
 
 export function renameRoute(name: string): Command {
@@ -321,4 +358,20 @@ export function patchStep(id: StepId, patch: StepPatch, opts: { readonly label?:
 /** Sets a step's note; an empty string clears it (null). Typing into one note coalesces. */
 export function updateStepNote(id: StepId, note: string | null): Command {
   return patchStep(id, { note: note === '' ? null : note }, { label: 'Edit note', coalesceKey: `step-note:${id}` });
+}
+
+/** Sets or clears (null) a step's location. */
+export function setStepLocation(id: StepId, location: Location | null): Command {
+  return patchStep(id, { location }, { label: location === null ? 'Clear location' : 'Set location' });
+}
+
+/**
+ * Sets a step's duration override in seconds, or clears it (null: the estimate applies). Only a
+ * finite, non-negative number is an override (the schema's rule); anything else changes nothing.
+ */
+export function setDurationOverride(id: StepId, seconds: number | null): Command {
+  if (seconds !== null && !(Number.isFinite(seconds) && seconds >= 0)) {
+    return { label: 'Set duration', apply: (project) => project };
+  }
+  return patchStep(id, { durationOverride: seconds }, { label: seconds === null ? 'Clear duration' : 'Set duration' });
 }

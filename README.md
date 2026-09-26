@@ -41,7 +41,38 @@ assumptions", never "optimal".
 
 ## Highlights
 
-**Available now (Milestones 1 and 2: Foundation, Forever data pipeline; Milestone 3: the map, before its reviews)**
+**Available now (Milestones 1 and 2: Foundation, Forever data pipeline; Milestone 3: the map, before its reviews; Milestone 4: project storage; Milestone 5: RestedXP custom guides, before its reviews)**
+
+- **Your projects are kept in the browser**: every change is saved automatically to IndexedDB
+  (after a short pause, in an idle moment; hiding or leaving the page starts the save at once),
+  and the project you had open reopens after a restart. While changes cannot be kept, the browser
+  asks before the page closes. The top bar says what is kept, in words: "Saved 12:03", "Unsaved
+  changes", "Saving…", or "Not saved" with the reason (storage full, changed in another tab, open
+  in another tab, storage unavailable). In a private window where the browser refuses storage,
+  the app keeps working in memory and says that nothing outlives the tab.
+- **Several projects**: new, open, rename, duplicate and delete from the Projects menu. A deleted
+  project is kept in Recently deleted for 30 days, then removed, or deleted permanently at once to
+  free space when storage is full; the original of a stored project that a newer version of the
+  app migrates is kept the same way. Two tabs never silently overwrite each other: a project
+  already open in another tab says so and offers to open it anyway or open a copy, a save in one
+  tab reaches the others at once, and overwriting the other tab's version asks first, naming it.
+- **Native project files**: export the open project as a `.frl.json` file (the same project always
+  gives the same bytes) and import one as a new project. A file with problems is refused with
+  every problem listed by where it is in the file; nothing is repaired or guessed.
+- **RestedXP custom guides in and out**: "Import RXP custom guide" takes pasted guide text or a
+  custom-guide addon's `.lua` file (read, never run; a file with several guides lets you choose),
+  checks it line by line and lists every diagnostic with its line, column, severity and code;
+  choosing one shows the line. The guide opens as a new project or is added to the end of the
+  route in one undoable step. Quests the data does not have (new Forever content) become
+  placeholder custom quests with their real ids, or stay unknown, as you choose; nothing about
+  them is made up. RestedXP's protected, account-bound import strings are refused and never
+  decoded. "Export RXP custom guide" previews, copies or downloads the route as guide text or a
+  `.lua` file, says whether it is byte-identical to the imported guide (it is, when the guide was
+  not edited) or rewritten in canonical form, and lists what has no RXP form. The RXP code loads
+  on demand, in its own chunk.
+- **Data drift**: a project saved with an older dataset revision opens with a "Data changed"
+  report of the quests it uses that are gone or whose objectives or prerequisites changed (for an
+  imported file, what cannot be compared is marked unknown).
 
 - **A map of the route**: Leaflet behind the project's own adapter, one surface per world map
   (Kalimdor, Eastern Kingdoms and the others the geometry has) with a switcher, pan and zoom.
@@ -74,8 +105,9 @@ assumptions", never "optimal".
   instead of a guessed position.
   Faction and class variants of quests, NPCs and dungeon entrances follow the character.
 - **A sample route built from the data**: "Sample: Durotar start (auto-generated)" for a level-1
-  Horde Orc Warrior, generated at load from the Durotar map's low-level quests (repeatable and
-  holiday quests left out) and labelled "Sample route (auto-generated, not a recommended route)".
+  Horde Orc Warrior, generated on a first visit (when no project is stored) from the Durotar map's
+  low-level quests (repeatable and holiday quests left out) and labelled "Sample route
+  (auto-generated, not a recommended route)".
 - **Quests and details from real data**: the Available tab lists the quests open to the character
   (a page of 100 at a time with an honest count, and search), and Details shows a quest's givers
   and receivers at zone and percent, its objectives and where they are done, its quest text, and
@@ -103,8 +135,8 @@ assumptions", never "optimal".
 | Milestone | Scope |
 |---|---|
 | 3 | Map: the independent rendering, coordinate and accessibility reviews of what is above; then 3b, terrain navigation (D-028) |
-| 4 | Route editor and storage: IndexedDB autosave, native JSON import and export |
-| 5 | RestedXP custom guide import and export with lossless round trips |
+| 4 | Route editor: editing polish and the 10,000-step map fix (storage, autosave and project files are above) |
+| 5 | RestedXP custom guides: the independent reviews of what is above, and the overlap check against RXPGuides |
 | 6 | Ruleset, simulation (XP, level, time) and validation |
 | 7 | Optimiser for a locked-anchor section, in a web worker |
 | 8 | Proposal review: diff, metrics, accept, reject or apply selected changes |
@@ -238,10 +270,17 @@ coordinates on four zones: it holds no Forever-specific content yet. Every recor
 carries "Forever status: unknown", and Forever XP values are assumptions until someone enters
 observed ones.
 
-**Maps.** No Blizzard map art is committed or deployed. The planned map draws zone frames, labels
-and data points procedurally from committed geometry. If you extract map files from your own
-client, they stay in the gitignored `local-maps/` folder, which only the development server
-serves and which the build audit keeps out of `dist/` ([docs/MAPS.md](docs/MAPS.md)).
+**Maps.** The painted world-map art in `public/maps/art/` is Blizzard Entertainment's
+(© Blizzard Entertainment, Inc.), extracted from the World of Warcraft: Forever client. It is
+committed and deployed with its own notice by the owner's decision D-033, which draws no legal
+conclusion. This project's licence grants no rights over it. The site stays non-commercial, and
+the art is removed promptly if Blizzard asks
+([public/maps/art/NOTICE.md](public/maps/art/NOTICE.md)). The terrain outlines and relief in
+`public/maps/terrain/` (D-032) and the navigation data in `public/nav/` (D-028) are derived by
+this project from the same client, and each ships with its own notice. Map files you extract from
+your own client for local use stay in the gitignored `local-maps/` folder, which only the
+development server serves and which the build audit keeps out of `dist/`
+([docs/MAPS.md](docs/MAPS.md)).
 
 **RestedXP guides.** Import and export follow the RestedXP custom-guide format from an independent
 behavioural specification ([docs/RXP.md](docs/RXP.md)). No RXPGuides code, guide text or data

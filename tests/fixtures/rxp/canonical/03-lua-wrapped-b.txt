@@ -1,0 +1,8 @@
+#forever
+#name 6-8 Fixture Three (Alt)
+#version 1
+#group Forever Route Lab Fixtures
+
+step
+    *A star note that mentions a closing bracket pair ]] which would end a level-0 string\nand has an escaped line break
+    .goto 1411,52.50,43.50,20

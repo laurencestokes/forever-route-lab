@@ -22,7 +22,12 @@ export type IconName =
   | 'layers'
   | 'chevron-down'
   | 'map-pin'
-  | 'add';
+  | 'add'
+  | 'cut'
+  | 'copy'
+  | 'paste'
+  | 'join'
+  | 'check';
 
 const ICONS: Readonly<Record<IconName, ReactElement>> = {
   search: (
@@ -120,6 +125,34 @@ const ICONS: Readonly<Record<IconName, ReactElement>> = {
     </>
   ),
   add: <path d="M8 3v10M3 8h10" />,
+  cut: (
+    <>
+      <circle cx="4.75" cy="11.5" r="2" />
+      <circle cx="11.25" cy="11.5" r="2" />
+      <path d="M6.2 10.1 12 2.5M9.8 10.1 4 2.5" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="2.75" y="2.75" width="7.5" height="7.5" rx="1" />
+      <path d="M12.75 5.75v6.5a1 1 0 0 1-1 1h-6.5" />
+    </>
+  ),
+  paste: (
+    <>
+      <path d="M5.5 3.25H4a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-8.5a1 1 0 0 0-1-1h-1.5" />
+      <rect x="5.5" y="2" width="5" height="2.5" rx="0.75" />
+      <path d="M5.75 8.25h4.5M5.75 10.75h3" />
+    </>
+  ),
+  join: (
+    <>
+      <path d="M3 3.5h4.5M3 12.5h4.5" />
+      <path d="M7.5 3.5c2 0 2 4.5 4 4.5M7.5 12.5c2 0 2-4.5 4-4.5" />
+      <path d="M11.5 8H13.5M11.75 6.25 13.5 8l-1.75 1.75" />
+    </>
+  ),
+  check: <path d="M3.25 8.5 6.5 11.75l6.25-7" />,
 };
 
 export interface IconProps {

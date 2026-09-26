@@ -1,0 +1,189 @@
+/*
+ * The editors of the Details tab, the custom quest editor and the Settings dialog (docs/UI.md §14).
+ * Tokens only.
+ */
+
+.frl-app-fields__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--frl-space-2);
+}
+
+.frl-app-fields__row > .frl-field {
+  flex: 1 1 120px;
+}
+
+.frl-app-actions--top {
+  padding-top: 0;
+  padding-bottom: var(--frl-space-2);
+}
+
+/* A location: what it is, the typed zone point, pick and clear. */
+.frl-app-location {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  min-width: 0;
+  margin: 0;
+  padding: var(--frl-space-2);
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius);
+}
+
+.frl-app-location__legend {
+  padding: 0 var(--frl-space-1);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-app-location__value {
+  color: var(--frl-fg);
+  overflow-wrap: anywhere;
+}
+
+.frl-app-location__typed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--frl-space-1);
+}
+
+.frl-app-location__typed > .frl-field:first-child {
+  flex: 1 1 140px;
+}
+
+.frl-app-location__number {
+  flex: 0 1 72px;
+}
+
+/* X and Y stay together when the row wraps (a narrow side panel). */
+.frl-app-location__pair {
+  display: flex;
+  flex: 0 1 148px;
+  align-items: flex-end;
+  gap: var(--frl-space-1);
+  min-width: 0;
+}
+
+.frl-app-location .frl-app-actions {
+  padding-top: 0;
+}
+
+/* The duration override: minutes in, whole seconds kept. */
+.frl-app-duration {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+}
+
+.frl-app-duration__row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--frl-space-1);
+}
+
+.frl-app-duration__row > .frl-field {
+  flex: 1 1 auto;
+}
+
+/* A field's problem, and a form's list of them (the words carry it; the edge is supplementary). */
+.frl-app-problem {
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-app-problems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  margin-bottom: var(--frl-space-2);
+  padding: var(--frl-space-2);
+  border: 1px solid var(--frl-border-strong);
+  border-left: 3px solid var(--frl-severity-error);
+  border-radius: var(--frl-radius);
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-app-problems:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 1px;
+}
+
+.frl-app-problems__title,
+.frl-app-info {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--frl-space-1);
+}
+
+.frl-app-problems__title .frl-severity-icon,
+.frl-app-info .frl-severity-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.frl-app-info {
+  padding: var(--frl-space-1) 0 var(--frl-space-2);
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-app-info code,
+.frl-app-problems code {
+  font-family: var(--frl-font-mono);
+}
+
+.frl-app-objective {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-1);
+}
+
+.frl-app-form {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Settings (the modal's own rule sets 680px; this one is more specific, whatever the load order). */
+.frl-modal.frl-settings-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.frl-settings {
+  gap: var(--frl-space-3);
+}
+
+.frl-settings__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--frl-space-2) var(--frl-space-3) var(--frl-space-3);
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius);
+}
+
+.frl-settings__group > legend {
+  padding: 0 var(--frl-space-1);
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-settings__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--frl-space-2) var(--frl-space-4);
+}
+
+@media (forced-colors: active) {
+  .frl-app-problems {
+    border-left-color: CanvasText;
+  }
+}

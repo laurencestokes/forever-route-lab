@@ -26,6 +26,11 @@
     "data:check": "pnpm data:fetch && pnpm data:extract --check && pnpm data:validate",
     "maps:placeholder": "tsx tools/maps/import.ts --placeholder",
     "maps:validate": "tsx tools/maps/validate.ts",
+    "rxp:overlap": "tsx tools/build/rxp-overlap.ts",
+    "nav:extract": "tsx tools/terrain/extract.ts",
+    "nav:check": "tsx tools/terrain/extract.ts --check",
+    "nav:validate": "tsx tools/terrain/validate.ts",
+    "nav:review-draft": "tsx tools/terrain/review-draft.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm data:validate && pnpm build"
   },
   "dependencies": {
@@ -51,6 +56,8 @@
     "globals": "^17.12.0",
     "happy-dom": "^20.14.5",
     "luaparse": "0.3.1",
+    "recast-navigation": "0.43.1",
+    "sharp": "0.35.4",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.1",

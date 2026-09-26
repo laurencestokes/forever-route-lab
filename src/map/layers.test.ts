@@ -574,7 +574,7 @@ describe('buildRouteLine', () => {
     });
     // No hearth line to s12, and s12's leg is unknown.
     expect(lines(ek).some((line) => line.style === 'hearth')).toBe(false);
-    expect(byId(buildRouteSteps(ctx, ROUTE, view(0), { selected: [], hovered: null, active: null }), 'step:s12')).toMatchObject({ badges: ['leg-unknown'] });
+    expect(byId(buildRouteSteps(ctx, ROUTE, view(0)), 'step:s12')).toMatchObject({ badges: ['leg-unknown'] });
     // A hearth with nothing placed before it leaves from nowhere known: no glyph.
     const first: RouteInput = { steps: [step('h', 0, UNKNOWN, 'route', 'hearth'), step('a', 1, point(1, 1))] };
     expect(ids(buildRouteLine(ctx, first, view(1)))).toEqual([]);
@@ -659,7 +659,7 @@ describe('routePieces', () => {
 
 describe('buildRouteSteps', () => {
   it('marks every placed step on this surface and flags unknown legs and off-frame points', () => {
-    const content = buildRouteSteps(ctx, ROUTE, view(0), { selected: [], hovered: null, active: null });
+    const content = buildRouteSteps(ctx, ROUTE, view(0));
     expect(ids(content)).toEqual(['step:s6', 'step:s7', 'step:s9', 'step:s10', 'step:s12']);
     expect(byId(content, 'step:s9')).toMatchObject({ badges: ['leg-unknown'] });
     expect(byId(content, 'step:s10')).toMatchObject({ badges: ['off-frame'] });
@@ -691,7 +691,7 @@ describe('buildRouteSteps', () => {
         step('e', 4, point(5, 5)),
       ],
     };
-    const content = buildRouteSteps(ctx, gornekStack, view(1), { selected: [], hovered: null, active: null });
+    const content = buildRouteSteps(ctx, gornekStack, view(1));
     // The stack takes its last item's place (later steps on top) and its first item's id.
     expect(ids(content)).toEqual(['step:b', 'step:d', 'step:a']);
     expect(byId(content, 'step:a')).toMatchObject({
@@ -706,24 +706,43 @@ describe('buildRouteSteps', () => {
       badges: ['off-frame'],
     });
     expect(content.stats.drawn).toBe(3);
-    // A focused member makes the whole stack focused and strong, on top.
-    const focused = buildRouteSteps(ctx, gornekStack, view(1), { selected: [stepId('c')], hovered: null, active: null });
-    expect(ids(focused)).toEqual(['step:b', 'step:d', 'step:a']);
-    expect(byId(focused, 'step:a')).toMatchObject({ emphasis: 'strong' });
+    // Focused members are drawn by the selection layer: a halo and a strong marker per stack.
     const halos = buildSelection(ctx, gornekStack, view(1), { selected: [stepId('a'), stepId('e')], hovered: null, active: null });
-    expect(ids(halos)).toEqual(['halo:a']);
+    expect(ids(halos)).toEqual(['halo:a', 'focus:a']);
     expect(byId(halos, 'halo:a')).toMatchObject({ count: 2, labels: ['a', 'e'] });
+    expect(byId(halos, 'focus:a')).toMatchObject({ kind: 'step', emphasis: 'strong', count: 2, labels: ['a', 'e'], badges: [] });
   });
 
-  it('draws selected, hovered and active steps strong and on top', () => {
-    const content = buildRouteSteps(ctx, ROUTE, view(0), { selected: [stepId('s7')], hovered: stepId('s10'), active: null });
-    expect(ids(content)).toEqual(['step:s6', 'step:s9', 'step:s12', 'step:s7', 'step:s10']);
-    expect(markers(content).map((m) => m.emphasis)).toEqual(['normal', 'normal', 'normal', 'strong', 'strong']);
+  it('does not see the focus: every marker is normal, in route order (M3 review PERF-2)', () => {
+    const content = buildRouteSteps(ctx, ROUTE, view(0));
+    expect(ids(content)).toEqual(['step:s6', 'step:s7', 'step:s9', 'step:s10', 'step:s12']);
+    expect(markers(content).every((m) => m.emphasis === 'normal')).toBe(true);
+    // A selection change leaves the memoised layer's content as it was.
+    const layers = createMapLayers({ geometry });
+    const before = layers.routeSteps(ROUTE, view(0));
+    layers.selection(ROUTE, view(0), { selected: [stepId('s7')], hovered: stepId('s10'), active: stepId('s7') });
+    expect(layers.routeSteps(ROUTE, view(0))).toBe(before);
+  });
+
+  it('builds the same markers from its caches as the stateless builder, stacks included', () => {
+    const layers = createMapLayers({ geometry });
+    const stacked: RouteInput = {
+      steps: [step('a', 0, point(5, 5)), step('b', 1, point(0, 0)), step('c', 2, point(5, 5)), step('d', 3, UNKNOWN), step('e', 4, point(0, 0)), step('f', 5, point(7, 7))],
+    };
+    const first = layers.routeSteps(stacked, view(1));
+    expect(first.items).toEqual(buildRouteSteps(ctx, stacked, view(1)).items);
+    // Moving `f` above `a` rebuilds in route order; unchanged stacks keep their objects.
+    const moved: RouteInput = { steps: [stacked.steps[5]!, ...stacked.steps.slice(0, 5)] };
+    const after = layers.routeSteps(moved, view(1));
+    expect(after.items).toEqual(buildRouteSteps(ctx, moved, view(1)).items);
+    expect(ids(after)).toEqual(['step:f', 'step:a', 'step:b']);
+    expect(byId(after, 'step:a')).toBe(byId(first, 'step:a'));
+    expect(byId(after, 'step:b')).toMatchObject({ count: 2, badges: ['leg-unknown'] });
   });
 
   it('keeps marker ids unique when a step id repeats', () => {
     const repeated: RouteInput = { steps: [step('x', 0, point(0, 0)), step('x', 1, point(1, 0))] };
-    expect(ids(buildRouteSteps(ctx, repeated, view(1), { selected: [], hovered: null, active: null }))).toEqual(['step:x', 'step:x~2']);
+    expect(ids(buildRouteSteps(ctx, repeated, view(1)))).toEqual(['step:x', 'step:x~2']);
   });
 });
 
@@ -734,9 +753,10 @@ describe('buildSelection', () => {
     active: active === null ? null : stepId(active),
   });
 
-  it('draws halos and the leg into the active step', () => {
+  it('draws the leg into the active step, then a halo and a strong marker for each focused step', () => {
     const content = buildSelection(ctx, ROUTE, view(0), focus('s10', ['s7']));
-    expect(ids(content)).toEqual(['leg:s10', 'halo:s7', 'halo:s10']);
+    expect(ids(content)).toEqual(['leg:s10', 'halo:s7', 'halo:s10', 'focus:s7', 'focus:s10']);
+    expect(byId(content, 'focus:s10')).toMatchObject({ kind: 'step', style: 'accent', emphasis: 'strong', badges: ['off-frame'], ref: { kind: 'step', stepId: 's10' } });
     expect(byId(content, 'leg:s10')).toMatchObject({
       type: 'polyline',
       style: 'highlight',
@@ -752,11 +772,23 @@ describe('buildSelection', () => {
 
   it('skips steps without a place but draws no leg across an unknown step or a world-map change', () => {
     const skip: RouteInput = { steps: [step('a', 0, point(0, 0)), step('b', 1, NONE), step('c', 2, point(5, 0))] };
-    expect(ids(buildSelection(ctx, skip, view(1), focus('c')))).toEqual(['leg:c', 'halo:c']);
+    expect(ids(buildSelection(ctx, skip, view(1), focus('c')))).toEqual(['leg:c', 'halo:c', 'focus:c']);
     expect(byId(buildSelection(ctx, skip, view(1), focus('c')), 'leg:c')).toMatchObject({ label: 'Selected leg', ref: { fromStepId: 'a' } });
-    expect(ids(buildSelection(ctx, ROUTE, view(0), focus('s12')))).toEqual(['halo:s12']);
-    expect(ids(buildSelection(ctx, ROUTE, view(0), focus('s9')))).toEqual(['halo:s9']);
-    expect(ids(buildSelection(ctx, ROUTE, view(0), focus('s6')))).toEqual(['halo:s6']);
+    expect(ids(buildSelection(ctx, ROUTE, view(0), focus('s12')))).toEqual(['halo:s12', 'focus:s12']);
+    expect(byId(buildSelection(ctx, ROUTE, view(0), focus('s12')), 'focus:s12')).toMatchObject({ badges: ['leg-unknown'] });
+    expect(ids(buildSelection(ctx, ROUTE, view(0), focus('s9')))).toEqual(['halo:s9', 'focus:s9']);
+    expect(ids(buildSelection(ctx, ROUTE, view(0), focus('s6')))).toEqual(['halo:s6', 'focus:s6']);
+  });
+
+  it('keeps the active step first when the cap bites', () => {
+    const many: RouteInput = { steps: Array.from({ length: 80 }, (_, i) => step(`m${String(i)}`, i, point(i * 10, 0))) };
+    const tight = layerContextOf(geometry, createLod({ budgets: { selection: 4 } }));
+    const all = many.steps.map((s) => String(s.stepId));
+    const content = buildSelection(tight, many, view(1, -2, { x: 0, y: 0 }), focus('m79', all));
+    expect(ids(content)).toContain('focus:m79');
+    expect(ids(content)).toContain('halo:m79');
+    expect(ids(content)).toContain('leg:m79');
+    expect(content.stats.notDrawn).toBe(80 * 2 + 1 - 4);
   });
 
   it('counts selected steps that cannot be drawn here', () => {
@@ -811,12 +843,11 @@ describe('createMapLayers (memoised per layer)', () => {
 
   it('keeps every step marker when a step is inserted above them: no step numbers in descriptors (M3 review PERF-2)', () => {
     const layers = createMapLayers({ geometry });
-    const noFocus = { selected: [], hovered: null, active: null };
-    const route: RouteInput = { steps: Array.from({ length: 600 }, (_, i) => step(`q${String(i)}`, i, point(i, i % 7))) };
-    const markersBefore = layers.routeSteps(route, view(1), noFocus);
+        const route: RouteInput = { steps: Array.from({ length: 600 }, (_, i) => step(`q${String(i)}`, i, point(i, i % 7))) };
+    const markersBefore = layers.routeSteps(route, view(1));
     const lineBefore = layers.routeLine(route, view(1));
     const inserted: RouteInput = { steps: [step('top', 0, NONE), ...route.steps.slice(0, 3), step('new', 4, point(2.5, 9)), ...route.steps.slice(3)] };
-    const markersAfter = layers.routeSteps(inserted, view(1), noFocus);
+    const markersAfter = layers.routeSteps(inserted, view(1));
     const kept = markersAfter.items.filter((item) => markersBefore.items.includes(item));
     // Only the new step's marker is new; every other marker is the same object.
     expect(markersAfter.items.length).toBe(markersBefore.items.length + 1);
@@ -866,10 +897,9 @@ describe('createMapLayers (memoised per layer)', () => {
 
   it('touches only what a route edit changed', () => {
     const layers = createMapLayers({ geometry });
-    const noFocus = { selected: [], hovered: null, active: null };
-    const before = layers.routeSteps(ROUTE, view(0), noFocus);
+        const before = layers.routeSteps(ROUTE, view(0));
     const moved = ROUTE.steps.map((s) => (s.stepId === 's7' ? { ...s, placement: point(61, 50, 0) } : s));
-    const after = layers.routeSteps({ steps: moved }, view(0), noFocus);
+    const after = layers.routeSteps({ steps: moved }, view(0));
     expect(after.items).not.toBe(before.items);
     const changed = after.items.filter((item, i) => item !== before.items[i]).map((item) => item.id);
     expect(changed).toEqual(['step:s7']);

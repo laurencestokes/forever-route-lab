@@ -1,0 +1,1261 @@
+{
+  "schema": 1,
+  "kind": "nav-manifest",
+  "notice": "NOTICE.md",
+  "navRevision": "aefbc78d797bb187cef9223b77514946245e768833b75813ac0599151e53f120",
+  "format": {
+    "block": "FRN3 v3 (attributes mode 3)",
+    "mapFile": "FRNM v1"
+  },
+  "pin": {
+    "product": "wow_classic_beta",
+    "version": "1.60.1.70009",
+    "buildKey": "05215079e3905ef5922ae0b03ffefb73"
+  },
+  "client": {
+    "rootCKey": "051a7757e36b884b1f8f9fd368b662e8",
+    "encodingCKey": "d8e6b4d7ee686bb4d62a0d3b8c8e0726",
+    "tables": [
+      {
+        "table": "Map",
+        "fileDataId": 1349477,
+        "ckey": "c7f3134e35c4f8c8bfd736e0a4ed3046"
+      },
+      {
+        "table": "AreaTable",
+        "fileDataId": 1353545,
+        "ckey": "65ca0ed314f02647991a9cf56cf63513"
+      },
+      {
+        "table": "WMOAreaTable",
+        "fileDataId": 1355528,
+        "ckey": "4a5a04e91c64f5cfcb51dfd50758348f"
+      },
+      {
+        "table": "LiquidType",
+        "fileDataId": 1371380,
+        "ckey": "ddd1be6948c742b457f88bad605d652a"
+      }
+    ]
+  },
+  "tool": {
+    "toolTreeHash": "bed17e28fd78d6f959c65ebecc6314099443dad24a61df0484b6c661e82af2d4",
+    "toolFiles": 63,
+    "nodeMajor": 22,
+    "recastNavigation": {
+      "version": "0.43.1",
+      "wasmSha256": "008696e1a67df34aa3c830417a520034a2a358c838fc631084681f7f8f1f7a38",
+      "wasmCompatJsSha256": "df034a241a7c2db1d37dfca51135a0a35bb5fea253b99f75804342fee9f54cbb"
+    }
+  },
+  "settings": {
+    "name": "c05r1+n12+e5+s60",
+    "blockAdts": 4,
+    "voxelsPerAdt": 1024,
+    "tileVoxels": 256,
+    "cellHeightYd": 0.25,
+    "mapOriginZ": 0,
+    "radiusVoxels": 1,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 60,
+    "maxSimplificationErrorYd": 5,
+    "maxEdgeLengthYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "vertsPerPoly": 12,
+    "m2MinFootprintYd": 4,
+    "swimDepthYd": 1.6,
+    "clipMarginYd": 8
+  },
+  "derived": {
+    "cellYd": 0.5208333333333334,
+    "tileYd": 133.33333333333334,
+    "perAdt": 4,
+    "walkableHeightVoxels": 8,
+    "walkableClimbVoxels": 6,
+    "borderVoxels": 4,
+    "minRegionAreaVoxels": 256,
+    "mergeRegionAreaVoxels": 1600,
+    "maxErrorVoxels": 9.6,
+    "maxEdgeLenVoxels": 128
+  },
+  "stage2": {
+    "settings": {
+      "snap": {
+        "radiusYd": 6,
+        "ruleBMinPolygons": 20
+      },
+      "prune": {
+        "minComponentPolygons": 1000
+      },
+      "water": {
+        "openWaterYd": 800
+      },
+      "census": {
+        "growthTolerance": 0.1,
+        "zoneMinSpawns": 50,
+        "zoneMinShare": 0.9,
+        "floorMinPolygons": 20
+      },
+      "seams": {
+        "maxBlockOverInnerPp": 0.2
+      },
+      "longSwimWarningYd": 200
+    },
+    "dataset": {
+      "dataRevision": "65c377bccf19f41759780b0d3052e1f972e317135d17ae763edd13b768866ab6",
+      "spawnsSha256": "00069fe75ca89494f120de17a96eba47d82b3fb0d6bfdbad84d6b37368858e3b",
+      "geometrySha256": "3b6d072d248044f507e90626db3192bbef8967b1edba290ec80e764c0618c330"
+    },
+    "censusReviewedSha256": "01fcc8373df720982d1b1093d04a395ecb193c1ae84179d4d34ea04b4b6a4609",
+    "connectorsSha256": "31d899bd92d177ab2e865a5883ef43a1dd659f04e20f3b6599516713417f5c91",
+    "passagesSha256": "14b17352b4146633438517134fc33cbb6a9ab978a7e96683318c502ae5354bd8"
+  },
+  "connectors": [
+    "thunder-bluff-elevator-west",
+    "rutheran-to-darnassus-portal"
+  ],
+  "passages": [
+    "undercity-west-tunnel",
+    "ironforge-mountain-top"
+  ],
+  "connectorsFile": {
+    "path": "connectors.json",
+    "bytes": 127,
+    "sha256": "019e57fc841a8b247a8bb066ce9c28abd6b44d66649384010b3c370279a9c645"
+  },
+  "maps": [
+    {
+      "mapId": 0,
+      "name": "Eastern Kingdoms",
+      "wdt": {
+        "fileDataId": 775971,
+        "ckey": "e4fb77fc12097f3b41adf2aac2d945e7"
+      },
+      "polygons": 322141,
+      "components": 1098,
+      "mainPolygons": 310382,
+      "mapFile": {
+        "path": "0/map.bin",
+        "bytes": 13657,
+        "sha256": "ddab7fd0c637f384712beb4390cfb69fd1283e1087769bbd4a6adf5e8d58cb1d"
+      },
+      "blocks": [
+        {
+          "path": "0/20_36.bin",
+          "row0": 20,
+          "col0": 36,
+          "polygons": 1056,
+          "bytes": 11894,
+          "sha256": "1362a34792ee71917d36a51309539f33c67fc36f3e9c19ecabf9849837d82e4f",
+          "inputHash": "8f140a102592979585f8e11d89cd143476bf0974433051a882654a3a76be4852"
+        },
+        {
+          "path": "0/20_40.bin",
+          "row0": 20,
+          "col0": 40,
+          "polygons": 492,
+          "bytes": 5680,
+          "sha256": "b3a0b2bd54ff812e5153932be9bf7d4e0db6b44976f9831fe19e265962bbe063",
+          "inputHash": "15dd5522aa4beadb5bea74d6b35cf6912876de165757c80d3353d4c1a83e1a78"
+        },
+        {
+          "path": "0/24_24.bin",
+          "row0": 24,
+          "col0": 24,
+          "polygons": 926,
+          "bytes": 10389,
+          "sha256": "e26bd8db36558b2d5154893384a3dd71c799ca6417f542799947dd69353a63f7",
+          "inputHash": "da2213ce2dd204ac8fe32b542a4e859af583d7f068accea0ffa1b972749cd5a3"
+        },
+        {
+          "path": "0/24_28.bin",
+          "row0": 24,
+          "col0": 28,
+          "polygons": 6469,
+          "bytes": 68518,
+          "sha256": "7649a10e96516f9b0edc80eadde010e5b7103d2e1dd20820ecfa66bb6d703aac",
+          "inputHash": "64727753bcc4c552a72ee4cdcfb88976b64fcc46dd4acfd63100305982a9135a"
+        },
+        {
+          "path": "0/24_32.bin",
+          "row0": 24,
+          "col0": 32,
+          "polygons": 8729,
+          "bytes": 96042,
+          "sha256": "4b4bbb9603a91bbe7349cfc5829306944df8ca9cd9b6ee0f35074acd48f75392",
+          "inputHash": "d444b7d98982f65ab389f9cb7f58e865c3a90ccdbd98f42301ec9e78a49338ab"
+        },
+        {
+          "path": "0/24_36.bin",
+          "row0": 24,
+          "col0": 36,
+          "polygons": 11197,
+          "bytes": 125325,
+          "sha256": "ec4bf80f62c474f4225019285babbf34540d43cd949759dd90cdc72e6f46397b",
+          "inputHash": "c72d713cab244b40af7a2f5ae812ce956620161a5681c89c6a93b18199e50578"
+        },
+        {
+          "path": "0/24_40.bin",
+          "row0": 24,
+          "col0": 40,
+          "polygons": 8846,
+          "bytes": 97334,
+          "sha256": "f762d19d3fc9352f165895c7333080baca83b663d99fe1a72ceffb84f578dbd1",
+          "inputHash": "53ad61263a0c32c5448895a63f6600ce92f9db754e731f3fed07decd63cc0c57"
+        },
+        {
+          "path": "0/24_44.bin",
+          "row0": 24,
+          "col0": 44,
+          "polygons": 58,
+          "bytes": 749,
+          "sha256": "1f6e89ff0a1c49c560d59c86c1611c24715955cd89cac302176d010c2bc420c5",
+          "inputHash": "fc9da79066c7290fdc761ba9e2a6ca78523a1e24cbb7fbdeb84aeba150734c4c"
+        },
+        {
+          "path": "0/28_24.bin",
+          "row0": 28,
+          "col0": 24,
+          "polygons": 1913,
+          "bytes": 21561,
+          "sha256": "e8235c2cb3af1374b05796f09b871a3064b9d6ae3ecda2d64d4db18b6cc79365",
+          "inputHash": "66c6b381c4355defc4888e5a353762714e916745de12b1a9dc7d1bf9a4b50c56"
+        },
+        {
+          "path": "0/28_28.bin",
+          "row0": 28,
+          "col0": 28,
+          "polygons": 16902,
+          "bytes": 186681,
+          "sha256": "c91524081ce1e963f0abf44bf1e434d55e8e8d663e4a5494ed9f917ad19fca96",
+          "inputHash": "01f785281f105f85c23143abf2e54cf5709d93b8841df3dc39ff082dafeec2d5"
+        },
+        {
+          "path": "0/28_32.bin",
+          "row0": 28,
+          "col0": 32,
+          "polygons": 16970,
+          "bytes": 182958,
+          "sha256": "8c07ad5f38c3b58cb70ca32eb616bfe3ab035f915ead1ec6e8f8b3de535eef3e",
+          "inputHash": "e7494ded928142dfa706ce7100c39df8ad130316482710fbfc2305430540af4d"
+        },
+        {
+          "path": "0/28_36.bin",
+          "row0": 28,
+          "col0": 36,
+          "polygons": 13737,
+          "bytes": 149580,
+          "sha256": "410e57565271bccc47786e0eca5a8e51482c86f55773c6d9128ef0a617b555bd",
+          "inputHash": "1a734110fd19a243e87f129016b63d2b158552a2512def4c93b8fda4703972f3"
+        },
+        {
+          "path": "0/28_40.bin",
+          "row0": 28,
+          "col0": 40,
+          "polygons": 8526,
+          "bytes": 93155,
+          "sha256": "6559d992796986aaa5c3d64502572c372433b5e3c380c91eb5f920dcae6764d6",
+          "inputHash": "329bda65db61f9b214dc2a2d08f6f6e06fee547a4b72cd12ba6f77161e82a77b"
+        },
+        {
+          "path": "0/28_44.bin",
+          "row0": 28,
+          "col0": 44,
+          "polygons": 1,
+          "bytes": 42,
+          "sha256": "acab96c032947be39b2ecb423992f17c4623f34f75bc3e2ae85e9bb953b9fb01",
+          "inputHash": "7260f82eabb6daa09eacf60cbc23ff59a48e7414034cccbb494275fb83eb4f72"
+        },
+        {
+          "path": "0/32_24.bin",
+          "row0": 32,
+          "col0": 24,
+          "polygons": 2672,
+          "bytes": 30338,
+          "sha256": "16ed686ba1e87fe2ad5ed56b7406b13301b7c99cfd16e9c5b87f9b429b588e6b",
+          "inputHash": "f7a248e4becd4ca7ac51c51a79171b980b2b6b632e15dc287ac13cae3df5c7d4"
+        },
+        {
+          "path": "0/32_28.bin",
+          "row0": 32,
+          "col0": 28,
+          "polygons": 12021,
+          "bytes": 132143,
+          "sha256": "03ce33fe859b184e1d573ff5f61e7045671a392f6a6e26dca9cec8f4c41a9628",
+          "inputHash": "02d0dce082309637a4e17836e7b82f0da392e450e5e3b2a8054cd044e4dfd43b"
+        },
+        {
+          "path": "0/32_32.bin",
+          "row0": 32,
+          "col0": 32,
+          "polygons": 9386,
+          "bytes": 100888,
+          "sha256": "77406692c06d2b227e4ac26d134a9c17480730539ea84900e3466c5b76646ac9",
+          "inputHash": "bfb97e9efab7cbb74a0e2fbd3bdca6a839f16ae4ca76d09922fd864f8d20b291"
+        },
+        {
+          "path": "0/32_36.bin",
+          "row0": 32,
+          "col0": 36,
+          "polygons": 10849,
+          "bytes": 119125,
+          "sha256": "5bb338cf7d6a8d76a950f6a173e2ea55b58028802f8cd648484648c559d61e2f",
+          "inputHash": "04e9a3bf2155a97b1d0c135245f5a3616fefb25eaca37450d66f759c86e22c9a"
+        },
+        {
+          "path": "0/32_40.bin",
+          "row0": 32,
+          "col0": 40,
+          "polygons": 1280,
+          "bytes": 14148,
+          "sha256": "4bd5e5367eea8816a4b1525ab3a2d0b817656c713389ea4eac850e315b473ae8",
+          "inputHash": "caf87302ee5664571b9205fbab3411d571f641bbe7d59a18d74758204f6ecaae"
+        },
+        {
+          "path": "0/36_24.bin",
+          "row0": 36,
+          "col0": 24,
+          "polygons": 579,
+          "bytes": 6387,
+          "sha256": "be543f18bf0f003f853db32fbbe6502317d019c4ccb2caf57d632924bb0c464e",
+          "inputHash": "012db4b254e735eb49b85fa0940ad4e9097d1ae73afda11a4f7836769b77f6c2"
+        },
+        {
+          "path": "0/36_28.bin",
+          "row0": 36,
+          "col0": 28,
+          "polygons": 2283,
+          "bytes": 26239,
+          "sha256": "e78fca623eec02c44193ef53dd3049632f1b1baac52d4cdea2b78951b5f0a4ac",
+          "inputHash": "b11d9543ce594e5bc3cf7ff0e8d74ba532322878d7b7cc90fa7e5b8a51946552"
+        },
+        {
+          "path": "0/36_32.bin",
+          "row0": 36,
+          "col0": 32,
+          "polygons": 6789,
+          "bytes": 73051,
+          "sha256": "20be1679db1c762556347b23187efda147627e57efbd33ca3a90781eae9d4e9a",
+          "inputHash": "2c0d718113b5b7f9717bedc9a4100a2ac2ee05f9e2ecf740bd38f7c5bf2964d1"
+        },
+        {
+          "path": "0/36_36.bin",
+          "row0": 36,
+          "col0": 36,
+          "polygons": 9748,
+          "bytes": 106068,
+          "sha256": "8f6b7b5293fa463d97729dc6151c205d96f91baf4accf20e2a0ad6136b9f5a78",
+          "inputHash": "053d6663d2b68c9275837f1359868079fbcce7e9b4d834aa3135ebf1517406d2"
+        },
+        {
+          "path": "0/36_40.bin",
+          "row0": 36,
+          "col0": 40,
+          "polygons": 1005,
+          "bytes": 11658,
+          "sha256": "01c85dc99b70404a335610f0af082951bc41cb63f1357726a7d51a59848c48af",
+          "inputHash": "9a879beae1caf1b11ac444c89bc62f7cd971857bab0d9e2cfef1354e53491b96"
+        },
+        {
+          "path": "0/40_24.bin",
+          "row0": 40,
+          "col0": 24,
+          "polygons": 3,
+          "bytes": 97,
+          "sha256": "2a8ba4d5c04970566e6f256baaf260893e2fb1b995eeb1385c759953bdb77b74",
+          "inputHash": "86abe51999b87d28cd521fee10cf748bc63a0b501e44e8d029956565599cd07a"
+        },
+        {
+          "path": "0/40_28.bin",
+          "row0": 40,
+          "col0": 28,
+          "polygons": 7698,
+          "bytes": 86375,
+          "sha256": "098b1f9e7eaaa60c00c2ebb1798cdd5bd1b6ad6b31e879de53c21e3b0cc63663",
+          "inputHash": "14a58bb6909a539916d5c091c065d7ab4831a1e4216e036bcb3bb8e3fe56fba9"
+        },
+        {
+          "path": "0/40_32.bin",
+          "row0": 40,
+          "col0": 32,
+          "polygons": 13393,
+          "bytes": 150260,
+          "sha256": "50de1f513e1ffd62c1e15bda8609040923474d8a7f95176a7f2f8777de499836",
+          "inputHash": "58acb843db8226c68a8a5d8d3ff4b84f0636884218c6aa8808e92618fb78e136"
+        },
+        {
+          "path": "0/40_36.bin",
+          "row0": 40,
+          "col0": 36,
+          "polygons": 11101,
+          "bytes": 124827,
+          "sha256": "ce72fd3021402d5e736774765dbfccb7e5e5f20cb45bccc996a8f588ee7f2f34",
+          "inputHash": "e8542cdda898efedd20fbe09cb103ebf8693e7a25c4854aaaaa72fcba63794f9"
+        },
+        {
+          "path": "0/40_40.bin",
+          "row0": 40,
+          "col0": 40,
+          "polygons": 2655,
+          "bytes": 29967,
+          "sha256": "7df5cf4f4590d5a7f67ce4165e8f8370ccdf1914421a115b2a0baac32e44f654",
+          "inputHash": "cf1bf9bf2836117e7f479c758a4c572bbf1dcf97ea104added636bb3868ed642"
+        },
+        {
+          "path": "0/44_28.bin",
+          "row0": 44,
+          "col0": 28,
+          "polygons": 6509,
+          "bytes": 73464,
+          "sha256": "91e332ded49ba0f6b1d4cd3a728d91ff25902746db8da31909b9bae584b789a8",
+          "inputHash": "000333685b33c6e3936ec21ff4317461763f5860083181d53a2e5aa32b7f380d"
+        },
+        {
+          "path": "0/44_32.bin",
+          "row0": 44,
+          "col0": 32,
+          "polygons": 9807,
+          "bytes": 109842,
+          "sha256": "c0a7e7fce31d21442e82c00fda02a7a9bf741b01cd9342587a2124bea52c9bf3",
+          "inputHash": "b1845bf57676800dff4d20edfcfa97ebba0e4ce7af26031975d2ba2115b19b23"
+        },
+        {
+          "path": "0/44_36.bin",
+          "row0": 44,
+          "col0": 36,
+          "polygons": 13234,
+          "bytes": 144022,
+          "sha256": "e39f4ab8ae78caa9656a98cf3e6f41041d6df22d1a98411203b193b7cfbfa896",
+          "inputHash": "4ff3e3e8eb7c684c4f6a324e9ebe70ea11e7fec2407d9ec0d6c778055f6e5e65"
+        },
+        {
+          "path": "0/44_40.bin",
+          "row0": 44,
+          "col0": 40,
+          "polygons": 9374,
+          "bytes": 98847,
+          "sha256": "148eb021ff099be7bf25a6d9d5be199805e94722d7515a668c67b77b7f688440",
+          "inputHash": "1587222ba6612deb6473dd6a5a02fe13ac553d1603167711349c9b641daa89b4"
+        },
+        {
+          "path": "0/44_44.bin",
+          "row0": 44,
+          "col0": 44,
+          "polygons": 13,
+          "bytes": 339,
+          "sha256": "b95bc02feac3e8f73e48ad2884ebc4f3049edf52a4981d5fdde9814229e27930",
+          "inputHash": "800c7089e2bd7879a57346420f2e0cf594a18121c204ea6112bfb733f65a3e61"
+        },
+        {
+          "path": "0/48_24.bin",
+          "row0": 48,
+          "col0": 24,
+          "polygons": 145,
+          "bytes": 1853,
+          "sha256": "7d8f9fd5877bbe94723e332904d0b8466a349a8a69e96c83df04ec55dffb8d6f",
+          "inputHash": "b9fb3a7fbd165fed660d9b77f206ded73219bf8d1c9f2f48aa16f99b11f576e5"
+        },
+        {
+          "path": "0/48_28.bin",
+          "row0": 48,
+          "col0": 28,
+          "polygons": 10616,
+          "bytes": 113701,
+          "sha256": "80e233fda17b1269c1d5082fe3c8059cb451b6b3abfbcb9cfeee246a058a04db",
+          "inputHash": "69e1592dfc4d75041bd48c19a5835ba4626cc5488d062cef3a1f2f3efc4b6e49"
+        },
+        {
+          "path": "0/48_32.bin",
+          "row0": 48,
+          "col0": 32,
+          "polygons": 15886,
+          "bytes": 173074,
+          "sha256": "85c67cdf5159e4bbead08b544afc108211a1217eeb91873c7c5b9a5b6fc72d86",
+          "inputHash": "8e86cbee8bf362b4f4a53761acbe6a634a6a179d063c7413bae7472d3bb4ab6a"
+        },
+        {
+          "path": "0/48_36.bin",
+          "row0": 48,
+          "col0": 36,
+          "polygons": 16307,
+          "bytes": 179084,
+          "sha256": "2bed97932cbbff6b96bbd059945f813e3a15e43003a8a5c4ad0e19851fd1121b",
+          "inputHash": "7f17c13d6a61d96e80b34963589e449c293090ddd21c5d66af1bf04ec0d233c0"
+        },
+        {
+          "path": "0/48_40.bin",
+          "row0": 48,
+          "col0": 40,
+          "polygons": 4995,
+          "bytes": 52234,
+          "sha256": "cc02196d471065fb5ce6980d7acd317c197ebbb9ec24a2a4b1678708326a7037",
+          "inputHash": "a4d7e8c699d22057de8eabf3960b26e9537a91cb5e08aa2de5faee5b2c79dfc4"
+        },
+        {
+          "path": "0/52_24.bin",
+          "row0": 52,
+          "col0": 24,
+          "polygons": 114,
+          "bytes": 1493,
+          "sha256": "d4923459ae8a2da0022d4a50a0195a332b689fb8a43f28e411c1276268f3505e",
+          "inputHash": "b2de18123e9f5f4fef3534d15598c48d5ea1ecb3c6a8a94c7fd9965104e322bb"
+        },
+        {
+          "path": "0/52_28.bin",
+          "row0": 52,
+          "col0": 28,
+          "polygons": 8836,
+          "bytes": 96051,
+          "sha256": "3d196f452a7532a41c436ea516772b02d5e5ff35f25cf5222cde3aa117fd9884",
+          "inputHash": "a094b9c3a46215af60bd8e7f26de75d9828fac2cc45bc54f7806d98f3b9033c3"
+        },
+        {
+          "path": "0/52_32.bin",
+          "row0": 52,
+          "col0": 32,
+          "polygons": 14821,
+          "bytes": 165203,
+          "sha256": "6026e61e34eef8ee560de0beb201816ab0e9307f2bbfc5d233aa2aa66bcee40f",
+          "inputHash": "2360cfdd29a88434861c0039fec4fc28d782f600d5b564f66db268344a000097"
+        },
+        {
+          "path": "0/52_36.bin",
+          "row0": 52,
+          "col0": 36,
+          "polygons": 10823,
+          "bytes": 119377,
+          "sha256": "3514c8e5e01b89c7ec869b177afb50d398036276f4e8627fac05c985455fd5a3",
+          "inputHash": "000a9080db1885a60a675b48b10f6d99a5a083e0e9ec351a3131fde1bd0bb0aa"
+        },
+        {
+          "path": "0/52_40.bin",
+          "row0": 52,
+          "col0": 40,
+          "polygons": 161,
+          "bytes": 1849,
+          "sha256": "92a40c6f260dc48cf4d6350630be228db4b1588ebe6fb61adc849a20c274e2d2",
+          "inputHash": "c8ec6523b2f5860f37709020c9f4e5d76c6e3ce11c7ef37ebf377a276c4ce248"
+        },
+        {
+          "path": "0/56_24.bin",
+          "row0": 56,
+          "col0": 24,
+          "polygons": 2079,
+          "bytes": 23111,
+          "sha256": "f88d2d97244e71face852dab59fc5ff754d08e8c4b6bf939a2be21608cecd7c6",
+          "inputHash": "e76a1dce855dc66aecc9e220d8f36b3a492813a7904997b24793ab456113191a"
+        },
+        {
+          "path": "0/56_28.bin",
+          "row0": 56,
+          "col0": 28,
+          "polygons": 5367,
+          "bytes": 58343,
+          "sha256": "7782ec2f55367e8cff54558b641197cd3257332a3ea76e689b9adebaca73b6b4",
+          "inputHash": "f69fb7db37a069ee41fd6dfe2360967d95a901760c28eb416453a9889b13ed19"
+        },
+        {
+          "path": "0/56_32.bin",
+          "row0": 56,
+          "col0": 32,
+          "polygons": 5199,
+          "bytes": 57680,
+          "sha256": "4e9ef4f3f5bbdbe03acbef795e658df3984f9810d8e97da0cfc42815ca892a20",
+          "inputHash": "1bd79228a45d6f31400493aa3b161d7ac4fd6b0b7650138aef5b73ae67b0bc21"
+        },
+        {
+          "path": "0/56_36.bin",
+          "row0": 56,
+          "col0": 36,
+          "polygons": 327,
+          "bytes": 3755,
+          "sha256": "b7af0ac09ac203073bc6f2c75e56353cbff89e171b098fb8cc77f4fe3950c61d",
+          "inputHash": "94c45134981d371b6990c7cb5641955932aba0863e35128b3bfd3171641a7c44"
+        },
+        {
+          "path": "0/60_28.bin",
+          "row0": 60,
+          "col0": 28,
+          "polygons": 220,
+          "bytes": 2573,
+          "sha256": "5dc2cafbed4fe8fa428ec4b232a07e49b8159e5e1f7eed056c00c9bb2f9c76bb",
+          "inputHash": "a25ead9accb115ca2787de6e0a8dc14cbe25a78b3171abd1159104a1f57261c1"
+        },
+        {
+          "path": "0/60_32.bin",
+          "row0": 60,
+          "col0": 32,
+          "polygons": 24,
+          "bytes": 504,
+          "sha256": "e6a85f660c99e0c8ffa9cfbeaf7c82df37575eb91ac9bb532d0756c7b67391ec",
+          "inputHash": "21379698f3c76d1e5f52671fb6150644ce93e3d3fd311638a571ad3a4cf8a34c"
+        }
+      ],
+      "connectorsApplied": [],
+      "passagesTagged": [
+        {
+          "id": "undercity-west-tunnel",
+          "polygons": 49
+        },
+        {
+          "id": "ironforge-mountain-top",
+          "polygons": 597
+        }
+      ],
+      "hintRollup": {},
+      "census": {
+        "spawns": 41198,
+        "main": 40977,
+        "offMain": 196,
+        "none": 25,
+        "ambiguous": 403,
+        "overOffMainFloor": 483,
+        "offMainComponents": 51,
+        "overOffMainFloorComponents": 47,
+        "sha256": "27458d66379d4607ea12b7aa05d9e07e71f2ceb93d546c9b7dfa8075d4958724"
+      },
+      "seams": {
+        "stage1": {
+          "innerPct": 2.1947,
+          "blockPct": 2.227,
+          "deltaPp": 0.0323
+        },
+        "final": {
+          "innerPct": 2.7862,
+          "blockPct": 2.5622,
+          "deltaPp": -0.224
+        }
+      },
+      "waterSplits": [
+        {
+          "fullPolygons": 318891,
+          "parts": [
+            {
+              "polygons": 310382,
+              "zone": 139,
+              "centroid": [
+                -4471,
+                -1658
+              ]
+            },
+            {
+              "polygons": 2129,
+              "zone": 408,
+              "centroid": [
+                -13334,
+                2817
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "mapId": 1,
+      "name": "Kalimdor",
+      "wdt": {
+        "fileDataId": 782779,
+        "ckey": "e5e3a148f224c2ee62067b1c07a12790"
+      },
+      "polygons": 367568,
+      "components": 1138,
+      "mainPolygons": 332097,
+      "mapFile": {
+        "path": "1/map.bin",
+        "bytes": 16663,
+        "sha256": "ddb74961fc74a3c6432e597ca15dba7109e6c7b2c2cc49f914f751bf40a7b92c"
+      },
+      "blocks": [
+        {
+          "path": "1/8_24.bin",
+          "row0": 8,
+          "col0": 24,
+          "polygons": 596,
+          "bytes": 6639,
+          "sha256": "45321a53b3ae22655802d6645187660348062cecdafb8d4a4da2e806ab4ab7bb",
+          "inputHash": "e2deff0aa638f0f918e7b8876d9ba64486d0ed77f20b19ec48ca841963f2d853"
+        },
+        {
+          "path": "1/8_28.bin",
+          "row0": 8,
+          "col0": 28,
+          "polygons": 3797,
+          "bytes": 38667,
+          "sha256": "0c230a9381c8807e6c76e708333683d3de9babe6acfc4b4ced7d6ba5fcec52d1",
+          "inputHash": "1c1a10bc2806334c304196adf775f9377b2e73d2cc490d389a4f627359e995f0"
+        },
+        {
+          "path": "1/8_32.bin",
+          "row0": 8,
+          "col0": 32,
+          "polygons": 304,
+          "bytes": 3130,
+          "sha256": "40c1a3d956fdecbe955187c6517c52554bcf70a18716828d5c28b028c03bc1a4",
+          "inputHash": "53d42313d18c4b4aac6e9dca668c0955012c89adc0ab7c6cba497608d78c1fa5"
+        },
+        {
+          "path": "1/12_24.bin",
+          "row0": 12,
+          "col0": 24,
+          "polygons": 4327,
+          "bytes": 46902,
+          "sha256": "394402b55557490cc8728be2f13467f182de6846f4af68267495835dd2cf1e8b",
+          "inputHash": "1519a9bfbfef95cddd225d882c063e6ce1225dbe3f7b25cd8869f82fffd10f38"
+        },
+        {
+          "path": "1/12_28.bin",
+          "row0": 12,
+          "col0": 28,
+          "polygons": 11295,
+          "bytes": 120653,
+          "sha256": "6873b3ce1000a414907ff5435faf3b402ccd4f4dd42afd4dc6d295b921070a26",
+          "inputHash": "205e690bb4933d019125833ce4c103f329058bf4bac9efd21b33d1bf727c2ede"
+        },
+        {
+          "path": "1/12_32.bin",
+          "row0": 12,
+          "col0": 32,
+          "polygons": 1818,
+          "bytes": 18191,
+          "sha256": "7465f48e37be6752aa49b3925093b614c00d26ff4e9c18d6d30bcc7a90121b66",
+          "inputHash": "72d98efa3c669a4d283cde900e9574d4f4b86243e57202b61523a6f90638212b"
+        },
+        {
+          "path": "1/12_36.bin",
+          "row0": 12,
+          "col0": 36,
+          "polygons": 1028,
+          "bytes": 11603,
+          "sha256": "fe62f426ae96e67dd2ffc65968f287b4a30d608c0bf9e5a18c4107c4b88d10ba",
+          "inputHash": "3777dc4ebb63e2229e43ea7d6cb0d4fca14cb32372568b582245023a40ac94dc"
+        },
+        {
+          "path": "1/12_40.bin",
+          "row0": 12,
+          "col0": 40,
+          "polygons": 503,
+          "bytes": 5418,
+          "sha256": "fd6635e6a89a782fdca941c9d8c9b7de0d80c3c23c05a547ab8ba16a9cc5bc59",
+          "inputHash": "6a16863f2f4685d5c2a22f08cf2e11ae441829659ce0a77ad4cadb1223f41685"
+        },
+        {
+          "path": "1/16_24.bin",
+          "row0": 16,
+          "col0": 24,
+          "polygons": 26,
+          "bytes": 414,
+          "sha256": "f6d62559fa57a0ed8a18d6c538a22cb6a6c1f6f86570e01755fbf7e5bbef901f",
+          "inputHash": "25089481bf710210320fc6d719b605f3e1facf9d0656bf5a0082658b62691e0c"
+        },
+        {
+          "path": "1/16_28.bin",
+          "row0": 16,
+          "col0": 28,
+          "polygons": 2234,
+          "bytes": 25166,
+          "sha256": "286a2fe92529233694c24b6d545821f52d70a9c4e212ed4fc1f793530159f6d6",
+          "inputHash": "41e2d0b32fc722bfd34422048f1aedc8bc93649efac9b3faef93162b67d19a6d"
+        },
+        {
+          "path": "1/16_32.bin",
+          "row0": 16,
+          "col0": 32,
+          "polygons": 8631,
+          "bytes": 95150,
+          "sha256": "b219725f3f32e763aaa899f41112a9331dc348e50e6e2fbcfe340c0c469be630",
+          "inputHash": "cdfbc2001903ce20730bdfc45a2157c724182b36cf4f510f6611e978e1d10df2"
+        },
+        {
+          "path": "1/16_36.bin",
+          "row0": 16,
+          "col0": 36,
+          "polygons": 10779,
+          "bytes": 120216,
+          "sha256": "b2ad6e8418b75fd0b3226ca74b8bd50e4e19097a0e4550a068bb432b8a8f9e35",
+          "inputHash": "3dde53979494af5a275c5251b2127144db1b733a843aff4266f936a8a267a63c"
+        },
+        {
+          "path": "1/16_40.bin",
+          "row0": 16,
+          "col0": 40,
+          "polygons": 5880,
+          "bytes": 63686,
+          "sha256": "bec88de5f06a08f1226bbabf35c8b9b1b74de7c0eef81e4f4a10817a585e85dd",
+          "inputHash": "885d8ac1c94441031dc8f3d2ed3a39db65fc732fb3bf495dfa532a3de220b63c"
+        },
+        {
+          "path": "1/20_28.bin",
+          "row0": 20,
+          "col0": 28,
+          "polygons": 5626,
+          "bytes": 61286,
+          "sha256": "6a2004a36a55b977d84704b55934b9f2f2fdc33cd638daf680ccb2ae537d5807",
+          "inputHash": "4a54965e10ae37186a4ccedabab57638005759689f119651074e14d792595551"
+        },
+        {
+          "path": "1/20_32.bin",
+          "row0": 20,
+          "col0": 32,
+          "polygons": 11270,
+          "bytes": 123545,
+          "sha256": "f7c8d2e7094e73fe01601929ae3978aa03a0fdc4fa0e8d13bceb08cbbd1a2d83",
+          "inputHash": "3448b37b4d2c085af973b24e9d173089fab59dcd963b8853c04136bdf4bc015c"
+        },
+        {
+          "path": "1/20_36.bin",
+          "row0": 20,
+          "col0": 36,
+          "polygons": 9618,
+          "bytes": 106252,
+          "sha256": "a4a350f3f7954baec40fd2ba9964e2bf9bce004796ab3fb96ca1e3a7ca732717",
+          "inputHash": "7e81437e7e7dc13b17c44aafce97e5aefbd418e9ef60e0b8cea4b42f2ed17f27"
+        },
+        {
+          "path": "1/20_40.bin",
+          "row0": 20,
+          "col0": 40,
+          "polygons": 8415,
+          "bytes": 91920,
+          "sha256": "22781bc6df8ac0086c779f5539a92a62a544c9a8de9bffafaadd03a59f38bb54",
+          "inputHash": "64f1c9c3e555e8724e6ea1a6f53db6f005f045be00d99ba629bdca0bbbb1af5b"
+        },
+        {
+          "path": "1/20_44.bin",
+          "row0": 20,
+          "col0": 44,
+          "polygons": 3107,
+          "bytes": 32771,
+          "sha256": "acf74adf02847842748494207297fa16b94a7095a526ff5f5ba99d0f66900a9e",
+          "inputHash": "770d726a24c93416e35dee4a202a620fe59d05a57d78ab00f85bc4c4dee50e24"
+        },
+        {
+          "path": "1/24_24.bin",
+          "row0": 24,
+          "col0": 24,
+          "polygons": 2215,
+          "bytes": 24832,
+          "sha256": "e8512aa83ea82895ddbff2ab7622f047dd28eb6aa698686dc53ba13d8b285b24",
+          "inputHash": "70b90c279e7a96a65544b4029a7c5b2242ae48d91a84bc2bc0b7532a97d85522"
+        },
+        {
+          "path": "1/24_28.bin",
+          "row0": 24,
+          "col0": 28,
+          "polygons": 8378,
+          "bytes": 92242,
+          "sha256": "fc7980c0deeb5c9a2568b3bd4bf47df77d331b936ed50a3332b3357ebeef074e",
+          "inputHash": "40b3c074bba94a638ae6cddb4973519af324e121c96823cb778e61b7b28131b6"
+        },
+        {
+          "path": "1/24_32.bin",
+          "row0": 24,
+          "col0": 32,
+          "polygons": 13878,
+          "bytes": 149546,
+          "sha256": "60108eb33947d21bd6f71cbb58adb6497d988aadcfe833f952efd0cef26445b9",
+          "inputHash": "ede5982df2100e8e068ef443abed6266d4e5691b4f0974a129e32b597c12fe4a"
+        },
+        {
+          "path": "1/24_36.bin",
+          "row0": 24,
+          "col0": 36,
+          "polygons": 10665,
+          "bytes": 115870,
+          "sha256": "69b77e4e88dac92f4a034ac2b0d14c2cb6c2c609c8969c935dabb2a0f421e140",
+          "inputHash": "f57917fd951ca786a853cafeb0e223a60c10e42d51bc5c629436875cb0e7f5ce"
+        },
+        {
+          "path": "1/24_40.bin",
+          "row0": 24,
+          "col0": 40,
+          "polygons": 13466,
+          "bytes": 145774,
+          "sha256": "576379658389b2fb0f4c25d1547ae5a740ea59cbf1c72737cbc240815d30e81e",
+          "inputHash": "2c3667fbaad3937fec4da24cbcd397e7d2431d90907aef924feb31ade927948c"
+        },
+        {
+          "path": "1/24_44.bin",
+          "row0": 24,
+          "col0": 44,
+          "polygons": 3861,
+          "bytes": 42353,
+          "sha256": "a9a871479a85a7617369aa5cfe52c545f78088ed321aa0089874e639b4031f41",
+          "inputHash": "2201c23acfe666d2d7f76b3c243a47ce2788e76f78e2e33f090a13894db65dd6"
+        },
+        {
+          "path": "1/28_24.bin",
+          "row0": 28,
+          "col0": 24,
+          "polygons": 1697,
+          "bytes": 19363,
+          "sha256": "3720c7e46cfa0fe864cd91151f0f68d61bb68d897202f96718cb0b84ad44525c",
+          "inputHash": "a903493b6e3b5274726253881616d5a25d3abfeff7285059464f94b963819ac4"
+        },
+        {
+          "path": "1/28_28.bin",
+          "row0": 28,
+          "col0": 28,
+          "polygons": 11939,
+          "bytes": 132481,
+          "sha256": "d839807833cf85f97e6aacbaa85c18f07aaaa4da669dcf775155c10399c143a9",
+          "inputHash": "09cc16ef54c7a41b98aa6b39e0101bb49abf1ae36fc4282029c3d73d3d8114bd"
+        },
+        {
+          "path": "1/28_32.bin",
+          "row0": 28,
+          "col0": 32,
+          "polygons": 12110,
+          "bytes": 132401,
+          "sha256": "553815d4b4eb519c0f265dadac95e9e41a90774d526bfa6d7c2154192452a430",
+          "inputHash": "c1950e78c2fa2778b5e80107d02c7286664baa0d7894d03fee26898b64df2947"
+        },
+        {
+          "path": "1/28_36.bin",
+          "row0": 28,
+          "col0": 36,
+          "polygons": 11925,
+          "bytes": 130555,
+          "sha256": "be69ee632a20c6469cfa7d3cc2daa9ac56f917df419fa19bbea895bdb3e80774",
+          "inputHash": "6baf0ec269b1731f2423b74bc56398113cfc83cc74f19273fc1ffc1295405fb9"
+        },
+        {
+          "path": "1/28_40.bin",
+          "row0": 28,
+          "col0": 40,
+          "polygons": 5816,
+          "bytes": 66724,
+          "sha256": "0643a366a89421c4406bd723ad6414a6bcf5b10c102059960fb5a469fad5a5f8",
+          "inputHash": "a467e788f2c4e7ae76d4e12acdf93c532877645d390c67a448888e0676d80dac"
+        },
+        {
+          "path": "1/28_44.bin",
+          "row0": 28,
+          "col0": 44,
+          "polygons": 280,
+          "bytes": 3124,
+          "sha256": "6b385dc44deb423f984cbd57560a5a715e38ebaebe77573518c2f17840a80ef9",
+          "inputHash": "88608ebd16373cb6111470ede795b2d06e92d2802e8a9d527e2327c6fd91e2d9"
+        },
+        {
+          "path": "1/32_24.bin",
+          "row0": 32,
+          "col0": 24,
+          "polygons": 4673,
+          "bytes": 52270,
+          "sha256": "8449f7d70e81a1285fe2807d39d3f280b1630e6e5e09300d513b05881d05c8da",
+          "inputHash": "c812fa532c71da5554b23eb7dea6131051396648b7a56e2cbade6074c09ed341"
+        },
+        {
+          "path": "1/32_28.bin",
+          "row0": 32,
+          "col0": 28,
+          "polygons": 10112,
+          "bytes": 109841,
+          "sha256": "bcc6c887b12aa3de8b0a6f4d914fe4657fd14ab88852e632011be1422b3d2eee",
+          "inputHash": "e2d72881e9d34bd13c9c08e4edf04eb2bd97e143182d8e090170af474e65ac9c"
+        },
+        {
+          "path": "1/32_32.bin",
+          "row0": 32,
+          "col0": 32,
+          "polygons": 8734,
+          "bytes": 97661,
+          "sha256": "22c1a11e14e342ed6eb703b7244c3c7aa80e9e7ae4b5b7c40ae5e14c70393f97",
+          "inputHash": "95cee393560f5100cb6e8d28311cc99aaff75813dee732f98b5b83021761ece4"
+        },
+        {
+          "path": "1/32_36.bin",
+          "row0": 32,
+          "col0": 36,
+          "polygons": 10501,
+          "bytes": 112049,
+          "sha256": "10f22a9ff19d4656c243f9cf94c75d5591760b65582d454c01f19c8657d64a41",
+          "inputHash": "7919b76a8658ad80f14bf07ba6f6a06394c2af2a132928a294164c2b67021851"
+        },
+        {
+          "path": "1/32_40.bin",
+          "row0": 32,
+          "col0": 40,
+          "polygons": 4958,
+          "bytes": 53977,
+          "sha256": "b20baf9431488a8872ec93192bb1e14a199976a63f8f2bc1720b1759d724370b",
+          "inputHash": "2c1ce3c6be78ca72804d8c52ec5695a65271f9a221f9c6463cb617551669eb0b"
+        },
+        {
+          "path": "1/36_24.bin",
+          "row0": 36,
+          "col0": 24,
+          "polygons": 5524,
+          "bytes": 60508,
+          "sha256": "cdf256e51330c41e4b31f94dedbc321907f876ba9578e6b402820094b3d07cbf",
+          "inputHash": "a91095eb5bbd4aa912a1471c43fdeedd75acb4c8fc4c5944a0039306bda387dd"
+        },
+        {
+          "path": "1/36_28.bin",
+          "row0": 36,
+          "col0": 28,
+          "polygons": 12952,
+          "bytes": 143565,
+          "sha256": "2cb01df95cba53a5a57262ab10fee0f7e61185f35680d56475e56cbe0a1b5677",
+          "inputHash": "831b14f4387076ef5e18dd2f410cbb9467524d674f076b0845a000269e42ed33"
+        },
+        {
+          "path": "1/36_32.bin",
+          "row0": 36,
+          "col0": 32,
+          "polygons": 7217,
+          "bytes": 80836,
+          "sha256": "f2c7ddb9252bbd7b43e3581b662a4a9521241f5c8672d6f81e1ccbd15a21dfcb",
+          "inputHash": "563253e3ee56f8a8523d15f3011409dd6fce9366262b3f54e5e551929fe59394"
+        },
+        {
+          "path": "1/36_36.bin",
+          "row0": 36,
+          "col0": 36,
+          "polygons": 15825,
+          "bytes": 167893,
+          "sha256": "76b656792c3e8c078b6006a7cd2ce159dd85a45717f7034f7ff8e43e1570dae1",
+          "inputHash": "f473233c461efcd6a0942ca7a073787915e99b8bd9d5fec1546c16e5ea64ccc0"
+        },
+        {
+          "path": "1/36_40.bin",
+          "row0": 36,
+          "col0": 40,
+          "polygons": 2925,
+          "bytes": 32951,
+          "sha256": "e604a63adb65d0db98dd765ffd448b83b84d9741874865c7849289113c57a792",
+          "inputHash": "21694cd9ae98e3b6e150799364eb594eb74a0d0d4a575cbe82d0180a38863c77"
+        },
+        {
+          "path": "1/40_24.bin",
+          "row0": 40,
+          "col0": 24,
+          "polygons": 5992,
+          "bytes": 65908,
+          "sha256": "3b43ed10457eb968dd4ca0475a53ffd18d9c80d574bd9f2c10ad9a31a05405f5",
+          "inputHash": "8552d270a2482ba2ddb17025dc64f806218520b8211d7a179003e5e23b889d6f"
+        },
+        {
+          "path": "1/40_28.bin",
+          "row0": 40,
+          "col0": 28,
+          "polygons": 11344,
+          "bytes": 125494,
+          "sha256": "3cd2e3ad58f5c7a640bd76b3a190fa1363f0f37e2ff047913e2d5e776bae261f",
+          "inputHash": "12c683736b0a93094d34a5836d123394598bb98ecd22d9fc85086846be6c3471"
+        },
+        {
+          "path": "1/40_32.bin",
+          "row0": 40,
+          "col0": 32,
+          "polygons": 10396,
+          "bytes": 117522,
+          "sha256": "b4e1fa2f0f6ee7e5adac071bd7e9589ba275e5f8b2e47d2d6c030d3eb727ed5e",
+          "inputHash": "823ac0ca7acb9c4c97e2f55e1d1d077befc063c3d1240861845a6edf33fcd528"
+        },
+        {
+          "path": "1/40_36.bin",
+          "row0": 40,
+          "col0": 36,
+          "polygons": 11466,
+          "bytes": 129766,
+          "sha256": "92089457c81ac036d84f436a6ccf033f39475ea1d0f502046c4824ed6cd9aeea",
+          "inputHash": "aacfef9ac584c7763d3b38d2fa841cfab7eda6cc1d2b17d3491f87c291eab911"
+        },
+        {
+          "path": "1/40_40.bin",
+          "row0": 40,
+          "col0": 40,
+          "polygons": 3047,
+          "bytes": 34707,
+          "sha256": "6aa0c756b338649ed4eded66fdb73232e69aaacb3f7ea8066041cd409388c0ce",
+          "inputHash": "ea8363fe5a243a556a7d7bb1d82c0837d832ceca2fea51de8116200f2dd03271"
+        },
+        {
+          "path": "1/44_24.bin",
+          "row0": 44,
+          "col0": 24,
+          "polygons": 3379,
+          "bytes": 37538,
+          "sha256": "ca48baa24cfeb18ec89e628fb58910178a1d1880735eb10029b9b0b3e8a8274b",
+          "inputHash": "6aedee84899aedaba44cfa773d0f20a429119a0c4db64ef40aa4671917e954bf"
+        },
+        {
+          "path": "1/44_28.bin",
+          "row0": 44,
+          "col0": 28,
+          "polygons": 9782,
+          "bytes": 107139,
+          "sha256": "9b666f2ce26710301057853587977f6df18efb29f0795637e131124c7d7a4162",
+          "inputHash": "f96931cea9ffe706017bafb3f69a41fa78f4ba966c5d0d84638d1eb244436300"
+        },
+        {
+          "path": "1/44_32.bin",
+          "row0": 44,
+          "col0": 32,
+          "polygons": 9269,
+          "bytes": 100257,
+          "sha256": "f2d5a10e95bc2def1ad8c0f140441311f09279cf2c8c3b7467e86682f06557ee",
+          "inputHash": "b3e64f7669450201d961bacdfe437c5224db0942c74aba591b5c738b7e9352b5"
+        },
+        {
+          "path": "1/44_36.bin",
+          "row0": 44,
+          "col0": 36,
+          "polygons": 7121,
+          "bytes": 79997,
+          "sha256": "25fb17b8094d88db998500c6aa710923811615a6cb387fc68d036ffd1bdca025",
+          "inputHash": "eca3e12d5dce23ef84f30649bfa4845b5339848843459b8044144b7a7af2853d"
+        },
+        {
+          "path": "1/44_40.bin",
+          "row0": 44,
+          "col0": 40,
+          "polygons": 4765,
+          "bytes": 52227,
+          "sha256": "a829abfd558e2a9b0fb97446f406fffd11e89ce81c3930cded0a04851ff7c70d",
+          "inputHash": "8078fa2128b3feb575b7aa43fadbd523075dc406931cc3243c4c2b7d820c6755"
+        },
+        {
+          "path": "1/48_24.bin",
+          "row0": 48,
+          "col0": 24,
+          "polygons": 3383,
+          "bytes": 37345,
+          "sha256": "b5e16be595ad7ace4bbb1099d0e63db88cf06735fbd4a596f77351bf758fbd72",
+          "inputHash": "029364a14d19232d27ff7dc157dc5727c443428d82c9a26655ee541873b575eb"
+        },
+        {
+          "path": "1/48_28.bin",
+          "row0": 48,
+          "col0": 28,
+          "polygons": 6175,
+          "bytes": 70000,
+          "sha256": "b61ea1b3086ba886884e7eaf259bc42cfd35b697f67fa555a08c41761bfe65c9",
+          "inputHash": "77aea1f8e2d491503f0830a5f4ba1205b2d088fbf30f6486166eaf7781d80bf7"
+        },
+        {
+          "path": "1/48_32.bin",
+          "row0": 48,
+          "col0": 32,
+          "polygons": 3142,
+          "bytes": 35633,
+          "sha256": "d9b58adb80ad125a7d6d278a23f402b988dfcf0a039bcd65a3aa44b2bc64d811",
+          "inputHash": "b5036e21b1b6d04afc9e4906fa4a3cb53e1706d26fc68acfbee11578d8fa276f"
+        },
+        {
+          "path": "1/48_36.bin",
+          "row0": 48,
+          "col0": 36,
+          "polygons": 6213,
+          "bytes": 68139,
+          "sha256": "1193e33f5c860ba0c859023afabc1ba0f541bc3bdb5588c8c0447e93ad30901c",
+          "inputHash": "867bc643d5e3318614c49922fb8fc00310575c6b74cca31394d278c12ac439d9"
+        },
+        {
+          "path": "1/48_40.bin",
+          "row0": 48,
+          "col0": 40,
+          "polygons": 1455,
+          "bytes": 16404,
+          "sha256": "e57dd3e0ff2ed9446921dbe66232004aec554efcd03ea22953ff16192f3c7032",
+          "inputHash": "730828623f4667e8f728dcbadea1a4177ebae8632fe7d74167ba663f8702623e"
+        },
+        {
+          "path": "1/52_24.bin",
+          "row0": 52,
+          "col0": 24,
+          "polygons": 265,
+          "bytes": 2930,
+          "sha256": "2d342158497d71cc278022fa8d18f20b4a432798edaab5977ac834bdad5eeaa0",
+          "inputHash": "257283e95fd131b9b7d6a176741c53d66f543b736e9a88a42ad8f355e188e2ab"
+        },
+        {
+          "path": "1/52_28.bin",
+          "row0": 52,
+          "col0": 28,
+          "polygons": 670,
+          "bytes": 7787,
+          "sha256": "4c14ee77bbd3912c0a9a8742bd27371ddbbc0044c0d0f122ccec05d472c9e011",
+          "inputHash": "0691e7c239c8fe2db6c61de4ad7c752346497dbedab3976e4099dd064e27148a"
+        },
+        {
+          "path": "1/52_40.bin",
+          "row0": 52,
+          "col0": 40,
+          "polygons": 799,
+          "bytes": 9135,
+          "sha256": "c3198d621020db681b0a3c59c4585d6d73381938556ee5febfdfbff8ea58c8b0",
+          "inputHash": "7623465a1be210c66f3a28d6a5ac608c9374325ada8386ca15f952516fc70715"
+        }
+      ],
+      "connectorsApplied": [],
+      "passagesTagged": [],
+      "hintRollup": {},
+      "census": {
+        "spawns": 33410,
+        "main": 31649,
+        "offMain": 1750,
+        "none": 11,
+        "ambiguous": 656,
+        "overOffMainFloor": 603,
+        "offMainComponents": 83,
+        "overOffMainFloorComponents": 70,
+        "sha256": "615759e5c05e0daaa58651143ac519198dac25e37dcf9bc3628b6742c6743303"
+      },
+      "seams": {
+        "stage1": {
+          "innerPct": 2.1318,
+          "blockPct": 2.1615,
+          "deltaPp": 0.0297
+        },
+        "final": {
+          "innerPct": 2.5834,
+          "blockPct": 2.7398,
+          "deltaPp": 0.1564
+        }
+      },
+      "waterSplits": [
+        {
+          "fullPolygons": 350326,
+          "parts": [
+            {
+              "polygons": 332097,
+              "zone": 331,
+              "centroid": [
+                -695,
+                -1610
+              ]
+            },
+            {
+              "polygons": 9241,
+              "zone": 141,
+              "centroid": [
+                9993,
+                1018
+              ]
+            },
+            {
+              "polygons": 799,
+              "zone": 440,
+              "centroid": [
+                -11624,
+                -4724
+              ]
+            },
+            {
+              "polygons": 50,
+              "zone": 16,
+              "centroid": [
+                6326,
+                -7587
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

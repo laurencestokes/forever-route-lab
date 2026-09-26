@@ -1,0 +1,44 @@
+{
+  "$comment": [
+    "Navigation build configuration (docs/research/terrain-navigation.md §4.3, §14.1; D-028, D-030).",
+    "extract.ts refuses any client other than 'pin' (gate G1). 'settings' is the chosen sweep entry",
+    "c05r1+n12+e5+s60; every value is recorded in public/nav/manifest.json. Yards are world yards;",
+    "Recast values in voxels are derived from them (lib/settings.ts)."
+  ],
+  "schema": 1,
+  "kind": "nav-build",
+  "pin": { "product": "wow_classic_beta", "version": "1.60.1.70009", "buildKey": "05215079e3905ef5922ae0b03ffefb73" },
+  "recastNavigation": "0.43.1",
+  "maps": [
+    { "id": 0, "name": "Eastern Kingdoms", "wdtFileDataId": 775971 },
+    { "id": 1, "name": "Kalimdor", "wdtFileDataId": 782779 }
+  ],
+  "settings": {
+    "name": "c05r1+n12+e5+s60",
+    "blockAdts": 4,
+    "voxelsPerAdt": 1024,
+    "tileVoxels": 256,
+    "cellHeightYd": 0.25,
+    "mapOriginZ": 0,
+    "radiusVoxels": 1,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 60,
+    "maxSimplificationErrorYd": 5,
+    "maxEdgeLengthYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "vertsPerPoly": 12,
+    "m2MinFootprintYd": 4,
+    "swimDepthYd": 1.6,
+    "clipMarginYd": 8
+  },
+  "stage2": {
+    "snap": { "radiusYd": 6, "ruleBMinPolygons": 20 },
+    "prune": { "minComponentPolygons": 1000 },
+    "water": { "openWaterYd": 800 },
+    "census": { "growthTolerance": 0.1, "zoneMinSpawns": 50, "zoneMinShare": 0.9, "floorMinPolygons": 20 },
+    "seams": { "maxBlockOverInnerPp": 0.2 },
+    "longSwimWarningYd": 200
+  }
+}

@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorStore } from '../app';
 import type { DatasetSource } from '../app/dataset-source';
+import { cachedDatasetSource, datasetBaseView } from '../app/dataset-views';
 import type { StepId } from '../domain/ids';
 import { createMapController, type MapEngineSetup } from '../app/map-exports';
 import { useEditor } from '../app/react';
@@ -8,7 +9,8 @@ import { type ActiveRow, buildRouteView, mapStepLabel } from './app-model';
 import { AppSidePanel } from './app/AppSidePanel';
 import { AppStatusBar } from './app/AppStatusBar';
 import { AppTopBar } from './app/AppTopBar';
-import { createAnnouncer, LiveRegion, useSelectionAnnouncements } from './app/LiveAnnouncer';
+import { LazyDialogFallback, loadSettingsDialog, preloadLazyParts, useLazy } from './app/lazy';
+import { AnnouncerContext, createAnnouncer, LiveRegion, useSelectionAnnouncements } from './app/LiveAnnouncer';
 import { MapPanel } from './app/MapPanel';
 import { createRouteActions } from './app/route-actions';
 import { RoutePanel } from './app/RoutePanel';
@@ -26,10 +28,17 @@ import './App.css';
  * custom quests and overrides lie on top (ARCHITECTURE §5.5). The source memoises the view, so it
  * changes only when one of those does.
  *
+ * The source is wrapped in a small cache of views (`cachedDatasetSource`), so the project's view
+ * and the view without its custom quests (what a custom quest with a real id replaces, DATA001) are
+ * both kept.
+ *
  * App reads only what the route rows are built from (the route, its imports, the start level) and
  * builds them once per change. Each panel (src/ui/app/) subscribes to its own slices and is
  * memoised, so a selection click re-renders the list, Details, the status bar and the map, and
  * neither the top bar nor the quest list.
+ *
+ * The Settings dialog, the custom quest editor and the RXP dialogs load on first use
+ * (`src/ui/app/lazy.tsx`, M4 review CR-19); production builds fetch them once the page is idle.
  */
 
 export interface AppProps {
@@ -57,6 +66,7 @@ export interface AppProps {
 }
 
 export function App({ store, data, projectName, routeNotice = null, geometrySummary = null, map = null, version, sourceCommit }: AppProps) {
+  const source = useMemo(() => cachedDatasetSource(data), [data]);
   const route = useEditor(store, selectRoute);
   const imports = useEditor(store, selectImports);
   const startLevel = useEditor(store, selectStartLevel);
@@ -65,24 +75,29 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
   const customQuests = useEditor(store, selectCustomQuests);
   const questOverrides = useEditor(store, selectQuestOverrides);
   const dataset = useMemo(
-    () => data.view({ faction, class: characterClass, customQuests, questOverrides }),
-    [data, faction, characterClass, customQuests, questOverrides],
+    () => source.view({ faction, class: characterClass, customQuests, questOverrides }),
+    [source, faction, characterClass, customQuests, questOverrides],
   );
+  const baseDataset = useMemo(() => datasetBaseView(source, { faction, class: characterClass, questOverrides }), [source, faction, characterClass, questOverrides]);
 
   const [activeRow, setActiveRow] = useState<ActiveRow | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [leftWidth, setLeftWidth] = useState<number | undefined>(undefined);
   const searchRef = useRef<HTMLInputElement>(null);
   const routeRef = useRef<HTMLDivElement>(null);
 
   const [announcer] = useState(createAnnouncer);
+  const settings = useLazy(loadSettingsDialog, settingsOpen);
+  useEffect(() => preloadLazyParts(), []);
   // One controller for the app's lifetime: the top bar's jump-to-zone and the map panel share it.
   const [mapController] = useState(() =>
-    map === null ? null : createMapController({ store, data, geometry: map.geometry, art: map.art, describeStep: mapStepLabel }),
+    map === null ? null : createMapController({ store, data: source, geometry: map.geometry, art: map.art, describeStep: mapStepLabel }),
   );
   const mapWiring = useMemo(() => (map === null || mapController === null ? null : { setup: map, controller: mapController }), [map, mapController]);
-  const actions = useMemo(() => createRouteActions(store, announcer.announce), [store, announcer]);
+  const geometry = map?.geometry ?? null;
+  const actions = useMemo(() => createRouteActions(store, announcer.announce, { geometry }), [store, announcer, geometry]);
   useSelectionAnnouncements(store, announcer.announce);
 
   const importNames = useMemo(() => new Map(imports.map((i) => [i.id, i.name])), [imports]);
@@ -94,7 +109,7 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
   const focusList = useCallback(() => {
     routeRef.current?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
   }, []);
-  useGlobalShortcuts({ actions, focusSearch, enabled: !aboutOpen });
+  useGlobalShortcuts({ actions, focusSearch, enabled: !aboutOpen && !settingsOpen });
 
   // Hovering a route row highlights its step markers on the map.
   const onHoverSteps = useCallback(
@@ -120,13 +135,19 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
   const closeAbout = useCallback(() => {
     setAboutOpen(false);
   }, []);
+  const openSettings = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+  }, []);
 
   const identity = dataset.identity;
   const placeholder = identity.dataRevision === 'placeholder';
   const sample = routeNotice !== null;
 
   return (
-    <>
+    <AnnouncerContext.Provider value={announcer}>
       <AppShell
         top={
           <AppTopBar
@@ -142,6 +163,9 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
             onAbout={openAbout}
             mapController={mapController}
             announce={announcer.announce}
+            onOpenSettings={openSettings}
+            geometry={geometry}
+            data={source}
           />
         }
         left={
@@ -166,9 +190,12 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
             view={view}
             route={route}
             dataset={dataset}
+            baseDataset={baseDataset}
             activeRow={activeRow}
             search={search}
             actions={actions}
+            mapController={mapController}
+            announce={announcer.announce}
             onFocusList={focusList}
           />
         }
@@ -184,7 +211,12 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
         dataUpstreamCommit={placeholder || identity.upstreamCommit === 'none' ? null : identity.upstreamCommit}
         dataIdentity={placeholder ? null : { dataRevision: identity.dataRevision, frameBuild: identity.frameBuild }}
       />
+      {settings.kind === 'ready' ? (
+        <settings.value.SettingsDialog open={settingsOpen} onClose={closeSettings} store={store} announce={announcer.announce} />
+      ) : (
+        <LazyDialogFallback title="Settings" state={settings} onClose={closeSettings} />
+      )}
       <LiveRegion announcer={announcer} />
-    </>
+    </AnnouncerContext.Provider>
   );
 }

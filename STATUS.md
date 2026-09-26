@@ -4,11 +4,14 @@
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md).
 > Nothing here depends on any previous AI conversation.
 
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 
 ## Current milestone
 
-**Milestone 3: Map**, complete. Next: **Milestone 3b: Terrain navigation and map art** (D-028, D-030..D-033). The design revision is in progress in `docs/research/terrain-navigation.md`. Milestones 4 (editor and storage) and 5 (RXP) can run in parallel with 3b.
+**Milestones 4 (editor and storage) and 5 (RXP)**, complete. **Milestone 3b part 1** (game-data
+reader, navmesh build and gates, map art and terrain layers, pure `src/nav` runtime), complete.
+Next: **Milestone 3b part 2** (worker, travel model, map rendering of paths/art/terrain, review), then
+**Milestone 6** (rules, simulation and validation).
 
 ## Completed work
 
@@ -75,25 +78,49 @@ Last updated: 2026-09-25
   - Local map sets: a dev/preview-only Vite plugin, an art manifest and hash-verified art loading.
   - Independent review: [docs/reviews/review-m3-map.md](docs/reviews/review-m3-map.md)
     (28 findings, 27 done, 1 partial).
+- **Milestone 4 (Editor and storage):**
+  - IndexedDB autosave. Saves issued on hide are written. Several projects can be kept, with
+    Recently deleted (30 days) and Delete permanently. Tabs coordinate through Web Locks and
+    BroadcastChannel. The drift report and native JSON import/export (strict UTF-8, validated)
+    are in.
+  - The editor adds quests (accept, complete, turn-in, or all three), inserts after the
+    selection, and shows chain labels. It edits steps (note, duration, location picked on the
+    map) and handles custom quests (with the DATA001 shadowing notice). A Settings dialog
+    covers character and route profile.
+  - Schema v1 frozen (D-035).
+- **Milestone 5 (RXP):**
+  - Pure `src/rxp`: unwrap (no Lua VM, protected strings refused), a lossless CST, filters,
+    command registry, coded diagnostics, lowering to steps plus groups, and a serializer.
+    Unedited imports export byte-identically; edited groups export canonically.
+  - "Import RXP custom guide" and "Export RXP custom guide" dialogs. Imported colour escapes are
+    shown as plain text.
+  - `tools/build/rxp-overlap.ts`: 0 overlaps against RXPGuides guides (D-019).
+- **Milestones 4/5 review:** three critics (editor/storage, RXP parser, UI/accessibility)
+  and a fix pass. Every blocker and major is fixed; see D-036 for the deferred items and
+  `docs/reviews/review-m4-m5.md`.
 
 ## Branch / commit
 
 - Branch: `main`
-- Commits: `e2e577f` skeleton, `14acc7a` M0, `374354a` M1, `daeefb1` M2, then the M3 commit (see `git log`).
+- Commits: `e2e577f` skeleton, `14acc7a` M0, `374354a` M1, `daeefb1` M2, `0b56df9` M3, then the
+  M4/M5/M3b-part-1 commit (see `git log`).
 
 ## Build / test status
 
-As of the Milestone 2 commit (`pnpm check`):
+As of the Milestones 4/5 and 3b part 1 commit (`pnpm check`, plus the nav, art and terrain gates):
 
 | Check | Status |
 |---|---|
 | Typecheck (pure, app, node configs) | pass |
 | Lint | pass |
-| Tests | 116 files, 1,521 tests, pass |
+| Tests | 188 files, 2,299 tests, pass (client tests: 25 of 25 ran against the installed client) |
 | Data validation (`data:validate`, public/data and fixture) | pass |
 | Reproducibility (`extract --check`, needs the QuestieDB clone) | byte-identical (manual gate until CI, Milestone 9) |
 | Licence gate | pass (8 shipped packages) |
-| Production build + dist audit | pass; entry about 142 kB gzip of 250 kB; lazy map chunk about 54 kB; data 938.6 kB gzip of 1.2 MB |
+| Production build + dist audit | pass; entry 206.1 kB gzip of 250 kB; lazy chunks 98.4 kB; data 938.6 kB gzip of 1.2 MB |
+| Navigation (`nav:validate` plain, `--client`, `--partition`; `nav:check`) | 56 / 62 / 60 checks pass; 113 of 113 files byte-identical on rebuild; gates G1-G15 pass (manual until CI; needs the client) |
+| Map art and terrain (`convert.ts --check`, `byproducts.ts --check`, `maps:validate`) | up to date, byte-identical; 14 checks pass |
+| Sizes (gzip-6) | nav 5,437,717 B of 7 MB; art 9,047,639 B of 12 MB; terrain 445,061 B of 600 kB |
 
 ## Known bugs / deferred checks
 
@@ -105,8 +132,11 @@ As of the Milestone 2 commit (`pnpm check`):
   data-F3). `extract.test.ts` is skipped, loudly, without the QuestieDB clone, and fails in CI
   (`CI` set) without it.
 - `pnpm data:check` (fetch, extract --check, validate) is a manual gate until CI exists (Milestone 9).
-- Map route-edit budget (8 ms) is missed at 10,000 steps (17-20 ms). The step-marker layer
-  rebuilds because its cache key includes the focus. Fix in Milestone 4 (review-m3-map.md).
+- PERF-2 (map route edit at 10,000 steps): improved to a 6.0-6.8 ms median in the browser, but
+  p90 is up to 8.7 ms against 8 ms. It stays open, guarded by `tests/bench/map-edit.bench.ts --check`
+  (D-036).
+- Autosave of a 10,000-step project is 35 ms unthrottled. Chunked storage is decided after the
+  Milestone 9 throttled run (D-036).
 - One quest-giver aggregate is drawn for UiMap 947 (Azeroth). Review it with the terrain map
   layers (Milestone 3b).
 - The planned 4× CPU-throttled startup measurement happens with Playwright (Milestone 9).
@@ -155,29 +185,40 @@ _None._
 
 ## Exact next tasks
 
-**Milestone 3b (terrain navigation and map art).** The design is being revised against critique
-TN-01..18 and decisions D-030 to D-033. Once the re-critique gives a go:
+**Milestone 3b (terrain navigation and map art).** Design:
+[docs/research/terrain-navigation.md](docs/research/terrain-navigation.md) (revision 3, re-critique
+RC-01..RC-13 accepted, D-028 to D-034). Steps 3b.1-3b.5, 3b.7 and 3b.8 are built (uncommitted):
+`tools/casc`, `tools/terrain` with `public/nav/` (5,423,019 B gzip-6, gates G1-G15 pass),
+`src/nav` (pure runtime), `public/maps/terrain/` (445,061 B) and `public/maps/art/` (9,047,639 B,
+Blizzard's art under D-033); committed with Milestones 4/5. The build and verifier reports are summarised
+in [docs/reviews/review-m3b-part1.md](docs/reviews/review-m3b-part1.md). Next:
 
-1. `tools/casc`: shared read-only CASC reader plus a WDC5 DB2 reader, from the Milestone 0/3b
-   experiments.
-2. `tools/terrain`: geometry assembly (ADT, liquids, holes, WMO/M2 collision); a Recast build
-   through recast-navigation-js (pinned dev dependency, build time only); the compact 4×4-block
-   format; build-time components; connectors from the owner's observations (D-031); validation
-   gates (spawn census, must-connect and must-not-connect fixtures, seams, determinism); the nav
-   budget (D-030).
-3. `src/nav` (pure): decode, snap, `legsFrom` (Dijkstra plus funnel), and a leg table. A worker
-   with fetch/verify/pin, and a `TravelModel` 'navigation' implementation.
-4. Map art (D-033): extraction via `tools/casc` (UiMapArt tiles, WorldMapOverlay), BLP decode,
-   stitching, web images, a manifest with NOTICE and a size budget, and an audit allowlist.
-5. Terrain byproducts (D-032): coastlines, zone outlines and low-res relief, rendered by the map
-   adapter.
-6. Reviews, fix, commit.
+1. 3b.6: `src/nav/worker` (fetch, verify, pin, LRU, resumable search), the leg table, the
+   `TravelModel` 'navigation' with the same-map `TravelGraph` rule (D-034 item 2), the SIM warnings
+   including `SIM-unverified-passage`, progress and cancel for "computing paths".
+2. Map adapter: the art and terrain layers and the path lines.
+3. D-033 notices still owed in the About dialog (it says "No map art is included").
+4. 3b.9 review, fix, commit.
 
-**In parallel, Milestone 4 (editor and storage) and Milestone 5 (RXP):**
-- M4: editing polish, IndexedDB autosave and backups, JSON import/export UI, and the PERF-2
-  10k-step fix.
-- M5: `src/rxp` from RXP.md (unwrap, CST, diagnostics, lowering, serializer, fixtures, round
-  trips), import/export UI, and `tools/build/rxp-overlap.ts`.
+**Owner in-game checks (D-031, D-034 items 1 and 5).** Each is tracked here until recorded:
+
+| Check | Where it is recorded | State |
+|---|---|---|
+| Undercity west tunnel: walk from Varimathras to Brill without an elevator | `tools/terrain/inputs/passages.json` `undercity-west-tunnel` (49 polygons tagged; legs through it warn) | unverified |
+| Ironforge mountain top: walk from the summit above Ironforge down to Dun Morogh | `passages.json` `ironforge-mountain-top` (597 polygons tagged) | unverified |
+| Ban'ethil Barrow Den lower chamber (Gnarlpine Hold, G7a): walk the spiral ramp under the overhang near (9857, 1571, 1328) | `tools/terrain/inputs/census-reviewed.json` (`mesh-break-suspected`); a `walk` connector if passable | unverified |
+| Thunder Bluff elevators (at least three) | `tools/terrain/inputs/connectors.json` (`thunder-bluff-elevator-west` is `todo`) | to record |
+| Undercity elevators (at least three) | `connectors.json` | to record |
+| Rut'theran Village → Darnassus portal (`teleport`) | `connectors.json` `rutheran-to-darnassus-portal` (`todo`) | to record |
+
+**Census gate (D-030), architect's call, open to owner override:** 283 of the 298 census review
+entries are rule-drafted geometry notes from `pnpm nav:review-draft` ("rule:" prefix), not
+individual reviews or in-game checks. They are accepted for the MVP gate because each names its rule
+and can be re-reviewed individually; the 15 largest or oddest components were reviewed one by one.
+
+**In parallel with 3b part 2, Milestone 6 (rules, simulation and validation):** the pure core first
+(rules, engine walker, simulation, validator), then the app and UI integration (route-list warnings,
+validation panel, estimates).
 
 ## Important commands
 
@@ -190,13 +231,21 @@ pnpm data:validate  # validate public/data and the fixture (no clone needed)
 pnpm data:check     # fetch the pinned QuestieDB, extract --check, validate (reproducibility)
 pnpm data:all       # regenerate public/data from the pin (commit with any tools/questiedb change)
 pnpm maps:placeholder  # regenerate public/maps/placeholder from the pin + tools/maps/inputs
+pnpm maps:validate     # placeholder geometry and committed art checks (no client needed)
+pnpm rxp:overlap       # D-019 gate: self-authored RXP text must not equal RXPGuides lines
+# The following need the installed WoW: Forever client (read-only: .build.info and Data/ only)
+pnpm nav:extract       # build public/nav from the client (about 76 s, 12 workers)
+pnpm nav:check         # rebuild and compare byte for byte
+pnpm nav:validate      # gates; add --client or --partition for the client-backed checks
+pnpm tsx tools/maps/convert.ts --check          # painted map art is up to date
+pnpm tsx tools/terrain/byproducts.ts --check    # coastlines, zone outlines, relief are up to date
 ```
 
 ## Major design decisions
 
 See [docs/DECISIONS.md](docs/DECISIONS.md). The most load-bearing: D-016 (licence finding and
 publishing), D-017 (coordinates), D-018 (map files), D-019 (RXP), D-020 (route model),
-D-021 (optimiser contract).
+D-021 (optimiser contract), D-028 (terrain navigation), D-033 (Blizzard map art).
 
 ## External research links
 

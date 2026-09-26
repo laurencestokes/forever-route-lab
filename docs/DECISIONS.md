@@ -479,3 +479,62 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
   3. The art is removed promptly if Blizzard asks.
   4. The project never distributes hacks, cheats or similar content.
 
+## D-034: Milestone 3b interpretations (architect; the owner may overrule)
+
+- **Date:** 2026-09-26
+- **Context:** The re-critique of the revised terrain design (GO with conditions, RC-01..RC-13).
+- **Decisions:**
+  1. **Portals and teleporters** (for example Rut'theran Village ↔ Darnassus) are connectors under
+     D-031. They are cited owner observations with a `teleport` type: endpoints, cast or wait
+     seconds, date, build. Until one is recorded, the labelled fallback plus a warning applies.
+  2. **Same-map transports** (for example the Auberdine ↔ Rut'theran boat) go through
+     ARCHITECTURE's `TravelGraph`. The route is a walk to the dock taken from the leg table, then
+     the transport edge, then a walk from the dock. The straight-line fallback applies only when no
+     such path exists.
+  3. **Per-polygon top-level zone ids** in the committed navigation blocks count as part of D-032's
+     committed zone outlines. They are the same derived information at polygon resolution, from
+     MCNK area ids and WMOAreaTable.
+  4. **Map-art budget (D-033):** a separate gated `art` budget of at most 12 MB gzip-6 in decimal
+     units, with per-file baselines. The terrain byproducts (D-032) get their own `terrain`
+     budget, at most 600 kB.
+  5. **Unverified passages** found by the mesh (the Undercity west tunnel, the Ironforge mountain
+     top) are tagged at build time. Any leg whose corridor crosses one carries an "unverified
+     passage" warning, and the owner's in-game check is tracked in STATUS. The navigation model
+     is still preferred on map 0, because the warning keeps the claim honest.
+
+## D-035: Project schema v1 is frozen from the Milestone 4 commit; Milestone 5 RXP rules ratified
+
+- **Date:** 2026-09-26
+- **Supersedes:** ARCHITECTURE §8.2's "unstable until the end of Milestone 6".
+- **Context:** Milestone 4 autosaves users' projects to IndexedDB under the strict v1 schema. A
+  later v1 change would leave every stored project unopenable (review CR-15).
+- **Decision:**
+  - From the Milestone 4 commit, every change to the project schema bumps `schemaVersion` and adds
+    a migration to `src/project/migrations.ts`, with a test. The migration-backup path already
+    exists. Milestone 6 (simulation and validation) follows the same rule.
+  - Ratified RXP import rules (Milestone 5):
+    - importing as a new project uses the default character, the same as "New project";
+    - "append" means the end of the route;
+    - unknown quests are collected from step quest ids only (accept and turn-in with their
+      any-of alternatives, complete targets, abandon), not from skip conditions.
+
+## D-036: Milestone 4/5 implementation choices and deferred decisions
+
+- **Date:** 2026-09-26
+- **RXP spec choices** (recorded in docs/RXP.md and ratified here, review F19):
+  1. Degenerate filter spellings print back as written: `-`, `/` and `(/)`.
+  2. A group written directly against a word, such as `(Orc)(Troll)` or `Orc(Warrior)`, is
+     modelled as one merged word that never matches. This is UNVERIFIED in game and is reported
+     with RXP016.
+  3. A custom quest's objective count is trusted for "complete all objectives" export when it is
+     above 0.
+  4. The unedited-group check compares against the template first.
+- **Deferred with triggers:**
+  - **Chunked step storage** (CR-06). IndexedDB autosave of a 10,000-step project measures 35 ms
+    unthrottled and is estimated at about 140 ms at 4× throttle. If the Milestone 9 throttled run
+    exceeds the 50 ms budget, store steps in chunks (a database version 3 migration).
+  - **Lazy Projects and Import/Export dialogs** (CR-19). Splitting `ProjectMenu.tsx` and
+    `ImportExport.tsx` is deferred until the entry chunk nears its 250 kB budget. It is 206 kB now.
+  - **PERF-2** stays open. The browser p90 for a 10,000-step move is up to 8.7 ms against 8 ms.
+    The Node bench (`tests/bench/map-edit.bench.ts --check`) guards against regression.
+

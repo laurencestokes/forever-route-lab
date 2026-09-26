@@ -404,10 +404,19 @@ export function mapRouteInput(steps: readonly RouteStep[], geometry: MapGeometry
  * Same content as `mapRouteInput`. The input does not depend on the dataset, so a dataset change
  * keeps it.
  */
-export function createRouteInputBuilder(geometry: MapGeometry): (steps: readonly RouteStep[]) => RouteInput {
+export interface RouteInputBuilder {
+  (steps: readonly RouteStep[]): RouteInput;
+  /**
+   * The input the builder holds for step `id`, or null when it has none. After a call it is the
+   * input of that call's step with the id; an id that has left the route may still be found.
+   */
+  readonly inputOf: (id: StepId) => RouteStepInput | null;
+}
+
+export function createRouteInputBuilder(geometry: MapGeometry): RouteInputBuilder {
   let cache = new Map<StepId, { readonly step: RouteStep; readonly input: RouteStepInput }>();
   let last: { readonly steps: readonly RouteStep[]; readonly route: RouteInput } | null = null;
-  return (steps) => {
+  const build = (steps: readonly RouteStep[]): RouteInput => {
     if (last?.steps === steps) return last.route;
     const inputs = steps.map((step) => {
       const hit = cache.get(step.id);
@@ -432,7 +441,14 @@ export function createRouteInputBuilder(geometry: MapGeometry): (steps: readonly
     last = { steps, route };
     return route;
   };
+  return Object.assign(build, { inputOf: (id: StepId): RouteStepInput | null => cache.get(id)?.input ?? null });
 }
+
+/**
+ * Whether the route layers draw from this step: it has a location, or it moves the character
+ * somewhere unknown, or it leaves by a special means (`createDrawnRouteFilter`).
+ */
+export const isDrawnStep = (step: RouteStepInput): boolean => step.placement.kind !== 'none' || step.departs !== null;
 
 /**
  * The route the route layers draw: only the steps that can change what they draw. A step with no
@@ -446,7 +462,7 @@ export function createDrawnRouteFilter(): (route: RouteInput) => RouteInput {
   let last: { readonly route: RouteInput; readonly drawn: RouteInput } | null = null;
   return (route) => {
     if (last?.route === route) return last.drawn;
-    const steps = route.steps.filter((step) => step.placement.kind !== 'none' || step.departs !== null);
+    const steps = route.steps.filter(isDrawnStep);
     const previous = last?.drawn.steps;
     const same = previous !== undefined && previous.length === steps.length && steps.every((step, i) => step === previous[i]);
     const drawn: RouteInput = same && last !== null ? last.drawn : steps.length === route.steps.length ? route : { steps };
@@ -605,7 +621,7 @@ export function stepFocusOf(selection: Selection, active: StepId | null): StepFo
  * `focus` without the steps the route layers do not draw from (`createDrawnRouteFilter`): focusing
  * a note changes nothing they draw, so it is left out, and selecting a note rebuilds no route layer.
  */
-export function focusWithin(focus: StepFocus, drawn: ReadonlySet<StepId>): StepFocus {
+export function focusWithin(focus: StepFocus, drawn: { readonly has: (id: StepId) => boolean }): StepFocus {
   const keep = (id: StepId | null): StepId | null => (id !== null && drawn.has(id) ? id : null);
   return { selected: focus.selected.filter((id) => drawn.has(id)), hovered: keep(focus.hovered), active: keep(focus.active) };
 }

@@ -1,0 +1,43 @@
+{
+  "$comment": [
+    "Owner-observed connectors for the navigation build (docs/research/terrain-navigation.md §11; D-031, D-034 items 1 and 2).",
+    "Only rows with status 'observed' are built, as directed off-mesh links (two when bidirectional); 'todo' rows change",
+    "nothing and are listed as missing by pnpm nav:validate. Endpoints are what /way shows in game: a UiMap and a percent",
+    "position; the uiMapId must be a UiMap of the row's map (RC-12). Seconds are read with a stopwatch. Boats and zeppelins",
+    "are TravelGraph transports, never rows here. A teleport row has castSeconds instead of rideSeconds. How to record one:",
+    "the design's §11.3 (about five minutes per connector). Still needed (§11.3): at least three Thunder Bluff elevators,",
+    "three Undercity elevators, the Rut'theran portal (and a return portal, if the game has one); the Great Lift is optional."
+  ],
+  "schema": 1,
+  "kind": "nav-connectors",
+  "connectors": [
+    {
+      "id": "thunder-bluff-elevator-west",
+      "status": "todo",
+      "type": "elevator",
+      "map": 1,
+      "bidirectional": true,
+      "a": { "uiMapId": 1412, "x": null, "y": null, "floor": "lowest", "note": "bottom landing, on the Mulgore ground" },
+      "b": { "uiMapId": 1456, "x": null, "y": null, "floor": "highest", "note": "top landing, on the rise" },
+      "rideSeconds": { "value": null, "basis": "reported", "note": "platform moving, one way" },
+      "waitSeconds": { "value": null, "basis": "reported", "stat": "max", "note": "longest wait seen for the platform to arrive" },
+      "transport": { "gameObjectEntry": null, "transportAnimationId": null },
+      "observed": { "date": null, "build": null, "by": "owner" },
+      "citation": null
+    },
+    {
+      "id": "rutheran-to-darnassus-portal",
+      "status": "todo",
+      "type": "teleport",
+      "map": 1,
+      "bidirectional": false,
+      "a": { "uiMapId": 1438, "x": null, "y": null, "floor": "only", "note": "the portal in Rut'theran Village" },
+      "b": { "uiMapId": 1457, "x": null, "y": null, "floor": "only", "note": "where you arrive in Darnassus" },
+      "castSeconds": { "value": null, "basis": "reported", "note": "stepping in to control at the arrival, loading screen included" },
+      "waitSeconds": { "value": 0, "basis": "reported", "stat": "max" },
+      "transport": { "gameObjectEntry": null, "transportAnimationId": null },
+      "observed": { "date": null, "build": null, "by": "owner" },
+      "citation": null
+    }
+  ]
+}

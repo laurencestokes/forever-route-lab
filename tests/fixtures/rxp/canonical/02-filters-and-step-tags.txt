@@ -1,0 +1,99 @@
+-- forever-route-lab RXP parser fixture 02: filter expressions, conditional header lines and step tags.
+-- Self-authored (GPL-3.0-or-later). Quest IDs reuse fixture 01 (QuestieDB data/Forever @ b6f5b07).
+-- Coordinates are placeholders, except the Gornek and Zureetha NPC positions reused from fixture 01.
+-- The point of this file is syntax, not a playable route.
+-- Expected filter results are written for profile P1 = {faction Horde, race Orc, class WARRIOR,
+-- gender Male, level 3, locale enUS, game FOREVER}. See docs/RXP.md section 6 for the rules.
+#forever
+#version 2
+#name 4-6 Fixture Two
+-- First applicable line wins for a repeated header key, so these two lines must stay in this order.
+#displayname 4-6 Fixture Two (Alliance) << Alliance
+#displayname 4-6 Fixture Two (Horde) << Horde
+#group Forever Route Lab Fixtures
+#subgroup Parser Samples
+#next Forever Route Lab Fixtures\6-8 Fixture Three;6-8 Fixture Three (Alt)
+#defaultfor Orc Warrior/Troll Warrior
+-- Step filter: whole step dropped for P1 (Orc).
+
+step << !Orc !Troll
+    #completewith next
+    +|cRXP_WARN_This guide was written for Orcs and Trolls|r
+    -- Step filter with a parenthesised group: (Orc/Troll) AND Warrior -> shown for P1.
+step << (Orc/Troll) Warrior
+    #sticky
+    #label WarriorSticky
+    >> Keep an eye out for |cRXP_ENEMY_Scorpid Workers|r while questing
+    .complete 789,1
+    .mob Scorpid Worker
+step
+    #xprate <1.5
+    #season 0
+    #softcore
+    .goto Durotar,44.00,60.00,30
+    >> This step only exists at XP rate below 1.5, season 0, hardcore off
+step
+    #xprate >1.49
+    #hardcore
+    .goto Durotar,44.50,60.50,30
+    >> This step only exists at XP rate above 1.49 with hardcore on
+step
+    #requires WarriorSticky
+    #completewith WarriorSticky
+    .goto Durotar,45.00,61.00
+    >> Only shown once the WarriorSticky step has completed (requires) and ends with it
+step
+    #optional
+    #label Boars
+step
+    #hidewindow
+    #loop
+    #completewith Boars2
+    .goto Durotar,45.00,70.00,0
+    .goto Durotar,45.00,70.00,35,0
+    .goto Durotar,46.00,68.00,35,0
+    .goto Durotar,44.00,69.00,35,0
+    +1
+step
+    #label Boars2
+    #level 3
+    .goto Durotar,45.50,69.00,-1
+    .goto Durotar,44.50,71.00,-1
+    >> Kill boars near either point (closest-point arrow)
+    .complete 788,1
+    .mob Mottled Boar
+    -- Line-level filters. Expected for P1 in the trailing comment of each line.
+step
+    >> Common line, no filter --shown
+    >> Warrior or Rogue only << Warrior/Rogue --shown
+    >> Orc Warrior or Troll Rogue << Orc Warrior/Troll Rogue --shown
+    >> Not an Orc << !Orc --hidden
+    >> Neither Mage nor Priest << !Mage !Priest --shown
+    >> Not (Orc or Troll) << !(Orc/Troll) --hidden
+    >> Level 3 or higher at first evaluation << 3 --shown
+    >> Below level 5 at first evaluation << !5 --shown
+    >> Female characters << Female --hidden
+    >> German clients only << deDE --hidden
+    >> Forever game token << Forever --shown
+    >> Classic game token is false on Forever even though the #classic header is accepted << Classic --hidden
+    >> Two filters on one line are ANDed, not ORed << tbc wotlk --hidden
+    >> Undead is an alias for the Scourge race token << Undead --hidden
+    >> Night Elf splits into two ANDed tokens and never matches << Night Elf --hidden
+    >> Unknown words evaluate false << skip --hidden
+    .goto Durotar,42.06,68.33 << Warrior --shown
+    .turnin 788 >> Turn in Cutting Teeth << Horde --shown
+    .accept 789 >> Pick up Sting of the Scorpid
+    .target Gornek
+    -- The idiom "step << skip" disables a whole step for every character.
+step << skip
+    .goto Durotar,40.00,65.00
+    .accept 790 >> Never reached
+    -- A step tag whose value carries its own filter (first applicable wins).
+step
+    #completewith next << Warrior/Rogue
+    #completewith Boars << !Warrior !Rogue
+    >> Tag values can be filtered too
+    .complete 792,1
+step
+    .goto 1411,42.85,69.15
+    .turnin 792 >> Hand in Vile Familiars

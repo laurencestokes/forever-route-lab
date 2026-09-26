@@ -1,0 +1,11 @@
+#forever
+<< Horde
+#name 6-8 Fixture Three
+#version 3
+#group Forever Route Lab Fixtures
+#subgroup Parser Samples
+
+step
+    .goto Durotar,52.00,43.00
+    >> Wrapped guide A, first step
+    .zone Durotar >> Enter Durotar

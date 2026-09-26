@@ -1,0 +1,22 @@
+{
+  "$comment": [
+    "Reviewed exceptions for tools/build/rxp-overlap.ts (D-019, docs/RXP.md section 19.2): lines of 24 or more",
+    "characters in src/, public/, tests/ or docs/research/rxp-samples/ that may equal a line of RXPGuides Guides/**.",
+    "An entry names our file and the exact trimmed line. Every entry must still overlap, or the check fails as stale.",
+    "Add an entry only after review, with the reason; bump 'commit' only together with RXPGUIDES_PIN."
+  ],
+  "commit": "c3429e065c06271827e9e412306fb1cede5ae852",
+  "minLength": 24,
+  "entries": [
+    {
+      "file": "docs/research/rxp-samples/03-lua-wrapped.txt",
+      "text": "RXPGuides.RegisterGuide([[",
+      "reason": "The addon's registration API call (interoperability vocabulary, D-019); fixture 03 lines 16 and 59 (docs/RXP.md section 19.2)."
+    },
+    {
+      "file": "tests/fixtures/rxp/03-lua-wrapped.txt",
+      "text": "RXPGuides.RegisterGuide([[",
+      "reason": "Byte-for-byte test copy of docs/research/rxp-samples/03-lua-wrapped.txt (the same two registration API lines)."
+    }
+  ]
+}

@@ -107,3 +107,15 @@ export const ART_SIZE_EXCEPTIONS: Readonly<Record<number, { readonly width: numb
   1464: { width: 512, height: 512 },
   2665: { width: 512, height: 512 },
 };
+
+/**
+ * The client build `convert.ts` and `import.ts --build` read (terrain-navigation.md §2, gate G1):
+ * `LocalCasc.open({ pin })` refuses any other installed build. The committed art records it.
+ */
+export const CLIENT_PIN = { product: 'wow_classic_beta', version: '1.60.1.70009', buildKey: '05215079e3905ef5922ae0b03ffefb73' } as const;
+
+/** D-034 item 4: the `art` budget, gzip level 6, decimal units (also gated by tools/build/audit-dist.ts). */
+export const ART_BUDGET_GZIP_BYTES = 12_000_000;
+
+/** The tool directories whose tree ids the art manifest records (terrain-navigation.md §13.4). */
+export const ART_TOOL_DIRS: readonly string[] = ['tools/casc', 'tools/maps'];

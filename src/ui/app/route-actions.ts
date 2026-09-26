@@ -1,17 +1,28 @@
 import {
   type Command,
+  copySelected,
+  cutSelected,
   deleteSelected,
   duplicateSelected,
   type EditorStore,
   insertGrind,
   insertNote,
   insertTravel,
+  joinSelectedSections,
   type MoveTarget,
   moveSelected,
+  paste,
+  selectionRuns,
+  setDurationOverride,
+  setStepLocation,
   toggleLockSelected,
 } from '../../app';
-import type { StepId } from '../../domain/ids';
+import { addQuestSteps, type QuestStepPart } from '../../app/quest-steps';
+import type { DatasetView } from '../../domain/dataset';
+import type { QuestId, StepId } from '../../domain/ids';
+import type { Location } from '../../domain/points';
 import type { RouteStep } from '../../domain/route';
+import type { MapGeometry } from '../../geo/types';
 import { formatDurationLong, formatInteger, plural, STEP_KIND_LABELS } from '../kit';
 import type { Announce } from './LiveAnnouncer';
 
@@ -36,8 +47,28 @@ export interface RouteActions {
   readonly insertNote: () => void;
   readonly insertTravel: () => void;
   readonly insertGrind: () => void;
+  /** Cuts the steps (default: the selection) to the clipboard. True when something was cut. */
+  readonly cutSteps: (ids?: ReadonlySet<StepId>) => boolean;
+  /** Copies the steps (default: the selection) to the clipboard; allowed while editing is locked. */
+  readonly copySteps: (ids?: ReadonlySet<StepId>) => void;
+  /** Pastes the clipboard after the selection. */
+  readonly pasteSteps: () => void;
+  /** Moves the later sections of the selection to follow its first one. */
+  readonly joinSections: () => void;
+  /**
+   * Adds steps for parts of a quest after the selection, each at the relevant spawn nearest the
+   * step before it (src/app/quest-steps.ts); `objective` picks one objective for `complete`.
+   */
+  readonly addQuest: (dataset: DatasetView, questId: QuestId, parts: readonly QuestStepPart[], objective?: number | null) => boolean;
+  readonly setLocation: (id: StepId, location: Location | null) => void;
+  readonly setDuration: (id: StepId, seconds: number | null) => void;
   readonly undo: () => void;
   readonly redo: () => void;
+}
+
+export interface RouteActionOptions {
+  /** Places zone-percent locations when a quest step looks for the spawn nearest the step before it; null without a map. */
+  readonly geometry?: MapGeometry | null | undefined;
 }
 
 /** "step 4" or "steps 4 to 6": the 1-based positions of `ids` in `steps`, as a range. */
@@ -62,7 +93,8 @@ function newSteps(before: readonly RouteStep[], after: readonly RouteStep[]): Ro
   return after.filter((s) => !old.has(s.id));
 }
 
-export function createRouteActions(store: EditorStore, announce: Announce): RouteActions {
+export function createRouteActions(store: EditorStore, announce: Announce, options: RouteActionOptions = {}): RouteActions {
+  const geometry = options.geometry ?? null;
   /** Dispatches `command`; when the project changed, announces `describe(before, after)`. */
   const run = (command: Command, describe: (before: readonly RouteStep[], after: readonly RouteStep[]) => string | null): boolean => {
     const { revision, project } = store.getState();
@@ -133,6 +165,60 @@ export function createRouteActions(store: EditorStore, announce: Announce): Rout
     },
     insertGrind: () => {
       insert(insertGrind({ until: { kind: 'duration', seconds: DEFAULT_GRIND_SECONDS } }));
+    },
+
+    cutSteps: (ids) =>
+      run(cutSelected(ids), (before, after) => `${plural(before.length - after.length, 'step')} cut. Paste with Ctrl+V; ${UNDO_HINT.charAt(0).toLowerCase()}${UNDO_HINT.slice(1)}`),
+
+    copySteps: (ids) => {
+      const count = targetOf(ids).size;
+      const before = store.getState().clipboard;
+      store.dispatch(copySelected(ids));
+      if (store.getState().clipboard !== before && count > 0) announce(`${plural(store.getState().clipboard.steps.length, 'step')} copied. Paste with Ctrl+V.`);
+    },
+
+    pasteSteps: () => {
+      run(paste(), (before, after) => {
+        const pasted = newSteps(before, after);
+        const where = positionsText(after, new Set(pasted.map((s) => s.id)));
+        return `${plural(pasted.length, 'step')} pasted${where === null ? '' : ` as ${where}`}.`;
+      });
+    },
+
+    joinSections: () => {
+      const picked = new Set(targetOf(undefined));
+      const runs = selectionRuns(store.getState().project.route.steps, picked).length;
+      run(joinSelectedSections(), (_before, after) => {
+        const where = positionsText(after, picked);
+        return `${formatInteger(runs)} sections joined${where === null ? '' : `: now ${where}`}.`;
+      });
+    },
+
+    addQuest: (dataset, questId, parts, objective = null) =>
+      run(addQuestSteps(questId, parts, { dataset, geometry, objective }), (before, after) => {
+        const added = newSteps(before, after);
+        const where = positionsText(after, new Set(added.map((s) => s.id)));
+        const name = dataset.quest(questId)?.name ?? `Quest ${String(questId)}`;
+        const what = added.map((s) => STEP_KIND_LABELS[s.kind].toLowerCase()).join(', ');
+        const placed = added.filter((s) => s.location !== null).length;
+        const unplaced = added.length - placed;
+        const note = unplaced === 0 ? '' : ` ${plural(unplaced, 'step has', 'steps have')} no location: the dataset has no usable spawn for ${unplaced === 1 ? 'it' : 'them'}.`;
+        return `${name}: ${what} added${where === null ? '' : ` as ${where}`}.${note}`;
+      }),
+
+    setLocation: (id, location) => {
+      run(setStepLocation(id, location), (_before, after) => {
+        const where = positionsText(after, new Set([id]));
+        const step = where ?? 'the step';
+        return location === null ? `Location of ${step} cleared.` : `Location of ${step} set.`;
+      });
+    },
+
+    setDuration: (id, seconds) => {
+      run(setDurationOverride(id, seconds), (_before, after) => {
+        const where = positionsText(after, new Set([id])) ?? 'the step';
+        return seconds === null ? `Duration override of ${where} cleared: the estimate applies.` : `Duration of ${where} set to ${formatDurationLong(seconds)}.`;
+      });
     },
 
     undo: () => {

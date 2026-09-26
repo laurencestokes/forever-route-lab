@@ -1,0 +1,4209 @@
+{
+  "$comment": [
+    "Reviewed spawn census of the navigation build (docs/research/terrain-navigation.md §12; D-030, RC-02, RC-05). Components are",
+    "identified by map and anchor (the lowest kind, id and spawn index among the spawns in them), never by component index.",
+    "First review, 3b.4 (build 1.60.1.70009, settings c05r1+n12+e5+s60, QuestieDB b6f5b07). Entries whose note starts with",
+    "'reviewed:' were examined individually (the island, Rut'theran, Thunder Bluff, the Ban'ethil Barrow Den chamber of RC-02,",
+    "the G7 floors and the zones). The others were drafted by tools/terrain/review-draft.ts from measured facts with the rules",
+    "in its header (note 'rule:'); they are geometric descriptions, not in-game checks. The gate fails on an unreviewed",
+    "component or unsnapped spawn, on a reviewed component growing by more than 10%, and on a zone of 50 or more spawns keeping",
+    "less than 90% (or its minShare) in its dominant component. Regenerate a draft with pnpm nav:review-draft."
+  ],
+  "schema": 1,
+  "kind": "nav-census-reviewed",
+  "components": [
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2053,
+        "index": 5
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 16,
+      "polygons": 607,
+      "zones": [
+        "Silverpine Forest (130): 16"
+      ],
+      "note": "rule: 16 dataset spawns stand here, so players likely reach it; closest approach to main 9.1 yd; z 32 to 216 around (-846, 847); polygon areas Silverpine Forest (130) 395, Hillsbrad Foothills (267) 204, Gilneas (17065) 8; n2053 n2054 n2173 n2332 o3705 o180642"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2271,
+        "index": 1
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 16,
+      "polygons": 122,
+      "zones": [
+        "Alterac Mountains (36): 16"
+      ],
+      "note": "rule: closest approach to main 1.6 yd; z 35 to 85 around (237, 285); polygon areas Alterac Mountains (36) 122; n2271 n2358 n2359 n2408 n2628 o1624 o2039"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5861,
+        "index": 16
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 15,
+      "polygons": 43,
+      "zones": [
+        "Searing Gorge (51): 15"
+      ],
+      "note": "rule: closest approach to main 3.5 yd; z 305 to 354 around (-6514, -984); polygon areas Searing Gorge (51) 43; n5861 n5862 n8282 n8419 n8436 o324 o1734 o2040"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 324,
+        "index": 174
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 12,
+      "polygons": 26,
+      "zones": [
+        "Burning Steppes (46): 12"
+      ],
+      "note": "rule: 12 dataset spawns stand here, so players likely reach it; closest approach to main 7.8 yd; z 182 to 235 around (-7627, -3083); polygon areas Burning Steppes (46) 26; o324 o1734 o2040 o2047 o165658 o175404"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 1732,
+        "index": 1085
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 12,
+      "polygons": 205,
+      "zones": [
+        "Arathi Highlands (45): 12"
+      ],
+      "note": "rule: 12 dataset spawns stand here, so players likely reach it; closest approach to main 89.4 yd; z 102 to 275 around (-2150, -2847); polygon areas Arathi Highlands (45) 205; o1732 o1733 o1734 o1735 o2040 o2047"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 6208,
+        "index": 1
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 11,
+      "polygons": 171,
+      "zones": [
+        "Dun Morogh (1): 11"
+      ],
+      "note": "rule: 11 dataset spawns stand here, so players likely reach it; closest approach to main 100.8 yd; z 237 to 262 around (-5022, 759); polygon areas Gnomeregan (721) 171; n6208 n6209 n6210 n6213 n6221"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 397,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 9,
+      "polygons": 42,
+      "zones": [
+        "Redridge Mountains (44): 9"
+      ],
+      "note": "rule: 22 of 42 polygon centroids over a main floor (a roof, platform or ledge); closest approach 29.4 yd; z 165 to 187 around (-9280, -3299); polygon areas Redridge Mountains (44) 42; n397 n429 n579 n819"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 456,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 9,
+      "polygons": 31,
+      "zones": [
+        "Westfall (40): 9"
+      ],
+      "note": "rule: closest approach to main 3.9 yd; z 2 to 11 around (-9801, 1834); polygon areas Westfall (40) 31; n456 n513"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 7028,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 5,
+      "polygons": 43,
+      "zones": [
+        "Burning Steppes (46): 5"
+      ],
+      "note": "rule: beside the main component (43 of 43 centroids with no main floor above or below); closest approach 5.5 yd; z 183 to 196 around (-7609, -784); polygon areas Burning Steppes (46) 43; n7028"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 1733,
+        "index": 1581
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 5,
+      "polygons": 2,
+      "zones": [
+        "Burning Steppes (46): 5"
+      ],
+      "note": "rule: beside the main component (2 of 2 centroids with no main floor above or below); closest approach 17.2 yd; z 252 to 266 around (-7478, -2270); polygon areas Burning Steppes (46) 2; o1733 o1734 o1735 o2040 o2047"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 4573,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 4,
+      "polygons": 614,
+      "zones": [
+        "Undercity (1497): 4"
+      ],
+      "note": "rule: closest approach to main 4.0 yd; z 61 to 88 around (1618, 254); polygon areas Tirisfal Glades (85) 360, Undercity (1497) 254; n4573 n5624 o37097 o180772"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 7664,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 4,
+      "polygons": 1,
+      "zones": [
+        "Blasted Lands (4): 4"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach none within 60 yd; z 141 to 154 around (-11236, -2840); polygon areas Blasted Lands (4) 1; n7664 n7734 n7735 o153205"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 8561,
+        "index": 1
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 4,
+      "polygons": 8,
+      "zones": [
+        "Eastern Plaguelands (139): 4"
+      ],
+      "note": "rule: closest approach to main 2.2 yd; z 164 to 172 around (3445, -4975); polygon areas Eastern Plaguelands (139) 8; n8561"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 331,
+        "index": 17
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 4,
+      "polygons": 10,
+      "zones": [
+        "Wetlands (11): 4"
+      ],
+      "note": "rule: beside the main component (10 of 10 centroids with no main floor above or below); closest approach 11.6 yd; z 51 to 66 around (-3584, -1812); polygon areas Wetlands (11) 10; o331 o333 o334 o35252"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 1373,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 3,
+      "polygons": 16,
+      "zones": [
+        "Dun Morogh (1): 3"
+      ],
+      "note": "rule: closest approach to main 4.2 yd; z 390 to 400 around (-5601, -541); polygon areas Dun Morogh (1) 16; n1373 o269 o270"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2271,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 3,
+      "polygons": 6,
+      "zones": [
+        "Alterac Mountains (36): 3"
+      ],
+      "note": "rule: closest approach to main 4.0 yd; z 80 to 83 around (367, 162); polygon areas Alterac Mountains (36) 6; n2271 n2272 n2358"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 4576,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 3,
+      "polygons": 40,
+      "zones": [
+        "Undercity (1497): 3"
+      ],
+      "note": "rule: beside the main component (27 of 40 centroids with no main floor above or below); closest approach 12.8 yd; z -45 to -40 around (1600, 240); polygon areas Undercity (1497) 38, Tirisfal Glades (85) 2; n4576 n7825 o3705"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5385,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 3,
+      "polygons": 34,
+      "zones": [
+        "Blasted Lands (4): 3"
+      ],
+      "note": "rule: 22 of 34 polygon centroids over a main floor (a roof, platform or ledge); closest approach 22.5 yd; z 117 to 138 around (-10986, -3492); polygon areas Blasted Lands (4) 34; n5385 n7826 n8022"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 9448,
+        "index": 8
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 3,
+      "polygons": 10,
+      "zones": [
+        "Eastern Plaguelands (139): 3"
+      ],
+      "note": "rule: closest approach to main 0.0 yd; z 101 to 103 around (1548, -5556); polygon areas Eastern Plaguelands (139) 10; n9448 n9450 n9451"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 14564,
+        "index": 15
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 3,
+      "polygons": 9,
+      "zones": [
+        "Eastern Plaguelands (139): 3"
+      ],
+      "note": "rule: beside the main component (9 of 9 centroids with no main floor above or below); closest approach 23.1 yd; z 218 to 250 around (3127, -2711); polygon areas Eastern Plaguelands (139) 9; n14564"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 1731,
+        "index": 962
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 3,
+      "polygons": 1,
+      "zones": [
+        "Redridge Mountains (44): 3"
+      ],
+      "note": "rule: closest approach to main 2.6 yd; z 103 to 103 around (-9077, -3301); polygon areas Redridge Mountains (44) 1; o1731 o1732 o1733"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 1731,
+        "index": 1005
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 3,
+      "polygons": 32,
+      "zones": [
+        "Redridge Mountains (44): 3"
+      ],
+      "note": "rule: beside the main component (24 of 32 centroids with no main floor above or below); closest approach 10.8 yd; z 164 to 201 around (-8663, -2267); polygon areas Redridge Mountains (44) 32; o1731 o1732 o1733"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 3705,
+        "index": 238
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 3,
+      "polygons": 151,
+      "zones": [
+        "Undercity (1497): 3"
+      ],
+      "note": "rule: 77 of 151 polygon centroids over a main floor (a roof, platform or ledge); closest approach 6.5 yd; z -3 to 10 around (1605, 240); polygon areas Undercity (1497) 140, Tirisfal Glades (85) 11; o3705 o180771 o180772"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 836,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 34,
+      "zones": [
+        "Dun Morogh (1): 2"
+      ],
+      "note": "rule: beside the main component (26 of 34 centroids with no main floor above or below); closest approach 10.1 yd; z 416 to 453 around (-6112, 390); polygon areas Dun Morogh (1) 34; n836 n944"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 1827,
+        "index": 9
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 4,
+      "zones": [
+        "Western Plaguelands (28): 2"
+      ],
+      "note": "rule: beside the main component (2 of 4 centroids with no main floor above or below); closest approach 12.1 yd; z 149 to 150 around (2767, -1631); polygon areas Western Plaguelands (28) 4; n1827"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 1827,
+        "index": 13
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 27,
+      "zones": [
+        "Western Plaguelands (28): 2"
+      ],
+      "note": "rule: closest approach to main 2.1 yd; z 146 to 155 around (2943, -1413); polygon areas Western Plaguelands (28) 27; n1827"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2349,
+        "index": 0
+      },
+      "reason": "enclosed",
+      "spawns": 2,
+      "polygons": 41,
+      "zones": [
+        "Alterac Mountains (36): 2"
+      ],
+      "note": "rule: 22 of 41 polygon centroids under a main floor (a room or cellar); closest approach 123.5 yd; z -90 to -75 around (-53, 389); polygon areas Alterac Mountains (36) 41; n2349 n2359"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2358,
+        "index": 10
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 26,
+      "zones": [
+        "Alterac Mountains (36): 2"
+      ],
+      "note": "rule: beside the main component (18 of 26 centroids with no main floor above or below); closest approach 17.0 yd; z 120 to 123 around (112, 409); polygon areas Alterac Mountains (36) 26; n2358 o2039"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 4283,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 38,
+      "zones": [
+        "Tirisfal Glades (85): 2"
+      ],
+      "note": "rule: closest approach to main 1.7 yd; z 142 to 164 around (2887, -818); polygon areas Tirisfal Glades (85) 38; n4283"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5111,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 8,
+      "zones": [
+        "Ironforge (1537): 2"
+      ],
+      "note": "rule: closest approach to main 3.9 yd; z 502 to 511 around (-4846, -866); polygon areas Ironforge (1537) 8; n5111 n14183"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5843,
+        "index": 41
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 7,
+      "zones": [
+        "Searing Gorge (51): 2"
+      ],
+      "note": "rule: beside the main component (6 of 7 centroids with no main floor above or below); closest approach 15.0 yd; z 192 to 197 around (-6891, -1144); polygon areas Searing Gorge (51) 7; n5843"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 6209,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 6,
+      "zones": [
+        "Dun Morogh (1): 2"
+      ],
+      "note": "rule: beside the main component (6 of 6 centroids with no main floor above or below); closest approach 13.0 yd; z 444 to 485 around (-5179, 889); polygon areas Dun Morogh (1) 6; n6209 n6210"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 7370,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 30,
+      "zones": [
+        "Deadwind Pass (41): 2"
+      ],
+      "note": "rule: closest approach to main 1.6 yd; z 39 to 65 around (-11078, -1976); polygon areas Deadwind Pass (41) 30; n7370 n12377"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 11865,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 8,
+      "zones": [
+        "Ironforge (1537): 2"
+      ],
+      "note": "rule: closest approach to main 3.5 yd; z 502 to 510 around (-5041, -1200); polygon areas Ironforge (1537) 8; n11865 n13084"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 14564,
+        "index": 6
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 1,
+      "zones": [
+        "Eastern Plaguelands (139): 2"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 10.3 yd; z 161 to 183 around (3095, -2744); polygon areas Eastern Plaguelands (139) 1; n14564"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 14731,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 16,
+      "zones": [
+        "The Hinterlands (47): 2"
+      ],
+      "note": "rule: closest approach to main 3.8 yd; z 12 to 31 around (-623, -4582); polygon areas The Hinterlands (47) 16; n14731 n14736"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 16004,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 34,
+      "zones": [
+        "Undercity (1497): 2"
+      ],
+      "note": "rule: 28 of 34 polygon centroids over a main floor (a roof, platform or ledge); closest approach 61.0 yd; z 119 to 127 around (1617, 242); polygon areas Undercity (1497) 33, Tirisfal Glades (85) 1; n16004 n16108"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 324,
+        "index": 123
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 22,
+      "zones": [
+        "Western Plaguelands (28): 2"
+      ],
+      "note": "rule: beside the main component (13 of 22 centroids with no main floor above or below); closest approach 11.1 yd; z 170 to 223 around (2412, -2242); polygon areas Western Plaguelands (28) 22; o324 o2047"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 1053,
+        "index": 8
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Wetlands (11): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 24.1 yd; z 135 to 137 around (-2669, -2376); polygon areas Wetlands (11) 1; n1053"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2742,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 26,
+      "zones": [
+        "Badlands (3): 1"
+      ],
+      "note": "rule: beside the main component (24 of 26 centroids with no main floor above or below); closest approach 8.8 yd; z 350 to 396 around (-6383, -3073); polygon areas Badlands (3) 26; n2742"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2790,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 5,
+      "zones": [
+        "Ironforge (1537): 1"
+      ],
+      "note": "rule: beside the main component (5 of 5 centroids with no main floor above or below); closest approach 5.4 yd; z 502 to 509 around (-5029, -1014); polygon areas Ironforge (1537) 5; n2790"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5159,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 4,
+      "zones": [
+        "Ironforge (1537): 1"
+      ],
+      "note": "rule: closest approach to main 4.7 yd; z 503 to 510 around (-4766, -1190); polygon areas Ironforge (1537) 4; n5159"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5843,
+        "index": 56
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 6,
+      "zones": [
+        "Searing Gorge (51): 1"
+      ],
+      "note": "rule: 4 of 6 polygon centroids over a main floor (a roof, platform or ledge); closest approach 17.2 yd; z 213 to 217 around (-6906, -1293); polygon areas Searing Gorge (51) 6; n5843"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 6209,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 4,
+      "zones": [
+        "Dun Morogh (1): 1"
+      ],
+      "note": "rule: beside the main component (4 of 4 centroids with no main floor above or below); closest approach 27.2 yd; z 476 to 494 around (-4932, 670); polygon areas Dun Morogh (1) 4; n6209"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 8507,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 5,
+      "zones": [
+        "Ironforge (1537): 1"
+      ],
+      "note": "rule: closest approach to main 4.9 yd; z 502 to 509 around (-4591, -965); polygon areas Ironforge (1537) 5; n8507"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 9026,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 7,
+      "zones": [
+        "? (10074): 1"
+      ],
+      "note": "rule: beside the main component (7 of 7 centroids with no main floor above or below); closest approach 17.5 yd; z 246 to 264 around (-8407, -479); polygon areas Elwynn Forest (12) 7; n9026"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 14387,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 120,
+      "zones": [
+        "Searing Gorge (51): 1"
+      ],
+      "note": "rule: closest approach to main 0.8 yd; z 164 to 184 around (-7371, -962); polygon areas Searing Gorge (51) 77, Burning Steppes (46) 43; n14387"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 14564,
+        "index": 32
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 4,
+      "zones": [
+        "Eastern Plaguelands (139): 1"
+      ],
+      "note": "rule: beside the main component (4 of 4 centroids with no main floor above or below); closest approach 21.5 yd; z 264 to 277 around (3197, -2708); polygon areas Eastern Plaguelands (139) 4; n14564"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 14564,
+        "index": 33
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Eastern Plaguelands (139): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 24.7 yd; z 188 to 204 around (3178, -2780); polygon areas Eastern Plaguelands (139) 1; n14564"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 2045,
+        "index": 386
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 2,
+      "zones": [
+        "Hillsbrad Foothills (267): 1"
+      ],
+      "note": "rule: closest approach to main 1.6 yd; z 5 to 9 around (-1360, -667); polygon areas Hillsbrad Foothills (267) 2; o2045"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 4149,
+        "index": 3
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 61,
+      "zones": [
+        "Badlands (3): 1"
+      ],
+      "note": "rule: beside the main component (60 of 61 centroids with no main floor above or below); closest approach 41.9 yd; z 378 to 402 around (-7347, -2027); polygon areas Searing Gorge (51) 31, Badlands (3) 30; o4149"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 1984,
+        "index": 0
+      },
+      "reason": "teleport-connector-missing",
+      "spawns": 1334,
+      "polygons": 12000,
+      "zones": [
+        "Teldrassil (141): 1240",
+        "Darnassus (1657): 94"
+      ],
+      "connectors": [
+        "rutheran-to-darnassus-portal"
+      ],
+      "note": "reviewed: Teldrassil and Darnassus (12000 polygons). Reached from Rut'theran Village through the portal, a teleport connector still todo (D-034 item 1); the island is cut from Darkshore by the open-water rule (G8). rule: 1334 dataset spawns stand here, so players likely reach it; closest approach to main none within 60 yd; z 1245 to 1544 around (9989, 1527); polygon areas Teldrassil (141) 9295, Darnassus (1657) 2705; n1984 n1985 n1986 n1988 n1989 n1992 n1993 n1994"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2798,
+        "index": 0
+      },
+      "reason": "elevator-connector-missing",
+      "spawns": 93,
+      "polygons": 985,
+      "zones": [
+        "Thunder Bluff (1638): 93"
+      ],
+      "connectors": [
+        "thunder-bluff-elevator-west"
+      ],
+      "note": "reviewed: the Thunder Bluff rises, bridges and Pools of Vision (985 polygons, G7b); joined to Mulgore only by the elevators, still todo (D-031). rule: 93 dataset spawns stand here, so players likely reach it; closest approach to main 28.1 yd; z 96 to 178 around (-1163, 25); polygon areas Thunder Bluff (1638) 985; n2798 n2987 n2995 n2998 n3001 n3004 n3007 n3008"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 10919,
+        "index": 3
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 44,
+      "polygons": 260,
+      "zones": [
+        "Darkshore (148): 44"
+      ],
+      "note": "rule: 44 dataset spawns stand here, so players likely reach it; closest approach to main none within 60 yd; z 149 to 213 around (7394, -1543); polygon areas Darkshore (148) 260; n10919 n11196"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2009,
+        "index": 30
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 27,
+      "polygons": 98,
+      "zones": [
+        "Teldrassil (141): 27"
+      ],
+      "note": "reviewed (RC-02, investigated in 3b.3): this is the lower chamber of the Ban'ethil Barrow Den WMO (its polygons carry WMOAreaTable area 262, \"Ban'ethil Barrow Den\", 1.60.1.70009; z 1254-1313 under the Teldrassil surface at z 1330-1450), where these Gnarlpine NPCs stand. The chamber is cut off on the den's spiral ramp near (9857, 1571, 1328), where the den's own WMO geometry leaves less than 2 yd of clearance over most of the ramp's width, so the 0.52-yd erosion removes what is left. Rebuilding block 12_28 alone: it joins with radius 0 or a 1-yd walkable height; it stays cut at slope 70 and 80, climb 3 yd, walkable heights 1.25, 1.5 and 1.75 yd, 128- and 512-voxel tiles, and with every M2 kept or dropped. Radius 0 costs about +41% (sweep c1r0) and a 1-yd height would pass under furniture everywhere, so the settings stay; a walk connector after the owner walks the ramp in game. rule: 27 dataset spawns stand here, so players likely reach it; closest approach to main none within 60 yd; z 1254 to 1313 around (9804, 1560); polygon areas Teldrassil (141) 98; n2009 n2010 n2011 n7318 o106318"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3736,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 21,
+      "polygons": 86,
+      "zones": [
+        "Ashenvale (331): 21"
+      ],
+      "note": "rule: 21 dataset spawns stand here, so players likely reach it; closest approach to main 12.6 yd; z 37 to 95 around (1811, -2723); polygon areas Ashenvale (331) 86; n3736 n3799 n3803 n3804 n3806 n3807 n3808 n3940"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2179,
+        "index": 5
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 18,
+      "polygons": 22,
+      "zones": [
+        "Darkshore (148): 18"
+      ],
+      "note": "rule: 18 dataset spawns stand here, so players likely reach it; closest approach to main 186.5 yd; z 250 to 328 around (6832, -778); polygon areas Darkshore (148) 22; n2179 n2180 n2339 n7017 o1733 o11713 o11714 o106319"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7327,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 17,
+      "polygons": 99,
+      "zones": [
+        "The Barrens (17): 17"
+      ],
+      "note": "rule: closest approach to main 1.7 yd; z 46 to 108 around (-4792, -2574); polygon areas The Barrens (17) 92, Razorfen Downs (722) 7; n7327 n7332 n7335"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7093,
+        "index": 6
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 15,
+      "polygons": 106,
+      "zones": [
+        "Felwood (361): 15"
+      ],
+      "note": "rule: 15 dataset spawns stand here, so players likely reach it; closest approach to main 16.4 yd; z 287 to 335 around (5082, -497); polygon areas Felwood (361) 106; n7093 n7111 n7114 n7118 n7120 n7126 n9862 n11016"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7112,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 13,
+      "polygons": 22,
+      "zones": [
+        "Felwood (361): 13"
+      ],
+      "note": "rule: 13 dataset spawns stand here, so players likely reach it; closest approach to main 18.0 yd; z 273 to 293 around (4790, -568); polygon areas Felwood (361) 22; n7112 n7113 n7115 n7125 o176645"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11777,
+        "index": 2
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 13,
+      "polygons": 36,
+      "zones": [
+        "Desolace (405): 13"
+      ],
+      "note": "rule: 13 dataset spawns stand here, so players likely reach it; closest approach to main 6.8 yd; z 153 to 205 around (-1224, 2989); polygon areas Desolace (405) 36; n11777 n11778 n11787 n11788 o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3118,
+        "index": 3
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 11,
+      "polygons": 196,
+      "zones": [
+        "Durotar (14): 11"
+      ],
+      "note": "rule: 11 dataset spawns stand here, so players likely reach it; closest approach to main 14.6 yd; z 42 to 72 around (1055, -4718); polygon areas Durotar (14) 196; n3118 n3126 o1731"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7093,
+        "index": 1
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 11,
+      "polygons": 152,
+      "zones": [
+        "Felwood (361): 11"
+      ],
+      "note": "rule: 11 dataset spawns stand here, so players likely reach it; closest approach to main 46.0 yd; z 244 to 286 around (5355, -523); polygon areas Felwood (361) 152; n7093 n7118 n7120 n7126 n9862 o176643"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2179,
+        "index": 3
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 9,
+      "polygons": 16,
+      "zones": [
+        "Darkshore (148): 9"
+      ],
+      "note": "rule: 16 of 16 polygon centroids over a main floor (a roof, platform or ledge); closest approach 79.9 yd; z 169 to 213 around (6797, -674); polygon areas Darkshore (148) 16; n2179 n2180 o11714"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3607,
+        "index": 0
+      },
+      "reason": "transport",
+      "spawns": 9,
+      "polygons": 9241,
+      "zones": [
+        "Teldrassil (141): 9"
+      ],
+      "note": "reviewed: Rut'theran Village and the Teldrassil shore (9241 polygons): the Auberdine boat, a same-map TravelGraph transport (D-034 item 2); the portal to Darnassus is a todo connector. rule: beside the main component (9241 of 9241 centroids with no main floor above or below); closest approach none within 60 yd; z -2 to 524 around (9993, 1018); polygon areas Teldrassil (141) 9241; n3607 n3838 n7907 n7916 n10118 n16788 n16817 o142958"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3385,
+        "index": 15
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 7,
+      "polygons": 63,
+      "zones": [
+        "The Barrens (17): 7"
+      ],
+      "note": "rule: 40 of 63 polygon centroids over a main floor (a roof, platform or ledge); closest approach 29.1 yd; z 111 to 132 around (-2096, -3647); polygon areas The Barrens (17) 63; n3385 n3393"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5057,
+        "index": 14
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 7,
+      "polygons": 24,
+      "zones": [
+        "Dustwallow Marsh (15): 7"
+      ],
+      "note": "rule: beside the main component (24 of 24 centroids with no main floor above or below); closest approach 7.7 yd; z 8 to 22 around (-4002, -5014); polygon areas Dustwallow Marsh (15) 24; n5057"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11917,
+        "index": 0
+      },
+      "reason": "enclosed",
+      "spawns": 6,
+      "polygons": 16,
+      "zones": [
+        "Stonetalon Mountains (406): 6"
+      ],
+      "note": "rule: 15 of 16 polygon centroids under a main floor (a room or cellar); closest approach 7.4 yd; z 95 to 107 around (-113, 375); polygon areas Stonetalon Mountains (406) 16; n11917 n11918 o178104 o178105"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5333,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 5,
+      "polygons": 89,
+      "zones": [
+        "Feralas (357): 5"
+      ],
+      "note": "rule: beside the main component (83 of 89 centroids with no main floor above or below); closest approach 7.8 yd; z 77 to 155 around (-5521, 3451); polygon areas Feralas (357) 89; n5333 n5336 n5343 o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5333,
+        "index": 4
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 4,
+      "polygons": 61,
+      "zones": [
+        "Feralas (357): 4"
+      ],
+      "note": "rule: beside the main component (57 of 61 centroids with no main floor above or below); closest approach 9.8 yd; z -20 to 3 around (-5711, 3660); polygon areas Feralas (357) 61; n5333 n5336 o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5333,
+        "index": 2
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 3,
+      "polygons": 65,
+      "zones": [
+        "Feralas (357): 3"
+      ],
+      "note": "rule: beside the main component (65 of 65 centroids with no main floor above or below); closest approach 18.9 yd; z 59 to 160 around (-5629, 3642); polygon areas Feralas (357) 65; n5333"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7167,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 3,
+      "polygons": 86,
+      "zones": [
+        "The Barrens (17): 3"
+      ],
+      "note": "rule: closest approach to main 3.7 yd; z 0 to 21 around (-1462, -3931); polygon areas The Barrens (17) 86; n7167 n7168 o123462"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 10919,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 3,
+      "polygons": 16,
+      "zones": [
+        "Darkshore (148): 3"
+      ],
+      "note": "rule: beside the main component (16 of 16 centroids with no main floor above or below); closest approach none within 60 yd; z 159 to 178 around (7548, -1523); polygon areas Darkshore (148) 16; n10919"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11685,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 3,
+      "polygons": 30,
+      "zones": [
+        "Desolace (405): 3"
+      ],
+      "note": "rule: 23 of 30 polygon centroids over a main floor (a roof, platform or ledge); closest approach 24.9 yd; z 164 to 216 around (-1439, 2964); polygon areas Desolace (405) 21, Maraudon (2100) 9; n11685 n13718"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 1735,
+        "index": 1428
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 3,
+      "polygons": 734,
+      "zones": [
+        "Feralas (357): 3"
+      ],
+      "note": "rule: beside the main component (697 of 734 centroids with no main floor above or below); closest approach 7.0 yd; z 22 to 248 around (-5389, 1957); polygon areas Feralas (357) 734; o1735 o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2179,
+        "index": 9
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 6,
+      "zones": [
+        "Darkshore (148): 2"
+      ],
+      "note": "rule: closest approach to main 0.0 yd; z 112 to 136 around (6848, -660); polygon areas Darkshore (148) 6; n2179 n2180"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2180,
+        "index": 2
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 2,
+      "zones": [
+        "Darkshore (148): 2"
+      ],
+      "note": "rule: 2 of 2 polygon centroids over a main floor (a roof, platform or ledge); closest approach 185.2 yd; z 257 to 278 around (6717, -665); polygon areas Darkshore (148) 2; n2180 o11714"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2203,
+        "index": 9
+      },
+      "reason": "enclosed",
+      "spawns": 2,
+      "polygons": 27,
+      "zones": [
+        "Darkshore (148): 2"
+      ],
+      "note": "rule: 19 of 27 polygon centroids under a main floor (a room or cellar); closest approach 6.6 yd; z -15 to -3 around (7046, 408); polygon areas Darkshore (148) 27; n2203"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3126,
+        "index": 24
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 84,
+      "zones": [
+        "Durotar (14): 2"
+      ],
+      "note": "rule: beside the main component (75 of 84 centroids with no main floor above or below); closest approach 13.6 yd; z 27 to 66 around (765, -4524); polygon areas Durotar (14) 84; n3126 o1731"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3632,
+        "index": 8
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 18,
+      "zones": [
+        "The Barrens (17): 2"
+      ],
+      "note": "rule: closest approach to main 2.5 yd; z 82 to 112 around (-796, -2045); polygon areas The Barrens (17) 18; n3632"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4014,
+        "index": 10
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 1,
+      "zones": [
+        "Stonetalon Mountains (406): 2"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 11.2 yd; z 185 to 193 around (1646, 675); polygon areas Stonetalon Mountains (406) 1; n4014"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4388,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 37,
+      "zones": [
+        "Dustwallow Marsh (15): 2"
+      ],
+      "note": "rule: beside the main component (37 of 37 centroids with no main floor above or below); closest approach 5.7 yd; z 7 to 21 around (-4074, -4519); polygon areas Dustwallow Marsh (15) 37; n4388"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5307,
+        "index": 3
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 3,
+      "zones": [
+        "Feralas (357): 2"
+      ],
+      "note": "rule: closest approach to main 1.6 yd; z 52 to 59 around (-5264, 1258); polygon areas Feralas (357) 3; n5307 n8612"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 6137,
+        "index": 6
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 2,
+      "polygons": 137,
+      "zones": [
+        "Azshara (16): 2"
+      ],
+      "note": "rule: closest approach to main 1.5 yd; z -1 to 26 around (3870, -7197); polygon areas Azshara (16) 137; n6137 o153453"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11686,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 1,
+      "zones": [
+        "Desolace (405): 2"
+      ],
+      "note": "rule: 1 of 1 polygon centroids over a main floor (a roof, platform or ledge); closest approach 14.1 yd; z 150 to 170 around (-1442, 2945); polygon areas Desolace (405) 1; n11686 n11687"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11777,
+        "index": 3
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 1,
+      "zones": [
+        "Desolace (405): 2"
+      ],
+      "note": "rule: 1 of 1 polygon centroids over a main floor (a roof, platform or ledge); closest approach 147.2 yd; z 237 to 242 around (-1168, 2984); polygon areas Desolace (405) 1; n11777 n11787"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11785,
+        "index": 8
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 2,
+      "polygons": 12,
+      "zones": [
+        "Desolace (405): 2"
+      ],
+      "note": "rule: 12 of 12 polygon centroids over a main floor (a roof, platform or ledge); closest approach 13.7 yd; z 187 to 224 around (-1467, 2659); polygon areas Desolace (405) 12; n11785"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2071,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Darkshore (148): 1"
+      ],
+      "note": "rule: closest approach to main 2.3 yd; z 35 to 38 around (7753, -1048); polygon areas Darkshore (148) 1; n2071"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2164,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Darkshore (148): 1"
+      ],
+      "note": "rule: closest approach to main 2.3 yd; z 23 to 25 around (6897, 10); polygon areas Darkshore (148) 1; n2164"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2179,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Darkshore (148): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 174.6 yd; z 256 to 272 around (6815, -745); polygon areas Darkshore (148) 1; n2179"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2179,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Darkshore (148): 1"
+      ],
+      "note": "rule: 1 of 1 polygon centroids over a main floor (a roof, platform or ledge); closest approach 141.5 yd; z 214 to 227 around (6723, -638); polygon areas Darkshore (148) 1; n2179"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2180,
+        "index": 13
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 2,
+      "zones": [
+        "Darkshore (148): 1"
+      ],
+      "note": "rule: beside the main component (2 of 2 centroids with no main floor above or below); closest approach 116.4 yd; z 193 to 216 around (6860, -720); polygon areas Darkshore (148) 2; n2180"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2180,
+        "index": 14
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 5,
+      "zones": [
+        "Darkshore (148): 1"
+      ],
+      "note": "rule: beside the main component (4 of 5 centroids with no main floor above or below); closest approach 124.6 yd; z 214 to 224 around (6796, -724); polygon areas Darkshore (148) 5; n2180"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2322,
+        "index": 9
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Darkshore (148): 1"
+      ],
+      "note": "rule: closest approach to main 1.9 yd; z 36 to 38 around (6866, -130); polygon areas Darkshore (148) 1; n2322"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3118,
+        "index": 5
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Durotar (14): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 13.5 yd; z 39 to 41 around (1119, -4657); polygon areas Durotar (14) 1; n3118"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3373,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 48,
+      "zones": [
+        "Orgrimmar (1637): 1"
+      ],
+      "note": "rule: 25 of 48 polygon centroids over a main floor (a roof, platform or ledge); closest approach 29.7 yd; z 58 to 142 around (1562, -4140); polygon areas Orgrimmar (1637) 48; n3373"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3921,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 192,
+      "zones": [
+        "Ashenvale (331): 1"
+      ],
+      "note": "rule: closest approach to main 0.0 yd; z 255 to 341 around (3393, -753); polygon areas Ashenvale (331) 192; n3921"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4014,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 6,
+      "zones": [
+        "Stonetalon Mountains (406): 1"
+      ],
+      "note": "rule: beside the main component (6 of 6 centroids with no main floor above or below); closest approach 10.0 yd; z 163 to 172 around (1421, 1030); polygon areas Stonetalon Mountains (406) 6; n4014"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4014,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 6,
+      "zones": [
+        "Stonetalon Mountains (406): 1"
+      ],
+      "note": "rule: beside the main component (6 of 6 centroids with no main floor above or below); closest approach 7.1 yd; z 169 to 182 around (1403, 1038); polygon areas Stonetalon Mountains (406) 6; n4014"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4014,
+        "index": 13
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Stonetalon Mountains (406): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 7.2 yd; z 139 to 144 around (1602, 856); polygon areas Stonetalon Mountains (406) 1; n4014"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4054,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 5,
+      "zones": [
+        "Ashenvale (331): 1"
+      ],
+      "note": "rule: closest approach to main 2.2 yd; z 138 to 160 around (2429, -1642); polygon areas Ashenvale (331) 5; n4054"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4116,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 2,
+      "zones": [
+        "Thousand Needles (400): 1"
+      ],
+      "note": "rule: beside the main component (1 of 2 centroids with no main floor above or below); closest approach 85.5 yd; z 87 to 98 around (-5336, -3254); polygon areas Thousand Needles (400) 2; n4116"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4663,
+        "index": 3
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 2,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: beside the main component (2 of 2 centroids with no main floor above or below); closest approach 7.0 yd; z 129 to 137 around (-284, 1772); polygon areas Desolace (405) 2; n4663"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4674,
+        "index": 12
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 5,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: closest approach to main 1.6 yd; z 90 to 93 around (-343, 812); polygon areas Desolace (405) 5; n4674"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4676,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 5,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: closest approach to main 2.2 yd; z 67 to 88 around (-1963, 1782); polygon areas Desolace (405) 5; n4676"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5276,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Feralas (357): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 11.1 yd; z 51 to 56 around (-3411, 2437); polygon areas Feralas (357) 1; n5276"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 10182,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 2,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: beside the main component (2 of 2 centroids with no main floor above or below); closest approach 15.4 yd; z 84 to 98 around (398, 1829); polygon areas Stonetalon Mountains (406) 2; n10182"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11106,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 17,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: closest approach to main 2.8 yd; z 47 to 64 around (-1593, 3150); polygon areas Desolace (405) 17; n11106"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11777,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: 1 of 1 polygon centroids over a main floor (a roof, platform or ledge); closest approach 141.8 yd; z 233 to 242 around (-1145, 3039); polygon areas Desolace (405) 1; n11777"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11778,
+        "index": 4
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 7.2 yd; z 163 to 163 around (-1314, 3000); polygon areas Desolace (405) 1; n11778"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11781,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 2,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: 2 of 2 polygon centroids over a main floor (a roof, platform or ledge); closest approach 67.9 yd; z 163 to 168 around (-1467, 2787); polygon areas Desolace (405) 2; n11781"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11781,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 30,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: beside the main component (24 of 30 centroids with no main floor above or below); closest approach 8.5 yd; z 134 to 176 around (-1495, 2930); polygon areas Desolace (405) 30; n11781"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11782,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: 1 of 1 polygon centroids over a main floor (a roof, platform or ledge); closest approach 12.4 yd; z 126 to 127 around (-1514, 2720); polygon areas Desolace (405) 1; n11782"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11786,
+        "index": 5
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 2,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: beside the main component (1 of 2 centroids with no main floor above or below); closest approach 25.1 yd; z 147 to 165 around (-1375, 2697); polygon areas Desolace (405) 2; n11786"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11788,
+        "index": 4
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: 1 of 1 polygon centroids over a main floor (a roof, platform or ledge); closest approach 143.2 yd; z 234 to 241 around (-1189, 3037); polygon areas Desolace (405) 1; n11788"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 13697,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 27.6 yd; z 204 to 211 around (-1457, 2809); polygon areas Desolace (405) 1; n13697"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 13718,
+        "index": 1
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 5,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: beside the main component (4 of 5 centroids with no main floor above or below); closest approach 107.3 yd; z 224 to 249 around (-1468, 3000); polygon areas Desolace (405) 5; n13718"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 15202,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 332,
+      "zones": [
+        "Silithus (1377): 1"
+      ],
+      "note": "rule: beside the main component (302 of 332 centroids with no main floor above or below); closest approach 10.5 yd; z 46 to 190 around (-6185, 87); polygon areas Silithus (1377) 332; n15202"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 1731,
+        "index": 451
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 4,
+      "zones": [
+        "Durotar (14): 1"
+      ],
+      "note": "rule: beside the main component (4 of 4 centroids with no main floor above or below); closest approach 8.9 yd; z 89 to 97 around (32, -4542); polygon areas Durotar (14) 4; o1731"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 1731,
+        "index": 488
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 48,
+      "zones": [
+        "Durotar (14): 1"
+      ],
+      "note": "rule: beside the main component (42 of 48 centroids with no main floor above or below); closest approach 19.3 yd; z 33 to 58 around (944, -4548); polygon areas Durotar (14) 48; o1731"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 1731,
+        "index": 590
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 169,
+      "zones": [
+        "Durotar (14): 1"
+      ],
+      "note": "rule: beside the main component (167 of 169 centroids with no main floor above or below); closest approach 11.0 yd; z 43 to 81 around (-1024, -4489); polygon areas Durotar (14) 165, The Barrens (17) 4; o1731"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 1731,
+        "index": 607
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 138,
+      "zones": [
+        "Durotar (14): 1"
+      ],
+      "note": "rule: beside the main component (132 of 138 centroids with no main floor above or below); closest approach 43.3 yd; z 88 to 231 around (1586, -4777); polygon areas Durotar (14) 138; o1731"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 1731,
+        "index": 1335
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 58,
+      "zones": [
+        "Mulgore (215): 1"
+      ],
+      "note": "rule: beside the main component (58 of 58 centroids with no main floor above or below); closest approach 12.4 yd; z 134 to 185 around (-1389, 504); polygon areas Mulgore (215) 58; o1731"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 1734,
+        "index": 2043
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 3,
+      "zones": [
+        "Winterspring (618): 1"
+      ],
+      "note": "rule: closest approach to main 2.6 yd; z 735 to 762 around (6959, -3327); polygon areas Winterspring (618) 3; o1734"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 2040,
+        "index": 1667
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 7,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: closest approach to main 2.3 yd; z 132 to 142 around (-1411, 2923); polygon areas Desolace (405) 7; o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 2040,
+        "index": 1690
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 101.4 yd; z 195 to 201 around (-1367, 2717); polygon areas Desolace (405) 1; o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 2047,
+        "index": 1451
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 91,
+      "zones": [
+        "Winterspring (618): 1"
+      ],
+      "note": "rule: beside the main component (81 of 91 centroids with no main floor above or below); closest approach 47.9 yd; z 954 to 1043 around (4739, -4498); polygon areas Winterspring (618) 91; o2047"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 2047,
+        "index": 1466
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 21,
+      "zones": [
+        "Silithus (1377): 1"
+      ],
+      "note": "rule: closest approach to main 2.6 yd; z -13 to 5 around (-6618, 1014); polygon areas Silithus (1377) 21; o2047"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 11714,
+        "index": 10
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 2,
+      "zones": [
+        "Darkshore (148): 1"
+      ],
+      "note": "rule: 2 of 2 polygon centroids over a main floor (a roof, platform or ledge); closest approach 235.9 yd; z 305 to 318 around (6722, -692); polygon areas Darkshore (148) 2; o11714"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 142140,
+        "index": 282
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 323,
+      "zones": [
+        "Tanaris (440): 1"
+      ],
+      "note": "rule: closest approach to main 2.1 yd; z -219 to 48 around (-8353, -4468); polygon areas Tanaris (440) 323; o142140"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 179497,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 1,
+      "zones": [
+        "Azshara (16): 1"
+      ],
+      "note": "rule: beside the main component (1 of 1 centroids with no main floor above or below); closest approach 6.3 yd; z 5 to 10 around (3430, -6197); polygon areas Azshara (16) 1; o179497"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 180652,
+        "index": 0
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 799,
+      "zones": [
+        "? (10089): 1"
+      ],
+      "note": "rule: beside the main component (799 of 799 centroids with no main floor above or below); closest approach none within 60 yd; z -1 to 73 around (-11624, -4724); polygon areas Tanaris (440) 799; o180652"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 400006,
+        "index": 11
+      },
+      "reason": "unreachable-terrain",
+      "spawns": 1,
+      "polygons": 17,
+      "zones": [
+        "Feralas (357): 1"
+      ],
+      "note": "rule: beside the main component (17 of 17 centroids with no main floor above or below); closest approach 10.4 yd; z 95 to 124 around (-4832, 944); polygon areas Feralas (357) 17; o400006"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 400008,
+        "index": 0
+      },
+      "reason": "mesh-break-suspected",
+      "spawns": 1,
+      "polygons": 9,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: closest approach to main 3.3 yd; z -2 to 56 around (-2194, 3225); polygon areas Desolace (405) 9; o400008"
+    }
+  ],
+  "overOffMainFloor": [
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 223,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 95,
+      "polygons": 614,
+      "zones": [
+        "Undercity (1497): 95"
+      ],
+      "note": "rule: for 95 of 95 spawns the isolated floor is above the main floor they snap to; floor z 61 to 88 around (1618, 254); closest approach to main 4.0 yd; n223 n1498 n2308 n2492 n2934 n4486 n4488 n4551"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 745,
+        "index": 8
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 46,
+      "polygons": 154,
+      "zones": [
+        "Swamp of Sorrows (8): 46"
+      ],
+      "note": "rule: for 0 of 46 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -114 to -38 around (-10288, -3949); closest approach to main 3.0 yd; n745 n5261 o1733 o1734 o1735 o2040 o30854 o30855"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5852,
+        "index": 2
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 31,
+      "polygons": 31,
+      "zones": [
+        "Searing Gorge (51): 31"
+      ],
+      "note": "rule: for 0 of 31 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 165 to 184 around (-7127, -1011); closest approach to main 63.8 yd; n5852 n5858 o324 o1734 o2040 o2047 o2866 o165658"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2349,
+        "index": 12
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 28,
+      "polygons": 122,
+      "zones": [
+        "Alterac Mountains (36): 28"
+      ],
+      "note": "rule: for 0 of 28 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 35 to 85 around (237, 285); closest approach to main 1.6 yd; n2349 n2356 n2358 n2359 n2408 n2628 o2039 o2041"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5718,
+        "index": 0
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 26,
+      "polygons": 52,
+      "zones": [
+        "The Hinterlands (47): 26"
+      ],
+      "note": "rule: for 0 of 26 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 75 to 111 around (925, -3956); closest approach to main 2.7 yd; n5718 n12477 n12478 n12479 n14887 n14888 n14889 n14890"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 6208,
+        "index": 0
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 22,
+      "polygons": 171,
+      "zones": [
+        "Dun Morogh (1): 22"
+      ],
+      "note": "rule: for 0 of 22 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 237 to 262 around (-5022, 759); closest approach to main 100.8 yd; n6208 n6209 n6210 n6213 n6221 n6231 n7843 o142345"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2566,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 21,
+      "polygons": 205,
+      "zones": [
+        "Arathi Highlands (45): 21"
+      ],
+      "note": "rule: for 21 of 21 spawns the isolated floor is above the main floor they snap to; floor z 102 to 275 around (-2150, -2847); closest approach to main 89.4 yd; n2566 n2604 n2793 o1732 o1733 o1734 o1735 o2040"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5624,
+        "index": 19
+      },
+      "reason": "upper-floor",
+      "spawns": 21,
+      "polygons": 34,
+      "zones": [
+        "Undercity (1497): 21"
+      ],
+      "note": "rule: for 21 of 21 spawns the isolated floor is above the main floor they snap to; floor z 119 to 127 around (1617, 242); closest approach to main 61.0 yd; n5624 n6741 n8403 n13429 n15895 n15898 n16255 n16787"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2198,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 20,
+      "polygons": 96,
+      "zones": [
+        "Stormwind City (1519): 20"
+      ],
+      "note": "rule: for 20 of 20 spawns the isolated floor is above the main floor they snap to; floor z 86 to 87 around (-8714, 737); closest approach to main 8.3 yd; n2198 n3581 n5493 o180771 o180772"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 4283,
+        "index": 1
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 20,
+      "polygons": 38,
+      "zones": [
+        "Tirisfal Glades (85): 20"
+      ],
+      "note": "rule: for 0 of 20 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 142 to 164 around (2887, -818); closest approach to main 1.7 yd; n4283 n4284 n4285"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2719,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 15,
+      "polygons": 61,
+      "zones": [
+        "Badlands (3): 15"
+      ],
+      "note": "rule: for 15 of 15 spawns the isolated floor is above the main floor they snap to; floor z 378 to 402 around (-7347, -2027); closest approach to main 41.9 yd; n2719 n2720 o1733 o1734 o1735 o2040 o2047"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2604,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 14,
+      "polygons": 21,
+      "zones": [
+        "Arathi Highlands (45): 14"
+      ],
+      "note": "rule: for 14 of 14 spawns the isolated floor is above the main floor they snap to; floor z 122 to 165 around (-2053, -2804); closest approach to main 8.8 yd; n2604 o1732 o1733 o1734 o1735 o2040 o2047"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 30854,
+        "index": 46
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 13,
+      "polygons": 26,
+      "zones": [
+        "Swamp of Sorrows (8): 13"
+      ],
+      "note": "rule: for 0 of 13 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -55 to -44 around (-10368, -3845); closest approach to main 4.8 yd; o30854 o30855 o30856 o179493"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 456,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 12,
+      "polygons": 31,
+      "zones": [
+        "Westfall (40): 12"
+      ],
+      "note": "rule: for 12 of 12 spawns the isolated floor is above the main floor they snap to; floor z 2 to 11 around (-9801, 1834); closest approach to main 3.9 yd; n456 n513"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5858,
+        "index": 5
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 11,
+      "polygons": 120,
+      "zones": [
+        "Searing Gorge (51): 11"
+      ],
+      "note": "rule: for 0 of 11 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 164 to 184 around (-7371, -962); closest approach to main 0.8 yd; n5858 o324 o1734 o2040 o2047 o165658"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 12377,
+        "index": 9
+      },
+      "reason": "upper-floor",
+      "spawns": 9,
+      "polygons": 30,
+      "zones": [
+        "Deadwind Pass (41): 9"
+      ],
+      "note": "rule: for 9 of 9 spawns the isolated floor is above the main floor they snap to; floor z 39 to 65 around (-11078, -1976); closest approach to main 1.6 yd; n12377 n12378 n12379 n12380"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 1973,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 8,
+      "polygons": 41,
+      "zones": [
+        "Silverpine Forest (130): 8"
+      ],
+      "note": "rule: for 8 of 8 spawns the isolated floor is above the main floor they snap to; floor z 113 to 156 around (-331, 1049); closest approach to main 2.5 yd; n1973 n1974 n2283"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 435,
+        "index": 10
+      },
+      "reason": "upper-floor",
+      "spawns": 7,
+      "polygons": 32,
+      "zones": [
+        "Redridge Mountains (44): 7"
+      ],
+      "note": "rule: for 7 of 7 spawns the isolated floor is above the main floor they snap to; floor z 164 to 201 around (-8663, -2267); closest approach to main 10.8 yd; n435 n615 n4463 o1731 o1732 o1733"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 429,
+        "index": 2
+      },
+      "reason": "upper-floor",
+      "spawns": 6,
+      "polygons": 42,
+      "zones": [
+        "Redridge Mountains (44): 6"
+      ],
+      "note": "rule: for 6 of 6 spawns the isolated floor is above the main floor they snap to; floor z 165 to 187 around (-9280, -3299); closest approach to main 29.4 yd; n429 n568 n819 o103628"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 837,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 6,
+      "polygons": 34,
+      "zones": [
+        "Dun Morogh (1): 6"
+      ],
+      "note": "rule: for 6 of 6 spawns the isolated floor is above the main floor they snap to; floor z 416 to 453 around (-6112, 390); closest approach to main 10.1 yd; n837 n895 n912 n916 n926 n8416"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 324,
+        "index": 202
+      },
+      "reason": "upper-floor",
+      "spawns": 6,
+      "polygons": 26,
+      "zones": [
+        "Burning Steppes (46): 6"
+      ],
+      "note": "rule: for 6 of 6 spawns the isolated floor is above the main floor they snap to; floor z 182 to 235 around (-7627, -3083); closest approach to main 7.8 yd; o324 o1734 o2040 o2047 o165658 o175404"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 1732,
+        "index": 867
+      },
+      "reason": "upper-floor",
+      "spawns": 6,
+      "polygons": 30,
+      "zones": [
+        "Arathi Highlands (45): 6"
+      ],
+      "note": "rule: for 6 of 6 spawns the isolated floor is above the main floor they snap to; floor z 231 to 285 around (-2097, -3178); closest approach to main 177.1 yd; o1732 o1733 o1734 o1735 o2040 o2047"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2055,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 5,
+      "polygons": 75,
+      "zones": [
+        "Undercity (1497): 5"
+      ],
+      "note": "rule: for 5 of 5 spawns the isolated floor is above the main floor they snap to; floor z 60 to 65 around (1614, 280); closest approach to main 1.6 yd; n2055 n5204 n6522 o3705 o103600"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 8555,
+        "index": 4
+      },
+      "reason": "upper-floor",
+      "spawns": 5,
+      "polygons": 35,
+      "zones": [
+        "Eastern Plaguelands (139): 5"
+      ],
+      "note": "rule: for 5 of 5 spawns the isolated floor is above the main floor they snap to; floor z 120 to 187 around (2843, -2512); closest approach to main 9.9 yd; n8555 n8557 n16184"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2346,
+        "index": 3
+      },
+      "reason": "upper-floor",
+      "spawns": 4,
+      "polygons": 61,
+      "zones": [
+        "Hillsbrad Foothills (267): 4"
+      ],
+      "note": "rule: for 4 of 4 spawns the isolated floor is above the main floor they snap to; floor z 146 to 224 around (-1397, -1364); closest approach to main 39.6 yd; n2346 n14275 o1727 o4096"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 8543,
+        "index": 22
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 4,
+      "polygons": 21,
+      "zones": [
+        "Eastern Plaguelands (139): 4"
+      ],
+      "note": "rule: for 0 of 4 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 146 to 152 around (3291, -3649); closest approach to main 1.9 yd; n8543 n12247 o177668"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 1808,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 3,
+      "polygons": 22,
+      "zones": [
+        "Western Plaguelands (28): 3"
+      ],
+      "note": "rule: for 3 of 3 spawns the isolated floor is above the main floor they snap to; floor z 170 to 223 around (2412, -2242); closest approach to main 11.1 yd; n1808 n1812"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 1827,
+        "index": 6
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 3,
+      "polygons": 27,
+      "zones": [
+        "Western Plaguelands (28): 3"
+      ],
+      "note": "rule: for 0 of 3 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 146 to 155 around (2943, -1413); closest approach to main 2.1 yd; n1827 n1834"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2723,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 3,
+      "polygons": 26,
+      "zones": [
+        "Badlands (3): 3"
+      ],
+      "note": "rule: for 3 of 3 spawns the isolated floor is above the main floor they snap to; floor z 350 to 396 around (-6383, -3073); closest approach to main 8.8 yd; n2723 n2743 o179492"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 5840,
+        "index": 4
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 3,
+      "polygons": 21,
+      "zones": [
+        "Searing Gorge (51): 3"
+      ],
+      "note": "rule: for 1 of 3 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 179 to 191 around (-6851, -1291); closest approach to main 7.8 yd; n5840 n5844"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 68,
+        "index": 17
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 44,
+      "zones": [
+        "Stormwind City (1519): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 71 to 99 around (-8662, 615); closest approach to main 2.7 yd; n68"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 2356,
+        "index": 11
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 2,
+      "polygons": 41,
+      "zones": [
+        "Alterac Mountains (36): 2"
+      ],
+      "note": "rule: for 0 of 2 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -90 to -75 around (-53, 389); closest approach to main 123.5 yd; n2356 n2359"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 7851,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 34,
+      "zones": [
+        "Blasted Lands (4): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 117 to 138 around (-10986, -3492); closest approach to main 22.5 yd; n7851"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 11284,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 22,
+      "zones": [
+        "Western Plaguelands (28): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 118 to 121 around (1282, -2571); closest approach to main 6.8 yd; n11284 n15594"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 12378,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 24,
+      "zones": [
+        "Deadwind Pass (41): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 38 to 68 around (-11048, -1924); closest approach to main 3.4 yd; n12378"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 4551,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 24,
+      "zones": [
+        "Undercity (1497): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 86 to 98 around (1677, 272); closest approach to main 23.8 yd; n4551"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 4565,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 20,
+      "zones": [
+        "Undercity (1497): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 60 to 66 around (1836, 94); closest approach to main 1.6 yd; n4565"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 7851,
+        "index": 3
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 27,
+      "zones": [
+        "Blasted Lands (4): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 80 to 94 around (-11063, -3424); closest approach to main 5.2 yd; n7851"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 8524,
+        "index": 3
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 25,
+      "zones": [
+        "Eastern Plaguelands (139): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 176 to 186 around (2952, -3440); closest approach to main 19.3 yd; n8524"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 8888,
+        "index": 0
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 1,
+      "polygons": 37,
+      "zones": [
+        "Burning Steppes (46): 1"
+      ],
+      "note": "rule: for 0 of 1 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 140 to 168 around (-7577, -1035); closest approach to main 21.2 yd; n8888"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 9046,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 53,
+      "zones": [
+        "? (10074): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 283 to 310 around (-7520, -1322); closest approach to main 5.5 yd; n9046"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 12377,
+        "index": 17
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 77,
+      "zones": [
+        "Deadwind Pass (41): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 96 to 193 around (-10914, -1807); closest approach to main 6.4 yd; n12377"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 14508,
+        "index": 0
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 1,
+      "polygons": 102,
+      "zones": [
+        "Stranglethorn Vale (33): 1"
+      ],
+      "note": "rule: for 0 of 1 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 17 to 44 around (-13204, 273); closest approach to main 1.6 yd; n14508"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 16016,
+        "index": 0
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 1,
+      "polygons": 302,
+      "zones": [
+        "Eastern Plaguelands (139): 1"
+      ],
+      "note": "rule: for 0 of 1 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 41 to 177 around (3672, -3458); closest approach to main 1.6 yd; n16016"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 16033,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 29,
+      "zones": [
+        "? (10074): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 475 to 481 around (-7495, -1221); closest approach to main 190.6 yd; n16033"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "object",
+        "id": 3658,
+        "index": 41
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 28,
+      "zones": [
+        "Elwynn Forest (12): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 52 to 71 around (-9617, 666); closest approach to main 6.9 yd; o3658"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4788,
+        "index": 0
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 50,
+      "polygons": 83,
+      "zones": [
+        "Darkshore (148): 39",
+        "Ashenvale (331): 11"
+      ],
+      "note": "rule: for 0 of 50 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -30 to -2 around (4262, 840); closest approach to main 10.7 yd; n4788 n4789 n4802 n4803 o1732 o1733 o2045 o178184"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11440,
+        "index": 2
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 46,
+      "polygons": 102,
+      "zones": [
+        "Feralas (357): 46"
+      ],
+      "note": "rule: for 0 of 46 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 99 to 171 around (-4362, 1301); closest approach to main 1.9 yd; n11440 n11443 n12418"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5420,
+        "index": 48
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 43,
+      "polygons": 323,
+      "zones": [
+        "Tanaris (440): 43"
+      ],
+      "note": "rule: for 0 of 43 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -219 to 48 around (-8353, -4468); closest approach to main 2.1 yd; n5420 n5423 n5424 n5426 n5451 n5465 n8196 o1734"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 6134,
+        "index": 0
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 36,
+      "polygons": 137,
+      "zones": [
+        "Azshara (16): 36"
+      ],
+      "note": "rule: for 0 of 36 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -1 to 26 around (3870, -7197); closest approach to main 1.5 yd; n6134 n6135 n6136 n6137 n6138 o179497"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7093,
+        "index": 8
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 32,
+      "polygons": 106,
+      "zones": [
+        "Felwood (361): 32"
+      ],
+      "note": "rule: for 0 of 32 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 287 to 335 around (5082, -497); closest approach to main 16.4 yd; n7093 n7107 n7114 n7118 n7120 n7126 n8960 n9518"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3799,
+        "index": 1
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 29,
+      "polygons": 86,
+      "zones": [
+        "Ashenvale (331): 29"
+      ],
+      "note": "rule: for 0 of 29 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 37 to 95 around (1811, -2723); closest approach to main 12.6 yd; n3799 n3801 n3802 n3803 n3804 n3806 n3807 n3808"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7092,
+        "index": 13
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 29,
+      "polygons": 152,
+      "zones": [
+        "Felwood (361): 29"
+      ],
+      "note": "rule: for 0 of 29 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 244 to 286 around (5355, -523); closest approach to main 46.0 yd; n7092 n7093 n7114 n7118 n7120 n8960 n9516 n9517"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5293,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 25,
+      "polygons": 734,
+      "zones": [
+        "Feralas (357): 25"
+      ],
+      "note": "rule: for 25 of 25 spawns the isolated floor is above the main floor they snap to; floor z 22 to 248 around (-5389, 1957); closest approach to main 7.0 yd; n5293 n5295 n5346 o1734 o1735 o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2855,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 22,
+      "polygons": 195,
+      "zones": [
+        "Orgrimmar (1637): 22"
+      ],
+      "note": "rule: for 22 of 22 spawns the isolated floor is above the main floor they snap to; floor z 51 to 120 around (1768, -4466); closest approach to main 27.9 yd; n2855 n3189 n3328 n3345 n3363 n3365 n3399 n3401"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3118,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 22,
+      "polygons": 196,
+      "zones": [
+        "Durotar (14): 22"
+      ],
+      "note": "rule: for 22 of 22 spawns the isolated floor is above the main floor they snap to; floor z 42 to 72 around (1055, -4718); closest approach to main 14.6 yd; n3118 n3127 n3199 o1731 o3290 o3658 o106318"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11440,
+        "index": 8
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 21,
+      "polygons": 25,
+      "zones": [
+        "Feralas (357): 21"
+      ],
+      "note": "rule: for 0 of 21 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 92 to 104 around (-4028, 1141); closest approach to main 59.2 yd; n11440 n11442 n11443 n12418 o178224"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11442,
+        "index": 10
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 20,
+      "polygons": 27,
+      "zones": [
+        "Feralas (357): 20"
+      ],
+      "note": "rule: for 0 of 20 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 91 to 96 around (-3755, 1092); closest approach to main 35.1 yd; n11442 n11443 n12418"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5317,
+        "index": 3
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 19,
+      "polygons": 51,
+      "zones": [
+        "Feralas (357): 19"
+      ],
+      "note": "rule: for 0 of 19 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -1 to 46 around (-2836, 1839); closest approach to main 3.3 yd; n5317 n5319 n5320 n14887 n14888 n14889 n14890"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2202,
+        "index": 10
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 12,
+      "polygons": 27,
+      "zones": [
+        "Darkshore (148): 12"
+      ],
+      "note": "rule: for 0 of 12 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -15 to -3 around (7046, 408); closest approach to main 6.6 yd; n2202 n2203 o2849 o3660 o3661 o175165"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3921,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 12,
+      "polygons": 192,
+      "zones": [
+        "Ashenvale (331): 12"
+      ],
+      "note": "rule: for 12 of 12 spawns the isolated floor is above the main floor they snap to; floor z 255 to 341 around (3393, -753); closest approach to main 0.0 yd; n3921 n3922 n3923 o2850 o178144"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5317,
+        "index": 5
+      },
+      "reason": "upper-floor",
+      "spawns": 12,
+      "polygons": 61,
+      "zones": [
+        "Feralas (357): 12"
+      ],
+      "note": "rule: for 12 of 12 spawns the isolated floor is above the main floor they snap to; floor z 320 to 413 around (-2819, 1858); closest approach to main 274.4 yd; n5317 n5319 n5320 n14887 n14888 n14889 n14890"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5420,
+        "index": 1
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 12,
+      "polygons": 120,
+      "zones": [
+        "Tanaris (440): 12"
+      ],
+      "note": "rule: for 0 of 12 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -197 to -75 around (-8420, -4255); closest approach to main 99.7 yd; n5420 n5423 n5426"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 15201,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 11,
+      "polygons": 332,
+      "zones": [
+        "Silithus (1377): 11"
+      ],
+      "note": "rule: for 11 of 11 spawns the isolated floor is above the main floor they snap to; floor z 46 to 190 around (-6185, 87); closest approach to main 10.5 yd; n15201 n15213"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3115,
+        "index": 10
+      },
+      "reason": "upper-floor",
+      "spawns": 10,
+      "polygons": 84,
+      "zones": [
+        "Durotar (14): 10"
+      ],
+      "note": "reviewed: Dustwind Cave's upper layer (design §4.5: 84 polygons, z 27-66, 13.6 yd from main); the spawns snap to the lower cave floor in main. rule: for 10 of 10 spawns the isolated floor is above the main floor they snap to; floor z 27 to 66 around (765, -4524); closest approach to main 13.6 yd; n3115 n3116 o1619 o3290 o3658"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3385,
+        "index": 6
+      },
+      "reason": "upper-floor",
+      "spawns": 10,
+      "polygons": 63,
+      "zones": [
+        "The Barrens (17): 10"
+      ],
+      "note": "rule: for 10 of 10 spawns the isolated floor is above the main floor they snap to; floor z 111 to 132 around (-2096, -3647); closest approach to main 29.1 yd; n3385 n3465 o3730 o111095"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4100,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 10,
+      "polygons": 22,
+      "zones": [
+        "Thousand Needles (400): 10"
+      ],
+      "note": "rule: for 10 of 10 spawns the isolated floor is above the main floor they snap to; floor z 139 to 143 around (-5585, -1621); closest approach to main 12.7 yd; n4100 n4101 n4104 n4490 o1735 o2852"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4944,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 7,
+      "polygons": 23,
+      "zones": [
+        "Dustwallow Marsh (15): 7"
+      ],
+      "note": "rule: for 7 of 7 spawns the isolated floor is above the main floor they snap to; floor z 33 to 45 around (-3726, -4544); closest approach to main 10.8 yd; n4944 n4947 n4948 n4964 n5083 n8141 n12939"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5244,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 7,
+      "polygons": 31,
+      "zones": [
+        "Feralas (357): 7"
+      ],
+      "note": "rule: for 7 of 7 spawns the isolated floor is above the main floor they snap to; floor z 170 to 215 around (-5370, 1); closest approach to main 5.0 yd; n5244 n5247 o73941 o123309 o123310"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7288,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 7,
+      "polygons": 28,
+      "zones": [
+        "The Barrens (17): 7"
+      ],
+      "note": "rule: for 7 of 7 spawns the isolated floor is above the main floor they snap to; floor z 113 to 123 around (1227, -2926); closest approach to main 6.9 yd; n7288 n7307 n7308 o3705 o129127"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3115,
+        "index": 8
+      },
+      "reason": "upper-floor",
+      "spawns": 6,
+      "polygons": 31,
+      "zones": [
+        "Durotar (14): 6"
+      ],
+      "note": "rule: for 6 of 6 spawns the isolated floor is above the main floor they snap to; floor z 40 to 50 around (675, -4448); closest approach to main 19.9 yd; n3115 o1731 o3290"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 6513,
+        "index": 23
+      },
+      "reason": "upper-floor",
+      "spawns": 6,
+      "polygons": 28,
+      "zones": [
+        "Un'Goro Crater (490): 6"
+      ],
+      "note": "rule: for 6 of 6 spawns the isolated floor is above the main floor they snap to; floor z -221 to -170 around (-6402, -1901); closest approach to main 8.9 yd; n6513 n6514 n6516"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7112,
+        "index": 5
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 6,
+      "polygons": 22,
+      "zones": [
+        "Felwood (361): 6"
+      ],
+      "note": "rule: for 0 of 6 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 273 to 293 around (4790, -568); closest approach to main 18.0 yd; n7112 n7113 n7115 n7125 o142145"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11722,
+        "index": 3
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 6,
+      "polygons": 21,
+      "zones": [
+        "Silithus (1377): 6"
+      ],
+      "note": "rule: for 1 of 6 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -28 to 20 around (-6320, 942); closest approach to main 2.8 yd; n11722 n11723 n11724 o324 o123309 o177388"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3102,
+        "index": 3
+      },
+      "reason": "upper-floor",
+      "spawns": 5,
+      "polygons": 29,
+      "zones": [
+        "Durotar (14): 5"
+      ],
+      "note": "rule: for 5 of 5 spawns the isolated floor is above the main floor they snap to; floor z 119 to 156 around (-91, -4326); closest approach to main 15.0 yd; n3102"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5333,
+        "index": 9
+      },
+      "reason": "upper-floor",
+      "spawns": 5,
+      "polygons": 20,
+      "zones": [
+        "Feralas (357): 5"
+      ],
+      "note": "rule: for 5 of 5 spawns the isolated floor is above the main floor they snap to; floor z 116 to 169 around (-5578, 3523); closest approach to main 96.4 yd; n5333 n5336 o2047"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 6135,
+        "index": 7
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 5,
+      "polygons": 45,
+      "zones": [
+        "Azshara (16): 5"
+      ],
+      "note": "rule: for 0 of 5 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -36 to -21 around (3990, -6983); closest approach to main 22.2 yd; n6135 n6136 n6137 n6138 o179497"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3324,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 4,
+      "polygons": 26,
+      "zones": [
+        "Orgrimmar (1637): 4"
+      ],
+      "note": "rule: for 4 of 4 spawns the isolated floor is above the main floor they snap to; floor z 29 to 50 around (1795, -4322); closest approach to main 6.7 yd; n3324 n3325 n5815 n6446"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4668,
+        "index": 2
+      },
+      "reason": "upper-floor",
+      "spawns": 4,
+      "polygons": 33,
+      "zones": [
+        "Desolace (405): 4"
+      ],
+      "note": "rule: for 4 of 4 spawns the isolated floor is above the main floor they snap to; floor z 129 to 159 around (-1841, 597); closest approach to main 9.4 yd; n4668 n4705"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5247,
+        "index": 9
+      },
+      "reason": "upper-floor",
+      "spawns": 4,
+      "polygons": 31,
+      "zones": [
+        "Feralas (357): 4"
+      ],
+      "note": "rule: for 4 of 4 spawns the isolated floor is above the main floor they snap to; floor z 250 to 309 around (-5394, -141); closest approach to main 213.2 yd; n5247 o73941 o123309 o123310"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3197,
+        "index": 22
+      },
+      "reason": "upper-floor",
+      "spawns": 3,
+      "polygons": 138,
+      "zones": [
+        "Durotar (14): 3"
+      ],
+      "note": "reviewed: the hilltop above the Burning Blade Coven cave (RC-05; 138 polygons, z 88-231, 109 yd above the cave floor this spawn snaps to). rule: for 3 of 3 spawns the isolated floor is above the main floor they snap to; floor z 88 to 231 around (1586, -4777); closest approach to main 43.3 yd; n3197 n3198"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5317,
+        "index": 8
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 3,
+      "polygons": 23,
+      "zones": [
+        "Feralas (357): 3"
+      ],
+      "note": "rule: for 0 of 3 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 40 to 48 around (-3120, 1705); closest approach to main 1.9 yd; n5317 n5319 n5320"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5420,
+        "index": 105
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 3,
+      "polygons": 42,
+      "zones": [
+        "Tanaris (440): 3"
+      ],
+      "note": "rule: for 0 of 3 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -209 to -133 around (-8613, -4486); closest approach to main 169.1 yd; n5420 n5452 o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11685,
+        "index": 1
+      },
+      "reason": "upper-floor",
+      "spawns": 3,
+      "polygons": 30,
+      "zones": [
+        "Desolace (405): 3"
+      ],
+      "note": "rule: for 3 of 3 spawns the isolated floor is above the main floor they snap to; floor z 164 to 216 around (-1439, 2964); closest approach to main 24.9 yd; n11685 n13718 o1735"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11726,
+        "index": 2
+      },
+      "reason": "upper-floor",
+      "spawns": 3,
+      "polygons": 23,
+      "zones": [
+        "Silithus (1377): 3"
+      ],
+      "note": "rule: for 3 of 3 spawns the isolated floor is above the main floor they snap to; floor z -10 to 18 around (-7476, 1889); closest approach to main 2.7 yd; n11726 n11727"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11728,
+        "index": 7
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 3,
+      "polygons": 51,
+      "zones": [
+        "Silithus (1377): 3"
+      ],
+      "note": "rule: for 0 of 3 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -80 to -34 around (-7264, 1694); closest approach to main 3.9 yd; n11728 o177388"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11731,
+        "index": 7
+      },
+      "reason": "upper-floor",
+      "spawns": 3,
+      "polygons": 62,
+      "zones": [
+        "Silithus (1377): 3"
+      ],
+      "note": "rule: for 3 of 3 spawns the isolated floor is above the main floor they snap to; floor z 24 to 104 around (-8135, 701); closest approach to main 10.0 yd; n11731 n11733"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11731,
+        "index": 9
+      },
+      "reason": "upper-floor",
+      "spawns": 3,
+      "polygons": 24,
+      "zones": [
+        "Silithus (1377): 3"
+      ],
+      "note": "rule: for 3 of 3 spawns the isolated floor is above the main floor they snap to; floor z -50 to -19 around (-8162, 391); closest approach to main 2.1 yd; n11731 n11732"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 1731,
+        "index": 546
+      },
+      "reason": "upper-floor",
+      "spawns": 3,
+      "polygons": 48,
+      "zones": [
+        "Durotar (14): 3"
+      ],
+      "note": "rule: for 3 of 3 spawns the isolated floor is above the main floor they snap to; floor z 33 to 58 around (944, -4548); closest approach to main 19.3 yd; o1731 o3290"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 2984,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 58,
+      "zones": [
+        "Mulgore (215): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 134 to 185 around (-1389, 504); closest approach to main 12.4 yd; n2984 o3658"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 3242,
+        "index": 110
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 2,
+      "polygons": 47,
+      "zones": [
+        "The Barrens (17): 2"
+      ],
+      "note": "rule: for 0 of 2 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -7 to 16 around (-810, -2286); closest approach to main 84.0 yd; n3242 n3634"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4095,
+        "index": 14
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 44,
+      "zones": [
+        "Thousand Needles (400): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 54 to 133 around (-5023, -2513); closest approach to main 2.2 yd; n4095 o2852"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5336,
+        "index": 12
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 89,
+      "zones": [
+        "Feralas (357): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 77 to 155 around (-5521, 3451); closest approach to main 7.8 yd; n5336 o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7327,
+        "index": 7
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 2,
+      "polygons": 99,
+      "zones": [
+        "The Barrens (17): 2"
+      ],
+      "note": "rule: for 0 of 2 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 46 to 108 around (-4792, -2574); closest approach to main 1.7 yd; n7327 n7332"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7462,
+        "index": 12
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 91,
+      "zones": [
+        "Winterspring (618): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 954 to 1043 around (4739, -4498); closest approach to main 47.9 yd; n7462 o175404"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11723,
+        "index": 7
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 2,
+      "polygons": 21,
+      "zones": [
+        "Silithus (1377): 2"
+      ],
+      "note": "rule: for 0 of 2 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -50 to -43 around (-6374, 1007); closest approach to main 6.0 yd; n11723 n11724"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11730,
+        "index": 12
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 36,
+      "zones": [
+        "Silithus (1377): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 84 to 161 around (-8203, 741); closest approach to main 161.5 yd; n11730 n11734"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11732,
+        "index": 25
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 22,
+      "zones": [
+        "Silithus (1377): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z -29 to 3 around (-7855, 256); closest approach to main 2.7 yd; n11732 n11734"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 324,
+        "index": 664
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 2,
+      "polygons": 25,
+      "zones": [
+        "Tanaris (440): 2"
+      ],
+      "note": "rule: for 0 of 2 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -160 to -119 around (-8301, -4635); closest approach to main 114.5 yd; o324 o2047"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 1731,
+        "index": 483
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 169,
+      "zones": [
+        "Durotar (14): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z 43 to 81 around (-1024, -4489); closest approach to main 11.0 yd; o1731 o3658"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 3236,
+        "index": 4
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 2,
+      "polygons": 20,
+      "zones": [
+        "Durotar (14): 2"
+      ],
+      "note": "rule: for 0 of 2 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -37 to -22 around (322, -5242); closest approach to main 32.3 yd; o3236"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 123309,
+        "index": 40
+      },
+      "reason": "upper-floor",
+      "spawns": 2,
+      "polygons": 21,
+      "zones": [
+        "Silithus (1377): 2"
+      ],
+      "note": "rule: for 2 of 2 spawns the isolated floor is above the main floor they snap to; floor z -13 to 5 around (-6618, 1014); closest approach to main 2.6 yd; o123309 o177388"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 175324,
+        "index": 0
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 2,
+      "polygons": 31,
+      "zones": [
+        "Winterspring (618): 2"
+      ],
+      "note": "rule: for 0 of 2 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 685 to 699 around (5309, -4899); closest approach to main 3.4 yd; o175324 o175404"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 4713,
+        "index": 1
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 1,
+      "polygons": 23,
+      "zones": [
+        "Desolace (405): 1"
+      ],
+      "note": "rule: for 0 of 1 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -64 to -34 around (56, 2700); closest approach to main 52.4 yd; n4713"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5254,
+        "index": 13
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 1,
+      "polygons": 21,
+      "zones": [
+        "Feralas (357): 1"
+      ],
+      "note": "rule: for 0 of 1 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 108 to 147 around (-4762, 899); closest approach to main 10.1 yd; n5254"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5336,
+        "index": 10
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 1,
+      "polygons": 61,
+      "zones": [
+        "Feralas (357): 1"
+      ],
+      "note": "rule: for 0 of 1 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -20 to 3 around (-5711, 3660); closest approach to main 9.8 yd; n5336"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 5910,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 40,
+      "zones": [
+        "Orgrimmar (1637): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 73 to 138 around (1730, -4171); closest approach to main 30.3 yd; n5910"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 6190,
+        "index": 8
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 1,
+      "polygons": 28,
+      "zones": [
+        "Azshara (16): 1"
+      ],
+      "note": "rule: for 0 of 1 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z 90 to 105 around (3457, -4576); closest approach to main 3.2 yd; n6190"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7010,
+        "index": 0
+      },
+      "reason": "floor-ambiguous",
+      "spawns": 1,
+      "polygons": 24,
+      "zones": [
+        "Orgrimmar (1637): 1"
+      ],
+      "note": "rule: for 0 of 1 spawns the isolated floor is above the main floor they snap to (below for the rest: the dataset has no heights, so a spawn may stand on the isolated floor); floor z -30 to -19 around (1807, -4467); closest approach to main 2.0 yd; n7010"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7101,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 23,
+      "zones": [
+        "Felwood (361): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 531 to 574 around (6269, -1715); closest approach to main 6.0 yd; n7101"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7462,
+        "index": 5
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 164,
+      "zones": [
+        "Winterspring (618): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 983 to 1042 around (4533, -4283); closest approach to main 23.5 yd; n7462"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7463,
+        "index": 3
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 275,
+      "zones": [
+        "Winterspring (618): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 1032 to 1113 around (4308, -3935); closest approach to main 44.0 yd; n7463"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 7880,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 20,
+      "zones": [
+        "Feralas (357): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 35 to 42 around (-4462, 3225); closest approach to main 10.5 yd; n7880"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "npc",
+        "id": 11733,
+        "index": 39
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 21,
+      "zones": [
+        "Silithus (1377): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 119 to 164 around (-8261, 554); closest approach to main 6.3 yd; n11733"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 2040,
+        "index": 1713
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 26,
+      "zones": [
+        "Tanaris (440): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z -19 to 10 around (-7829, -2575); closest approach to main 2.1 yd; o2040"
+    },
+    {
+      "map": 1,
+      "anchor": {
+        "kind": "object",
+        "id": 175404,
+        "index": 388
+      },
+      "reason": "upper-floor",
+      "spawns": 1,
+      "polygons": 77,
+      "zones": [
+        "Winterspring (618): 1"
+      ],
+      "note": "rule: for 1 of 1 spawns the isolated floor is above the main floor they snap to; floor z 939 to 1012 around (4856, -4720); closest approach to main 40.9 yd; o175404"
+    },
+    {
+      "map": 0,
+      "anchor": {
+        "kind": "npc",
+        "id": 223,
+        "index": 0
+      },
+      "reason": "upper-floor",
+      "spawns": 11,
+      "polygons": 40,
+      "zones": [
+        "Undercity (1497): 11"
+      ],
+      "note": "rule: for 11 of 11 spawns the isolated floor is above the main floor they snap to; floor z -45 to -40 around (1600, 240); closest approach to main 12.8 yd; n223 n4588 n4591 n4596 n6293 n7683 n11048 n11049"
+    }
+  ],
+  "unsnapped": [
+    {
+      "map": 0,
+      "kind": "npc",
+      "id": 14564,
+      "index": 2,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (3116.9, -2742.0), zone Eastern Plaguelands (139)"
+    },
+    {
+      "map": 0,
+      "kind": "npc",
+      "id": 14564,
+      "index": 5,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (3121.2, -2752.3), zone Eastern Plaguelands (139)"
+    },
+    {
+      "map": 0,
+      "kind": "npc",
+      "id": 14564,
+      "index": 14,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (3123.8, -2747.5), zone Eastern Plaguelands (139)"
+    },
+    {
+      "map": 0,
+      "kind": "npc",
+      "id": 14564,
+      "index": 16,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (3118.0, -2737.2), zone Eastern Plaguelands (139)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 324,
+      "index": 265,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-7858.9, -911.1), zone Burning Steppes (46)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1731,
+      "index": 105,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1731,
+      "index": 175,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1731,
+      "index": 966,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-9195.0, -2438.9), zone Redridge Mountains (44)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1732,
+      "index": 15,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1732,
+      "index": 85,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1732,
+      "index": 791,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-9195.0, -2438.9), zone Redridge Mountains (44)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1733,
+      "index": 246,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1733,
+      "index": 316,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1733,
+      "index": 1198,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-9195.0, -2438.9), zone Redridge Mountains (44)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1734,
+      "index": 358,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1734,
+      "index": 428,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1734,
+      "index": 1433,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-7858.9, -911.1), zone Burning Steppes (46)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1735,
+      "index": 248,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 1735,
+      "index": 318,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-11101.2, -74.7), zone Duskwood (10)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 2040,
+      "index": 1159,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-7858.9, -911.1), zone Burning Steppes (46)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 2047,
+      "index": 913,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-7858.9, -911.1), zone Burning Steppes (46)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 142140,
+      "index": 5,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-6582.9, -3131.9), zone Badlands (3)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 148506,
+      "index": 0,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-6484.8, -973.1), zone Searing Gorge (51)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 165658,
+      "index": 126,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-7858.9, -911.1), zone Burning Steppes (46)"
+    },
+    {
+      "map": 0,
+      "kind": "object",
+      "id": 175404,
+      "index": 164,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-7858.9, -911.1), zone Burning Steppes (46)"
+    },
+    {
+      "map": 1,
+      "kind": "npc",
+      "id": 4014,
+      "index": 2,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (1567.0, 887.7), zone Stonetalon Mountains (406)"
+    },
+    {
+      "map": 1,
+      "kind": "npc",
+      "id": 6195,
+      "index": 40,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (3320.0, -5255.2), zone Azshara (16)"
+    },
+    {
+      "map": 1,
+      "kind": "npc",
+      "id": 6519,
+      "index": 0,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-6519.7, -1246.7), zone Un'Goro Crater (490)"
+    },
+    {
+      "map": 1,
+      "kind": "npc",
+      "id": 6519,
+      "index": 1,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-6543.9, -1281.1), zone Un'Goro Crater (490)"
+    },
+    {
+      "map": 1,
+      "kind": "npc",
+      "id": 6519,
+      "index": 2,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-6447.4, -1257.5), zone Un'Goro Crater (490)"
+    },
+    {
+      "map": 1,
+      "kind": "npc",
+      "id": 6519,
+      "index": 3,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-6611.7, -1464.7), zone Un'Goro Crater (490)"
+    },
+    {
+      "map": 1,
+      "kind": "npc",
+      "id": 6527,
+      "index": 0,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-6753.8, -1213.1), zone Un'Goro Crater (490)"
+    },
+    {
+      "map": 1,
+      "kind": "npc",
+      "id": 7462,
+      "index": 16,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (4289.9, -4036.4), zone Winterspring (618)"
+    },
+    {
+      "map": 1,
+      "kind": "object",
+      "id": 1731,
+      "index": 1325,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-2881.3, 355.4), zone Mulgore (215)"
+    },
+    {
+      "map": 1,
+      "kind": "object",
+      "id": 2045,
+      "index": 468,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (2480.4, -2347.6), zone Ashenvale (331)"
+    },
+    {
+      "map": 1,
+      "kind": "object",
+      "id": 4004,
+      "index": 0,
+      "reason": "no-mesh",
+      "note": "rule: no polygon within 6 yd of (-7126.2, -1274.5), zone Un'Goro Crater (490)"
+    }
+  ],
+  "zones": [
+    {
+      "map": 1,
+      "zone": 141,
+      "name": "Teldrassil (141)",
+      "reason": "teleport-connector-missing",
+      "note": "reviewed: the dominant component is Teldrassil and Darnassus, reached through the Rut'theran portal (todo). rule: 1240 of 1276 spawns in the dominant component (not main)"
+    },
+    {
+      "map": 1,
+      "zone": 1638,
+      "name": "Thunder Bluff (1638)",
+      "reason": "elevator-connector-missing",
+      "minShare": 0.85,
+      "note": "reviewed: the dominant component is the rises (elevators todo); the other spawns stand on the Mulgore ground at the bluff's foot, in main. rule: 93 of 108 spawns in the dominant component (not main)"
+    },
+    {
+      "map": 1,
+      "zone": 1657,
+      "name": "Darnassus (1657)",
+      "reason": "teleport-connector-missing",
+      "note": "reviewed: the dominant component is Teldrassil and Darnassus, reached through the Rut'theran portal (todo). rule: 94 of 94 spawns in the dominant component (not main)"
+    }
+  ],
+  "waterSplits": [
+    {
+      "map": 0,
+      "zone": 408,
+      "polygons": 2129,
+      "centroid": [
+        -13334,
+        2817
+      ],
+      "reason": "island",
+      "note": "reviewed: Gillijim's Isle off Stranglethorn Vale (design §10). rule: a 2129-polygon part (Gillijim's Isle (408)) joined to the rest of its component only across open water wider than 800 yd"
+    },
+    {
+      "map": 1,
+      "zone": 141,
+      "polygons": 9241,
+      "centroid": [
+        9993,
+        1018
+      ],
+      "reason": "transport",
+      "note": "reviewed: Rut'theran Village and the Teldrassil shore, reached by the Auberdine boat (TravelGraph); rule: a 9241-polygon part (Teldrassil (141)) joined to the rest of its component only across open water wider than 800 yd"
+    },
+    {
+      "map": 1,
+      "zone": 440,
+      "polygons": 799,
+      "centroid": [
+        -11624,
+        -4724
+      ],
+      "reason": "island",
+      "note": "rule: a 799-polygon part (Tanaris (440)) joined to the rest of its component only across open water wider than 800 yd"
+    },
+    {
+      "map": 1,
+      "zone": 16,
+      "polygons": 50,
+      "centroid": [
+        6326,
+        -7587
+      ],
+      "reason": "island",
+      "note": "rule: a 50-polygon part (Azshara (16)) joined to the rest of its component only across open water wider than 800 yd"
+    }
+  ],
+  "mustConnectExceptions": [
+    {
+      "map": 1,
+      "fixture": "Dustwind Cave",
+      "spawn": {
+        "kind": "npc",
+        "id": 3116,
+        "index": 0
+      },
+      "polygons": 84,
+      "zMin": 38,
+      "zMax": 44,
+      "reason": "upper-floor",
+      "note": "Dustwind Cave's upper layer above the cave floor the spawn snaps to (design §4.5, RC-05)"
+    },
+    {
+      "map": 1,
+      "fixture": "Dustwind Cave",
+      "spawn": {
+        "kind": "npc",
+        "id": 3116,
+        "index": 4
+      },
+      "polygons": 84,
+      "zMin": 38,
+      "zMax": 44,
+      "reason": "upper-floor",
+      "note": "Dustwind Cave's upper layer above the cave floor the spawn snaps to (design §4.5, RC-05)"
+    },
+    {
+      "map": 1,
+      "fixture": "Dustwind Cave",
+      "spawn": {
+        "kind": "npc",
+        "id": 3116,
+        "index": 5
+      },
+      "polygons": 84,
+      "zMin": 38,
+      "zMax": 44,
+      "reason": "upper-floor",
+      "note": "Dustwind Cave's upper layer above the cave floor the spawn snaps to (design §4.5, RC-05)"
+    },
+    {
+      "map": 1,
+      "fixture": "Burning Blade Coven",
+      "spawn": {
+        "kind": "npc",
+        "id": 3197,
+        "index": 22
+      },
+      "polygons": 138,
+      "zMin": 120,
+      "zMax": 128,
+      "reason": "upper-floor",
+      "note": "the hilltop 109 yd above the Burning Blade Coven cave floor the spawn snaps to (RC-05)"
+    }
+  ]
+}

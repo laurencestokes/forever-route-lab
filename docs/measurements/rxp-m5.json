@@ -1,0 +1,46 @@
+{
+  "$comment": [
+    "Milestone 5 RXP measurements (docs/RXP.md §13; the Milestone 5 RXP review F20; docs/ARCHITECTURE.md §14 has no RXP budget yet).",
+    "Command: pnpm exec tsx tests/bench/rxp.bench.ts --runs 7 (median, min and max of 7 runs after one warm-up, in ms, main thread, Node). The guide is synthetic and self-authored (D-019): the step blocks of fixtures 01, 02, 05 and 06 repeated without their full-line comments until it has 3,810 RXP steps (604 kB), about the size of the largest RXP guide file the review measured (527 kB, 3,768 steps). Nothing of RXPGuides is used.",
+    "Phases: import = importRxp (unwrap, CST, diagnostics, lowering, group fingerprints); importLua = the same text in one RegisterGuide([[...]]) call; exportUnedited = exportRxpForms of the unedited import (both the .txt and the .lua form); exportEdited = exportRxpForms after deleting every 7th route step; exportEditedTwice = two exportRxp calls (txt, then lua) for the same edit, as the export dialog did before it used exportRxpForms; canonical = canonicalizeRxp.",
+    "before: the same benchmark on the same machine with one exportRxp call per form and every run's fingerprint recomputed with SHA-256; after: the export dialog makes one export and wraps its text for the .lua form (wrapLua), and a run whose content equals its template group lowered again is not hashed (docs/RXP.md §13.2). The machine was shared with other work, so single runs vary by about 10-20%.",
+    "Where the time goes (after): SHA-256 in pure TypeScript without bitwise operators (D-012) hashes about 3.4 MB/s; import hashes every group's canonical JSON (about 3.4 MB here, about 0.85 s of the import); an edited export hashes only the edited groups. The CST parse takes about 36 ms, lowering without fingerprints about 53 ms, canonical JSON of every group about 90 ms.",
+    "Proposed budget for docs/ARCHITECTURE.md §14 (architect's decision): Node benchmark against this baseline, fail on a >25% regression; the import stays under 1.5 s and one export under 1 s for a guide of this size."
+  ],
+  "date": "2026-09-26",
+  "machine": {
+    "os": "Windows 11 Home 10.0.26200",
+    "node": "v22.13.1",
+    "arch": "x64"
+  },
+  "guide": {
+    "bytes": 604059,
+    "lines": 19559,
+    "rxpSteps": 3810,
+    "routeSteps": 7342,
+    "editedRouteSteps": 6294
+  },
+  "before": {
+    "importMs": { "median": 1280.9, "min": 1259.4, "max": 1372 },
+    "importLuaMs": { "median": 1361.7, "min": 1297, "max": 1371.3 },
+    "exportUneditedMs": { "median": 1039.8, "min": 1017.6, "max": 1088.6 },
+    "exportEditedMs": { "median": 1457.1, "min": 1367.8, "max": 1525 },
+    "exportEditedTwiceMs": { "median": 2898.7, "min": 2810.5, "max": 2970.5 },
+    "canonicalMs": { "median": 45.5, "min": 38.7, "max": 56.4 },
+    "runs": 5
+  },
+  "after": {
+    "importMs": { "median": 1432.4, "min": 1338.8, "max": 1584.7 },
+    "importLuaMs": { "median": 1329.7, "min": 1288.2, "max": 1428.3 },
+    "exportUneditedMs": { "median": 258.9, "min": 237.3, "max": 313.5 },
+    "exportEditedMs": { "median": 837.7, "min": 819.2, "max": 869.2 },
+    "exportEditedTwiceMs": { "median": 1667.5, "min": 1615.2, "max": 1694.7 },
+    "canonicalMs": { "median": 45.8, "min": 39, "max": 54.1 },
+    "runs": 7
+  },
+  "exportDialog": {
+    "$comment": "What the RXP export dialog blocks the main thread for with this guide after an edit: two exports before, one after.",
+    "beforeMs": 2898.7,
+    "afterMs": 837.7
+  }
+}

@@ -1,0 +1,391 @@
+/* The RXP custom-guide dialogs (docs/UI.md §15): import, export, their diagnostics and source excerpts. Tokens only. */
+
+/* Wider than the project dialogs: guide text and diagnostics need the room. */
+.frl-modal.frl-rxp {
+  width: min(880px, calc(100vw - 32px));
+}
+
+.frl-rxp__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+  min-width: 0;
+}
+
+.frl-rxp__section:focus-visible {
+  outline-offset: 4px;
+}
+
+.frl-rxp__drop.is-dragging {
+  outline: 2px dashed var(--frl-focus);
+  outline-offset: 4px;
+}
+
+.frl-rxp__label {
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-rxp__hint {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-rxp__text {
+  width: 100%;
+  min-height: 120px;
+  padding: var(--frl-space-1) var(--frl-space-2);
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius);
+  background: var(--frl-surface);
+  color: var(--frl-fg);
+  font-family: var(--frl-font-mono);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+  tab-size: 4;
+  resize: vertical;
+}
+
+.frl-rxp__text:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 1px;
+}
+
+.frl-rxp__file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--frl-space-2);
+}
+
+.frl-rxp__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  min-width: 0;
+  margin: 0;
+  padding: var(--frl-space-2) var(--frl-space-3) var(--frl-space-3);
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius);
+}
+
+.frl-rxp__group > legend {
+  padding: 0 var(--frl-space-1);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-rxp__radio {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--frl-space-2);
+  align-items: baseline;
+}
+
+.frl-rxp__radio input {
+  margin: 0;
+  accent-color: var(--frl-accent);
+}
+
+.frl-rxp__radio .frl-rxp__hint {
+  grid-column: 2;
+}
+
+.frl-rxp__radio input:disabled + label {
+  color: var(--frl-fg-disabled);
+}
+
+.frl-rxp__problem,
+.frl-rxp__refused,
+.frl-rxp__unknown,
+.frl-rxp__stale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--frl-space-1) var(--frl-space-2);
+  padding: var(--frl-space-2) var(--frl-space-3);
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-rxp__problem:focus-visible,
+.frl-rxp__result:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 2px;
+}
+
+.frl-rxp__refused,
+.frl-rxp__unknown {
+  flex-direction: column;
+}
+
+.frl-rxp__stale {
+  border-style: dashed;
+}
+
+.frl-rxp__refused-title,
+.frl-rxp__unknown > p:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--frl-space-1);
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-rxp__summary {
+  line-height: var(--frl-leading);
+}
+
+.frl-rxp__subheading {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.frl-rxp__quests,
+.frl-rxp__problems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  margin: 0;
+  padding-left: var(--frl-space-4);
+}
+
+.frl-rxp__quests > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--frl-space-1) var(--frl-space-2);
+}
+
+.frl-rxp__quests > li > .frl-rxpsource {
+  flex: 1 1 100%;
+}
+
+.frl-rxp__footer-hint {
+  flex: 1 1 auto;
+  align-self: center;
+  min-width: 0;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+}
+
+/* "Copied" beside Copy for a few seconds: the word carries it, the tick is supplementary. */
+.frl-rxp__copied {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  align-self: center;
+  justify-content: flex-end;
+  gap: var(--frl-space-1);
+  min-width: 0;
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+}
+
+/* Diagnostics list ------------------------------------------------------------------------- */
+
+.frl-rxpdiag {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  min-width: 0;
+}
+
+.frl-rxpdiag__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-2);
+}
+
+.frl-rxpdiag__counts {
+  font-size: var(--frl-text-sm);
+}
+
+.frl-rxpdiag__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--frl-border);
+}
+
+.frl-rxpdiag__item {
+  border-bottom: 1px solid var(--frl-border);
+  box-shadow: inset 3px 0 0 var(--frl-rxpdiag-bar, transparent);
+}
+
+.frl-rxpdiag__item--error {
+  --frl-rxpdiag-bar: var(--frl-severity-error);
+}
+
+.frl-rxpdiag__item--warning {
+  --frl-rxpdiag-bar: var(--frl-severity-warning);
+}
+
+.frl-rxpdiag__item--info {
+  --frl-rxpdiag-bar: var(--frl-severity-info);
+}
+
+.frl-rxpdiag__body {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-areas:
+    'severity where'
+    'severity message'
+    'severity meta';
+  column-gap: var(--frl-space-2);
+  width: 100%;
+  padding: 5px var(--frl-space-3);
+  border: 0;
+  background: transparent;
+  color: var(--frl-fg);
+  font: inherit;
+  text-align: left;
+}
+
+button.frl-rxpdiag__body {
+  cursor: pointer;
+}
+
+button.frl-rxpdiag__body:hover {
+  background: var(--frl-surface-hover);
+}
+
+button.frl-rxpdiag__body:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: -2px;
+}
+
+.frl-rxpdiag__severity {
+  grid-area: severity;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: start;
+  height: var(--frl-leading);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-rxpdiag__where {
+  grid-area: where;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-rxpdiag__message {
+  grid-area: message;
+  overflow-wrap: anywhere;
+}
+
+.frl-rxpdiag__meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--frl-space-1) var(--frl-space-2);
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+}
+
+.frl-rxpdiag__meta code {
+  font-family: var(--frl-font-mono);
+}
+
+.frl-rxpdiag__toggle {
+  color: var(--frl-accent);
+  text-decoration: underline;
+}
+
+.frl-rxpdiag__item > .frl-rxpsource {
+  margin: 0 var(--frl-space-3) var(--frl-space-2);
+}
+
+.frl-rxpdiag__more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--frl-space-2);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+}
+
+/* Source excerpt --------------------------------------------------------------------------- */
+
+.frl-rxpsource {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  padding: var(--frl-space-1) 0;
+  overflow-x: auto;
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius);
+  background: var(--frl-surface-raised);
+  color: var(--frl-fg);
+  font-family: var(--frl-font-mono);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+  white-space: pre;
+  tab-size: 4;
+}
+
+.frl-rxpsource:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 1px;
+}
+
+.frl-rxpsource__line {
+  display: block;
+  min-height: var(--frl-leading-tight);
+  padding-right: var(--frl-space-2);
+}
+
+.frl-rxpsource__line.is-target {
+  background: var(--frl-selection-bg);
+  box-shadow: inset 3px 0 0 var(--frl-selection-bar);
+}
+
+.frl-rxpsource__number {
+  display: inline-block;
+  min-width: 6ch;
+  padding: 0 var(--frl-space-2) 0 var(--frl-space-1);
+  color: var(--frl-fg-subtle);
+  text-align: right;
+  user-select: none;
+}
+
+.frl-rxpsource__line.is-target .frl-rxpsource__number {
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-rxpsource__column {
+  background: transparent;
+  color: inherit;
+  text-decoration: underline wavy var(--frl-fg);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  outline: 1px solid var(--frl-border-strong);
+}
+
+@media (forced-colors: active) {
+  .frl-rxpdiag__item {
+    border-left: 3px solid CanvasText;
+  }
+
+  .frl-rxpsource__line.is-target {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+
+  .frl-rxpsource__column {
+    outline-color: Highlight;
+  }
+
+  .frl-rxp__drop.is-dragging {
+    outline-color: Highlight;
+  }
+}

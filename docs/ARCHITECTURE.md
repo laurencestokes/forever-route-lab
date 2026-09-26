@@ -88,6 +88,8 @@ src/
   validate/      validation rules; src/validate/codes.ts is the issue-code registry
   rxp/           unwrap, CST parser, filter parser, command registry, lowering, serializer
   diff/          route diff (LIS based), change-sets, apply-selected
+  nav/           pure navmesh runtime (D-028): block decode, snap, resumable search, funnel,
+                 legsFrom/navPath; nav/worker/ (not pure) fetches, verifies and caches blocks
   project/       zod schemas typed against domain types, migrations, import/export
   optimizer/
     types.ts     Optimizer interface and request/options/progress/result types
@@ -95,7 +97,7 @@ src/
     worker/      protocol.ts, optimizer.worker.ts, client.ts
     index.ts     createTypeScriptBeamSearchOptimizer
   infra/         data/ (dataset loader), maps/ (geometry + local-map probe),
-                 persistence/ (IndexedDB)
+                 persistence/ (IndexedDB), nav/ (nav manifest loader)
   map/
     adapter.ts   MapAdapter interface, descriptors, view-model input types
     layers.ts    pure: view models → descriptors (memoised per layer)
@@ -107,11 +109,18 @@ tools/
                  diff.ts, lib/
   maps/          README.md, import.ts, convert.ts, validate.ts, vite-local-maps.ts (dev plugin),
                  inputs/db2-rows-1.60.1.70009.json (the 12 cited DB2 rows, committed)
+  casc/          read-only CASC and WDC5 DB2 reader over the local client's Data/ (D-028)
+  terrain/       extract.ts (navmesh build), validate.ts (gates G1-G15), byproducts.ts
+                 (coastlines, zone outlines, relief), review-draft.ts, inputs/ (connectors,
+                 passages, census reviews)
   build/         third-party-notices.ts, licence-gate.ts, audit-dist.ts, rxp-overlap.ts
 generated/       questiedb-report.json: extraction report (gitignored; §5.2)
 public/
   data/          committed generated dataset
   maps/placeholder/  committed placeholder geometry + NOTICE.md
+  maps/art/      committed Blizzard painted map art (WebP) + manifest + NOTICE (D-033)
+  maps/terrain/  committed coastlines, zone outlines, relief + manifest + NOTICE (D-032)
+  nav/           committed navmesh blocks, per-map map.bin, connectors, manifest, NOTICE (D-028)
 local-maps/      gitignored local map sets (outside public/)
 tests/           fixtures and cross-module tests; unit tests sit beside their modules
 docs/            this file, decisions, provenance, maps, RXP, simulation, research, reviews
@@ -131,11 +140,13 @@ any pure module is allowed everywhere.
 | `validate` | `domain`, `geo`, `rules`, `engine`, `sim` |
 | `rxp` | `domain`, `geo` (dataset lookups injected through an interface) |
 | `diff` | `domain` |
+| `nav` | `domain`, `geo` (engine, sim and `optimizer/core` import its types only) |
+| `nav/worker` | `nav` |
 | `project` | `domain`, `zod` |
 | `optimizer/core` | `domain`, `geo`, `rules`, `sim`, `engine` |
 | `optimizer/worker` | `optimizer/core`, `optimizer/types` |
 | `optimizer/index` | `optimizer/*`, `domain`, `engine`, `geo`, `rules`, `sim` |
-| `infra/*` | pure modules, `idb`, browser APIs |
+| `infra/*` | pure modules (including `nav`), `idb`, browser APIs |
 | `map/adapter`, `map/layers` | `domain`, `geo` |
 | `map/leaflet` | `map/adapter`, `leaflet` |
 | `app` | everything except `ui` and `map/leaflet`; React only in `src/app/react.ts`, the store binding (D-027) |
@@ -462,9 +473,8 @@ interface ProjectV1 {
 
 - Types are hand-written in `domain`; `project/schema.ts` declares zod schemas typed
   `z.ZodType<ProjectV1>`, and a compile-time test asserts the two agree.
-- **Schema version 1 is unstable until the end of Milestone 6**: no migration obligation before
-  then; fixtures are regenerated. From Milestone 7 it is frozen, and every change adds
-  `migrateV1ToV2` and so on to the migration registry.
+- **Schema version 1 is frozen from the Milestone 4 commit (D-035):** every change bumps
+  `schemaVersion` and adds `migrateV1ToV2` and so on to the migration registry, with a test.
 - Import: `unknown → detect version → migrate step by step → validate → latest`. Malformed input
   is rejected with path-level errors; nothing is silently repaired. Before an in-place migration
   of a stored project, the old record is copied to `backups`.
@@ -667,6 +677,12 @@ updating RXP.md.
      (Forever by default, Era optional) and get `RXP030-frame-ambiguous`.
    Zone names resolve through a table built from QuestieDB data (validated names from
    `uiMapIdToAreaId.lua`) plus self-authored pseudo-zone keys; localised zone names are rejected.
+Implemented in Milestone 5 as the pure `src/rxp` module (registry of diagnostics in
+`src/rxp/diagnostics.ts`). Display of imported text strips RXP colour and texture escapes through
+`src/app/ui-text.ts` (`plainGuideText`), while the raw text is kept for byte-identical export. A
+"complete all objectives" step exports as one `.complete q,i` per known objective, otherwise as an
+RXP042 note.
+
 5. **Serializer and export guarantee** (definitions in RXP.md §13):
    - an unedited import exports byte-identical to its source. "Unedited" means every group of the
      import is present, contiguous, in original order, with no foreign steps between, and every
@@ -861,6 +877,19 @@ updatedAt, stepCount, dataRevision), `backups`, `settings`. Autosave runs in `re
 (timeout about 2 s) when the revision changed, and flushes on `visibilitychange` and `pagehide`.
 The last open project is restored at startup. Native JSON import/export goes through `project/`.
 
+As built in Milestone 4:
+- **Stores:** database version 2 adds a `backupIndex` store, so listings never load full records.
+- **Tabs:** each open project holds a Web Lock, and a second tab asks before opening it
+  ("Open anyway" or "Open a copy"). Saves are broadcast on a `BroadcastChannel`, so other tabs
+  mark the project "changed elsewhere" at once.
+- **Leaving the page:** a save started on `visibilitychange`/`pagehide` issues all its IndexedDB
+  requests inside the handler. A `beforeunload` prompt guards unsaved changes when saving has
+  failed, is blocked or is unavailable.
+- **Deleting:** a deleted project goes to "Recently deleted" for 30 days, or until the tab closes
+  when storage is unavailable. "Delete permanently" frees space when storage is full.
+- **Imports:** imported projects, RXP ones included, are validated with `parseProject` before they
+  are stored. Files are decoded as strict UTF-8.
+
 ### 12.4 Layout
 
 Dense desktop layout with an original visual system (no copied branding, icons or art):
@@ -914,6 +943,9 @@ Machine-independent CI gates (fail the build):
 | Entry chunk + static imports (gzip, from Vite's build manifest; chunks loaded by `import()` are reported, not gated) | ≤ 250 KB |
 | Each `public/data` file (gzip) | recorded baseline + 10%; total ≤ 1.2 MB |
 | Optimiser evaluations on fixed fixtures | recorded baseline, exact |
+| `public/nav` (navmesh blocks, `map.bin`, connectors) | ≤ 7 MB total (target 5-6 MB; measured 5.44 MB); ≤ 300 kB per file; per-map baselines + 10% (D-030) |
+| `public/maps/art` | ≤ 12 MB total (measured 9.05 MB); per-file baselines + 10% (D-034) |
+| `public/maps/terrain` | ≤ 600 kB total (measured 445 kB); per-file baselines + 10% (D-034) |
 
 Time budgets, as Node benchmarks against stored baselines in `docs/measurements/` (fail on a
 >25% regression), and later a Playwright run with 4× CPU throttling:
@@ -927,7 +959,10 @@ Time budgets, as Node benchmarks against stored baselines in `docs/measurements/
 | Autosave of a 10,000-step project (main thread) | ≤ 50 ms |
 | Map: moveend redraw at the LOD cap / one route edit applied | ≤ 16 ms / ≤ 8 ms |
 | Optimiser compile | ≤ 30 ms |
+| RXP import of a typical guide (≤ 300 steps), main thread | ≤ 250 ms (measured about 100 ms for 150 steps); whole addon files (thousands of steps, about 1.3 s) move to a worker when a measured need arises |
+| Autosave IndexedDB put of a 10,000-step project | measured 35 ms median unthrottled; the Milestone 9 throttled run decides whether steps are stored in chunks (D-036) |
 | Optimiser, pool 100 quests (~300 actions), beam 256 | first improvement < 2 s; worker heap < 64 MB |
+| Navigation legs for a route section, in the nav worker (RC-07) | ceiling 16 s, with progress and cancel; measured 3.03 s for a realistic 116-point section, heap 60.9 MB; the main thread never waits on it (straight-line fallback until legs arrive) |
 
 ## 15. Testing
 
@@ -955,8 +990,11 @@ Time budgets, as Node benchmarks against stored baselines in `docs/measurements/
   reaches `dist/`) against an SPDX allowlist: MIT, ISC, BSD-2-Clause, BSD-3-Clause, Apache-2.0,
   0BSD, Zlib, CC0-1.0, BlueOak-1.0.0. Anything else needs an exceptions entry and a decision.
 - `tools/build/audit-dist.ts` fails if `dist/` contains: `local-maps/` or any `maps.manifest.json`
-  marked local-only; images outside an allowlist of app assets; local paths; `.cache` references;
-  `.lua`, `.blp` or source maps; files over budget. It also fails if a required file is missing:
+  marked local-only; images anywhere except `maps/art/` and `maps/terrain/`, and there only when
+  that folder ships its `NOTICE.md` and `manifest.json` and the manifest lists the image with a
+  matching SHA-256; raw client files (`.blp .adt .wdt .wdl .wmo .m2 .skin .anim .db2` by extension,
+  and ADT/WDT/WDL/WMO, M2, DB2 or BLTE content under any name); local paths; `.cache` references;
+  `.lua` or source maps; files over budget (§14). It also fails if a required file is missing:
   `LICENSE.txt`, `third-party-notices.txt`, `data/NOTICE.md`, every data file the manifest lists,
   `maps/placeholder/geometry.placeholder.json` and `maps/placeholder/NOTICE.md`. CI additionally
   checks with `git ls-files --error-unmatch` that every runtime-fetched file is tracked.
@@ -979,8 +1017,11 @@ Planned dependencies:
 | tsx 4 | run tools (dev) | MIT |
 | @playwright/test | gauntlet smoke (dev) | Apache-2.0 |
 
-Code ported into `tools/` (for example BLP decoding from wow.export, MIT) keeps its header and is
-listed in THIRD_PARTY_NOTICES under "Ported code".
+Code ported into `tools/` would keep its header and be listed in THIRD_PARTY_NOTICES under "Ported
+code". None is ported so far: the CASC reader, the DB2 reader and the BLP decoder are our own.
+Build-only dev dependencies added in Milestone 3b: recast-navigation 0.43.1 (MIT; the navmesh
+build) and sharp 0.35.4 (Apache-2.0, with LGPL-3.0-or-later libvips; WebP encoding). Neither
+reaches `dist/`.
 
 ## 17. Enforcement
 
@@ -988,10 +1029,11 @@ listed in THIRD_PARTY_NOTICES under "Ported code".
 
 - the §4 allowlist matrix;
 - the **pure set** (`domain`, `geo`, `rules`, `engine`, `sim`, `validate`, `rxp`, `diff`,
-  `project`, `optimizer/core`, `map/adapter`, `map/layers`) must not reference `window`,
+  `project`, `optimizer/core`, `nav`, `map/adapter`, `map/layers`) must not reference `window`,
   `document`, `indexedDB`, `Date.now`, argument-less `new Date()`, `Math.random`, `performance`,
   React, Leaflet or `idb`;
-- `optimizer/core` must not call `Math.hypot`, `pow`, `exp`, `log` or trigonometric functions;
+- `optimizer/core` and `nav` must not call `Math.hypot`, `pow`, `exp`, `log` or trigonometric
+  functions, whose results the platform may approximate (terrain-navigation.md G14);
 - committed text files must not contain an absolute path into a user profile, meaning a drive
   letter, `Users` and a real account name (written here as `C:\Users\<name>\` and
   `/c/Users/<name>/`; the check's regex requires an account-name character where `<name>`

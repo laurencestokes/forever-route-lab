@@ -1,0 +1,6382 @@
+{
+ "$comment": [
+  "Milestone 3b revision measurements for docs/research/terrain-navigation.md (TN-14). Every figure the design cites is here, with its method.",
+  "Sizes: bytes; gzip6 = node:zlib gzipSync level 6 of each block file on its own (the dist audit measure, tools/build/lib/audit.ts gzipSize); decimal units in prose (1 kB = 1000 B, 1 MB = 1,000,000 B).",
+  "Client: wow_classic_beta 1.60.1.70009, build key 05215079e3905ef5922ae0b03ffefb73, read-only from WOW_INSTALL (.build.info and Data/ only). Dataset spawns: public/data at QuestieDB b6f5b07 through src/infra/data/points.ts and src/geo (placeholder geometry).",
+  "Code: .cache/experiments/terrain/m3b (gitignored research code; recast-navigation-js 0.43.1 at build time only). Runs: build.ts (stage 1 per 4x4-ADT block, 12 processes), link.ts (unpruned stage 2 and census), link2.ts (pruning, water rule, census with snap rules A+B), queries.ts, cities.ts, dtcheck.ts, memstats.ts, byproducts.ts, cmp-partition.ts, region.ts.",
+  "Timings: wall and CPU on one machine, warm OS cache, other sweeps possibly running in parallel for build figures; query figures were run with the machine otherwise idle.",
+  "Census counts: every dataset spawn with a world point on map 0 or 1 (74,608), snapped with the design rules; off-main includes the islands and elevator-only areas that are correct (see census.classes)."
+ ],
+ "date": "2026-09-26",
+ "machine": {
+  "cpu": "AMD Ryzen 7 7800X3D (8 cores, 16 threads)",
+  "ramGb": 32,
+  "os": "Windows 11 Home 10.0.26200",
+  "node": "v22.13.1",
+  "runner": "tsx"
+ },
+ "chosen": {
+  "set": "c05r1+n12+e5+s60",
+  "settings": {
+   "cellYd": 0.521,
+   "tileVoxels": 256,
+   "tileYd": 133.333,
+   "cellHeightYd": 0.25,
+   "radiusVoxels": 1,
+   "radiusYd": 0.521,
+   "climbYd": 1.5,
+   "heightYd": 2,
+   "slopeDeg": 60,
+   "maxSimplificationErrorYd": 5,
+   "maxSimplificationErrorVoxels": 9.6,
+   "maxEdgeLenYd": 66.67,
+   "minRegionSideYd": 8.33,
+   "mergeRegionSideYd": 20.83,
+   "maxVertsPerPoly": 12,
+   "m2MinFootprintYd": 4
+  },
+  "pruneBelowPolygons": 1000,
+  "waterCorridorYd": 800,
+  "snapRadiusYd": 6,
+  "snapMinComponent": 20
+ },
+ "sweep": [
+  {
+   "set": "c1r1",
+   "settings": {
+    "cellYd": 1.042,
+    "tileVoxels": 128,
+    "tileYd": 133.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 1.042,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 3.125,
+    "maxSimplificationErrorVoxels": 3,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 6,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 538,
+    "geomS": 118,
+    "recastS": 391,
+    "postS": 29,
+    "maxBlockS": 8.9,
+    "wall": {
+     "buildS": 59,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 3226498,
+     "easternKingdoms": 2661314,
+     "total": 5887812
+    },
+    "maxBlockGzip6Bytes": 136986,
+    "polygons": 702291,
+    "census": {
+     "spawns": 74608,
+     "main": 62041,
+     "offMain": 11059,
+     "noPolygon": 1508
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "comp97(87) x10, MAIN x1",
+     "Burning Blade Coven": "comp225(47) x9, MAIN x71, comp97(87) x4, comp821(19) x1, comp1(6754) x10, comp248(44) x1, comp14886(2) x1, comp214(48) x3, comp12613(3) x1",
+     "Dustwind Cave": "MAIN x24, comp64(129) x2, comp23(291) x2, comp32085(1) x1, comp32109(1) x1, comp32088(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "comp59(136) x1",
+     "TB Elder Rise (Hesuwa)": "comp89(93) x1",
+     "TB Kym Wildmane": "comp90(93) x1",
+     "TB Spirit Rise (Beram)": "comp58(137) x1",
+     "TB Pools of Vision (Father Cobb)": "comp58(137) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 1823615,
+     "easternKingdoms": 1590042,
+     "total": 3413657
+    },
+    "maxBlockGzip6Bytes": 110921,
+    "blocks": 104,
+    "polygons": 443271,
+    "prunedPolygons": 238852,
+    "droppedSwimPolygons": 20168,
+    "census": {
+     "offMain": 9755,
+     "noPolygon": 1526,
+     "ambiguousComponent": 2105,
+     "mainWithOffMainFloor": 1373
+    }
+   }
+  },
+  {
+   "set": "c1r0",
+   "settings": {
+    "cellYd": 1.042,
+    "tileVoxels": 128,
+    "tileYd": 133.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 0,
+    "radiusYd": 0,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 3.125,
+    "maxSimplificationErrorVoxels": 3,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 6,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 497,
+    "geomS": 109,
+    "recastS": 359,
+    "postS": 29,
+    "maxBlockS": 8.2,
+    "wall": {
+     "buildS": 55,
+     "linkS": 7
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4546582,
+     "easternKingdoms": 3742302,
+     "total": 8288884
+    },
+    "maxBlockGzip6Bytes": 197679,
+    "polygons": 1051117,
+    "census": {
+     "spawns": 74608,
+     "main": 65710,
+     "offMain": 8417,
+     "noPolygon": 481
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "comp243(73) x8, MAIN x77, comp2(10081) x10, comp348(56) x1, comp23412(2) x1, comp108(131) x3, comp7229(7) x1",
+     "Dustwind Cave": "MAIN x26, comp70(190) x1, comp22(434) x1, comp44637(1) x1, comp44606(1) x1, comp44610(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp9(1094) x1",
+     "TB Kym Wildmane": "comp9(1094) x1",
+     "TB Spirit Rise (Beram)": "comp9(1094) x1",
+     "TB Pools of Vision (Father Cobb)": "comp9(1094) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 2444861,
+     "easternKingdoms": 2172087,
+     "total": 4616948
+    },
+    "maxBlockGzip6Bytes": 135964,
+    "blocks": 108,
+    "polygons": 639613,
+    "prunedPolygons": 392331,
+    "droppedSwimPolygons": 19173,
+    "census": {
+     "offMain": 22681,
+     "noPolygon": 494,
+     "ambiguousComponent": 1993,
+     "mainWithOffMainFloor": 1700
+    }
+   }
+  },
+  {
+   "set": "c075r1",
+   "settings": {
+    "cellYd": 0.694,
+    "tileVoxels": 192,
+    "tileYd": 133.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.694,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 3.125,
+    "maxSimplificationErrorVoxels": 4.5,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 6,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 719,
+    "geomS": 106,
+    "recastS": 586,
+    "postS": 27,
+    "maxBlockS": 11.1,
+    "wall": {
+     "buildS": 78,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4680543,
+     "easternKingdoms": 3750761,
+     "total": 8431304
+    },
+    "maxBlockGzip6Bytes": 192380,
+    "polygons": 1002356,
+    "census": {
+     "spawns": 74608,
+     "main": 70650,
+     "offMain": 3856,
+     "noPolygon": 102
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(10657) x13, comp147(100) x1, comp7098(5) x1",
+     "Dustwind Cave": "MAIN x26, comp113(127) x2, comp32008(1) x1, comp31982(1) x1, comp31986(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp7(1058) x1",
+     "TB Kym Wildmane": "comp7(1058) x1",
+     "TB Spirit Rise (Beram)": "comp7(1058) x1",
+     "TB Pools of Vision (Father Cobb)": "comp7(1058) x1"
+    }
+   },
+   "pruned": null
+  },
+  {
+   "set": "c05r1",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 256,
+    "tileYd": 133.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 3.125,
+    "maxSimplificationErrorVoxels": 6,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 6,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1050,
+    "geomS": 110,
+    "recastS": 909,
+    "postS": 30,
+    "maxBlockS": 16,
+    "wall": {
+     "buildS": 111,
+     "linkS": 7
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 5139685,
+     "easternKingdoms": 4106238,
+     "total": 9245923
+    },
+    "maxBlockGzip6Bytes": 226795,
+    "polygons": 1075321,
+    "census": {
+     "spawns": 74608,
+     "main": 71976,
+     "offMain": 2601,
+     "noPolygon": 31
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(12769) x10, comp51(207) x1, comp8088(4) x1, comp108(132) x3",
+     "Dustwind Cave": "MAIN x27, comp40(258) x1, comp31828(1) x1, comp31803(1) x1, comp31807(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp6(1177) x1",
+     "TB Kym Wildmane": "comp6(1177) x1",
+     "TB Spirit Rise (Beram)": "comp6(1177) x1",
+     "TB Pools of Vision (Father Cobb)": "comp6(1177) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 3326116,
+     "easternKingdoms": 2968426,
+     "total": 6294542
+    },
+    "maxBlockGzip6Bytes": 154739,
+    "blocks": 108,
+    "polygons": 786934,
+    "prunedPolygons": 270828,
+    "droppedSwimPolygons": 17559,
+    "census": {
+     "offMain": 2100,
+     "noPolygon": 32,
+     "ambiguousComponent": 1592,
+     "mainWithOffMainFloor": 1679
+    }
+   }
+  },
+  {
+   "set": "c05r1+t4",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 1024,
+    "tileYd": 533.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 3.125,
+    "maxSimplificationErrorVoxels": 6,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 6,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1259,
+    "geomS": 105,
+    "recastS": 1121,
+    "postS": 33,
+    "maxBlockS": 17.8,
+    "wall": {
+     "buildS": 134,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4865274,
+     "easternKingdoms": 3931813,
+     "total": 8797087
+    },
+    "maxBlockGzip6Bytes": 214240,
+    "polygons": 980691,
+    "census": {
+     "spawns": 74608,
+     "main": 71947,
+     "offMain": 2625,
+     "noPolygon": 36
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(11752) x10, comp57(184) x1, comp7354(4) x1, comp113(121) x3",
+     "Dustwind Cave": "MAIN x27, comp43(220) x1, comp28394(1) x1, comp28293(1) x1, comp28304(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp5(1040) x1",
+     "TB Kym Wildmane": "comp5(1040) x1",
+     "TB Spirit Rise (Beram)": "comp5(1040) x1",
+     "TB Pools of Vision (Father Cobb)": "comp5(1040) x1"
+    }
+   },
+   "pruned": null
+  },
+  {
+   "set": "c05r1+n12",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 256,
+    "tileYd": 133.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 3.125,
+    "maxSimplificationErrorVoxels": 6,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1062,
+    "geomS": 110,
+    "recastS": 921,
+    "postS": 30,
+    "maxBlockS": 15.6,
+    "wall": {
+     "buildS": 114,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 5031613,
+     "easternKingdoms": 4011098,
+     "total": 9042711
+    },
+    "maxBlockGzip6Bytes": 222180,
+    "polygons": 989031,
+    "census": {
+     "spawns": 74608,
+     "main": 71961,
+     "offMain": 2600,
+     "noPolygon": 47
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(11766) x10, comp51(188) x1, comp7869(4) x1, comp104(127) x3",
+     "Dustwind Cave": "MAIN x27, comp41(229) x1, comp31712(1) x1, comp31686(1) x1, comp31690(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp6(1078) x1",
+     "TB Kym Wildmane": "comp6(1078) x1",
+     "TB Spirit Rise (Beram)": "comp6(1078) x1",
+     "TB Pools of Vision (Father Cobb)": "comp6(1078) x1"
+    }
+   },
+   "pruned": null
+  },
+  {
+   "set": "c05r1+l0",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 256,
+    "tileYd": 133.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 3.125,
+    "maxSimplificationErrorVoxels": 6,
+    "maxEdgeLenYd": 0,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 6,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1042,
+    "geomS": 110,
+    "recastS": 903,
+    "postS": 30,
+    "maxBlockS": 15.6,
+    "wall": {
+     "buildS": 112,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 5135604,
+     "easternKingdoms": 4103048,
+     "total": 9238652
+    },
+    "maxBlockGzip6Bytes": 226505,
+    "polygons": 1073700,
+    "census": {
+     "spawns": 74608,
+     "main": 71976,
+     "offMain": 2601,
+     "noPolygon": 31
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(12769) x10, comp51(207) x1, comp8080(4) x1, comp108(132) x3",
+     "Dustwind Cave": "MAIN x27, comp40(258) x1, comp31823(1) x1, comp31798(1) x1, comp31802(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp6(1173) x1",
+     "TB Kym Wildmane": "comp6(1173) x1",
+     "TB Spirit Rise (Beram)": "comp6(1173) x1",
+     "TB Pools of Vision (Father Cobb)": "comp6(1173) x1"
+    }
+   },
+   "pruned": null
+  },
+  {
+   "set": "c05r1+e6",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 256,
+    "tileYd": 133.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 6,
+    "maxSimplificationErrorVoxels": 11.52,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 6,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1076,
+    "geomS": 116,
+    "recastS": 930,
+    "postS": 30,
+    "maxBlockS": 16,
+    "wall": {
+     "buildS": 114,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 3823488,
+     "easternKingdoms": 3109875,
+     "total": 6933363
+    },
+    "maxBlockGzip6Bytes": 167139,
+    "polygons": 836955,
+    "census": {
+     "spawns": 74608,
+     "main": 71750,
+     "offMain": 2804,
+     "noPolygon": 54
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(9966) x10, comp52(156) x1, comp5207(4) x1, comp137(80) x3",
+     "Dustwind Cave": "MAIN x27, comp93(106) x1, comp35(208) x1, comp24926(1) x1, comp24892(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "comp45(171) x1",
+     "TB Elder Rise (Hesuwa)": "comp6(916) x1",
+     "TB Kym Wildmane": "comp6(916) x1",
+     "TB Spirit Rise (Beram)": "comp6(916) x1",
+     "TB Pools of Vision (Father Cobb)": "comp6(916) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 2571146,
+     "easternKingdoms": 2306090,
+     "total": 4877236
+    },
+    "maxBlockGzip6Bytes": 123348,
+    "blocks": 108,
+    "polygons": 634885,
+    "prunedPolygons": 186457,
+    "droppedSwimPolygons": 15613,
+    "census": {
+     "offMain": 2128,
+     "noPolygon": 55,
+     "ambiguousComponent": 1424,
+     "mainWithOffMainFloor": 1496
+    }
+   }
+  },
+  {
+   "set": "c05r1+t4+n12",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 1024,
+    "tileYd": 533.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 3.125,
+    "maxSimplificationErrorVoxels": 6,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1337,
+    "geomS": 113,
+    "recastS": 1189,
+    "postS": 35,
+    "maxBlockS": 19.2,
+    "wall": {
+     "buildS": 143,
+     "linkS": 8
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4712095,
+     "easternKingdoms": 3792428,
+     "total": 8504523
+    },
+    "maxBlockGzip6Bytes": 207644,
+    "polygons": 872395,
+    "census": {
+     "spawns": 74608,
+     "main": 71947,
+     "offMain": 2625,
+     "noPolygon": 36
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(10528) x10, comp59(164) x1, comp7075(4) x1, comp103(116) x3",
+     "Dustwind Cave": "MAIN x27, comp50(182) x1, comp28232(1) x1, comp28130(1) x1, comp28141(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp5(937) x1",
+     "TB Kym Wildmane": "comp5(937) x1",
+     "TB Spirit Rise (Beram)": "comp5(937) x1",
+     "TB Pools of Vision (Father Cobb)": "comp5(937) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 3105391,
+     "easternKingdoms": 2771110,
+     "total": 5876501
+    },
+    "maxBlockGzip6Bytes": 146677,
+    "blocks": 106,
+    "polygons": 631588,
+    "prunedPolygons": 231565,
+    "droppedSwimPolygons": 9242,
+    "census": {
+     "offMain": 2141,
+     "noPolygon": 49,
+     "ambiguousComponent": 1493,
+     "mainWithOffMainFloor": 1564
+    }
+   }
+  },
+  {
+   "set": "c075r1+t4+n12",
+   "settings": {
+    "cellYd": 0.694,
+    "tileVoxels": 768,
+    "tileYd": 533.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.694,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 3.125,
+    "maxSimplificationErrorVoxels": 4.5,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 828,
+    "geomS": 108,
+    "recastS": 691,
+    "postS": 29,
+    "maxBlockS": 12.4,
+    "wall": {
+     "buildS": 89,
+     "linkS": 5
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4259689,
+     "easternKingdoms": 3447143,
+     "total": 7706832
+    },
+    "maxBlockGzip6Bytes": 174019,
+    "polygons": 813482,
+    "census": {
+     "spawns": 74608,
+     "main": 70620,
+     "offMain": 3882,
+     "noPolygon": 106
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x85, comp28439(1) x1, comp1(8788) x13, comp185(72) x1, comp6149(5) x1",
+     "Dustwind Cave": "MAIN x26, comp160(78) x2, comp28422(1) x1, comp28317(1) x1, comp28324(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp7(823) x1",
+     "TB Kym Wildmane": "comp7(823) x1",
+     "TB Spirit Rise (Beram)": "comp7(823) x1",
+     "TB Pools of Vision (Father Cobb)": "comp7(823) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 2612033,
+     "easternKingdoms": 2329716,
+     "total": 4941749
+    },
+    "maxBlockGzip6Bytes": 140275,
+    "blocks": 106,
+    "polygons": 547934,
+    "prunedPolygons": 256041,
+    "droppedSwimPolygons": 9507,
+    "census": {
+     "offMain": 3020,
+     "noPolygon": 125,
+     "ambiguousComponent": 1734,
+     "mainWithOffMainFloor": 1814
+    }
+   }
+  },
+  {
+   "set": "c05r1+t4+n12+e4",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 1024,
+    "tileYd": 533.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 4,
+    "maxSimplificationErrorVoxels": 7.68,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1259,
+    "geomS": 106,
+    "recastS": 1124,
+    "postS": 29,
+    "maxBlockS": 18,
+    "wall": {
+     "buildS": 133,
+     "linkS": 5
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4110486,
+     "easternKingdoms": 3332658,
+     "total": 7443144
+    },
+    "maxBlockGzip6Bytes": 182975,
+    "polygons": 765203,
+    "census": {
+     "spawns": 74608,
+     "main": 71877,
+     "offMain": 2695,
+     "noPolygon": 36
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(9407) x10, comp64(136) x1, comp5728(4) x1, comp16178(1) x1, comp113(93) x2",
+     "Dustwind Cave": "MAIN x27, comp40(170) x1, comp26216(1) x1, comp26098(1) x1, comp26108(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp5(848) x1",
+     "TB Kym Wildmane": "comp5(848) x1",
+     "TB Spirit Rise (Beram)": "comp5(848) x1",
+     "TB Pools of Vision (Father Cobb)": "comp5(848) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 2725264,
+     "easternKingdoms": 2450126,
+     "total": 5175390
+    },
+    "maxBlockGzip6Bytes": 131305,
+    "blocks": 106,
+    "polygons": 561525,
+    "prunedPolygons": 196070,
+    "droppedSwimPolygons": 7608,
+    "census": {
+     "offMain": 2151,
+     "noPolygon": 41,
+     "ambiguousComponent": 1387,
+     "mainWithOffMainFloor": 1477
+    }
+   }
+  },
+  {
+   "set": "c05r1+t4+n12+e6",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 1024,
+    "tileYd": 533.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 55,
+    "maxSimplificationErrorYd": 6,
+    "maxSimplificationErrorVoxels": 11.52,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1276,
+    "geomS": 105,
+    "recastS": 1141,
+    "postS": 30,
+    "maxBlockS": 17.6,
+    "wall": {
+     "buildS": 134,
+     "linkS": 5
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 3472173,
+     "easternKingdoms": 2851360,
+     "total": 6323533
+    },
+    "maxBlockGzip6Bytes": 152977,
+    "polygons": 662182,
+    "census": {
+     "spawns": 74608,
+     "main": 71710,
+     "offMain": 2837,
+     "noPolygon": 61
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(8016) x10, comp60(117) x1, comp4401(4) x1, comp11952(1) x1, comp119(76) x2",
+     "Dustwind Cave": "MAIN x26, comp273(37) x1, comp40(150) x1, comp22493(1) x1, comp22376(1) x1, comp22387(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp5(751) x1",
+     "TB Kym Wildmane": "comp5(751) x1",
+     "TB Spirit Rise (Beram)": "comp5(751) x1",
+     "TB Pools of Vision (Father Cobb)": "comp5(751) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 2348151,
+     "easternKingdoms": 2139837,
+     "total": 4487988
+    },
+    "maxBlockGzip6Bytes": 117343,
+    "blocks": 106,
+    "polygons": 497066,
+    "prunedPolygons": 158365,
+    "droppedSwimPolygons": 6751,
+    "census": {
+     "offMain": 2161,
+     "noPolygon": 66,
+     "ambiguousComponent": 1242,
+     "mainWithOffMainFloor": 1291
+    }
+   }
+  },
+  {
+   "set": "c05r1+t4+n12+e4+s60",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 1024,
+    "tileYd": 533.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 60,
+    "maxSimplificationErrorYd": 4,
+    "maxSimplificationErrorVoxels": 7.68,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1269,
+    "geomS": 105,
+    "recastS": 1133,
+    "postS": 31,
+    "maxBlockS": 18.1,
+    "wall": {
+     "buildS": 134,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4423141,
+     "easternKingdoms": 3506402,
+     "total": 7929543
+    },
+    "maxBlockGzip6Bytes": 193583,
+    "polygons": 830950,
+    "census": {
+     "spawns": 74608,
+     "main": 72049,
+     "offMain": 2526,
+     "noPolygon": 33
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(11492) x11, comp15798(1) x1, comp3417(6) x1, comp85(100) x2",
+     "Dustwind Cave": "MAIN x27, comp43(157) x1, comp25229(1) x1, comp25134(1) x1, comp25143(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp3(886) x1",
+     "TB Kym Wildmane": "comp3(886) x1",
+     "TB Spirit Rise (Beram)": "comp3(886) x1",
+     "TB Pools of Vision (Father Cobb)": "comp3(886) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 3129356,
+     "easternKingdoms": 2761293,
+     "total": 5890649
+    },
+    "maxBlockGzip6Bytes": 145729,
+    "blocks": 106,
+    "polygons": 646230,
+    "prunedPolygons": 177209,
+    "droppedSwimPolygons": 7511,
+    "census": {
+     "offMain": 2014,
+     "noPolygon": 38,
+     "ambiguousComponent": 1295,
+     "mainWithOffMainFloor": 1300
+    }
+   }
+  },
+  {
+   "set": "c05r1+t4+n12+e5+s60",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 1024,
+    "tileYd": 533.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 60,
+    "maxSimplificationErrorYd": 5,
+    "maxSimplificationErrorVoxels": 9.6,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1294,
+    "geomS": 107,
+    "recastS": 1155,
+    "postS": 32,
+    "maxBlockS": 18.7,
+    "wall": {
+     "buildS": 136,
+     "linkS": 5
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4043079,
+     "easternKingdoms": 3226413,
+     "total": 7269492
+    },
+    "maxBlockGzip6Bytes": 176718,
+    "polygons": 770128,
+    "census": {
+     "spawns": 74608,
+     "main": 71998,
+     "offMain": 2569,
+     "noPolygon": 41
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(10532) x11, comp13324(1) x1, comp2969(6) x1, comp88(90) x2",
+     "Dustwind Cave": "MAIN x27, comp41(148) x1, comp23660(1) x1, comp23557(1) x1, comp23567(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp3(829) x1",
+     "TB Kym Wildmane": "comp3(829) x1",
+     "TB Spirit Rise (Beram)": "comp3(829) x1",
+     "TB Pools of Vision (Father Cobb)": "comp3(829) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 2882857,
+     "easternKingdoms": 2555854,
+     "total": 5438711
+    },
+    "maxBlockGzip6Bytes": 136587,
+    "blocks": 106,
+    "polygons": 604238,
+    "prunedPolygons": 158992,
+    "droppedSwimPolygons": 6898,
+    "census": {
+     "offMain": 2007,
+     "noPolygon": 47,
+     "ambiguousComponent": 1136,
+     "mainWithOffMainFloor": 1153
+    }
+   }
+  },
+  {
+   "set": "c05r1+t4+n12+e6+s60",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 1024,
+    "tileYd": 533.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 60,
+    "maxSimplificationErrorYd": 6,
+    "maxSimplificationErrorVoxels": 11.52,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1314,
+    "geomS": 110,
+    "recastS": 1174,
+    "postS": 30,
+    "maxBlockS": 18.6,
+    "wall": {
+     "buildS": 138,
+     "linkS": 5
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 3789304,
+     "easternKingdoms": 3041294,
+     "total": 6830598
+    },
+    "maxBlockGzip6Bytes": 164745,
+    "polygons": 731598,
+    "census": {
+     "spawns": 74608,
+     "main": 71922,
+     "offMain": 2640,
+     "noPolygon": 46
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(9929) x13, comp88(83) x2",
+     "Dustwind Cave": "MAIN x27, comp40(142) x1, comp21840(1) x1, comp21739(1) x1, comp21749(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp3(792) x1",
+     "TB Kym Wildmane": "comp3(792) x1",
+     "TB Spirit Rise (Beram)": "comp3(792) x1",
+     "TB Pools of Vision (Father Cobb)": "comp3(792) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 2735136,
+     "easternKingdoms": 2423088,
+     "total": 5158224
+    },
+    "maxBlockGzip6Bytes": 131058,
+    "blocks": 106,
+    "polygons": 578625,
+    "prunedPolygons": 146289,
+    "droppedSwimPolygons": 6684,
+    "census": {
+     "offMain": 2025,
+     "noPolygon": 51,
+     "ambiguousComponent": 1073,
+     "mainWithOffMainFloor": 1049
+    }
+   }
+  },
+  {
+   "set": "c05r1+t4+n12+e4+s60+a",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 1024,
+    "tileYd": 533.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 60,
+    "maxSimplificationErrorYd": 4,
+    "maxSimplificationErrorVoxels": 7.68,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 0
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1308,
+    "geomS": 108,
+    "recastS": 1167,
+    "postS": 33,
+    "maxBlockS": 18.5,
+    "wall": {
+     "buildS": 137,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4645104,
+     "easternKingdoms": 3774665,
+     "total": 8419769
+    },
+    "maxBlockGzip6Bytes": 202533,
+    "polygons": 891464,
+    "census": {
+     "spawns": 74608,
+     "main": 71970,
+     "offMain": 2606,
+     "noPolygon": 32
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(12821) x11, comp15837(1) x1, comp3449(6) x1, comp86(101) x2",
+     "Dustwind Cave": "MAIN x28, comp25273(1) x1, comp25176(1) x1, comp25185(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp3(958) x1",
+     "TB Kym Wildmane": "comp3(958) x1",
+     "TB Spirit Rise (Beram)": "comp3(958) x1",
+     "TB Pools of Vision (Father Cobb)": "comp3(958) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 3354504,
+     "easternKingdoms": 3020819,
+     "total": 6375323
+    },
+    "maxBlockGzip6Bytes": 160967,
+    "blocks": 106,
+    "polygons": 706476,
+    "prunedPolygons": 177469,
+    "droppedSwimPolygons": 7519,
+    "census": {
+     "offMain": 2043,
+     "noPolygon": 37,
+     "ambiguousComponent": 1400,
+     "mainWithOffMainFloor": 1398
+    }
+   }
+  },
+  {
+   "set": "c05r1+n12+e4+s60",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 256,
+    "tileYd": 133.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 60,
+    "maxSimplificationErrorYd": 4,
+    "maxSimplificationErrorVoxels": 7.68,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1004,
+    "geomS": 99,
+    "recastS": 879,
+    "postS": 26,
+    "maxBlockS": 15,
+    "wall": {
+     "buildS": 108,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4731613,
+     "easternKingdoms": 3714475,
+     "total": 8446088
+    },
+    "maxBlockGzip6Bytes": 207250,
+    "polygons": 953622,
+    "census": {
+     "spawns": 74608,
+     "main": 72068,
+     "offMain": 2501,
+     "noPolygon": 39
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(12964) x11, comp19011(1) x1, comp84(110) x3",
+     "Dustwind Cave": "MAIN x27, comp38(203) x1, comp28222(1) x1, comp28197(1) x1, comp28201(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp3(1003) x1",
+     "TB Kym Wildmane": "comp3(1003) x1",
+     "TB Spirit Rise (Beram)": "comp3(1003) x1",
+     "TB Pools of Vision (Father Cobb)": "comp3(1003) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 3290079,
+     "easternKingdoms": 2868828,
+     "total": 6158907
+    },
+    "maxBlockGzip6Bytes": 150611,
+    "blocks": 108,
+    "polygons": 733899,
+    "prunedPolygons": 203591,
+    "droppedSwimPolygons": 16132,
+    "census": {
+     "offMain": 2007,
+     "noPolygon": 40,
+     "ambiguousComponent": 1171,
+     "mainWithOffMainFloor": 1178
+    }
+   }
+  },
+  {
+   "set": "c05r1+n12+e5+s60",
+   "settings": {
+    "cellYd": 0.521,
+    "tileVoxels": 256,
+    "tileYd": 133.333,
+    "cellHeightYd": 0.25,
+    "radiusVoxels": 1,
+    "radiusYd": 0.521,
+    "climbYd": 1.5,
+    "heightYd": 2,
+    "slopeDeg": 60,
+    "maxSimplificationErrorYd": 5,
+    "maxSimplificationErrorVoxels": 9.6,
+    "maxEdgeLenYd": 66.67,
+    "minRegionSideYd": 8.33,
+    "mergeRegionSideYd": 20.83,
+    "maxVertsPerPoly": 12,
+    "m2MinFootprintYd": 4
+   },
+   "build": {
+    "blocks": 136,
+    "cpuS": 1018,
+    "geomS": 103,
+    "recastS": 888,
+    "postS": 27,
+    "maxBlockS": 14.8,
+    "wall": {
+     "buildS": 109,
+     "linkS": 6
+    }
+   },
+   "unpruned": {
+    "gzip6Bytes": {
+     "kalimdor": 4335683,
+     "easternKingdoms": 3421786,
+     "total": 7757469
+    },
+    "maxBlockGzip6Bytes": 188665,
+    "polygons": 888599,
+    "census": {
+     "spawns": 74608,
+     "main": 72035,
+     "offMain": 2537,
+     "noPolygon": 36
+    },
+    "mustConnectKalimdor": {
+     "Skull Rock": "MAIN x11",
+     "Burning Blade Coven": "MAIN x86, comp1(11977) x11, comp16331(1) x1, comp91(98) x3",
+     "Dustwind Cave": "MAIN x27, comp34(196) x1, comp26244(1) x1, comp26218(1) x1, comp26222(1) x1",
+     "Cleft of Shadow": "MAIN x1",
+     "Orgrimmar Zamja": "MAIN x1",
+     "TB Elder Rise (Hesuwa)": "comp3(953) x1",
+     "TB Kym Wildmane": "comp3(953) x1",
+     "TB Spirit Rise (Beram)": "comp3(953) x1",
+     "TB Pools of Vision (Father Cobb)": "comp3(953) x1"
+    }
+   },
+   "pruned": {
+    "rule": "spawn-free components < 1000 polygons dropped; swim polygons > 400 yd from shore dropped (N = 800); snap rules A + B (minComp 20)",
+    "gzip6Bytes": {
+     "kalimdor": 3043014,
+     "easternKingdoms": 2661743,
+     "total": 5704757
+    },
+    "maxBlockGzip6Bytes": 138855,
+    "blocks": 108,
+    "polygons": 689543,
+    "prunedPolygons": 183421,
+    "droppedSwimPolygons": 15635,
+    "census": {
+     "offMain": 1977,
+     "noPolygon": 37,
+     "ambiguousComponent": 1060,
+     "mainWithOffMainFloor": 1086
+    }
+   }
+  }
+ ],
+ "firstDesignReference": {
+  "v2Gzip6BlockBytes": 8558774,
+  "source": "critic TN-09 (136 compact-v2 4x4 blocks of the first prototype, same gzip level 6)",
+  "v3SameSettingsGzip6Bytes": 5887812
+ },
+ "encoding": {
+  "set": "c05r1+n12+e5+s60",
+  "stage": "stage-1 blocks, before pruning, summed over both maps",
+  "gzip6Bytes": {
+   "bareFirstUseOrder": 7459539,
+   "bareRecastOrder": 7181158,
+   "withExplicitNeighbours": 9751847,
+   "eighthYardVertices": 8495583,
+   "withZonesComp0": 7483856
+  },
+  "notes": "bareFirstUseOrder = v3 without attributes, vertices renumbered by first use; bareRecastOrder = v3 without attributes in rcPolyMesh vertex order (the chosen form); withExplicitNeighbours = bareFirstUseOrder plus a stored neighbour per edge (the v2 approach); eighthYardVertices = bareFirstUseOrder with 1/8-yd XY and 1/4-yd Z vertices instead of voxel integers (the v2 quantisation); withZonesComp0 = bareFirstUseOrder plus the zone attribute stream and an all-zero component stream"
+ },
+ "final": {
+  "perMap": {
+   "kalimdor": {
+    "blocks": 58,
+    "tiles": 9605,
+    "polys": 367400,
+    "vertexSlots": 1506776,
+    "edges": 1106734,
+    "slotsPerPoly": 4.1011867174741425,
+    "edgesPerPoly": 3.0123407729994556,
+    "loadAllMs": 654.4908,
+    "estimateRuntimeBytes": 50135792,
+    "bytesPerPoly": 136.46105606967882,
+    "raw": 4223863,
+    "gzip6": 3043014,
+    "gzip6Max": 128074,
+    "gzip6Median": 48932,
+    "blockLoadMs": {
+     "p50": 7.7526000000000295,
+     "p90": 19.267399999999952,
+     "max": 45.069499999999834
+    },
+    "census": {
+     "polys": 367400,
+     "components": 1138,
+     "main": 332053,
+     "second": [
+      11977,
+      9239,
+      1056,
+      953,
+      799
+     ],
+     "off": 1748,
+     "none": 12,
+     "ambiguous": 653,
+     "hiddenFloor": 599,
+     "main_": 31650,
+     "offBySize": {
+      ">=2000": 1343,
+      "20-199": 190,
+      "<20": 72,
+      "200-1999": 143
+     },
+     "floorSpan": {
+      "over10": 1992,
+      "over20": 1722,
+      "over20SameComp": 1140
+     }
+    },
+    "pre": {
+     "polys": 491333,
+     "components": 35582,
+     "main": 350280,
+     "off": 1747,
+     "none": 11,
+     "ambiguous": 654,
+     "hiddenFloor": 601
+    },
+    "prune": {
+     "droppedPolys": 115285,
+     "droppedComponents": 34294
+    },
+    "water": {
+     "droppedSwimPolygons": 8648,
+     "splitByLongSwims": [
+      {
+       "fullComp": 0,
+       "fullSize": 350280,
+       "parts": [
+        {
+         "polys": 332053,
+         "zones": "Ashenvale:36051, The Barrens:30055, Feralas:29978"
+        },
+        {
+         "polys": 9239,
+         "zones": "Teldrassil:9239"
+        },
+        {
+         "polys": 799,
+         "zones": "Tanaris:799"
+        },
+        {
+         "polys": 50,
+         "zones": "Azshara:46, 0:4"
+        }
+       ]
+      }
+     ]
+    },
+    "offComponentsTop": [
+     {
+      "comp": 1,
+      "polys": 11977,
+      "spawns": 1334,
+      "zones": "Teldrassil:1240, Darnassus:94",
+      "ids": "n1984 n1985 n1986 n1988 n1989 n1992 n1993 n1994"
+     },
+     {
+      "comp": 4,
+      "polys": 953,
+      "spawns": 93,
+      "zones": "Thunder Bluff:93",
+      "ids": "n2798 n2987 n2995 n2998 n3001 n3004 n3007 n3008"
+     },
+     {
+      "comp": 11,
+      "polys": 260,
+      "spawns": 44,
+      "zones": "Darkshore:44",
+      "ids": "n10919 n11196"
+     },
+     {
+      "comp": 23,
+      "polys": 98,
+      "spawns": 27,
+      "zones": "Teldrassil:27",
+      "ids": "n2009 n2010 n2011 n7318 o106318"
+     },
+     {
+      "comp": 26,
+      "polys": 86,
+      "spawns": 21,
+      "zones": "Ashenvale:21",
+      "ids": "n3736 n3799 n3803 n3804 n3806 n3807 n3808 n3940"
+     },
+     {
+      "comp": 80,
+      "polys": 22,
+      "spawns": 18,
+      "zones": "Darkshore:18",
+      "ids": "n2179 n2180 n2339 n7017 o1733 o11713 o11714 o106319"
+     },
+     {
+      "comp": 22,
+      "polys": 99,
+      "spawns": 17,
+      "zones": "The Barrens:17",
+      "ids": "n7327 n7332 n7335"
+     },
+     {
+      "comp": 81,
+      "polys": 22,
+      "spawns": 13,
+      "zones": "Felwood:13",
+      "ids": "n7112 n7113 n7115 n7125 o176645"
+     },
+     {
+      "comp": 50,
+      "polys": 36,
+      "spawns": 13,
+      "zones": "Desolace:13",
+      "ids": "n11777 n11778 n11787 n11788 o2040"
+     },
+     {
+      "comp": 31,
+      "polys": 68,
+      "spawns": 12,
+      "zones": "Felwood:12",
+      "ids": "n7111 n7114 n7118 n7120 n7126 n9862 n11016"
+     },
+     {
+      "comp": 12,
+      "polys": 196,
+      "spawns": 11,
+      "zones": "Durotar:11",
+      "ids": "n3118 n3126 o1731"
+     },
+     {
+      "comp": 122,
+      "polys": 16,
+      "spawns": 9,
+      "zones": "Darkshore:9",
+      "ids": "n2179 n2180 o11714"
+     },
+     {
+      "comp": 2,
+      "polys": 9239,
+      "spawns": 9,
+      "zones": "Teldrassil:9",
+      "ids": "n3607 n3838 n7907 n7916 n10118 n16788 n16817 o142958"
+     },
+     {
+      "comp": 20,
+      "polys": 119,
+      "spawns": 8,
+      "zones": "Felwood:8",
+      "ids": "n7118 n7120 n7126 n9862 o176643"
+     },
+     {
+      "comp": 33,
+      "polys": 63,
+      "spawns": 7,
+      "zones": "The Barrens:7",
+      "ids": "n3385 n3393"
+     },
+     {
+      "comp": 72,
+      "polys": 24,
+      "spawns": 7,
+      "zones": "Dustwallow Marsh:7",
+      "ids": "n5057"
+     },
+     {
+      "comp": 127,
+      "polys": 16,
+      "spawns": 6,
+      "zones": "Stonetalon Mountains:6",
+      "ids": "n11917 n11918 o178104 o178105"
+     },
+     {
+      "comp": 25,
+      "polys": 89,
+      "spawns": 5,
+      "zones": "Feralas:5",
+      "ids": "n5333 n5336 n5343 o2040"
+     },
+     {
+      "comp": 39,
+      "polys": 51,
+      "spawns": 4,
+      "zones": "Feralas:4",
+      "ids": "n5333 n5336 o2040"
+     },
+     {
+      "comp": 32,
+      "polys": 65,
+      "spawns": 3,
+      "zones": "Feralas:3",
+      "ids": "n5333"
+     },
+     {
+      "comp": 27,
+      "polys": 86,
+      "spawns": 3,
+      "zones": "The Barrens:3",
+      "ids": "n7167 n7168 o123462"
+     },
+     {
+      "comp": 123,
+      "polys": 16,
+      "spawns": 3,
+      "zones": "Darkshore:3",
+      "ids": "n10919"
+     },
+     {
+      "comp": 58,
+      "polys": 30,
+      "spawns": 3,
+      "zones": "Desolace:3",
+      "ids": "n11685 n13718"
+     },
+     {
+      "comp": 6,
+      "polys": 734,
+      "spawns": 3,
+      "zones": "Feralas:3",
+      "ids": "o1735 o2040"
+     },
+     {
+      "comp": 318,
+      "polys": 6,
+      "spawns": 2,
+      "zones": "Darkshore:2",
+      "ids": "n2179 n2180"
+     }
+    ],
+    "zonesTop": [
+     {
+      "zone": 141,
+      "name": "Teldrassil",
+      "total": 1276,
+      "off": 1276,
+      "none": 0
+     },
+     {
+      "zone": 1657,
+      "name": "Darnassus",
+      "total": 94,
+      "off": 94,
+      "none": 0
+     },
+     {
+      "zone": 1638,
+      "name": "Thunder Bluff",
+      "total": 108,
+      "off": 93,
+      "none": 0
+     },
+     {
+      "zone": 148,
+      "name": "Darkshore",
+      "total": 2020,
+      "off": 88,
+      "none": 0
+     },
+     {
+      "zone": 405,
+      "name": "Desolace",
+      "total": 1987,
+      "off": 39,
+      "none": 0
+     },
+     {
+      "zone": 361,
+      "name": "Felwood",
+      "total": 1080,
+      "off": 37,
+      "none": 1
+     },
+     {
+      "zone": 17,
+      "name": "The Barrens",
+      "total": 3963,
+      "off": 29,
+      "none": 0
+     },
+     {
+      "zone": 331,
+      "name": "Ashenvale",
+      "total": 2117,
+      "off": 23,
+      "none": 1
+     },
+     {
+      "zone": 357,
+      "name": "Feralas",
+      "total": 1897,
+      "off": 19,
+      "none": 0
+     },
+     {
+      "zone": 14,
+      "name": "Durotar",
+      "total": 1829,
+      "off": 18,
+      "none": 0
+     },
+     {
+      "zone": 406,
+      "name": "Stonetalon Mountains",
+      "total": 1182,
+      "off": 11,
+      "none": 1
+     },
+     {
+      "zone": 15,
+      "name": "Dustwallow Marsh",
+      "total": 2162,
+      "off": 9,
+      "none": 0
+     },
+     {
+      "zone": 490,
+      "name": "Un'Goro Crater",
+      "total": 2601,
+      "off": 0,
+      "none": 6
+     },
+     {
+      "zone": 16,
+      "name": "Azshara",
+      "total": 1794,
+      "off": 3,
+      "none": 1
+     },
+     {
+      "zone": 618,
+      "name": "Winterspring",
+      "total": 1230,
+      "off": 2,
+      "none": 1
+     },
+     {
+      "zone": 215,
+      "name": "Mulgore",
+      "total": 2018,
+      "off": 1,
+      "none": 1
+     },
+     {
+      "zone": 1377,
+      "name": "Silithus",
+      "total": 1815,
+      "off": 2,
+      "none": 0
+     },
+     {
+      "zone": 1637,
+      "name": "Orgrimmar",
+      "total": 159,
+      "off": 1,
+      "none": 0
+     },
+     {
+      "zone": 400,
+      "name": "Thousand Needles",
+      "total": 1725,
+      "off": 1,
+      "none": 0
+     },
+     {
+      "zone": 440,
+      "name": "Tanaris",
+      "total": 2268,
+      "off": 1,
+      "none": 0
+     }
+    ]
+   },
+   "easternKingdoms": {
+    "blocks": 50,
+    "tiles": 7262,
+    "polys": 322143,
+    "vertexSlots": 1330810,
+    "edges": 978755,
+    "slotsPerPoly": 4.131115684649364,
+    "edgesPerPoly": 3.038262510748332,
+    "loadAllMs": 446.22810000000004,
+    "estimateRuntimeBytes": 44242681,
+    "bytesPerPoly": 137.338638430759,
+    "raw": 3709585,
+    "gzip6": 2661743,
+    "gzip6Max": 138855,
+    "gzip6Median": 54209,
+    "blockLoadMs": {
+     "p50": 7.465900000000147,
+     "p90": 20.063900000000103,
+     "max": 26.473700000000008
+    },
+    "census": {
+     "polys": 322143,
+     "components": 1101,
+     "main": 310185,
+     "second": [
+      2129,
+      1216,
+      614,
+      607,
+      302
+     ],
+     "off": 229,
+     "none": 25,
+     "ambiguous": 407,
+     "hiddenFloor": 487,
+     "main_": 40944,
+     "offBySize": {
+      "20-199": 141,
+      "<20": 56,
+      "200-1999": 32
+     },
+     "floorSpan": {
+      "over10": 3145,
+      "over20": 2664,
+      "over20SameComp": 2324
+     }
+    },
+    "pre": {
+     "polys": 397266,
+     "components": 21567,
+     "main": 318694,
+     "off": 229,
+     "none": 25,
+     "ambiguous": 407,
+     "hiddenFloor": 487
+    },
+    "prune": {
+     "droppedPolys": 68136,
+     "droppedComponents": 20222
+    },
+    "water": {
+     "droppedSwimPolygons": 6987,
+     "splitByLongSwims": [
+      {
+       "fullComp": 0,
+       "fullSize": 318694,
+       "parts": [
+        {
+         "polys": 310185,
+         "zones": "Eastern Plaguelands:29568, Stranglethorn Vale:23016, Wetlands:22184"
+        },
+        {
+         "polys": 2129,
+         "zones": "Gillijim's Isle:1379, Stranglethorn Vale:717, 16550:33"
+        }
+       ]
+      }
+     ]
+    },
+    "offComponentsTop": [
+     {
+      "comp": 15,
+      "polys": 82,
+      "spawns": 18,
+      "zones": "Stranglethorn Vale:18",
+      "ids": "n1653 n2551 n4505 n4506 o2554 o4149"
+     },
+     {
+      "comp": 4,
+      "polys": 607,
+      "spawns": 16,
+      "zones": "Silverpine Forest:16",
+      "ids": "n2053 n2054 n2173 n2332 o3705 o180642"
+     },
+     {
+      "comp": 10,
+      "polys": 122,
+      "spawns": 16,
+      "zones": "Alterac Mountains:16",
+      "ids": "n2271 n2358 n2359 n2408 n2628 o1624 o2039"
+     },
+     {
+      "comp": 25,
+      "polys": 43,
+      "spawns": 15,
+      "zones": "Searing Gorge:15",
+      "ids": "n5861 n5862 n8282 n8419 n8436 o324 o1734 o2040"
+     },
+     {
+      "comp": 14,
+      "polys": 91,
+      "spawns": 14,
+      "zones": "Stranglethorn Vale:14",
+      "ids": "n1565 n1653 n2547 n4505 n4506 o2554"
+     },
+     {
+      "comp": 48,
+      "polys": 26,
+      "spawns": 12,
+      "zones": "Burning Steppes:12",
+      "ids": "o324 o1734 o2040 o2047 o165658 o175404"
+     },
+     {
+      "comp": 6,
+      "polys": 205,
+      "spawns": 12,
+      "zones": "Arathi Highlands:12",
+      "ids": "o1732 o1733 o1734 o1735 o2040 o2047"
+     },
+     {
+      "comp": 7,
+      "polys": 171,
+      "spawns": 11,
+      "zones": "Dun Morogh:11",
+      "ids": "n6208 n6209 n6210 n6213 n6221"
+     },
+     {
+      "comp": 26,
+      "polys": 42,
+      "spawns": 9,
+      "zones": "Redridge Mountains:9",
+      "ids": "n397 n429 n579 n819"
+     },
+     {
+      "comp": 38,
+      "polys": 31,
+      "spawns": 9,
+      "zones": "Westfall:9",
+      "ids": "n456 n513"
+     },
+     {
+      "comp": 24,
+      "polys": 43,
+      "spawns": 5,
+      "zones": "Burning Steppes:5",
+      "ids": "n7028"
+     },
+     {
+      "comp": 695,
+      "polys": 2,
+      "spawns": 5,
+      "zones": "Burning Steppes:5",
+      "ids": "o1733 o1734 o1735 o2040 o2047"
+     },
+     {
+      "comp": 3,
+      "polys": 614,
+      "spawns": 4,
+      "zones": "Undercity:4",
+      "ids": "n4573 n5624 o37097 o180772"
+     },
+     {
+      "comp": 1068,
+      "polys": 1,
+      "spawns": 4,
+      "zones": "Blasted Lands:4",
+      "ids": "n7664 n7734 n7735 o153205"
+     },
+     {
+      "comp": 184,
+      "polys": 8,
+      "spawns": 4,
+      "zones": "Eastern Plaguelands:4",
+      "ids": "n8561"
+     },
+     {
+      "comp": 139,
+      "polys": 10,
+      "spawns": 4,
+      "zones": "Wetlands:4",
+      "ids": "o331 o333 o334 o35252"
+     },
+     {
+      "comp": 78,
+      "polys": 16,
+      "spawns": 3,
+      "zones": "Dun Morogh:3",
+      "ids": "n1373 o269 o270"
+     },
+     {
+      "comp": 274,
+      "polys": 6,
+      "spawns": 3,
+      "zones": "Alterac Mountains:3",
+      "ids": "n2271 n2272 n2358"
+     },
+     {
+      "comp": 29,
+      "polys": 40,
+      "spawns": 3,
+      "zones": "Undercity:3",
+      "ids": "n4576 n7825 o3705"
+     },
+     {
+      "comp": 35,
+      "polys": 34,
+      "spawns": 3,
+      "zones": "Blasted Lands:3",
+      "ids": "n5385 n7826 n8022"
+     },
+     {
+      "comp": 134,
+      "polys": 10,
+      "spawns": 3,
+      "zones": "Eastern Plaguelands:3",
+      "ids": "n9448 n9450 n9451"
+     },
+     {
+      "comp": 154,
+      "polys": 9,
+      "spawns": 3,
+      "zones": "Eastern Plaguelands:3",
+      "ids": "n14564"
+     },
+     {
+      "comp": 1026,
+      "polys": 1,
+      "spawns": 3,
+      "zones": "Redridge Mountains:3",
+      "ids": "o1731 o1732 o1733"
+     },
+     {
+      "comp": 36,
+      "polys": 32,
+      "spawns": 3,
+      "zones": "Redridge Mountains:3",
+      "ids": "o1731 o1732 o1733"
+     },
+     {
+      "comp": 9,
+      "polys": 151,
+      "spawns": 3,
+      "zones": "Undercity:3",
+      "ids": "o3705 o180771 o180772"
+     }
+    ],
+    "zonesTop": [
+     {
+      "zone": 33,
+      "name": "Stranglethorn Vale",
+      "total": 3274,
+      "off": 33,
+      "none": 0
+     },
+     {
+      "zone": 46,
+      "name": "Burning Steppes",
+      "total": 2100,
+      "off": 22,
+      "none": 6
+     },
+     {
+      "zone": 36,
+      "name": "Alterac Mountains",
+      "total": 1454,
+      "off": 23,
+      "none": 0
+     },
+     {
+      "zone": 51,
+      "name": "Searing Gorge",
+      "total": 1086,
+      "off": 19,
+      "none": 1
+     },
+     {
+      "zone": 1,
+      "name": "Dun Morogh",
+      "total": 1453,
+      "off": 19,
+      "none": 0
+     },
+     {
+      "zone": 44,
+      "name": "Redridge Mountains",
+      "total": 1427,
+      "off": 15,
+      "none": 3
+     },
+     {
+      "zone": 139,
+      "name": "Eastern Plaguelands",
+      "total": 2719,
+      "off": 14,
+      "none": 4
+     },
+     {
+      "zone": 130,
+      "name": "Silverpine Forest",
+      "total": 1581,
+      "off": 16,
+      "none": 0
+     },
+     {
+      "zone": 1497,
+      "name": "Undercity",
+      "total": 199,
+      "off": 12,
+      "none": 0
+     },
+     {
+      "zone": 45,
+      "name": "Arathi Highlands",
+      "total": 3271,
+      "off": 12,
+      "none": 0
+     },
+     {
+      "zone": 10,
+      "name": "Duskwood",
+      "total": 1506,
+      "off": 0,
+      "none": 10
+     },
+     {
+      "zone": 40,
+      "name": "Westfall",
+      "total": 2140,
+      "off": 9,
+      "none": 0
+     },
+     {
+      "zone": 1537,
+      "name": "Ironforge",
+      "total": 164,
+      "off": 7,
+      "none": 0
+     },
+     {
+      "zone": 4,
+      "name": "Blasted Lands",
+      "total": 1441,
+      "off": 7,
+      "none": 0
+     },
+     {
+      "zone": 28,
+      "name": "Western Plaguelands",
+      "total": 1642,
+      "off": 6,
+      "none": 0
+     },
+     {
+      "zone": 11,
+      "name": "Wetlands",
+      "total": 2435,
+      "off": 5,
+      "none": 0
+     },
+     {
+      "zone": 3,
+      "name": "Badlands",
+      "total": 1618,
+      "off": 2,
+      "none": 1
+     },
+     {
+      "zone": 85,
+      "name": "Tirisfal Glades",
+      "total": 2093,
+      "off": 2,
+      "none": 0
+     },
+     {
+      "zone": 47,
+      "name": "The Hinterlands",
+      "total": 2377,
+      "off": 2,
+      "none": 0
+     },
+     {
+      "zone": 41,
+      "name": "Deadwind Pass",
+      "total": 114,
+      "off": 2,
+      "none": 0
+     }
+    ]
+   }
+  },
+  "totalGzip6Bytes": 5704757,
+  "totalRawBytes": 7933448,
+  "blocks": 108,
+  "maxBlockGzip6Bytes": 138855,
+  "build": {
+   "blocks": 136,
+   "cpuS": 1018,
+   "geomS": 103,
+   "recastS": 888,
+   "postS": 27,
+   "maxBlockS": 14.8,
+   "wall": {
+    "buildS": 109,
+    "linkS": 6
+   },
+   "link2PruneCensusMs": {
+    "kalimdor": 8431,
+    "easternKingdoms": 7029
+   }
+  }
+ },
+ "seams": {
+  "method": "TS slab relinker (Detour findConnectingPolys/overlapSlabs rule: 0.01 yd along-side shrink, |dh| <= 2 x walkableClimb at either overlap end, or crossing). Unmatched = portal-edge length on a side with a loaded neighbour tile that no link covers. Block seams are tile sides on 4x4-ADT block boundaries; mid lines are tile sides at mod 16 = 8 (inside blocks, also ADT boundaries); byLineMod32 splits by boundary index mod 32.",
+  "final": {
+   "kalimdor": {
+    "innerLenYd": 6932447.395830107,
+    "innerUnmatchedPct": 2.1320031954158103,
+    "blockLenYd": 428037.4999999896,
+    "blockUnmatchedPct": 2.161512328553339,
+    "deltaPp": 0.029509133137528565,
+    "midLenYd": 467219.7916666514,
+    "midUnmatchedPct": 2.070202505512042,
+    "byLineMod32": {
+     "0": 2.059,
+     "8": 1.822,
+     "16": 2.262,
+     "24": 2.38
+    }
+   },
+   "easternKingdoms": {
+    "innerLenYd": 5209781.249999724,
+    "innerUnmatchedPct": 2.1947498595366266,
+    "blockLenYd": 331836.97916666424,
+    "blockUnmatchedPct": 2.227028520216323,
+    "deltaPp": 0.032278660679696536,
+    "midLenYd": 332836.45833333005,
+    "midUnmatchedPct": 2.2639997746640717,
+    "byLineMod32": {
+     "0": 2.151,
+     "8": 1.781,
+     "16": 2.304,
+     "24": 2.818
+    }
+   }
+  },
+  "c1r1": {
+   "kalimdor": {
+    "innerLenYd": 5978931.249998034,
+    "innerUnmatchedPct": 1.82733675576503,
+    "blockLenYd": 363088.54166666296,
+    "blockUnmatchedPct": 1.8900348572003178,
+    "deltaPp": 0.06269810143528787,
+    "midLenYd": 405639.5833333223,
+    "midUnmatchedPct": 1.7251562604325477,
+    "byLineMod32": {
+     "0": 1.754,
+     "8": 1.559,
+     "16": 2.026,
+     "24": 1.946
+    }
+   },
+   "easternKingdoms": {
+    "innerLenYd": 4508540.625000192,
+    "innerUnmatchedPct": 2.006007579586877,
+    "blockLenYd": 284471.87500000186,
+    "blockUnmatchedPct": 2.21792576155323,
+    "deltaPp": 0.21191818196635293,
+    "midLenYd": 289892.7083333309,
+    "midUnmatchedPct": 2.0298458122071206,
+    "byLineMod32": {
+     "0": 1.872,
+     "8": 1.535,
+     "16": 2.562,
+     "24": 2.619
+    }
+   }
+  },
+  "firstPrototypeCritic": {
+   "blockUnmatchedPct": {
+    "kalimdor": 2.37,
+    "easternKingdoms": 2.2
+   },
+   "innerUnmatchedPct": {
+    "kalimdor": 1.43,
+    "easternKingdoms": 1.53
+   },
+   "source": "critic TN-06 (loader rule, border length matched: 97.63/97.80 block, 98.57/98.47 inner)"
+  },
+  "partitionInvariance": {
+   "method": "cmp-partition.ts: SHA-256 of every decoded Recast tile (voxel vertices with absolute heights, polygons, swim flags) of Eastern Kingdoms built as 4x4-ADT blocks vs 8x8-ADT blocks, or with an ablation switch",
+   "results": [
+    "c1r1t4 4 c1r1t8 8 (per-tile origin, sorted): tiles 11776 11776 identical 11776 different 0",
+    "c1r1t4 4 c1r1u4 4 (sorted vs unsorted triangles, same partition): tiles 11776 11776 identical 11455 different 321",
+    "c1r1ob4 4 c1r1ob8 8 (per-block origin as in the first prototype, sorted): tiles 11776 11776 identical 11667 different 109",
+    "c05r1+n12+e5+s60 4 c05r1+n12+s60+e5 8 (final settings, per-tile origin, sorted): tiles 11776 11776 identical 11776 different 0",
+    "c1r1fx4 4 c1r1fx8 8 (one fixed vertical origin for the map, -1010 yd, 8191 x 0.25 yd, sorted): tiles 11776 11776 identical 11776 different 0"
+   ]
+  }
+ },
+ "determinism": {
+  "method": "two independent full builds of the same settings under two set names (c05r1+t4+n12+e4+s60 and c05r1+t4+n12+s60+e4; c05r1+n12+e5+s60 and c05r1+s60+n12+e5), each 12 processes: SHA-256 over the sorted per-block SHA-256 of the stage-1, final and pruned final blocks",
+  "results": [
+   "final settings map 0 /stage1: b58908f5f008ff90 b58908f5f008ff90 identical",
+   "final settings map 0 /final: 20cc3b1675be26f2 20cc3b1675be26f2 identical",
+   "final settings map 0 /final-p1000-w800: d1194f3f15121f24 d1194f3f15121f24 identical",
+   "final settings map 1 /stage1: 8423f26094c0109b 8423f26094c0109b identical",
+   "final settings map 1 /final: 1e8dc38f30e9fcff 1e8dc38f30e9fcff identical",
+   "final settings map 1 /final-p1000-w800: db0bd458ea549435 db0bd458ea549435 identical",
+   "t4+e4 settings map 0 /stage1: 4b528a072bf9ff28 4b528a072bf9ff28 identical",
+   "t4+e4 settings map 0 /final: a287508a10460770 a287508a10460770 identical",
+   "t4+e4 settings map 1 /stage1: 2a2d9e89bca0c70d 2a2d9e89bca0c70d identical",
+   "t4+e4 settings map 1 /final: 4984ea901f10ccd5 4984ea901f10ccd5 identical"
+  ]
+ },
+ "queries": {
+  "set": "c05r1+n12+e5+s60",
+  "final": "-p1000-w800",
+  "map": 1,
+  "polys": 367400,
+  "loadMs": 703.2302999999999,
+  "compMismatchVsStored": 0,
+  "heapMB": 318.947832,
+  "durotar": {
+   "points": 300,
+   "offMainPoints": 3,
+   "legs": 90000,
+   "reachable": 88218,
+   "ms": 1758.1008,
+   "msPerSource": 5.860336,
+   "usPerLeg": 19.534453333333335,
+   "deterministic": true,
+   "hash": "011d8a9b5881d221",
+   "prunedTargets": 1782,
+   "expandedPerSource": 27159.83,
+   "noPruning": {
+    "ms": 17460.2932,
+    "expandedPerSource": 328734.43,
+    "sameResult": true
+   },
+   "consecutive": {
+    "legs": 299,
+    "ms": 118.40160000000105,
+    "msPerLeg": 0.3959919732441507
+   },
+   "ratio": {
+    "n": 87684,
+    "p50": 1.1687160126148521,
+    "p90": 1.8897139011819675,
+    "max": 33.28411669839929
+   },
+   "longSwimLegs": 22606,
+   "swimOver200Legs": 9489,
+   "swimOver400Legs": 3928,
+   "fetch": {
+    "blocks": 14,
+    "gzip6": 1006536
+   },
+   "msRange": [
+    1739.8845999999999,
+    1767.0248
+   ],
+   "hashesEqualAcrossRuns": true
+  },
+  "barrens": {
+   "points": 300,
+   "offMainPoints": 1,
+   "legs": 90000,
+   "reachable": 89402,
+   "ms": 6397.346600000001,
+   "msPerSource": 21.32448866666667,
+   "usPerLeg": 71.0816288888889,
+   "deterministic": true,
+   "hash": "8985d82415c282da",
+   "prunedTargets": 598,
+   "expandedPerSource": 111561.81333333334,
+   "noPruning": {
+    "ms": 18108.5452,
+    "expandedPerSource": 330946.4866666667,
+    "sameResult": true
+   },
+   "consecutive": {
+    "legs": 299,
+    "ms": 645.4612000000052,
+    "msPerLeg": 2.15873311036791
+   },
+   "ratio": {
+    "n": 89000,
+    "p50": 1.081041639171662,
+    "p90": 1.1521841787213654,
+    "max": 8.328278447422985
+   },
+   "longSwimLegs": 1859,
+   "swimOver200Legs": 638,
+   "swimOver400Legs": 45,
+   "fetch": {
+    "blocks": 37,
+    "gzip6": 2339548
+   },
+   "msRange": [
+    6293.601000000002,
+    6404.7739
+   ],
+   "hashesEqualAcrossRuns": true
+  },
+  "runs": 3,
+  "method": "queries.ts, three runs on an otherwise idle machine; times are the median of the three (msRange = min and max): whole Kalimdor mesh (final pruned blocks); fixtures = dataset spawns of the zone sorted by (kind, id, x, y), every k-th to 300, endpoints rounded to 1 yd then snapped (rules A+B); one legsFrom per source over all 300 targets (90,000 directed legs); noPruning = the same without the component test; consecutive = 299 single-target legsFrom calls; ratio = (ground + swim) / straight for legs with straight > 50 yd (mesh-derived, not game truth); fetch = blocks holding a polygon settled by any search, with their gzip6 bytes; heapMB = the experiment process heap after loading (Float64 layout)"
+ },
+ "detourCheck": {
+  "set": "c05r1+n12+e5+s60",
+  "blocks": [
+   [
+    28,
+    36
+   ],
+   [
+    28,
+    40
+   ]
+  ],
+  "dtTiles": 512,
+  "dtFail": 0,
+  "tsPolys": 24544,
+  "tsMain": 18073,
+  "points": 300,
+  "pairs": 300,
+  "dtNoPath": 0,
+  "dtPartial": 0,
+  "tsUnreachable": 0,
+  "ratio": {
+   "p10": 0.9993683289748544,
+   "p50": 1.0324812653956914,
+   "p90": 1.0760163823741595,
+   "max": 1.7205448664788126,
+   "min": 0.888521029461539
+  },
+  "method": "dtcheck.ts: same geometry and settings at maxVertsPerPoly 6 (Detour limit); Detour tiles made from the same rcPolyMesh without a detail mesh; 300 spawn pairs i -> (7919 i + 13) mod n from 300 region spawns in the main component; ratio = TS legsFrom length / Detour findPath + findStraightPath 2D length (pairs with Detour length > 20 yd)"
+ },
+ "multiLevel": {
+  "set": "c05r1+n12+e5+s60",
+  "method": "cities.ts: every dataset spawn of the zone; with = rules A (zone hint) + B, without = rule B only; ambiguous = containing candidates in more than one component after the rules; multiLayer = containing candidates more than 3 yd apart vertically. hintEffect (hintcheck.ts): where the snap without rule A lands (zone of the polygon, height difference to the hinted snap)",
+  "map1": {
+   "cities": [
+    {
+     "zone": 1637,
+     "name": "Orgrimmar",
+     "spawns": 159,
+     "containedPct": 99.4,
+     "within6ydPct": 0.6,
+     "nonePct": 0,
+     "offMain": 1,
+     "offMainNoHint": 1,
+     "hintChangedPoly": 0,
+     "ambiguous": 26,
+     "ambiguousNoHint": 26,
+     "multiLayer": 140
+    },
+    {
+     "zone": 1638,
+     "name": "Thunder Bluff",
+     "spawns": 108,
+     "containedPct": 97.2,
+     "within6ydPct": 2.8,
+     "nonePct": 0,
+     "offMain": 93,
+     "offMainNoHint": 93,
+     "hintChangedPoly": 0,
+     "ambiguous": 0,
+     "ambiguousNoHint": 0,
+     "multiLayer": 13
+    },
+    {
+     "zone": 1657,
+     "name": "Darnassus",
+     "spawns": 94,
+     "containedPct": 97.9,
+     "within6ydPct": 2.1,
+     "nonePct": 0,
+     "offMain": 94,
+     "offMainNoHint": 94,
+     "hintChangedPoly": 0,
+     "ambiguous": 15,
+     "ambiguousNoHint": 15,
+     "multiLayer": 33
+    },
+    {
+     "zone": 14,
+     "name": "Durotar",
+     "spawns": 1829,
+     "containedPct": 95.6,
+     "within6ydPct": 4.4,
+     "nonePct": 0,
+     "offMain": 18,
+     "offMainNoHint": 18,
+     "hintChangedPoly": 0,
+     "ambiguous": 53,
+     "ambiguousNoHint": 53,
+     "multiLayer": 134
+    },
+    {
+     "zone": 215,
+     "name": "Mulgore",
+     "spawns": 2018,
+     "containedPct": 98.3,
+     "within6ydPct": 1.7,
+     "nonePct": 0,
+     "offMain": 1,
+     "offMainNoHint": 1,
+     "hintChangedPoly": 9,
+     "ambiguous": 2,
+     "ambiguousNoHint": 2,
+     "multiLayer": 98
+    }
+   ],
+   "detail": [
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 763.5,
+     "y": -4458.7,
+     "zone": "Durotar",
+     "poly": 176356,
+     "dist": 0,
+     "z": 17.1,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 28:84",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 25.416666666666668
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 1057.9,
+     "y": -4556,
+     "zone": "Durotar",
+     "poly": 177072,
+     "dist": 0,
+     "z": 19.3,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 1081.8,
+     "y": -4549.1,
+     "zone": "Durotar",
+     "poly": 177417,
+     "dist": 0,
+     "z": 19.6,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 1077.2,
+     "y": -4522.7,
+     "zone": "Durotar",
+     "poly": 177358,
+     "dist": 0,
+     "z": 18.6,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 692.7,
+     "y": -4518.5,
+     "zone": "Durotar",
+     "poly": 176369,
+     "dist": 0,
+     "z": 16.5,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 28:84",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 23.09375
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 742.7,
+     "y": -4485.7,
+     "zone": "Durotar",
+     "poly": 176367,
+     "dist": 0,
+     "z": 23.5,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 28:84",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 16.9375
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 746.3,
+     "y": -4454,
+     "zone": "Durotar",
+     "poly": 176357,
+     "dist": 0,
+     "z": 17.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 743.8,
+     "y": -4421.2,
+     "zone": "Durotar",
+     "poly": 176351,
+     "dist": 0,
+     "z": 19.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 736.7,
+     "y": -4435.5,
+     "zone": "Durotar",
+     "poly": 176357,
+     "dist": 0,
+     "z": 17.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 730.4,
+     "y": -4470.9,
+     "zone": "Durotar",
+     "poly": 176368,
+     "dist": 0,
+     "z": 17.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 846.4,
+     "y": -4677.6,
+     "zone": "Durotar",
+     "poly": 176819,
+     "dist": 0,
+     "z": 15.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 1121,
+     "y": -4544.4,
+     "zone": "Durotar",
+     "poly": 177419,
+     "dist": 0,
+     "z": 20.3,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3116",
+     "x": 866.8,
+     "y": -4633.2,
+     "zone": "Durotar",
+     "poly": 176799,
+     "dist": 0,
+     "z": 15.6,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1045.2,
+     "y": -4688.7,
+     "zone": "Durotar",
+     "poly": 177122,
+     "dist": 0,
+     "z": 21.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 12:196",
+     "flags": {
+      "hint": "used",
+      "compRule": true,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 32.54166666666667
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 995.1,
+     "y": -4678.2,
+     "zone": "Durotar",
+     "poly": 177117,
+     "dist": 0,
+     "z": 32.3,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 12:196",
+     "flags": {
+      "hint": "used",
+      "compRule": true,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 25.92857142857143
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1100.9,
+     "y": -4713.1,
+     "zone": "Durotar",
+     "poly": 177424,
+     "dist": 0,
+     "z": 18.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 12:196",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 36.357142857142854
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 978.9,
+     "y": -4705.1,
+     "zone": "Durotar",
+     "poly": 177129,
+     "dist": 0,
+     "z": 59.3,
+     "comp": 12,
+     "compSize": 196,
+     "containingComps": "12:196",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 983.8,
+     "y": -4687.1,
+     "zone": "Durotar",
+     "poly": 177117,
+     "dist": 0,
+     "z": 32.3,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1118.8,
+     "y": -4657.5,
+     "zone": "Durotar",
+     "poly": 177410,
+     "dist": 0,
+     "z": 39.8,
+     "comp": 933,
+     "compSize": 1,
+     "containingComps": "933:1",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 975.4,
+     "y": -4677.1,
+     "zone": "Durotar",
+     "poly": 177117,
+     "dist": 0,
+     "z": 32.3,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 967.3,
+     "y": -4765.4,
+     "zone": "Durotar",
+     "poly": 177168,
+     "dist": 4.73,
+     "z": 25.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 971.1,
+     "y": -4783.4,
+     "zone": "Durotar",
+     "poly": 177163,
+     "dist": 1.32,
+     "z": 24.9,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "",
+     "flags": {
+      "hint": "used",
+      "compRule": true,
+      "reassigned": true,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 988.8,
+     "y": -4670.8,
+     "zone": "Durotar",
+     "poly": 177117,
+     "dist": 0,
+     "z": 32.3,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1020.5,
+     "y": -4823.6,
+     "zone": "Durotar",
+     "poly": 177173,
+     "dist": 0,
+     "z": 19.9,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1045.9,
+     "y": -4778.6,
+     "zone": "Durotar",
+     "poly": 177155,
+     "dist": 0,
+     "z": 18.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1053.6,
+     "y": -4712.5,
+     "zone": "Durotar",
+     "poly": 177165,
+     "dist": 0,
+     "z": 18.2,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 12:196",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 34.875
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1103.7,
+     "y": -4698.3,
+     "zone": "Durotar",
+     "poly": 177424,
+     "dist": 0,
+     "z": 18.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1131.9,
+     "y": -4673.4,
+     "zone": "Durotar",
+     "poly": 177431,
+     "dist": 0,
+     "z": 18.9,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 12:196",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 33.57142857142857
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1137.5,
+     "y": -4689.3,
+     "zone": "Durotar",
+     "poly": 177431,
+     "dist": 0,
+     "z": 18.9,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 1096.6,
+     "y": -4677.1,
+     "zone": "Durotar",
+     "poly": 177424,
+     "dist": 0,
+     "z": 18.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Dustwind Cave",
+     "id": "npc 3118",
+     "x": 953.5,
+     "y": -4771.7,
+     "zone": "Durotar",
+     "poly": 177168,
+     "dist": 0,
+     "z": 25.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Cleft of Shadow",
+     "id": "npc 5639",
+     "x": 1844.5,
+     "y": -4400.1,
+     "zone": "Orgrimmar",
+     "poly": 179135,
+     "dist": 0,
+     "z": -21.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 31.458333333333336
+     }
+    },
+    {
+     "place": "Orgrimmar Zamja",
+     "id": "npc 3399",
+     "x": 1769.1,
+     "y": -4485.7,
+     "zone": "Orgrimmar",
+     "poly": 179232,
+     "dist": 0,
+     "z": 45.6,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 13:195",
+     "flags": {
+      "hint": "used",
+      "compRule": true,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 51.86428571428571
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 948.6,
+     "y": -4182.7,
+     "zone": "Durotar",
+     "poly": 167363,
+     "dist": 0,
+     "z": -6.7,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 947.2,
+     "y": -4206.5,
+     "zone": "Durotar",
+     "poly": 167356,
+     "dist": 0,
+     "z": -5.1,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 945.8,
+     "y": -4112.9,
+     "zone": "Durotar",
+     "poly": 167315,
+     "dist": 0,
+     "z": -9.2,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 947.9,
+     "y": -4249.9,
+     "zone": "Durotar",
+     "poly": 167376,
+     "dist": 0,
+     "z": -4.9,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 971.9,
+     "y": -4229.3,
+     "zone": "Durotar",
+     "poly": 167373,
+     "dist": 0,
+     "z": -3.5,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 957.4,
+     "y": -4269.4,
+     "zone": "Durotar",
+     "poly": 177001,
+     "dist": 0,
+     "z": -4.1,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 950.3,
+     "y": -4151,
+     "zone": "Durotar",
+     "poly": 167363,
+     "dist": 0,
+     "z": -6.7,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 955.6,
+     "y": -4086.5,
+     "zone": "Durotar",
+     "poly": 167333,
+     "dist": 0,
+     "z": -7.1,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 917.6,
+     "y": -4018.3,
+     "zone": "Durotar",
+     "poly": 166487,
+     "dist": 0,
+     "z": -10.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 978.5,
+     "y": -4052.1,
+     "zone": "Durotar",
+     "poly": 167329,
+     "dist": 0,
+     "z": -9.3,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 37.1625
+     }
+    },
+    {
+     "place": "Skull Rock",
+     "id": "npc 3131",
+     "x": 930.6,
+     "y": -4043.7,
+     "zone": "Durotar",
+     "poly": 166477,
+     "dist": 0,
+     "z": -10.5,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1450.5,
+     "y": -4691.4,
+     "zone": "Durotar",
+     "poly": 177967,
+     "dist": 0,
+     "z": -1.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 49.7
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1436.8,
+     "y": -4785.5,
+     "zone": "Durotar",
+     "poly": 178025,
+     "dist": 0,
+     "z": 8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 26.6
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1449.8,
+     "y": -4738.4,
+     "zone": "Durotar",
+     "poly": 177997,
+     "dist": 0,
+     "z": -1.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 50.425
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1458.7,
+     "y": -4804,
+     "zone": "Durotar",
+     "poly": 178047,
+     "dist": 0,
+     "z": 12.2,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 15.729166666666668
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1483.3,
+     "y": -4779.7,
+     "zone": "Durotar",
+     "poly": 178390,
+     "dist": 0,
+     "z": 9.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1504.8,
+     "y": -4735.8,
+     "zone": "Durotar",
+     "poly": 178322,
+     "dist": 0,
+     "z": 14.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 871.7,
+     "y": -4183.8,
+     "zone": "Durotar",
+     "poly": 166524,
+     "dist": 0,
+     "z": -12.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 860.1,
+     "y": -4198.6,
+     "zone": "Durotar",
+     "poly": 166521,
+     "dist": 0,
+     "z": -14,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 880.9,
+     "y": -4196.5,
+     "zone": "Durotar",
+     "poly": 166536,
+     "dist": 0,
+     "z": -13.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 846.4,
+     "y": -4200.2,
+     "zone": "Durotar",
+     "poly": 166541,
+     "dist": 0,
+     "z": -9.9,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 33.375
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1463.2,
+     "y": -4871.2,
+     "zone": "Durotar",
+     "poly": 178064,
+     "dist": 0,
+     "z": 13.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1518.2,
+     "y": -4716.2,
+     "zone": "Durotar",
+     "poly": 178322,
+     "dist": 0,
+     "z": 14.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1495.7,
+     "y": -4834.7,
+     "zone": "Durotar",
+     "poly": 178460,
+     "dist": 0,
+     "z": 12.4,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1496.4,
+     "y": -4805.1,
+     "zone": "Durotar",
+     "poly": 178415,
+     "dist": 0,
+     "z": 11,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 30.166666666666664
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1484.7,
+     "y": -4683.4,
+     "zone": "Durotar",
+     "poly": 178276,
+     "dist": 0,
+     "z": 9.6,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1425.9,
+     "y": -4705.1,
+     "zone": "Durotar",
+     "poly": 177977,
+     "dist": 0,
+     "z": -1.6,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 35.732142857142854
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1483,
+     "y": -4736.9,
+     "zone": "Durotar",
+     "poly": 178328,
+     "dist": 0,
+     "z": -1.6,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1478.4,
+     "y": -4855.3,
+     "zone": "Durotar",
+     "poly": 178457,
+     "dist": 0,
+     "z": 13.5,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 12.875
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1419.2,
+     "y": -4749,
+     "zone": "Durotar",
+     "poly": 178015,
+     "dist": 0,
+     "z": 2,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": true,
+      "spanYd": 34
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1519.6,
+     "y": -4783.4,
+     "zone": "Durotar",
+     "poly": 178380,
+     "dist": 0,
+     "z": 11.6,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1502.7,
+     "y": -4679.2,
+     "zone": "Durotar",
+     "poly": 178278,
+     "dist": 0,
+     "z": 11.3,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1492.8,
+     "y": -4762.2,
+     "zone": "Durotar",
+     "poly": 178390,
+     "dist": 0,
+     "z": 9.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053",
+     "flags": {
+      "hint": "used",
+      "compRule": true,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Burning Blade Coven",
+     "id": "npc 3197",
+     "x": 1529.2,
+     "y": -4749.5,
+     "zone": "Durotar",
+     "poly": 178356,
+     "dist": 0,
+     "z": 14.8,
+     "comp": 0,
+     "compSize": 332053,
+     "containingComps": "0:332053 17:138",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": true,
+      "multiLayer": true,
+      "spanYd": 109.05555555555556
+     }
+    }
+   ]
+  },
+  "map0": {
+   "cities": [
+    {
+     "zone": 1497,
+     "name": "Undercity",
+     "spawns": 199,
+     "containedPct": 89.9,
+     "within6ydPct": 10.1,
+     "nonePct": 0,
+     "offMain": 12,
+     "offMainNoHint": 22,
+     "hintChangedPoly": 20,
+     "ambiguous": 36,
+     "ambiguousNoHint": 121,
+     "multiLayer": 68
+    },
+    {
+     "zone": 1537,
+     "name": "Ironforge",
+     "spawns": 164,
+     "containedPct": 89,
+     "within6ydPct": 11,
+     "nonePct": 0,
+     "offMain": 7,
+     "offMainNoHint": 0,
+     "hintChangedPoly": 22,
+     "ambiguous": 1,
+     "ambiguousNoHint": 0,
+     "multiLayer": 19
+    },
+    {
+     "zone": 1519,
+     "name": "Stormwind City",
+     "spawns": 272,
+     "containedPct": 99.6,
+     "within6ydPct": 0.4,
+     "nonePct": 0,
+     "offMain": 0,
+     "offMainNoHint": 0,
+     "hintChangedPoly": 1,
+     "ambiguous": 22,
+     "ambiguousNoHint": 22,
+     "multiLayer": 219
+    },
+    {
+     "zone": 85,
+     "name": "Tirisfal Glades",
+     "spawns": 2093,
+     "containedPct": 98.4,
+     "within6ydPct": 1.6,
+     "nonePct": 0,
+     "offMain": 2,
+     "offMainNoHint": 2,
+     "hintChangedPoly": 4,
+     "ambiguous": 20,
+     "ambiguousNoHint": 20,
+     "multiLayer": 96
+    },
+    {
+     "zone": 1,
+     "name": "Dun Morogh",
+     "spawns": 1453,
+     "containedPct": 97.9,
+     "within6ydPct": 2.1,
+     "nonePct": 0,
+     "offMain": 19,
+     "offMainNoHint": 20,
+     "hintChangedPoly": 16,
+     "ambiguous": 11,
+     "ambiguousNoHint": 29,
+     "multiLayer": 210
+    }
+   ],
+   "detail": [
+    {
+     "place": "Undercity Varimathras",
+     "id": "npc 2425",
+     "x": 1287.8,
+     "y": 333.5,
+     "zone": "Undercity",
+     "poly": 49516,
+     "dist": 0,
+     "z": -59.3,
+     "comp": 0,
+     "compSize": 310185,
+     "containingComps": "0:310185",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    },
+    {
+     "place": "Ironforge Magni",
+     "id": "npc 2784",
+     "x": -4865.8,
+     "y": -1022.6,
+     "zone": "Ironforge",
+     "poly": 170029,
+     "dist": 0,
+     "z": 506,
+     "comp": 0,
+     "compSize": 310185,
+     "containingComps": "0:310185",
+     "flags": {
+      "hint": "used",
+      "compRule": false,
+      "reassigned": false,
+      "ambiguous": false,
+      "multiLayer": false,
+      "spanYd": 0
+     }
+    }
+   ]
+  },
+  "hintEffect": [
+   {
+    "set": "c05r1+n12+e5+s60",
+    "zone": 1497,
+    "name": "Undercity",
+    "spawns": 199,
+    "noHintLandsInOtherZone": 20,
+    "otherZones": {
+     "Tirisfal Glades": 17,
+     "Silverpine Forest": 3
+    },
+    "floorDiffOver10yd": 20,
+    "sameComponent": 184
+   },
+   {
+    "set": "c05r1+n12+e5+s60",
+    "zone": 1537,
+    "name": "Ironforge",
+    "spawns": 164,
+    "noHintLandsInOtherZone": 22,
+    "otherZones": {
+     "Dun Morogh": 22
+    },
+    "floorDiffOver10yd": 22,
+    "sameComponent": 157
+   },
+   {
+    "set": "c05r1+n12+e5+s60",
+    "zone": 1519,
+    "name": "Stormwind City",
+    "spawns": 272,
+    "noHintLandsInOtherZone": 1,
+    "otherZones": {
+     "Elwynn Forest": 1
+    },
+    "floorDiffOver10yd": 1,
+    "sameComponent": 272
+   },
+   {
+    "set": "c05r1+n12+e5+s60",
+    "zone": 1637,
+    "name": "Orgrimmar",
+    "spawns": 159,
+    "noHintLandsInOtherZone": 0,
+    "otherZones": {},
+    "floorDiffOver10yd": 0,
+    "sameComponent": 159
+   },
+   {
+    "set": "c05r1+n12+e5+s60",
+    "zone": 1638,
+    "name": "Thunder Bluff",
+    "spawns": 108,
+    "noHintLandsInOtherZone": 2,
+    "otherZones": {
+     "Mulgore": 2
+    },
+    "floorDiffOver10yd": 0,
+    "sameComponent": 108
+   }
+  ]
+ },
+ "isolatedPlaces": {
+  "method": "region.ts: blocks 28_36 and 28_40 of Kalimdor built in one process per setting; each probe is the polygon containing (x, y) nearest to z, where z is the height the critic recorded; MAIN = the largest component of the two blocks",
+  "probes": [
+   {
+    "set": "c1r1",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 19756,
+    "main": 11340,
+    "probes": [
+     "1844.5,-4400.1,-24: comp 41 (19) z -24.6",
+     "1769.1,-4485.7,98.5: comp 6 (136) z 101.5",
+     "692.7,-4518.5,40.5: comp 8 (129) z 39.4",
+     "1449.8,-4738.4,-1.4: comp 17 (47) z -1.1",
+     "930.6,-4043.7,-11.8: comp 9 (87) z -11.5"
+    ]
+   },
+   {
+    "set": "c1r0",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 29403,
+    "main": 15989,
+    "probes": [
+     "1844.5,-4400.1,-24: comp 49 (25) z -24.6",
+     "1769.1,-4485.7,98.5: comp 6 (255) z 98.9",
+     "692.7,-4518.5,40.5: comp 9 (190) z 39.3",
+     "1449.8,-4738.4,-1.4: comp 17 (73) z -1.1",
+     "930.6,-4043.7,-11.8: MAIN z -11.6"
+    ]
+   },
+   {
+    "set": "c05r1",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 28368,
+    "main": 19487,
+    "probes": [
+     "1844.5,-4400.1,-24: comp 1 (369) z -24.0",
+     "1769.1,-4485.7,98.5: comp 5 (214) z 98.5",
+     "692.7,-4518.5,40.5: comp 9 (128) z 40.5",
+     "1449.8,-4738.4,-1.4: MAIN z -1.4",
+     "930.6,-4043.7,-11.8: MAIN z -11.1"
+    ]
+   },
+   {
+    "set": "c05r1+a",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 29795,
+    "main": 20856,
+    "probes": [
+     "1844.5,-4400.1,-24: comp 1 (369) z -24.0",
+     "1769.1,-4485.7,98.5: comp 5 (214) z 98.5",
+     "692.7,-4518.5,40.5: comp 9 (128) z 40.5",
+     "1449.8,-4738.4,-1.4: MAIN z -1.4",
+     "930.6,-4043.7,-11.8: MAIN z -11.1"
+    ]
+   },
+   {
+    "set": "c05r1+c2",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 29221,
+    "main": 20118,
+    "probes": [
+     "1844.5,-4400.1,-24: comp 1 (387) z -24.0",
+     "1769.1,-4485.7,98.5: comp 5 (218) z 98.6",
+     "692.7,-4518.5,40.5: comp 9 (116) z 38.8",
+     "1449.8,-4738.4,-1.4: MAIN z -0.8",
+     "930.6,-4043.7,-11.8: MAIN z -10.8"
+    ]
+   },
+   {
+    "set": "c05r1+o60",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 28860,
+    "main": 19777,
+    "probes": [
+     "1844.5,-4400.1,-24: comp 1 (369) z -24.0",
+     "1769.1,-4485.7,98.5: comp 5 (226) z 98.9",
+     "692.7,-4518.5,40.5: comp 8 (128) z 40.5",
+     "1449.8,-4738.4,-1.4: MAIN z -1.4",
+     "930.6,-4043.7,-11.8: MAIN z -11.1"
+    ]
+   },
+   {
+    "set": "c05r1+s60",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 29537,
+    "main": 21113,
+    "probes": [
+     "1844.5,-4400.1,-24: MAIN z -22.3",
+     "1769.1,-4485.7,98.5: comp 3 (237) z 98.9",
+     "692.7,-4518.5,40.5: comp 7 (105) z 39.6",
+     "1449.8,-4738.4,-1.4: MAIN z -1.4",
+     "930.6,-4043.7,-11.8: MAIN z -10.8"
+    ]
+   },
+   {
+    "set": "c05r1+s70",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 30778,
+    "main": 22275,
+    "probes": [
+     "1844.5,-4400.1,-24: MAIN z -22.3",
+     "1769.1,-4485.7,98.5: comp 2 (264) z 98.9",
+     "692.7,-4518.5,40.5: comp 8 (107) z 39.6",
+     "1449.8,-4738.4,-1.4: MAIN z -1.4",
+     "930.6,-4043.7,-11.8: MAIN z -10.8"
+    ]
+   },
+   {
+    "set": "c05r1+t4+n12+e4+s60",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 21489,
+    "main": 14921,
+    "probes": [
+     "1844.5,-4400.1,-24: comp 2 (251) z -18.1",
+     "1769.1,-4485.7,98.5: comp 3 (183) z 97.5",
+     "692.7,-4518.5,40.5: comp 9 (63) z 39.0",
+     "1449.8,-4738.4,-1.4: MAIN z -1.4",
+     "930.6,-4043.7,-11.8: MAIN z -10.3"
+    ]
+   },
+   {
+    "set": "c05r1+t2+n12+e4+s60",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 22437,
+    "main": 15560,
+    "probes": [
+     "1844.5,-4400.1,-24: comp 2 (257) z -18.0",
+     "1769.1,-4485.7,98.5: comp 3 (194) z 97.5",
+     "692.7,-4518.5,40.5: comp 9 (77) z 40.0",
+     "1449.8,-4738.4,-1.4: MAIN z -1.4",
+     "930.6,-4043.7,-11.8: MAIN z -10.2"
+    ]
+   },
+   {
+    "set": "c05r1+n12+e4+s60",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 24456,
+    "main": 17393,
+    "probes": [
+     "1844.5,-4400.1,-24: MAIN z -21.8",
+     "1769.1,-4485.7,98.5: comp 2 (212) z 97.5",
+     "692.7,-4518.5,40.5: comp 7 (92) z 39.6",
+     "1449.8,-4738.4,-1.4: MAIN z -1.4",
+     "930.6,-4043.7,-11.8: MAIN z -9.8"
+    ]
+   },
+   {
+    "set": "c05r1+n12+e5+s60",
+    "map": 1,
+    "blocks": "28_36,28_40",
+    "polys": 22630,
+    "main": 16336,
+    "probes": [
+     "1844.5,-4400.1,-24: MAIN z -21.8",
+     "1769.1,-4485.7,98.5: comp 3 (195) z 97.5",
+     "692.7,-4518.5,40.5: comp 7 (84) z 39.6",
+     "1449.8,-4738.4,-1.4: MAIN z -1.4",
+     "930.6,-4043.7,-11.8: MAIN z -10.5"
+    ]
+   }
+  ]
+ },
+ "water": {
+  "method": "link2.ts WATER_SWEEP on c05r1 (unpruned): swim polygons whose through-water distance from the nearest ground polygon exceeds N/2 are cut; census and the Teldrassil (141) vs Darkshore (148) must-not-connect test per N",
+  "kalimdor": {
+   "swimPolys": 51676,
+   "sweep": [
+    {
+     "N": 0,
+     "main": 384280,
+     "components": 39856,
+     "off": 1978,
+     "none": 13,
+     "droppedSwimPolys": 0,
+     "teldrassilSpawnsSharingDarkshoreComp": 8
+    },
+    {
+     "N": 50,
+     "main": 314688,
+     "components": 61374,
+     "off": 3960,
+     "none": 13,
+     "droppedSwimPolys": 21147,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 100,
+     "main": 322851,
+     "components": 57816,
+     "off": 3122,
+     "none": 13,
+     "droppedSwimPolys": 17862,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 150,
+     "main": 328574,
+     "components": 56220,
+     "off": 2785,
+     "none": 13,
+     "droppedSwimPolys": 16393,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 200,
+     "main": 330402,
+     "components": 55334,
+     "off": 2715,
+     "none": 13,
+     "droppedSwimPolys": 15548,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 300,
+     "main": 342009,
+     "components": 54084,
+     "off": 2207,
+     "none": 13,
+     "droppedSwimPolys": 14356,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 400,
+     "main": 351869,
+     "components": 53159,
+     "off": 2053,
+     "none": 13,
+     "droppedSwimPolys": 13450,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 600,
+     "main": 364143,
+     "components": 51245,
+     "off": 1999,
+     "none": 13,
+     "droppedSwimPolys": 11546,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 800,
+     "main": 365556,
+     "components": 49384,
+     "off": 1987,
+     "none": 13,
+     "droppedSwimPolys": 9686,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 1200,
+     "main": 377559,
+     "components": 46956,
+     "off": 1978,
+     "none": 13,
+     "droppedSwimPolys": 7260,
+     "teldrassilSpawnsSharingDarkshoreComp": 8
+    },
+    {
+     "N": 1600,
+     "main": 379105,
+     "components": 45454,
+     "off": 1978,
+     "none": 13,
+     "droppedSwimPolys": 5759,
+     "teldrassilSpawnsSharingDarkshoreComp": 8
+    },
+    {
+     "N": 2400,
+     "main": 380952,
+     "components": 43533,
+     "off": 1978,
+     "none": 13,
+     "droppedSwimPolys": 3838,
+     "teldrassilSpawnsSharingDarkshoreComp": 8
+    }
+   ]
+  },
+  "easternKingdoms": {
+   "swimPolys": 41852,
+   "sweep": [
+    {
+     "N": 0,
+     "main": 356737,
+     "components": 25571,
+     "off": 623,
+     "none": 18,
+     "droppedSwimPolys": 0,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 50,
+     "main": 305187,
+     "components": 43474,
+     "off": 2539,
+     "none": 18,
+     "droppedSwimPolys": 17679,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 100,
+     "main": 310941,
+     "components": 40348,
+     "off": 1757,
+     "none": 18,
+     "droppedSwimPolys": 14800,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 150,
+     "main": 312845,
+     "components": 38866,
+     "off": 1323,
+     "none": 18,
+     "droppedSwimPolys": 13430,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 200,
+     "main": 314348,
+     "components": 37959,
+     "off": 1140,
+     "none": 18,
+     "droppedSwimPolys": 12579,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 300,
+     "main": 331788,
+     "components": 36633,
+     "off": 929,
+     "none": 18,
+     "droppedSwimPolys": 11307,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 400,
+     "main": 344661,
+     "components": 35765,
+     "off": 731,
+     "none": 18,
+     "droppedSwimPolys": 10458,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 600,
+     "main": 346069,
+     "components": 34389,
+     "off": 651,
+     "none": 18,
+     "droppedSwimPolys": 9085,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 800,
+     "main": 347198,
+     "components": 33177,
+     "off": 623,
+     "none": 18,
+     "droppedSwimPolys": 7873,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 1200,
+     "main": 348819,
+     "components": 31484,
+     "off": 623,
+     "none": 18,
+     "droppedSwimPolys": 6180,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 1600,
+     "main": 349879,
+     "components": 30353,
+     "off": 623,
+     "none": 18,
+     "droppedSwimPolys": 5049,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    },
+    {
+     "N": 2400,
+     "main": 354212,
+     "components": 28676,
+     "off": 623,
+     "none": 18,
+     "droppedSwimPolys": 3373,
+     "teldrassilSpawnsSharingDarkshoreComp": 0
+    }
+   ]
+  },
+  "chosenN": 800
+ },
+ "carriedOver": {
+  "$comment": "First-design measurements the revised design still relies on; reproduced by the critic on 2026-09-25 (.cache/m3-review.txt, CRITIC terrain-design CHECKS) and not re-measured here.",
+  "cascOpenSeconds": 0.82,
+  "localIdxEntries": 2161431,
+  "rootFileDataIds": 1435081,
+  "encryptedFlagFileDataIds": 4970,
+  "headerlessLocalEntries": 273,
+  "navigationInputFilesBothContinents": 13686,
+  "navigationInputsEncryptedOrMissing": 0,
+  "wmoPlacementExtentsReproducedWithin005Yd": "65/65",
+  "rootMapRssGrowthMB": 496,
+  "encryptedDb2Sections": {
+   "Map": 3,
+   "AreaTable": 3
+  },
+  "mh2oDeepBitShareOfLiquidQuads": {
+   "kalimdor": 0.016,
+   "easternKingdoms": 0.017,
+   "source": "critic TN-10 from the first design 11-land-survey.json"
+  }
+ },
+ "proposedBudgets": {
+  "$comment": "Proposed dist-requirements nav and terrain sections, derived from the chosen build (gzip6 bytes, decimal). Baselines are recorded by 3b.3 from the committed build, not copied from this experiment.",
+  "navTotalGzip6CapBytes": 7000000,
+  "navTotalGzip6TargetBytes": [
+   5000000,
+   6000000
+  ],
+  "navBlockGzip6CapBytes": 300000,
+  "navBaselineTolerance": 0.1,
+  "chosenTotalGzip6Bytes": 5704757,
+  "chosenMaxBlockGzip6Bytes": 138855,
+  "terrainByproductsGzip6CapBytes": 600000,
+  "longSwimWarningYd": 200
+ },
+ "facts": {
+  "method": "facts.ts on the chosen build: WMOAreaTable and AreaTable via the m3b WDC5 reader; zone-from-triangle share from the stage-1 statistics; polygon height range of the unpruned final blocks; off-main components and zone main shares with snap rules A+B (reviewed zones 141, 1657, 1638 excluded); the NPCs that were on the separate Cleft floor at slope 55",
+  "set": "c05r1+n12+e5+s60",
+  "tables": {
+   "wmoAreaTableRows": 52578,
+   "wmoAreaTableLayout": "C5A7B977",
+   "wmoAreaTableInlineFields": 15,
+   "wmoAreaTableDistinctAreas": 338,
+   "undercityWmo1150RootArea": 1497,
+   "areaTableRows": 1371
+  },
+  "zoneFromTriangle": {
+   "polygons": 888599,
+   "fromTriangle": 745323,
+   "share": 0.8387619162299305
+  },
+  "map1": {
+   "unprunedPolygonZ": [
+    -504.25,
+    2487.25
+   ],
+   "unprunedPolygonZSpan": 2991.5,
+   "offMainComponents": 87,
+   "offMainComponentsOutsideReviewedZones": 83,
+   "offMainSpawnsOutsideReviewedZones": 285,
+   "worstZones": [
+    {
+     "zone": 10089,
+     "total": 1,
+     "mainShare": 0
+    },
+    {
+     "zone": 148,
+     "name": "Darkshore",
+     "total": 2020,
+     "mainShare": 0.9564356435643564
+    },
+    {
+     "zone": 361,
+     "name": "Felwood",
+     "total": 1080,
+     "mainShare": 0.9648148148148148
+    },
+    {
+     "zone": 405,
+     "name": "Desolace",
+     "total": 1987,
+     "mainShare": 0.980372420734776
+    },
+    {
+     "zone": 331,
+     "name": "Ashenvale",
+     "total": 2117,
+     "mainShare": 0.9886632026452528
+    },
+    {
+     "zone": 406,
+     "name": "Stonetalon Mountains",
+     "total": 1182,
+     "mainShare": 0.9898477157360406
+    },
+    {
+     "zone": 357,
+     "name": "Feralas",
+     "total": 1897,
+     "mainShare": 0.9899841855561413
+    },
+    {
+     "zone": 14,
+     "name": "Durotar",
+     "total": 1829,
+     "mainShare": 0.9901585565882997
+    }
+   ],
+   "cleftNpcs": [
+    {
+     "id": 5882,
+     "comp": 0,
+     "z": 12.1,
+     "containing": [
+      0,
+      95,
+      388
+     ]
+    },
+    {
+     "id": 5883,
+     "comp": 0,
+     "z": 12.1,
+     "containing": [
+      0,
+      95,
+      388
+     ]
+    },
+    {
+     "id": 5885,
+     "comp": 0,
+     "z": 12.1,
+     "containing": [
+      0,
+      95
+     ]
+    },
+    {
+     "id": 5958,
+     "comp": 0,
+     "z": 12.1,
+     "containing": [
+      0,
+      95,
+      388
+     ]
+    },
+    {
+     "id": 7311,
+     "comp": 0,
+     "z": 12.1,
+     "containing": [
+      0,
+      95,
+      388
+     ]
+    },
+    {
+     "id": 11178,
+     "comp": 0,
+     "z": 9,
+     "containing": [
+      0
+     ]
+    }
+   ]
+  },
+  "map0": {
+   "unprunedPolygonZ": [
+    -989,
+    894.25
+   ],
+   "unprunedPolygonZSpan": 1883.25,
+   "offMainComponents": 54,
+   "offMainComponentsOutsideReviewedZones": 54,
+   "offMainSpawnsOutsideReviewedZones": 229,
+   "worstZones": [
+    {
+     "zone": 10074,
+     "total": 3,
+     "mainShare": 0.6666666666666666
+    },
+    {
+     "zone": 1497,
+     "name": "Undercity",
+     "total": 199,
+     "mainShare": 0.9396984924623115
+    },
+    {
+     "zone": 1537,
+     "name": "Ironforge",
+     "total": 164,
+     "mainShare": 0.9573170731707317
+    },
+    {
+     "zone": 51,
+     "name": "Searing Gorge",
+     "total": 1086,
+     "mainShare": 0.9815837937384899
+    },
+    {
+     "zone": 41,
+     "name": "Deadwind Pass",
+     "total": 114,
+     "mainShare": 0.9824561403508771
+    },
+    {
+     "zone": 36,
+     "name": "Alterac Mountains",
+     "total": 1454,
+     "mainShare": 0.984181568088033
+    },
+    {
+     "zone": 46,
+     "name": "Burning Steppes",
+     "total": 2100,
+     "mainShare": 0.9866666666666667
+    },
+    {
+     "zone": 1,
+     "name": "Dun Morogh",
+     "total": 1453,
+     "mainShare": 0.9869236063317275
+    }
+   ]
+  }
+ },
+ "probes": {
+  "cleftGapAtSlope55": {
+   "method": "gap.ts on c05r1 (slope 55, unpruned final): closest vertex pairs between the component containing (1844.5, -4400.1) nearest z -24 and the main component",
+   "lines": [
+    "1844.5,-4400.1,-24 poly 296699 comp 27 size 378 z range -27.5 15.3",
+    "  gap 3.45 yd at 1827.6 -4426.6 -25.0 -> main 1827.1 -4427.6 -21.8",
+    "  gap 11.50 yd at 1600.0 -4400.0 -2.8 -> main 1600.0 -4400.0 8.8",
+    "  gap 11.50 yd at 1600.0 -4400.0 -2.8 -> main 1600.0 -4400.0 8.8",
+    "  gap 12.07 yd at 1808.9 -4425.5 -25.0 -> main 1816.1 -4434.4 -21.3"
+   ]
+  },
+  "cleftGeometry": {
+   "method": "geomprobe.ts: source triangles within 2 yd of (1827.6, -4426.6): class (1 terrain, 2 object), AreaTable tag, height range, normal z (cos 55 deg = 0.574, cos 60 deg = 0.5)",
+   "lines": [
+    "triangles 33 {\"adt\":9,\"terrainTris\":256,\"liquidTris\":1986,\"wmoPlacements\":12,\"wmoTris\":21,\"m2Placements\":1662,\"m2Tris\":0,\"m2SkippedSmall\":1727,\"wmoDoodads\":199,\"clippedOut\":212664,\"bytesRead\":30570179}",
+    "cls 1 tag 1637 z -25.1..-25.1 nz 1.00 x6",
+    "cls 1 tag 1637 z -37.6..-25.1 nz 0.16 x2",
+    "cls 1 tag 1637 z -37.6..-25.1 nz 0.23 x3",
+    "cls 1 tag 1637 z -37.6..-37.6 nz 1.00 x1",
+    "cls 2 tag 1637 z -13.8..-4.4 nz -0.25 x2",
+    "cls 2 tag 1637 z -19.0..-10.4 nz 0.00 x1",
+    "cls 2 tag 1637 z -19.0..-10.4 nz 0.22 x1",
+    "cls 2 tag 1637 z -2.3..1.1 nz -0.92 x1",
+    "cls 2 tag 1637 z -2.3..1.1 nz -0.94 x1",
+    "cls 2 tag 1637 z -23.5..-15.5 nz 0.13 x1",
+    "cls 2 tag 1637 z -23.5..-15.5 nz 0.40 x1",
+    "cls 2 tag 1637 z -23.5..-20.1 nz 0.91 x1",
+    "cls 2 tag 1637 z -24.0..-20.6 nz 0.94 x2",
+    "cls 2 tag 1637 z -24.0..-20.6 nz 0.95 x1",
+    "cls 2 tag 1637 z -29.0..10.4 nz 0.00 x2",
+    "cls 2 tag 1637 z -5.4..-1.9 nz 0.42 x1",
+    "cls 2 tag 1637 z -5.4..1.1 nz -0.60 x1",
+    "cls 2 tag 1637 z -5.4..1.1 nz -0.73 x1",
+    "cls 2 tag 1637 z -6.6..-3.1 nz -0.79 x1",
+    "cls 2 tag 1637 z -6.6..-3.1 nz 0.35 x1",
+    "cls 2 tag 1637 z -7.8..-4.4 nz -0.82 x1",
+    "cls 2 tag 1637 z 110.2..118.3 nz 0.90 x1"
+   ]
+  },
+  "isolatedFloorGaps": {
+   "method": "gap.ts on the chosen build: Zamja upper floor and Dustwind upper layer against the main component",
+   "lines": [
+    "1769.1,-4485.7,97.5 poly 179201 comp 13 size 195 z range 51.3 119.5",
+    "  gap 27.95 yd at 1913.5 -4509.4 67.8 -> main 1923.4 -4515.1 42.3",
+    "  gap 28.10 yd at 1915.1 -4513.0 69.0 -> main 1923.4 -4515.1 42.3",
+    "  gap 30.45 yd at 1950.0 -4443.2 82.3 -> main 1931.8 -4440.6 58.0",
+    "  gap 30.45 yd at 1950.0 -4443.2 82.3 -> main 1931.8 -4440.6 58.0",
+    "692.7,-4518.5,39.6 poly 176394 comp 28 size 84 z range 27.0 65.5",
+    "  gap 13.64 yd at 666.7 -4603.1 30.3 -> main 656.2 -4602.1 21.5",
+    "  gap 13.64 yd at 666.7 -4603.1 30.3 -> main 656.2 -4602.1 21.5",
+    "  gap 13.64 yd at 666.7 -4603.1 30.3 -> main 656.2 -4602.1 21.5",
+    "  gap 16.19 yd at 749.5 -4481.8 40.3 -> main 759.9 -4487.0 29.0"
+   ]
+  },
+  "undercityToBrill": {
+   "method": "path.ts and dbg-pathz.ts on the chosen build: npc 2425 (Varimathras) to npc 5688 (Brill innkeeper), corridor polygons with their heights and zones",
+   "leg": [
+    "npc:2425 at 1287.8 333.5 snap poly 49516 comp 0 size 310185 z -59.3 zone 1497 {\"hint\":\"used\",\"compRule\":false,\"reassigned\":false,\"ambiguous\":false,\"multiLayer\":false,\"spanYd\":0} containing comps 0",
+    "npc:5688 at 2269.5 244.4 snap poly 4647 comp 0 size 310185 z 34.8 zone 85 {\"hint\":\"used\",\"compRule\":false,\"reassigned\":false,\"ambiguous\":true,\"multiLayer\":true,\"spanYd\":16} containing comps 0,519",
+    "leg {\"reachable\":true,\"groundTenths\":16925,\"swimTenths\":0,\"longestSwimYd\":0,\"corridor\":90,\"points\":39,\"cost\":2263.628537988367} straight 986",
+    "path polys 90 z range -65.3 79.5 vertices 39",
+    "wrote .cache/experiments/terrain/m3b/out/png/uc-brill-final.png 303 x 561"
+   ],
+   "corridor": [
+    "49516 xy 1295.4 325.5 z -59.3 dz 0.0 zone 1497 swim 0 edge kind -",
+    "49527 xy 1315.8 317.4 z -62.5 dz -3.2 zone 1497 swim 0 edge kind 0",
+    "49470 xy 1322.5 411.5 z -59.5 dz 4.3 zone 1497 swim 0 edge kind 1",
+    "50433 xy 1335.8 424.5 z -56.8 dz 2.7 zone 1497 swim 0 edge kind 1",
+    "50434 xy 1358.7 436.4 z -54.0 dz 2.8 zone 1497 swim 0 edge kind 0",
+    "50436 xy 1394.2 434.1 z -54.0 dz 0.1 zone 1497 swim 0 edge kind 0",
+    "50435 xy 1426.4 414.3 z -56.5 dz -2.6 zone 1497 swim 0 edge kind 0",
+    "50500 xy 1451.8 387.0 z -58.5 dz -1.9 zone 1497 swim 0 edge kind 1",
+    "50476 xy 1465.6 365.6 z -60.3 dz -1.9 zone 1497 swim 0 edge kind 0",
+    "51626 xy 1505.6 391.0 z -59.4 dz 1.8 zone 1497 swim 0 edge kind 0",
+    "51623 xy 1520.0 398.8 z -61.3 dz -2.4 zone 1497 swim 0 edge kind 0",
+    "51549 xy 1582.6 422.8 z -52.3 dz 8.8 zone 1497 swim 0 edge kind 0",
+    "51550 xy 1597.9 423.3 z -45.9 dz 6.3 zone 1497 swim 0 edge kind 0",
+    "52825 xy 1614.6 436.7 z -39.5 dz 6.1 zone 1497 swim 0 edge kind 1",
+    "52824 xy 1629.2 458.2 z -28.1 dz 11.4 zone 1497 swim 0 edge kind 0",
+    "52823 xy 1641.9 479.8 z -17.9 dz 10.3 zone 1497 swim 0 edge kind 0",
+    "52806 xy 1660.5 481.4 z -12.3 dz 5.6 zone 1497 swim 0 edge kind 0",
+    "52770 xy 1662.9 570.2 z -10.4 dz 2.2 zone 1497 swim 0 edge kind 0",
+    "52750 xy 1693.2 606.5 z 3.8 dz 13.4 zone 1497 swim 0 edge kind 0",
+    "52744 xy 1680.9 637.9 z 15.4 dz 11.6 zone 1497 swim 0 edge kind 0",
+    "52743 xy 1645.6 647.1 z 27.1 dz 11.7 zone 1497 swim 0 edge kind 0",
+    "52730 xy 1613.9 650.8 z 39.4 dz 12.3 zone 1497 swim 0 edge kind 0",
+    "52690 xy 1601.6 669.6 z 46.9 dz 7.5 zone 1497 swim 0 edge kind 1",
+    "51440 xy 1593.6 669.6 z 50.2 dz 3.3 zone 1497 swim 0 edge kind 1",
+    "51442 xy 1588.4 687.1 z 57.5 dz 7.4 zone 1497 swim 0 edge kind 0",
+    "51441 xy 1594.3 712.5 z 65.6 dz 8.1 zone 1497 swim 0 edge kind 0",
+    "52709 xy 1617.5 731.5 z 74.1 dz 9.7 zone 1497 swim 0 edge kind 0",
+    "52707 xy 1641.0 735.5 z 79.0 dz 4.9 zone 1497 swim 0 edge kind 0",
+    "52699 xy 1692.4 739.7 z 74.4 dz -3.6 zone 85 swim 0 edge kind 0",
+    "52716 xy 1708.0 729.7 z 64.3 dz -10.1 zone 85 swim 0 edge kind 0",
+    "52718 xy 1724.6 722.5 z 55.5 dz -8.8 zone 85 swim 0 edge kind 0",
+    "52725 xy 1723.0 681.8 z 50.8 dz -4.8 zone 85 swim 0 edge kind 0",
+    "54224 xy 1741.1 677.0 z 45.3 dz -5.5 zone 85 swim 0 edge kind 1",
+    "54275 xy 1790.9 672.0 z 41.9 dz -3.3 zone 85 swim 0 edge kind 0",
+    "54284 xy 1840.1 605.0 z 47.5 dz 4.2 zone 85 swim 0 edge kind 0",
+    "54280 xy 1829.2 576.2 z 43.6 dz -4.0 zone 85 swim 0 edge kind 0",
+    "54295 xy 1815.0 558.3 z 39.9 dz -3.6 zone 85 swim 0 edge kind 0",
+    "54297 xy 1816.7 547.4 z 37.7 dz -2.3 zone 85 swim 0 edge kind 0",
+    "54288 xy 1828.6 535.2 z 35.9 dz -1.8 zone 85 swim 0 edge kind 0",
+    "54285 xy 1834.6 535.9 z 36.5 dz 0.6 zone 85 swim 0 edge kind 0",
+    "55520 xy 1901.7 430.0 z 36.4 dz -2.3 zone 85 swim 0 edge kind 0",
+    "55513 xy 1896.1 423.2 z 37.9 dz 1.5 zone 85 swim 0 edge kind 0",
+    "55516 xy 1944.2 432.4 z 39.4 dz 1.6 zone 85 swim 0 edge kind 0",
+    "55549 xy 1908.3 390.2 z 44.6 dz 5.1 zone 85 swim 0 edge kind 1",
+    "55550 xy 1953.0 359.4 z 39.3 dz -5.3 zone 85 swim 0 edge kind 0",
+    "55523 xy 1950.0 309.0 z 40.8 dz 1.6 zone 85 swim 0 edge kind 0",
+    "55547 xy 1961.5 295.4 z 44.6 dz 3.7 zone 85 swim 0 edge kind 0",
+    "56465 xy 2026.0 296.8 z 49.9 dz 5.4 zone 85 swim 0 edge kind 1",
+    "56459 xy 2053.0 284.0 z 58.1 dz 8.2 zone 85 swim 0 edge kind 0",
+    "56450 xy 2107.4 283.6 z 56.6 dz -1.8 zone 85 swim 0 edge kind 0",
+    "3466 xy 2213.8 282.4 z 39.7 dz -15.8 zone 85 swim 0 edge kind 0",
+    "3471 xy 2226.4 245.1 z 34.8 dz -5.1 zone 85 swim 0 edge kind 0"
+   ]
+  },
+  "durotarOutliers": {
+   "method": "outliers.ts on the chosen build: largest path/straight ratios of the Durotar fixture",
+   "lines": [
+    "33.3 straight 64 path 2114 swim 0 npc3101@-44,-4274 z 69 Durotar -> object1731@-9,-4221 z 96 Durotar",
+    "33.3 straight 64 path 2114 swim 0 object1731@-9,-4221 z 96 Durotar -> npc3101@-44,-4274 z 69 Durotar",
+    "30.2 straight 73 path 2193 swim 0 npc3101@-80,-4236 z 53 Durotar -> object1731@-9,-4221 z 96 Durotar",
+    "30.2 straight 73 path 2193 swim 0 object1731@-9,-4221 z 96 Durotar -> npc3101@-80,-4236 z 53 Durotar",
+    "28.6 straight 53 path 1529 swim 0 npc3117@965,-4733 z 32 Durotar -> object106318@915,-4714 z 24 Durotar",
+    "28.6 straight 53 path 1529 swim 0 object106318@915,-4714 z 24 Durotar -> npc3117@965,-4733 z 32 Durotar",
+    "26.5 straight 104 path 2766 swim 0 npc3124@-346,-4045 z 54 Durotar -> object61934@-244,-4023 z 184 Durotar",
+    "25.6 straight 104 path 2672 swim 0 object61934@-244,-4023 z 184 Durotar -> npc3124@-346,-4045 z 54 Durotar",
+    "legs with a swim run > 100 yd 22606 top sources: npc3103@-94,-5426:295 npc3103@151,-5280:295 object3236@-76,-5359:295 object3236@186,-5260:295 npc3103@-1587,-5184:294 npc3104@-157,-5317:294 npc3106@-207,-5343:294 npc3121@-1584,-5307:291"
+   ]
+  },
+  "fixedMapOriginSeams": {
+   "method": "c1r1 settings, Eastern Kingdoms, one fixed vertical origin (-1010 yd, 8191 x 0.25 yd) for every tile",
+   "seam": {
+    "innerLenYd": 4508563.541666859,
+    "innerUnmatchedPct": 2.0064594668248725,
+    "blockLenYd": 284471.87500000186,
+    "blockUnmatchedPct": 2.21792576155323,
+    "deltaPp": 0.21146629472835743,
+    "midLenYd": 289905.2083333309,
+    "midUnmatchedPct": 2.03407004444629,
+    "byLineMod32": {
+     "0": 1.874,
+     "8": 1.535,
+     "16": 2.56,
+     "24": 2.629
+    }
+   }
+  }
+ },
+ "adjacency": {
+  "method": "adjcheck.ts: blocks 28_36 and 28_40 of Kalimdor built with the chosen settings; recastAdjacency (derived from vertex indices) against the neighbours rcPolyMesh stores, and the tile-side portal rule against its portal flags, before deep and hazard polygons are dropped",
+  "set": "c05r1+n12+e5+s60",
+  "blocks": [
+   [
+    28,
+    36
+   ],
+   [
+    28,
+    40
+   ]
+  ],
+  "tiles": 512,
+  "edges": 91135,
+  "internalRecast": 54098,
+  "internalAgree": 54098,
+  "portalsRecast": 7924,
+  "portalsDerived": 7924,
+  "portalAgree": 7924
+ },
+ "linkSymmetry": {
+  "method": "symcheck.ts on the final blocks: edges without a reverse edge (current Recast-pairing adjacency), and the same count for the first map-based adjacency (last polygon with the reverse directed edge)",
+  "map1": {
+   "internalEdges": 1010254,
+   "internalWithoutReverse": 0,
+   "crossTileLinks": 96480,
+   "crossTileWithoutReverse": 0
+  },
+  "map0": {
+   "internalEdges": 899782,
+   "internalWithoutReverse": 0,
+   "crossTileLinks": 78973,
+   "crossTileWithoutReverse": 0
+  },
+  "firstMapBasedAdjacency": {
+   "map1": {
+    "internalEdges": 1010527,
+    "internalWithoutReverse": 88,
+    "crossTileLinks": 96484,
+    "crossTileWithoutReverse": 0
+   },
+   "map0": {
+    "internalEdges": 900208,
+    "internalWithoutReverse": 67,
+    "crossTileLinks": 78967,
+    "crossTileWithoutReverse": 0
+   }
+  }
+ },
+ "mustConnect": {
+  "method": "mustcheck.ts on the chosen build (Kalimdor): every spawn of the id keyed to the zone, snapped with rules A+B; everyFloorOf20InMain = every containing floor of at least 20 polygons is in the main component",
+  "Skull Rock": {
+   "kind": "npc",
+   "id": 3131,
+   "zone": 14,
+   "spawns": 11,
+   "inMain": 11,
+   "pass": true
+  },
+  "Burning Blade Coven": {
+   "kind": "npc",
+   "id": 3197,
+   "zone": 14,
+   "spawns": 23,
+   "inMain": 23,
+   "pass": true
+  },
+  "Dustwind Cave": {
+   "kind": "npc",
+   "id": 3116,
+   "zone": 14,
+   "spawns": 13,
+   "inMain": 13,
+   "pass": true
+  },
+  "Cleft of Shadow": {
+   "kind": "npc",
+   "id": 5639,
+   "zone": 1637,
+   "spawns": 1,
+   "inMain": 1,
+   "everyFloorOf20InMain": 1,
+   "pass": true
+  },
+  "Thunder Bluff rises and Pools of Vision in one component": {
+   "comps": [
+    4,
+    4,
+    4,
+    4
+   ],
+   "sizes": [
+    953,
+    953,
+    953,
+    953
+   ],
+   "pass": true
+  },
+  "Thunder Bluff separate from main until connectors": {
+   "pass": true
+  },
+  "Teldrassil not connected to Darkshore": {
+   "sharedComponents": 0,
+   "pass": true
+  }
+ },
+ "radius0Breaks": {
+  "method": "link2.ts on c1r0 (radius 0 at 1.04 yd), pruned, water N = 800: the components the water rule splits and the largest off-main components",
+  "kalimdor": {
+   "split": [
+    {
+     "fullComp": 0,
+     "fullSize": 271269,
+     "parts": [
+      {
+       "polys": 254240,
+       "zones": "Ashenvale:28846, Azshara:26640, The Barrens:24639"
+      },
+      {
+       "polys": 3371,
+       "zones": "Teldrassil:3371"
+      },
+      {
+       "polys": 2133,
+       "zones": "Teldrassil:2133"
+      },
+      {
+       "polys": 871,
+       "zones": "Tanaris:871"
+      },
+      {
+       "polys": 559,
+       "zones": "Teldrassil:559"
+      },
+      {
+       "polys": 97,
+       "zones": "Teldrassil:97"
+      }
+     ]
+    }
+   ],
+   "offComponents": [
+    {
+     "comp": 2,
+     "polys": 10081,
+     "spawns": 1275,
+     "zones": "Teldrassil:1188, Darnassus:87",
+     "ids": "n1984 n1985 n1986 n1988 n1989 n1992 n1994 n1995"
+    },
+    {
+     "comp": 1,
+     "polys": 26791,
+     "spawns": 1163,
+     "zones": "Winterspring:1163",
+     "ids": "n7428 n7429 n7430 n7431 n7432 n7433 n7434 n7435"
+    },
+    {
+     "comp": 11,
+     "polys": 1094,
+     "spawns": 93,
+     "zones": "Thunder Bluff:93",
+     "ids": "n2798 n2987 n2995 n2998 n3001 n3004 n3007 n3008"
+    }
+   ]
+  },
+  "easternKingdoms": {
+   "split": [
+    {
+     "fullComp": 0,
+     "fullSize": 273774,
+     "parts": [
+      {
+       "polys": 142886,
+       "zones": "Riverglades:24473, Stranglethorn Vale:17601, Wetlands:12302"
+      },
+      {
+       "polys": 121910,
+       "zones": "Eastern Plaguelands:26435, Tirisfal Glades:16951, Western Plaguelands:15630"
+      },
+      {
+       "polys": 1411,
+       "zones": "Gillijim's Isle:1006, Stranglethorn Vale:405"
+      }
+     ]
+    }
+   ],
+   "offComponents": [
+    {
+     "comp": 1,
+     "polys": 121910,
+     "spawns": 15185,
+     "zones": "Undercity:160, Hillsbrad Foothills:1549, Tirisfal Glades:2089, Wetlands:53, Silverpine Forest:1483, Western Plaguelands:1604, Eastern Plaguelands:2601, Alterac Mountains:1227, The Hinterlands:1838, Arathi Highlands:2581",
+     "ids": "n223 n232 n620 n1051 n1052 n1053 n1054 n1071"
+    },
+    {
+     "comp": 18,
+     "polys": 474,
+     "spawns": 195,
+     "zones": "The Hinterlands:195",
+     "ids": "n2644 n2645 n2646 n2647 n2648 n2681 n7995 n10802"
+    },
+    {
+     "comp": 42,
+     "polys": 124,
+     "spawns": 181,
+     "zones": "Arathi Highlands:181",
+     "ids": "n2572 n2573 n2574 o1732 o1733 o1734 o1735 o2040"
+    }
+   ]
+  }
+ },
+ "pruneThreshold": {
+  "method": "link2.ts on c05r1+t4+n12+e6 with snap rules A+B (MINCOMP 20), water N = 800; K = minimum component size kept without a dataset spawn",
+  "rows": [
+   {
+    "K": 100,
+    "gzip6Bytes": 4700675,
+    "prunedPolygons": 136954,
+    "offMain": 2161
+   },
+   {
+    "K": 1000,
+    "gzip6Bytes": 4487988,
+    "prunedPolygons": 158365,
+    "offMain": 2161
+   },
+   {
+    "K": 1000000000,
+    "gzip6Bytes": 4463604,
+    "prunedPolygons": 160999,
+    "offMain": 2161
+   }
+  ]
+ },
+ "byproducts": {
+  "0": {
+   "tiles": 736,
+   "chunkGrid": [
+    672,
+    368
+   ],
+   "parseMs": 2559.8289000000004,
+   "zones": 28,
+   "relief_16.67yd": {
+    "width": 736,
+    "height": 1344,
+    "png8Bytes": 336013,
+    "png4Bytes": 157213
+   },
+   "relief_33.33yd": {
+    "width": 368,
+    "height": 672,
+    "png8Bytes": 89559,
+    "png4Bytes": 43020
+   },
+   "zonesJson": {
+    "bytes": 13008,
+    "gzip6": 2924,
+    "arcs": 109,
+    "vertices": 1808
+   },
+   "coastJson": {
+    "bytes": 330744,
+    "gzip6": 74752,
+    "arcs": 13952,
+    "vertices": 30833
+   },
+   "ms": 3916.125100000001
+  },
+  "1": {
+   "tiles": 988,
+   "chunkGrid": [
+    896,
+    784
+   ],
+   "parseMs": 3969.8698999999997,
+   "zones": 26,
+   "relief_16.67yd": {
+    "width": 1568,
+    "height": 1792,
+    "png8Bytes": 471766,
+    "png4Bytes": 218729
+   },
+   "relief_33.33yd": {
+    "width": 784,
+    "height": 896,
+    "png8Bytes": 124664,
+    "png4Bytes": 58959
+   },
+   "zonesJson": {
+    "bytes": 14097,
+    "gzip6": 3103,
+    "arcs": 127,
+    "vertices": 1973
+   },
+   "coastJson": {
+    "bytes": 366635,
+    "gzip6": 83807,
+    "arcs": 15633,
+    "vertices": 34739
+   },
+   "ms": 7052.086200000001
+  },
+  "method": "byproducts.ts: zone outlines = boundary arcs between per-chunk top-level zones (33.3 yd cells), Douglas-Peucker 8 yd, 1-yd integers, delta JSON; coast = land/water arcs at quad resolution (4.17 yd), DP 4 yd; relief = hillshade (light NW 45 deg, x2 vertical) of MCVT heights box-averaged, palette PNG with water and transparent entries; sizes are file bytes (PNG is already deflated) and gzip6 for JSON"
+ },
+ "totals": {
+  "$comment": "Sums and ratios of figures elsewhere in this file, as the design quotes them.",
+  "census": {
+   "spawns": {
+    "kalimdor": 33410,
+    "easternKingdoms": 41198,
+    "total": 74608
+   },
+   "main": 72594,
+   "offMain": 1977,
+   "noPolygon": 37,
+   "ambiguousComponent": 1060,
+   "mainWithOffMainFloor": 1086,
+   "islandTeldrassilDarnassus": 1370,
+   "thunderBluff": 93,
+   "toReview": 514,
+   "floorSpanOver20SameComponent": 3464
+  },
+  "prune": {
+   "droppedPolygons": 183421,
+   "droppedComponents": 54516
+  },
+  "crossTileLinks": 175453,
+  "encodingRelativeToChosen": {
+   "firstUseOrder": 1.03876547487188,
+   "explicitNeighbours": 1.3579769446654704,
+   "eighthYard": 1.183038028128611,
+   "zonesComp0": 1.042151697539589,
+   "zonesComp0VsFirstUse": 1.003259852921206
+  },
+  "v3VsV2AtFirstDesignSettings": 0.6879270325399409,
+  "byproducts": {
+   "zonesGzip6": 6027,
+   "coastGzip6": 158559,
+   "coastArcs": 29585,
+   "relief16yd4bitBytes": 375942,
+   "relief16yd8bitBytes": 807779,
+   "relief33yd4bitBytes": 101979,
+   "chosenTotal": 540528
+  }
+ },
+ "implementation": {
+  "$comment": [
+   "Steps 3b.3 and 3b.4 (tools/terrain/extract.ts, validate.ts; docs/research/terrain-navigation.md §17): the committed public/nav/ build, measured with the ported code.",
+   "Client wow_classic_beta 1.60.1.70009 (build key 05215079e3905ef5922ae0b03ffefb73) at WOW_INSTALL, read-only; recast-navigation 0.43.1 (WASM SHA-256 in public/nav/manifest.json); dataset QuestieDB b6f5b07 (dataRevision 65c377bc…). Sizes: gzip level 6 of each file on its own, decimal units.",
+   "Method: pnpm nav:extract --parts 12 (stage 1 in 12 worker processes, stage 2 in the parent), then pnpm nav:check --parts 12 (an independent full rebuild compared byte for byte; the timings below are from that run), then pnpm nav:validate --client --partition --parts 8. Timings are one run each on an otherwise idle machine (the machine block above); per-block and full input lists are in the gitignored generated/terrain-nav-report.json."
+  ],
+  "date": "2026-09-26",
+  "settings": "c05r1+n12+e5+s60",
+  "navRevision": "aefbc78d797bb187cef9223b77514946245e768833b75813ac0599151e53f120",
+  "toolTreeHash": "bed17e28fd78d6f959c65ebecc6314099443dad24a61df0484b6c661e82af2d4",
+  "toolFiles": 63,
+  "build": {
+   "wallSeconds": {
+    "total": 76.3,
+    "stage1": 66.1,
+    "stage2Kalimdor": 4.4,
+    "stage2EasternKingdoms": 4
+   },
+   "processes": 12,
+   "stage1CpuSeconds": {
+    "geometry": 65,
+    "recast": 674,
+    "exportAndZones": 18,
+    "total": 757
+   },
+   "blockSeconds": {
+    "p50": 6.3,
+    "p90": 8.4,
+    "max": 11.3,
+    "slowest": "0/28_28"
+   },
+   "maxWorkerRssMb": 929,
+   "stage1PolygonsKept": 888756,
+   "zoneFromTriangleShare": 0.8388,
+   "tilesAtTheHeightLimit": 0,
+   "budget": "full build ≤ 5 min wall on 8 cores (§14.3): 76.3 s with 12 processes"
+  },
+  "sizes": {
+   "perMap": {
+    "easternKingdoms": {
+     "name": "Eastern Kingdoms",
+     "stage1Blocks": 60,
+     "blocks": 50,
+     "stage1Polygons": 397266,
+     "stage1Components": 21559,
+     "stage1Main": 318891,
+     "polygons": 322141,
+     "components": 1098,
+     "largestComponents": [
+      310382,
+      2129,
+      1216,
+      614,
+      607,
+      302,
+      205,
+      171
+     ],
+     "raw": 3537878,
+     "gzip6": 2517680,
+     "gzip6MaxBlock": 131177,
+     "gzip6MedianBlock": 50838,
+     "mapBin": {
+      "bytes": 13657,
+      "gzip6": 8475
+     },
+     "totalGzip6": 2526155,
+     "water": {
+      "swimPolygons": 35125,
+      "droppedSwimPolygons": 6987,
+      "splits": [
+       {
+        "fullPolygons": 318891,
+        "parts": [
+         {
+          "polygons": 310382,
+          "zone": 139,
+          "centroid": [
+           -4471,
+           -1658
+          ]
+         },
+         {
+          "polygons": 2129,
+          "zone": 408,
+          "centroid": [
+           -13334,
+           2817
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "prune": {
+      "droppedPolygons": 68138,
+      "droppedComponents": 20217
+     },
+     "seams": {
+      "stage1": {
+       "innerPct": 2.1947,
+       "blockPct": 2.227,
+       "deltaPp": 0.0323
+      },
+      "final": {
+       "innerPct": 2.7862,
+       "blockPct": 2.5622,
+       "deltaPp": -0.224
+      }
+     },
+     "linkSymmetry": {
+      "internal": 899794,
+      "internalWithoutReverse": 0,
+      "crossTile": 78967,
+      "crossTileWithoutReverse": 0
+     },
+     "censusBeforeWaterAndPrune": {
+      "spawns": 41198,
+      "main": 40977,
+      "offMain": 196,
+      "none": 25,
+      "ambiguous": 403,
+      "overOffMainFloor": 483,
+      "reassigned": 385,
+      "hintUsed": 41123,
+      "hintMiss": 50,
+      "spanOver20": 2664,
+      "offBySize": {
+       "20-199": 108,
+       "<20": 56,
+       "200-1999": 32
+      }
+     },
+     "census": {
+      "spawns": 41198,
+      "main": 40977,
+      "offMain": 196,
+      "none": 25,
+      "ambiguous": 403,
+      "overOffMainFloor": 483,
+      "reassigned": 313,
+      "hintUsed": 41123,
+      "hintMiss": 50,
+      "spanOver20": 2664,
+      "offBySize": {
+       "20-199": 108,
+       "<20": 56,
+       "200-1999": 32
+      }
+     },
+     "censusComponents": {
+      "offMain": 51,
+      "overOffMainFloor": 47
+     },
+     "passagesTagged": [
+      {
+       "id": "undercity-west-tunnel",
+       "polygons": 49
+      },
+      {
+       "id": "ironforge-mountain-top",
+       "polygons": 597
+      }
+     ],
+     "stage2Ms": {
+      "link": 1260,
+      "water": 1061,
+      "prune": 1071,
+      "census": 238
+     }
+    },
+    "kalimdor": {
+     "name": "Kalimdor",
+     "stage1Blocks": 76,
+     "blocks": 58,
+     "stage1Polygons": 491490,
+     "stage1Components": 35574,
+     "stage1Main": 350326,
+     "polygons": 367568,
+     "components": 1138,
+     "largestComponents": [
+      332097,
+      12000,
+      9241,
+      1058,
+      985,
+      799,
+      734,
+      475
+     ],
+     "raw": 4036353,
+     "gzip6": 2886601,
+     "gzip6MaxBlock": 120191,
+     "gzip6MedianBlock": 46212,
+     "mapBin": {
+      "bytes": 16663,
+      "gzip6": 10263
+     },
+     "totalGzip6": 2896864,
+     "water": {
+      "swimPolygons": 43687,
+      "droppedSwimPolygons": 8681,
+      "splits": [
+       {
+        "fullPolygons": 350326,
+        "parts": [
+         {
+          "polygons": 332097,
+          "zone": 331,
+          "centroid": [
+           -695,
+           -1610
+          ]
+         },
+         {
+          "polygons": 9241,
+          "zone": 141,
+          "centroid": [
+           9993,
+           1018
+          ]
+         },
+         {
+          "polygons": 799,
+          "zone": 440,
+          "centroid": [
+           -11624,
+           -4724
+          ]
+         },
+         {
+          "polygons": 50,
+          "zone": 16,
+          "centroid": [
+           6326,
+           -7587
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "prune": {
+      "droppedPolygons": 115241,
+      "droppedComponents": 34267
+     },
+     "seams": {
+      "stage1": {
+       "innerPct": 2.1318,
+       "blockPct": 2.1615,
+       "deltaPp": 0.0297
+      },
+      "final": {
+       "innerPct": 2.5834,
+       "blockPct": 2.7398,
+       "deltaPp": 0.1564
+      }
+     },
+     "linkSymmetry": {
+      "internal": 1010652,
+      "internalWithoutReverse": 0,
+      "crossTile": 96544,
+      "crossTileWithoutReverse": 0
+     },
+     "censusBeforeWaterAndPrune": {
+      "spawns": 33410,
+      "main": 31651,
+      "offMain": 1749,
+      "none": 10,
+      "ambiguous": 657,
+      "overOffMainFloor": 605,
+      "reassigned": 356,
+      "hintUsed": 33319,
+      "hintMiss": 81,
+      "spanOver20": 1724,
+      "offBySize": {
+       ">=2000": 1334,
+       "20-199": 195,
+       "<20": 78,
+       "200-1999": 142
+      }
+     },
+     "census": {
+      "spawns": 33410,
+      "main": 31649,
+      "offMain": 1750,
+      "none": 11,
+      "ambiguous": 656,
+      "overOffMainFloor": 603,
+      "reassigned": 313,
+      "hintUsed": 33310,
+      "hintMiss": 89,
+      "spanOver20": 1724,
+      "offBySize": {
+       ">=2000": 1343,
+       "20-199": 195,
+       "<20": 69,
+       "200-1999": 143
+      }
+     },
+     "censusComponents": {
+      "offMain": 83,
+      "overOffMainFloor": 70
+     },
+     "passagesTagged": [],
+     "stage2Ms": {
+      "link": 1437,
+      "water": 1295,
+      "prune": 1173,
+      "census": 210
+     }
+    }
+   },
+   "navTotalGzip6": 5423019,
+   "blocksGzip6": 5404281,
+   "mapBinGzip6": 18738,
+   "largestBlockGzip6": 131177,
+   "capAndTarget": "D-030: 5,423,019 B against the 7,000,000 B cap (1,576,981 B headroom) and the 5-6 MB target; every block under the 300,000 B block cap",
+   "againstPrototype": {
+    "prototypeBlocksGzip6": 5704757,
+    "thisBuildBlocksGzip6": 5404281,
+    "why": [
+     "Vertices keep rcPolyMesh order (§5, the smaller of the measured orders); the prototype final blocks kept its stage-1 first-use renumbering. Re-encoding these final blocks with first-use order gives 5,677,066 B (+5.05%).",
+     "No component stream in the blocks (RC-03); the per-polygon zone attributes cost 0.31% (these blocks re-encoded with one zone per block: 5,387,533 B).",
+     "The corrected WMO liquid rule (3b.2, U14) keeps 168 more Kalimdor polygons after pruning (367,568 against 367,400)."
+    ]
+   }
+  },
+  "census": {
+   "method": "Every dataset spawn with a world point on maps 0 and 1, snapped with rules A (zone hint = the area key rolled up through AreaTable ParentAreaID; for every spawn at this pin the roll-up equals the key, so the manifest hintRollup is empty) and B (20 polygons); off-main spawns grouped by component and anchor (§12).",
+   "kalimdor": {
+    "spawns": 33410,
+    "main": 31649,
+    "offMain": 1750,
+    "none": 11,
+    "ambiguous": 656,
+    "overOffMainFloor": 603,
+    "reassigned": 313,
+    "hintUsed": 33310,
+    "hintMiss": 89,
+    "spanOver20": 1724,
+    "offBySize": {
+     ">=2000": 1343,
+     "20-199": 195,
+     "<20": 69,
+     "200-1999": 143
+    }
+   },
+   "easternKingdoms": {
+    "spawns": 41198,
+    "main": 40977,
+    "offMain": 196,
+    "none": 25,
+    "ambiguous": 403,
+    "overOffMainFloor": 483,
+    "reassigned": 313,
+    "hintUsed": 41123,
+    "hintMiss": 50,
+    "spanOver20": 2664,
+    "offBySize": {
+     "20-199": 108,
+     "<20": 56,
+     "200-1999": 32
+    }
+   },
+   "total": {
+    "spawns": 74608,
+    "main": 72626,
+    "offMain": 1946,
+    "none": 36,
+    "ambiguous": 1059,
+    "overOffMainFloor": 1086
+   },
+   "offMainComponents": {
+    "kalimdor": 83,
+    "easternKingdoms": 51
+   },
+   "overOffMainFloorComponents": {
+    "kalimdor": 70,
+    "easternKingdoms": 47
+   },
+   "largestOffMain": [
+    {
+     "anchor": {
+      "kind": "npc",
+      "id": 1984,
+      "index": 0
+     },
+     "polygons": 12000,
+     "spawns": 1334,
+     "zones": [
+      [
+       141,
+       1240
+      ],
+      [
+       1657,
+       94
+      ]
+     ]
+    },
+    {
+     "anchor": {
+      "kind": "npc",
+      "id": 2798,
+      "index": 0
+     },
+     "polygons": 985,
+     "spawns": 93,
+     "zones": [
+      [
+       1638,
+       93
+      ]
+     ]
+    },
+    {
+     "anchor": {
+      "kind": "npc",
+      "id": 10919,
+      "index": 3
+     },
+     "polygons": 260,
+     "spawns": 44,
+     "zones": [
+      [
+       148,
+       44
+      ]
+     ]
+    },
+    {
+     "anchor": {
+      "kind": "npc",
+      "id": 2009,
+      "index": 30
+     },
+     "polygons": 98,
+     "spawns": 27,
+     "zones": [
+      [
+       141,
+       27
+      ]
+     ]
+    },
+    {
+     "anchor": {
+      "kind": "npc",
+      "id": 3736,
+      "index": 0
+     },
+     "polygons": 86,
+     "spawns": 21,
+     "zones": [
+      [
+       331,
+       21
+      ]
+     ]
+    }
+   ],
+   "againstPrototype": [
+    "Kalimdor: main 31,649 (prototype 31,650), off-main 1,750 (1,748), none 11 (12); the corrected WMO liquid rule changes 3,230 triangles in 7 blocks (U14); no component joins or splits among the named ones.",
+    "Eastern Kingdoms: main 40,977 (40,944), off-main 196 (229), from the same 397,266 stage-1 polygons. Two prototype components (82 and 91 polygons with 18 and 14 spawns: npc 1653, 2551, 4505 and 1565, 1653, 2547) are now in main: 32 of the 33. Cause (INFERRED: the polygons are identical, so only linking differs): the derived adjacency now pairs edges on rcPolyMesh vertex numbering, which is Recast's own pairing (G5b 54,098 of 54,098), whereas the prototype paired them after its first-use renumbering, which can differ where more than two polygons meet at one edge."
+   ],
+   "firstReview": {
+    "file": "tools/terrain/inputs/census-reviewed.json",
+    "method": "Entries whose note starts with 'reviewed:' were examined individually (Teldrassil and Darnassus, Rut'theran, Thunder Bluff, the Ban'ethil Barrow Den chamber of RC-02, the G7 floors, the three zones, the four water splits); the others were drafted by tools/terrain/review-draft.ts from measured facts with the rules in its header ('rule:' notes): geometric descriptions, not in-game checks.",
+    "components": 134,
+    "overOffMainFloor": 117,
+    "unsnapped": 36,
+    "zones": [
+     {
+      "map": 1,
+      "zone": 141,
+      "reason": "teleport-connector-missing"
+     },
+     {
+      "map": 1,
+      "zone": 1638,
+      "reason": "elevator-connector-missing",
+      "minShare": 0.85
+     },
+     {
+      "map": 1,
+      "zone": 1657,
+      "reason": "teleport-connector-missing"
+     }
+    ],
+    "waterSplits": [
+     {
+      "map": 0,
+      "zone": 408,
+      "polygons": 2129,
+      "reason": "island"
+     },
+     {
+      "map": 1,
+      "zone": 141,
+      "polygons": 9241,
+      "reason": "transport"
+     },
+     {
+      "map": 1,
+      "zone": 440,
+      "polygons": 799,
+      "reason": "island"
+     },
+     {
+      "map": 1,
+      "zone": 16,
+      "polygons": 50,
+      "reason": "island"
+     }
+    ],
+    "byReason": {
+     "components:0:mesh-break-suspected": {
+      "components": 23,
+      "spawns": 127,
+      "reviewedIndividually": 0
+     },
+     "components:0:unreachable-terrain": {
+      "components": 27,
+      "spawns": 67,
+      "reviewedIndividually": 0
+     },
+     "components:0:enclosed": {
+      "components": 1,
+      "spawns": 2,
+      "reviewedIndividually": 0
+     },
+     "components:1:teleport-connector-missing": {
+      "components": 1,
+      "spawns": 1334,
+      "reviewedIndividually": 1
+     },
+     "components:1:elevator-connector-missing": {
+      "components": 1,
+      "spawns": 93,
+      "reviewedIndividually": 1
+     },
+     "components:1:mesh-break-suspected": {
+      "components": 28,
+      "spawns": 214,
+      "reviewedIndividually": 1
+     },
+     "components:1:unreachable-terrain": {
+      "components": 50,
+      "spawns": 92,
+      "reviewedIndividually": 0
+     },
+     "components:1:transport": {
+      "components": 1,
+      "spawns": 9,
+      "reviewedIndividually": 1
+     },
+     "components:1:enclosed": {
+      "components": 2,
+      "spawns": 8,
+      "reviewedIndividually": 0
+     },
+     "overOffMainFloor:0:upper-floor": {
+      "components": 32,
+      "spawns": 293,
+      "reviewedIndividually": 0
+     },
+     "overOffMainFloor:0:floor-ambiguous": {
+      "components": 15,
+      "spawns": 212,
+      "reviewedIndividually": 0
+     },
+     "overOffMainFloor:1:floor-ambiguous": {
+      "components": 29,
+      "spawns": 392,
+      "reviewedIndividually": 0
+     },
+     "overOffMainFloor:1:upper-floor": {
+      "components": 41,
+      "spawns": 231,
+      "reviewedIndividually": 2
+     }
+    }
+   }
+  },
+  "gnarlpineHold": {
+   "finding": "RC-02's component 23 (here 98 polygons, 27 spawns: npc 2009, 2010, 2011, 7318 and object 106318) is the lower chamber of the Ban'ethil Barrow Den WMO: its polygons carry WMOAreaTable area 262 ('Ban\\'ethil Barrow Den', AreaTable 1.60.1.70009, ParentAreaID 141), z 1254-1313, under the Teldrassil surface (z 1330-1450) near world (9800, 1560). Its closest approach to Teldrassil's dominant component is 18.8 yd (17.5 yd of it vertical); the nearest vertex pairs are at least 4.9 yd apart in 2D.",
+   "cause": "Rebuilding block 1:12_28 alone with radius 0, the chamber joins through a spiral ramp that climbs from z 1261 to 1336; on that ramp near (9857, 1571, 1328) WMO triangles of the den itself (tag 262, not M2 doodads) lie 1.1-2.9 yd above the floor, so with 2-yd clearance only a strip too narrow to survive the 0.52-yd erosion is left.",
+   "variants": {
+    "method": "block 1:12_28 rebuilt alone per variant; JOINED = the chamber point (9826.9, 1494.8, z 1260) and a surface point (9870.0, 1511.6, z 1334) in one component of that block",
+    "joined": [
+     "radiusVoxels 0",
+     "heightYd 1 (4 voxels)"
+    ],
+    "separate": [
+     "chosen",
+     "slopeDeg 70",
+     "slopeDeg 80",
+     "climbYd 3",
+     "heightYd 1.25",
+     "heightYd 1.5",
+     "heightYd 1.6 (7 voxels = 1.75 yd; TrinityCore's 1.6-yd agent height lies between this and 1.5)",
+     "tileVoxels 128",
+     "tileVoxels 512",
+     "every M2 kept (m2MinFootprintYd 0)",
+     "M2 under 8 and 16 yd dropped",
+     "every M2 dropped, WMO doodads included",
+     "ADT-placed M2s dropped"
+    ]
+   },
+   "decision": "Settings unchanged (radius 0 costs about +41% at 1.04-yd cells, sweep c1r0; a 1-yd height would pass under furniture everywhere). Reviewed as mesh-break-suspected pending a walk connector after the owner walks the ramp; G7a passes through that reviewed exception."
+  },
+  "ironforgePassageBox": "passages.json ironforge-mountain-top: x -5085..-4570, y -1340..-835 (the Ironforge polygons' extent, rounded out), z 560..900 (above the city's highest floor, z 551; the summit is at 886), zone 1: 597 polygons tagged. Without rule A, 22 Ironforge spawns land there, at z 618-839, in main.",
+  "gates": {
+   "G1": [
+    "pass: manifest pin equals build.json: wow_classic_beta 1.60.1.70009 05215079e3905ef5922ae0b03ffefb73",
+    "pass: client pin: wow_classic_beta 1.60.1.70009 05215079e3905ef5922ae0b03ffefb73"
+   ],
+   "G2": [
+    "pass: per-block stage-1 input hashes against the installed client: 136 blocks unchanged"
+   ],
+   "G3": "pnpm nav:check: an independent full rebuild (stage 1 into another folder) gave 113 of 113 files byte-identical to public/nav (navRevision aefbc78d797bb187cef9223b77514946245e768833b75813ac0599151e53f120)",
+   "G4": [
+    "pass: map 0: partition invariance, 4×4 against 8×8 blocks: 11776 of 11776 tiles identical (11776 in 8×8); zones differ on 0; largest 8×8 block height span 1476.0 yd (48_32)",
+    "pass: map 1: partition invariance, 4×4 against 8×8 blocks: 15803 of 15803 tiles identical (15803 in 8×8); zones differ on 0; largest 8×8 block height span 2514.0 yd (16_32)"
+   ],
+   "G4partition": {
+    "0": {
+     "tilesA": 11776,
+     "tilesB": 11776,
+     "identical": 11776,
+     "different": [],
+     "zonesDifferent": 0,
+     "maxBlockSpanYd": 1476,
+     "maxBlockSpanBlock": "48_32"
+    },
+    "1": {
+     "tilesA": 15803,
+     "tilesB": 15803,
+     "identical": 15803,
+     "different": [],
+     "zonesDifferent": 0,
+     "maxBlockSpanYd": 2514,
+     "maxBlockSpanBlock": "16_32"
+    },
+    "stage1B8WallMs": 93127,
+    "parts": 8
+   },
+   "G5": [
+    "pass: map 0: every link has its reverse: 899794 internal edges, 78967 cross-tile links; 0 without a reverse",
+    "pass: map 0: block seams unmatched ≤ inner + 0.2 pp (final mesh): block 2.5622%, inner 2.7862%, Δ -0.224 pp",
+    "pass: map 0: block seams unmatched ≤ inner + 0.2 pp (stage 1, from the build): block 2.227%, inner 2.1947%, Δ 0.0323 pp",
+    "pass: map 0: final seams equal the manifest: {\"innerPct\":2.7862,\"blockPct\":2.5622,\"deltaPp\":-0.224}",
+    "pass: map 1: every link has its reverse: 1010652 internal edges, 96544 cross-tile links; 0 without a reverse",
+    "pass: map 1: block seams unmatched ≤ inner + 0.2 pp (final mesh): block 2.7398%, inner 2.5834%, Δ 0.1564 pp",
+    "pass: map 1: block seams unmatched ≤ inner + 0.2 pp (stage 1, from the build): block 2.1615%, inner 2.1318%, Δ 0.0297 pp",
+    "pass: map 1: final seams equal the manifest: {\"innerPct\":2.5834,\"blockPct\":2.7398,\"deltaPp\":0.1564}"
+   ],
+   "G5b": [
+    "pass: derived adjacency and portals equal rcPolyMesh (Kalimdor 28_36, 28_40, 12 vertices per polygon (the shipped settings)): 512 tiles: internal 54098 of 54098, portals 7924 of 7924 (derived 7924)",
+    "pass: derived adjacency and portals equal rcPolyMesh (Kalimdor 28_36, 28_40, 6 vertices per polygon (the Detour rebuild)): 512 tiles: internal 57928 of 57928, portals 7925 of 7925 (derived 7925)"
+   ],
+   "G6": [
+    "pass: map 0: census equals the build’s: main 40977, off-main 196 in 51 components, unsnapped 25, over an off-main floor 483 in 47 components",
+    "pass: map 0: spawn census gate (every off-main, unsnapped and over-a-floor component reviewed; zone shares): 98 components and 25 unsnapped spawns reviewed",
+    "pass: map 1: census equals the build’s: main 31649, off-main 1750 in 83 components, unsnapped 11, over an off-main floor 603 in 70 components",
+    "pass: map 1: spawn census gate (every off-main, unsnapped and over-a-floor component reviewed; zone shares): 153 components and 11 unsnapped spawns reviewed"
+   ],
+   "G7": [
+    "pass: map 1: Skull Rock (npc 3131), rule B 20: 11 of 11 spawns: every floor of ≥ 20 polygons in main",
+    "pass: map 1: Skull Rock (npc 3131), rule B 10: 11 of 11 spawns: every floor of ≥ 10 polygons in main",
+    "reviewed: map 1: Burning Blade Coven (npc 3197), rule B 20: 23 of 23 spawns: every floor of ≥ 20 polygons in main (reviewed exceptions used)",
+    "reviewed: map 1: Burning Blade Coven (npc 3197), rule B 10: 23 of 23 spawns: every floor of ≥ 10 polygons in main (reviewed exceptions used)",
+    "reviewed: map 1: Dustwind Cave (npc 3116), rule B 20: 13 of 13 spawns: every floor of ≥ 20 polygons in main (reviewed exceptions used)",
+    "reviewed: map 1: Dustwind Cave (npc 3116), rule B 10: 13 of 13 spawns: every floor of ≥ 10 polygons in main (reviewed exceptions used)",
+    "pass: map 1: Cleft of Shadow (npc 5639), rule B 20: 1 of 1 spawns: every floor of ≥ 20 polygons in main",
+    "pass: map 1: Cleft of Shadow (npc 5639), rule B 10: 1 of 1 spawns: every floor of ≥ 10 polygons in main",
+    "reviewed: map 1: Gnarlpine Hold in Teldrassil’s dominant component: 100 of 124 spawns in the dominant component; 24 outside it (reviewed mesh-break-suspected)",
+    "pass: map 1: Thunder Bluff rises and Pools of Vision in one component: 4 spawns of 4 NPCs in components 4",
+    "pass: map 1: connectors pending: todo: thunder-bluff-elevator-west, rutheran-to-darnassus-portal (checked once observed)"
+   ],
+   "G8": [
+    "pass: map 1: Thunder Bluff rises not connected to Mulgore without an elevator: components 4 (0 = main)",
+    "pass: map 1: Teldrassil not connected to Darkshore: 3 Teldrassil and 16 Darkshore components, none shared",
+    "pass: map 0: passage undercity-west-tunnel tagged: 49 polygons tagged in map.bin",
+    "pass: map 0: passage ironforge-mountain-top tagged: 597 polygons tagged in map.bin"
+   ],
+   "G9": [
+    "pass: map 0: water splits reviewed: 1 split parts reviewed",
+    "pass: map 1: water splits reviewed: 3 split parts reviewed"
+   ],
+   "G10": [
+    "pass: TypeScript ÷ Detour on the 6-vertex rebuild: 300 pairs over 20 yd of 300 points: median 1.032, p90 1.076, max 1.721; Detour no path 0, partial 0; TS unreachable 0; 512 Detour tiles (0 failed)"
+   ],
+   "G10b": [
+    "pass: TypeScript on the shipped 12-vertex blocks ÷ Detour at 6 vertices: 300 pairs over 20 yd of 300 points: median 1.032, p90 1.094, max 1.715; Detour no path 0, partial 0; TS unreachable 0; 512 Detour tiles (0 failed)"
+   ],
+   "G11": [
+    "pass: map 0: every block decodes: 50 blocks",
+    "pass: map 1: every block decodes: 58 blocks",
+    "pass: nav total ≤ 7000000 B gzip6 (D-030 cap): 5423019 B in 108 blocks and 2 map.bin files",
+    "pass: nav total within the 5000000-6000000 B target (D-030): 5423019 B",
+    "pass: every block ≤ 300000 B gzip6: largest 131177 B"
+   ],
+   "G12": [
+    "pass: map 0: stored components equal a recomputation: 0 polygons differ; main 310382 polygons",
+    "pass: map 1: stored components equal a recomputation: 0 polygons differ; main 332097 polygons"
+   ],
+   "G13": "18 checks, 0 not passing",
+   "G15": [
+    "pass: connector file: 2 rows (0 observed)"
+   ],
+   "detourCheck": {
+    "blocks": [
+     "28_36",
+     "28_40"
+    ],
+    "dtTiles": 512,
+    "dtFail": 0,
+    "points": 300,
+    "dtNoPath": 0,
+    "dtPartial": 0,
+    "g10": {
+     "pairs": 300,
+     "tsUnreachable": 0,
+     "p10": 0.9993683289748544,
+     "p50": 1.0324812653956914,
+     "p90": 1.0760163823741595,
+     "min": 0.888521029461539,
+     "max": 1.7205448664788126
+    },
+    "g10b": {
+     "pairs": 300,
+     "tsUnreachable": 0,
+     "p10": 0.9992711412181663,
+     "p50": 1.0321560577986912,
+     "p90": 1.0936659364133792,
+     "min": 0.888521029461539,
+     "max": 1.7145839471025055
+    },
+    "adjacency": {
+     "tiles": 512,
+     "internalRecast": 57928,
+     "internalAgree": 57928,
+     "portalsRecast": 7925,
+     "portalsDerived": 7925,
+     "portalsAgree": 7925
+    }
+   },
+   "adjacency": {
+    "chosen": {
+     "tiles": 512,
+     "internalRecast": 54098,
+     "internalAgree": 54098,
+     "portalsRecast": 7924,
+     "portalsDerived": 7924,
+     "portalsAgree": 7924
+    },
+    "sixVertices": {
+     "tiles": 512,
+     "internalRecast": 57928,
+     "internalAgree": 57928,
+     "portalsRecast": 7925,
+     "portalsDerived": 7925,
+     "portalsAgree": 7925
+    }
+   },
+   "validateOfflineSeconds": 2
+  },
+  "proposedBudgets": {
+   "$comment": "For the architect to record in tools/build/dist-requirements.json (not edited here): measured bytes of this build.",
+   "navTotalGzip6Bytes": 5423019,
+   "navCapBytes": 7000000,
+   "navTargetBytes": [
+    5000000,
+    6000000
+   ],
+   "blockCapBytes": 300000,
+   "largestBlockGzip6Bytes": 131177,
+   "mapBinGzip6Bytes": {
+    "0": 8475,
+    "1": 10263
+   },
+   "perBlockGzip6Bytes": {
+    "0/20_36.bin": 8460,
+    "0/20_40.bin": 4157,
+    "0/24_24.bin": 7253,
+    "0/24_28.bin": 48440,
+    "0/24_32.bin": 69018,
+    "0/24_36.bin": 89937,
+    "0/24_40.bin": 69420,
+    "0/24_44.bin": 507,
+    "0/28_24.bin": 15505,
+    "0/28_28.bin": 131177,
+    "0/28_32.bin": 130056,
+    "0/28_36.bin": 107437,
+    "0/28_40.bin": 66465,
+    "0/28_44.bin": 62,
+    "0/32_24.bin": 21083,
+    "0/32_28.bin": 93278,
+    "0/32_32.bin": 70830,
+    "0/32_36.bin": 85592,
+    "0/32_40.bin": 9821,
+    "0/36_24.bin": 4406,
+    "0/36_28.bin": 18053,
+    "0/36_32.bin": 50838,
+    "0/36_36.bin": 76011,
+    "0/36_40.bin": 8294,
+    "0/40_24.bin": 66,
+    "0/40_28.bin": 62307,
+    "0/40_32.bin": 108463,
+    "0/40_36.bin": 90008,
+    "0/40_40.bin": 21347,
+    "0/44_28.bin": 52122,
+    "0/44_32.bin": 79930,
+    "0/44_36.bin": 103751,
+    "0/44_40.bin": 69631,
+    "0/44_44.bin": 179,
+    "0/48_24.bin": 1144,
+    "0/48_28.bin": 79192,
+    "0/48_32.bin": 124388,
+    "0/48_36.bin": 127067,
+    "0/48_40.bin": 35923,
+    "0/52_24.bin": 894,
+    "0/52_28.bin": 66747,
+    "0/52_32.bin": 118831,
+    "0/52_36.bin": 85646,
+    "0/52_40.bin": 1173,
+    "0/56_24.bin": 15689,
+    "0/56_28.bin": 41170,
+    "0/56_32.bin": 41273,
+    "0/56_36.bin": 2751,
+    "0/60_28.bin": 1629,
+    "0/60_32.bin": 259,
+    "1/8_24.bin": 4343,
+    "1/8_28.bin": 26297,
+    "1/8_32.bin": 1958,
+    "1/12_24.bin": 32283,
+    "1/12_28.bin": 86556,
+    "1/12_32.bin": 11948,
+    "1/12_36.bin": 8166,
+    "1/12_40.bin": 3873,
+    "1/16_24.bin": 313,
+    "1/16_28.bin": 17202,
+    "1/16_32.bin": 68133,
+    "1/16_36.bin": 87095,
+    "1/16_40.bin": 46212,
+    "1/20_28.bin": 43243,
+    "1/20_32.bin": 89266,
+    "1/20_36.bin": 77558,
+    "1/20_40.bin": 66485,
+    "1/20_44.bin": 23173,
+    "1/24_24.bin": 17825,
+    "1/24_28.bin": 66187,
+    "1/24_32.bin": 108076,
+    "1/24_36.bin": 83153,
+    "1/24_40.bin": 104811,
+    "1/24_44.bin": 28897,
+    "1/28_24.bin": 13592,
+    "1/28_28.bin": 96142,
+    "1/28_32.bin": 95299,
+    "1/28_36.bin": 93320,
+    "1/28_40.bin": 47803,
+    "1/28_44.bin": 1947,
+    "1/32_24.bin": 36821,
+    "1/32_28.bin": 78426,
+    "1/32_32.bin": 69825,
+    "1/32_36.bin": 79322,
+    "1/32_40.bin": 37610,
+    "1/36_24.bin": 42973,
+    "1/36_28.bin": 103608,
+    "1/36_32.bin": 58375,
+    "1/36_36.bin": 120191,
+    "1/36_40.bin": 22457,
+    "1/40_24.bin": 45827,
+    "1/40_28.bin": 91530,
+    "1/40_32.bin": 84542,
+    "1/40_36.bin": 93404,
+    "1/40_40.bin": 24541,
+    "1/44_24.bin": 26496,
+    "1/44_28.bin": 77777,
+    "1/44_32.bin": 71627,
+    "1/44_36.bin": 56922,
+    "1/44_40.bin": 37039,
+    "1/48_24.bin": 26929,
+    "1/48_28.bin": 50838,
+    "1/48_32.bin": 25006,
+    "1/48_36.bin": 48497,
+    "1/48_40.bin": 11288,
+    "1/52_24.bin": 2044,
+    "1/52_28.bin": 5502,
+    "1/52_40.bin": 6028
+   },
+   "otherFilesGzip6Bytes": {
+    "manifest.json": 12754,
+    "NOTICE.md": 1829,
+    "connectors.json": 115
+   }
+  }
+ },
+ "runtime": {
+  "$comment": [
+   "Step 3b.5 (src/nav, docs/research/terrain-navigation.md §9.5, §9.6, §14.3; RC-06, RC-07, RC-13): the runtime on the committed public/nav, measured by tests/bench/nav.bench.ts (node --expose-gc --import tsx tests/bench/nav.bench.ts --runs 3 --write).",
+   "Fixtures on map 1 (Kalimdor): durotar and barrens are the prototype sets of §9.5 (zone spawns sorted by kind, id, x, y; every k-th to 300; rounded to 1 yd; snapped with rules A and B). barrensPool is the realistic section (RC-07): every quest with zoneOrSort 17 (The Barrens), 98 quests and about 300 actions; its quest givers and turn-in targets (first spawn on the map) and one location per objective (the spawn nearest the centroid of the objective entities' Barrens spawns; items through their droppers), unique after 1-yd rounding.",
+   "matrixMs: one legsFrom per source over every target with the whole map resident (median of the runs, range given); buildReference: the same legs from the build's reference legsFrom (tools/terrain/lib/legs.ts, the code G10 and G10b check against Detour), compared field by field; consecutive: N - 1 single-target legs; ratio: (ground + swim) / straight line for legs longer than 50 yd straight (mesh-derived, not game truth); ratio3dOver2d: the 3D length through the portal crossings (each at its portal's interpolated height, endpoints by the polygon's fan triangle) over the 2D length, legs over 50 yd (RC-13); computingPathsFromEmpty: from an empty mesh, snap every endpoint (loading every block within 6 yd), then the matrix with the searches loading the blocks they reach (RC-06): decode and link included, fetch and SHA-256 not; blocks and gzip6 are the blocks loaded (the fetch baseline, §9.6).",
+   "memory: each continent resident in the typed layout: typedLayoutBytes (sum of the typed arrays the mesh holds) and searchScratch (the per-map Dijkstra arrays); heapGrowthMB = growth of heapUsed + arrayBuffers after gc (node --expose-gc) for opening and loading every block, file bytes read beforehand. blockDecodeAndLinkMs: each block decoded and added alone to an empty mesh.",
+   "proposedCeiling: the absolute ceiling for \"computing paths\" of the realistic section on the Milestone 9 throttled profile (4x CPU): computingPathsFromEmpty.ms x 4 x 1.25 (the 25% regression allowance), rounded up to 100 ms. Fetch and SHA-256 of the blocks come on top and are measured in 3b.6."
+  ],
+  "date": "2026-09-26",
+  "machine": {
+   "cpu": "AMD Ryzen 7 7800X3D 8-Core Processor",
+   "threads": 16,
+   "ramGb": 33,
+   "node": "v22.13.1"
+  },
+  "navRevision": "aefbc78d797bb187cef9223b77514946245e768833b75813ac0599151e53f120",
+  "runs": 3,
+  "fixtures": {
+   "durotar": {
+    "points": 300,
+    "snapped": 300,
+    "unsnapped": 0,
+    "offMainPoints": 3,
+    "ambiguousPoints": 8,
+    "legs": 90000,
+    "reachable": 88218,
+    "matrixMs": 1891,
+    "matrixMsRange": [
+     1840,
+     1930.7
+    ],
+    "msPerSource": 6.303,
+    "settledPerSource": 27154,
+    "hash": "adbb51b6df03157b",
+    "deterministic": true,
+    "buildReference": {
+     "legsCompared": 90000,
+     "differences": 0,
+     "ms": 1854.2
+    },
+    "consecutive": {
+     "legs": 299,
+     "msMean": 0.514
+    },
+    "ratio": {
+     "n": 87684,
+     "p50": 1.1687,
+     "p90": 1.8897,
+     "max": 33.2841
+    },
+    "ratio3dOver2d": {
+     "n": 87751,
+     "p50": 1.0126,
+     "p90": 1.025,
+     "max": 1.1724,
+     "total": 1.0149
+    },
+    "swimOver200Legs": 9489,
+    "swimOver400Legs": 3928,
+    "unverifiedPassageLegs": 0,
+    "computingPathsFromEmpty": {
+     "ms": 1953.3,
+     "msRange": [
+      1952.8,
+      1986.9
+     ],
+     "snapBlocks": 4,
+     "snapGzip6": 258055,
+     "blocks": 14,
+     "gzip6": 951086
+    }
+   },
+   "barrens": {
+    "points": 300,
+    "snapped": 300,
+    "unsnapped": 0,
+    "offMainPoints": 1,
+    "ambiguousPoints": 2,
+    "legs": 90000,
+    "reachable": 89402,
+    "matrixMs": 7331.9,
+    "matrixMsRange": [
+     7197.2,
+     7374.3
+    ],
+    "msPerSource": 24.44,
+    "settledPerSource": 111553,
+    "hash": "92518bb3575c67b3",
+    "deterministic": true,
+    "buildReference": {
+     "legsCompared": 90000,
+     "differences": 0,
+     "ms": 6394.7
+    },
+    "consecutive": {
+     "legs": 299,
+     "msMean": 2.668
+    },
+    "ratio": {
+     "n": 89000,
+     "p50": 1.081,
+     "p90": 1.1522,
+     "max": 8.3283
+    },
+    "ratio3dOver2d": {
+     "n": 89023,
+     "p50": 1.0493,
+     "p90": 1.0863,
+     "max": 1.2914,
+     "total": 1.0516
+    },
+    "swimOver200Legs": 638,
+    "swimOver400Legs": 45,
+    "unverifiedPassageLegs": 0,
+    "computingPathsFromEmpty": {
+     "ms": 7460,
+     "msRange": [
+      7408.1,
+      7520.6
+     ],
+     "snapBlocks": 9,
+     "snapGzip6": 731888,
+     "blocks": 38,
+     "gzip6": 2287183
+    }
+   },
+   "barrensPool": {
+    "quests": 98,
+    "actions": 289,
+    "skippedActions": {
+     "giver-item": 6,
+     "objective-event": 3,
+     "objective-no-barrens-spawn": 9,
+     "giver-no-spawn-on-map": 1
+    },
+    "points": 116,
+    "snapped": 116,
+    "unsnapped": 0,
+    "offMainPoints": 9,
+    "ambiguousPoints": 1,
+    "legs": 13456,
+    "reachable": 11484,
+    "matrixMs": 3028.5,
+    "matrixMsRange": [
+     3006,
+     3050.7
+    ],
+    "msPerSource": 26.108,
+    "settledPerSource": 125121,
+    "hash": "932967565583f617",
+    "deterministic": true,
+    "buildReference": {
+     "legsCompared": 13456,
+     "differences": 0,
+     "ms": 2470.2
+    },
+    "consecutive": {
+     "legs": 115,
+     "msMean": 1.071
+    },
+    "ratio": {
+     "n": 11290,
+     "p50": 1.0897,
+     "p90": 1.2244,
+     "max": 5.0907
+    },
+    "ratio3dOver2d": {
+     "n": 11299,
+     "p50": 1.0436,
+     "p90": 1.0798,
+     "max": 1.3302,
+     "total": 1.0475
+    },
+    "swimOver200Legs": 46,
+    "swimOver400Legs": 0,
+    "unverifiedPassageLegs": 0,
+    "computingPathsFromEmpty": {
+     "ms": 3184.2,
+     "msRange": [
+      3139.6,
+      3190.3
+     ],
+     "snapBlocks": 11,
+     "snapGzip6": 854139,
+     "blocks": 43,
+     "gzip6": 2527817
+    }
+   }
+  },
+  "memory": {
+   "0": {
+    "polygons": 322141,
+    "blocks": 50,
+    "loadAllMs": 158,
+    "typedLayoutBytes": 43090295,
+    "typedLayout": {
+     "mapWide": 10958190,
+     "blocks": 32132105,
+     "searchScratch": 9019948
+    },
+    "bytesPerPolygon": 161.8,
+    "heapGrowthMB": 52.8,
+    "blockDecodeAndLinkMs": {
+     "p50": 3.4,
+     "p90": 8.2,
+     "max": 14.1
+    }
+   },
+   "1": {
+    "polygons": 367568,
+    "blocks": 58,
+    "loadAllMs": 215.3,
+    "typedLayoutBytes": 49499044,
+    "typedLayout": {
+     "mapWide": 12503028,
+     "blocks": 36996016,
+     "searchScratch": 10291904
+    },
+    "bytesPerPolygon": 162.7,
+    "heapGrowthMB": 60.9,
+    "blockDecodeAndLinkMs": {
+     "p50": 2.7,
+     "p90": 5.2,
+     "max": 11.8
+    }
+   }
+  },
+  "proposedCeiling": {
+   "realisticSectionComputingPathsMs": 16000,
+   "profile": "Milestone 9 throttled (4x CPU)",
+   "basis": "computingPathsFromEmpty.ms of barrensPool x 4 x 1.25, rounded up to 100 ms; excludes fetch and SHA-256"
+  },
+  "benchWallMs": 101305
+ }
+}

@@ -1,0 +1,8 @@
+#forever
+#name 9-10 Fixture Quoted
+#group Forever Route Lab Fixtures
+#version 1
+
+step
+    >> Quoted form with a "quote" and a backslash \ in it
+    .goto Durotar,53.50,44.50,15

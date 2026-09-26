@@ -13,9 +13,15 @@
   flex: none;
   align-items: center;
   min-height: var(--frl-panel-header-height);
-  padding: 0 var(--frl-space-1);
+  padding: var(--frl-space-half) var(--frl-space-1);
   border-bottom: 1px solid var(--frl-border);
   background: var(--frl-surface);
+}
+
+/* The route actions wrap onto a second line in a narrow route panel rather than being clipped. */
+.frl-app-route__toolbar > .frl-toolbar {
+  flex-wrap: wrap;
+  row-gap: var(--frl-space-half);
 }
 
 .frl-app-route__list {

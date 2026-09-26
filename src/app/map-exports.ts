@@ -20,6 +20,8 @@ export {
   type MapControllerOptions,
   type MapEngineSetup,
   type MapLayerStatus,
+  type MapPickRequest,
+  type MapPickStatus,
   type MapStatus,
   type MapTiming,
   type ObjectUrls,

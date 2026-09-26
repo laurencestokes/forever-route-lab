@@ -115,11 +115,11 @@ describe('the map in the shell', () => {
     const rows = () => within(screen.getByRole('listbox')).getAllByRole('option');
     const option = rows()[3];
     if (option === undefined) throw new Error('row missing');
-    const stepSets = () => s.adapter().callsOf('setLayer').filter((call) => call.layer === 'route-steps').length;
+    const stepSets = () => s.adapter().callsOf('setLayer').filter((call) => call.layer === 'selection').length;
     const before = stepSets();
     fireEvent.click(option);
     expect(s.adapter().callsOf('focus').at(-1)).toMatchObject({ point: { x: 200, y: -4300 } });
-    // One sync for the click: the selection and the active step it makes (PERF-6).
+    // One sync for the click: the selection and the active step it makes (PERF-6); the step markers do not see it (PERF-2).
     expect(stepSets() - before).toBe(1);
     const second = s.steps[1];
     const marker = s.adapter().contents.get('route-steps')?.items.find((item) => item.ref.kind === 'step' && item.ref.stepId === second?.id);

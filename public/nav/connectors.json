@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "kind": "nav-connectors-observed",
+  "source": "tools/terrain/inputs/connectors.json",
+  "connectors": []
+}

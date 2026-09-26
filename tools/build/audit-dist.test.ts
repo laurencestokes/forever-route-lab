@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -10,7 +11,10 @@ import {
   checkFileContent,
   checkFileSignature,
   checkForbiddenPaths,
+  checkGzipBudget,
   checkImages,
+  checkMapFolders,
+  checkNavBudget,
   checkRequiredFiles,
   formatAuditReport,
   gzipSize,
@@ -18,6 +22,8 @@ import {
   removeBuildManifest,
   resolveRequiredFiles,
   type DistRequirements,
+  type MapFolder,
+  type NavBudget,
 } from './lib/audit';
 import { REPO_ROOT } from './lib/fs';
 import { globToRegExp, matchesAnyGlob } from './lib/glob';
@@ -58,6 +64,8 @@ const requirements: DistRequirements = {
   allowedImages: [{ glob: 'favicon.svg', reason: 'app icon' }, { glob: 'assets/*.svg', reason: 'ui icons' }],
   entryChunkGzipBudgetBytes: 250_000,
   data: { totalGzipBudgetBytes: 1_200_000, baselineTolerance: 0.1, baselines: {} },
+  mapFolders: [],
+  nav: null,
 };
 
 // Built at runtime so this file never contains a literal user-profile path or WTF account path
@@ -162,6 +170,29 @@ describe('content rules', () => {
     expect(checkFileSignature('art/1411.blp', blp)).toEqual([]);
     expect(checkFileSignature('assets/index.js', text('export const RIFF = "WEBP";'))).toEqual([]);
     expect(checkFileSignature('favicon.svg', text('<svg xmlns="http://www.w3.org/2000/svg"></svg>'))).toEqual([]);
+  });
+
+  it('refuses raw client files (terrain, objects, models, tables, CASC data) by extension and by content (G13)', () => {
+    const client = ['maps/x.adt', 'maps/x.wdt', 'maps/x.wdl', 'models/x.wmo', 'models/x.skin', 'models/x.anim', 'data/x.db2', 'data/x.dbc'];
+    expect(rulesOf(checkForbiddenPaths(client))).toEqual(client.map((path) => `file-type ${path}`));
+    const adt = text('REVM\u0004\u0000\u0000\u0000\u0012\u0000\u0000\u0000');
+    const signatures: readonly (readonly [string, Uint8Array])[] = [
+      ['nav/0/28_36.bin', adt],
+      ['assets/model.bin', text('MD21\u0000\u0000')],
+      ['assets/model2.bin', text('MD20\u0000\u0000')],
+      ['data/table.json', text('WDC5\u0000\u0000')],
+      ['assets/blob', text('BLTE\u0000\u0000\u0000\u0000')],
+    ];
+    for (const [path, bytes] of signatures) {
+      const found = checkFileSignature(path, bytes);
+      expect(rulesOf(found)).toEqual([`file-type ${path}`]);
+      expect(found[0]?.message).toMatch(/Blizzard client files \(.+ content\) must not ship, whatever the name/);
+    }
+    // The path rule reports a client file under its own extension; the signature rule does not repeat it.
+    expect(checkFileSignature('maps/x.adt', adt)).toEqual([]);
+    // Our own navigation blocks and map files are not client files.
+    expect(checkFileSignature('nav/0/28_36.bin', text('FRN3\u0003\u0000'))).toEqual([]);
+    expect(checkFileSignature('nav/0/map.bin', text('FRNM\u0001\u0000'))).toEqual([]);
   });
 
   it('finds user-profile paths in raw, escaped and Vite (forward-slash) spellings', () => {
@@ -379,7 +410,154 @@ describe('whole audit', () => {
   });
 });
 
+describe('map folders: the one image allowlist (D-032, D-033)', () => {
+  const sha = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+  const webp = new Uint8Array([...new TextEncoder().encode('RIFF'), 4, 0, 0, 0, ...new TextEncoder().encode('WEBPVP8 ')]);
+  const art: MapFolder = { name: 'art', dir: 'maps/art', source: 'public/maps/art', reason: 'D-033', totalGzipBudgetBytes: 12_000_000, baselineTolerance: 0.1, baselines: {} };
+  const terrain: MapFolder = { ...art, name: 'terrain', dir: 'maps/terrain', source: 'public/maps/terrain', totalGzipBudgetBytes: 600_000 };
+  const artFiles = (overrides: Readonly<Record<string, string | Uint8Array>> = {}, manifestFiles?: readonly unknown[]): Record<string, string | Uint8Array> => ({
+    'maps/art/NOTICE.md': 'Blizzard Entertainment owns the artwork',
+    'maps/art/1411.webp': webp,
+    'maps/art/manifest.json': JSON.stringify({ files: manifestFiles ?? [{ path: '1411.webp', sha256: sha(webp) }] }),
+    ...overrides,
+  });
+  const list = (): readonly string[] => {
+    const out: string[] = [];
+    const walk = (dir: string, prefix: string): void => {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name);
+        if (statSync(p).isDirectory()) walk(p, `${prefix}${name}/`);
+        else out.push(`${prefix}${name}`);
+      }
+    };
+    walk(distDir, '');
+    return out.sort();
+  };
+
+  it('allows an image a folder manifest lists with its SHA-256, next to its NOTICE', () => {
+    writeFiles(distDir, artFiles());
+    const result = checkMapFolders(distDir, list(), [art, terrain], repoRoot);
+    expect(result.violations).toEqual([]);
+    expect([...result.allowedImages]).toEqual(['maps/art/1411.webp']);
+    expect(checkImages(list(), requirements.allowedImages, result.allowedImages)).toEqual([]);
+    // Without the folder allowlist the same image is refused, as before D-033.
+    expect(rulesOf(checkImages(list(), requirements.allowedImages))).toEqual(['image maps/art/1411.webp']);
+  });
+
+  it('refuses unlisted files, changed bytes, a missing NOTICE or manifest, and listed files that are missing', () => {
+    writeFiles(distDir, artFiles({ 'maps/art/1412.webp': webp, 'maps/art/extra.json': '{}' }));
+    expect(rulesOf(checkMapFolders(distDir, list(), [art], repoRoot).violations)).toEqual(['map-folder maps/art/1412.webp', 'map-folder maps/art/extra.json']);
+    rmSync(distDir, { recursive: true });
+    writeFiles(distDir, artFiles({}, [{ path: '1411.webp', sha256: sha('something else') }]));
+    const changed = checkMapFolders(distDir, list(), [art], repoRoot);
+    expect(rulesOf(changed.violations)).toEqual(['map-folder maps/art/1411.webp']);
+    expect(changed.allowedImages.size).toBe(0);
+    rmSync(join(distDir, 'maps', 'art', 'NOTICE.md'));
+    expect(rulesOf(checkMapFolders(distDir, list(), [art], repoRoot).violations)).toContain('map-folder maps/art/NOTICE.md');
+    rmSync(distDir, { recursive: true });
+    writeFiles(distDir, artFiles({}, [{ path: '1411.webp', sha256: sha(webp) }, { path: 'gone.webp', sha256: sha('x') }]));
+    expect(rulesOf(checkMapFolders(distDir, list(), [art], repoRoot).violations)).toEqual(['map-folder maps/art/gone.webp']);
+    rmSync(join(distDir, 'maps', 'art', 'manifest.json'));
+    expect(rulesOf(checkMapFolders(distDir, list(), [art], repoRoot).violations)).toEqual(['map-folder maps/art/manifest.json', 'map-folder maps/art/1411.webp']);
+    writeFiles(distDir, { 'maps/art/manifest.json': JSON.stringify({ files: [{ path: '../x.webp', sha256: sha(webp) }] }) });
+    expect(checkMapFolders(distDir, list(), [art], repoRoot).violations[0]?.message).toMatch(/invalid files\[\] entry/);
+  });
+
+  it('requires the folder once the repository has its manifest, and refuses images of an unconfigured folder', () => {
+    writeFiles(repoRoot, { 'public/maps/terrain/manifest.json': '{}' });
+    writeFiles(distDir, artFiles({ 'maps/other/1411.webp': webp }));
+    const result = checkMapFolders(distDir, list(), [art, terrain], repoRoot);
+    expect(rulesOf(result.violations)).toEqual(['map-folder maps/terrain']);
+    expect(rulesOf(checkImages(list(), requirements.allowedImages, result.allowedImages))).toEqual(['image maps/other/1411.webp']);
+  });
+
+  it('gates a folder by per-file baselines and its total, requiring baselines once active', () => {
+    writeFiles(distDir, artFiles());
+    const files = list();
+    const where = { prefix: 'maps/art/', section: 'mapFolders "art"', rule: 'art-budget', why: 'D-034 item 4' };
+    const baselines = Object.fromEntries(files.map((f) => [f, gzipSize(readFileSync(join(distDir, f)))]));
+    expect(checkGzipBudget(distDir, files, where, { ...art, baselines }, true).violations).toEqual([]);
+    expect(rulesOf(checkGzipBudget(distDir, files, where, { ...art, baselines: {} }, true).violations)).toEqual(['art-budget maps/art/1411.webp', 'art-budget maps/art/NOTICE.md', 'art-budget maps/art/manifest.json']);
+    expect(checkGzipBudget(distDir, files, where, { ...art, baselines: {} }, false).violations).toEqual([]);
+    const over = checkGzipBudget(distDir, files, where, { ...art, totalGzipBudgetBytes: 10, baselines: { ...baselines, 'maps/art/1411.webp': 1 } }, true);
+    expect(rulesOf(over.violations)).toEqual(['art-budget maps/art/1411.webp', 'art-budget (build)']);
+  });
+
+  it('passes a whole build with a committed art folder and reports its budget', () => {
+    writeFiles(repoRoot, { 'public/maps/art/manifest.json': '{}' });
+    writeFiles(distDir, { ...cleanDist(), ...artFiles() });
+    const baselines = Object.fromEntries(Object.keys(artFiles()).map((f) => [f, gzipSize(readFileSync(join(distDir, f)))]));
+    const result = auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [{ ...art, baselines }] } });
+    expect(result.violations).toEqual([]);
+    expect(formatAuditReport(result)).toMatch(/maps\/art\/ \(art budget 12\.00 MB gzip\): 3 files/);
+    const unrecorded = auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [art] } });
+    expect(new Set(unrecorded.violations.map((v) => v.rule))).toEqual(new Set(['art-budget']));
+  });
+});
+
+describe('nav budget (D-030)', () => {
+  const nav: NavBudget = {
+    dir: 'nav',
+    activatedBy: 'public/nav/manifest.json',
+    required: ['nav/manifest.json', 'nav/NOTICE.md'],
+    totalGzipBudgetBytes: 7_000_000,
+    targetGzipBytes: { min: 5_000_000, max: 6_000_000 },
+    perFileGzipCapBytes: 300_000,
+    baselineTolerance: 0.1,
+    mapBaselines: { '0': 1_000, '1': 1_000 },
+  };
+  /** Incompressible, deterministic bytes (a SHA-256 chain), so gzip sizes are predictable. */
+  const random = (n: number, seed: number): Uint8Array => {
+    const parts: Buffer[] = [];
+    let block = createHash('sha256').update(String(seed)).digest();
+    for (let size = 0; size < n; size += block.length) {
+      parts.push(block);
+      block = createHash('sha256').update(block).digest();
+    }
+    return new Uint8Array(Buffer.concat(parts).subarray(0, n));
+  };
+
+  it('sums per map folder, caps every file and the total, and needs baselines and notices once active', () => {
+    writeFiles(distDir, { 'nav/0/28_36.bin': random(400, 1), 'nav/1/28_36.bin': random(400, 2), 'nav/1/map.bin': random(300, 3) });
+    const files = ['nav/0/28_36.bin', 'nav/1/28_36.bin', 'nav/1/map.bin'];
+    const inactive = checkNavBudget(distDir, files, nav, repoRoot);
+    expect(inactive.violations).toEqual([]);
+    expect(inactive.report.maps.map((m) => [m.mapId, m.files])).toEqual([['0', 1], ['1', 2]]);
+    expect(inactive.report.totalGzipBytes).toBe(files.map((f) => gzipSize(readFileSync(join(distDir, f)))).reduce((a, b) => a + b, 0));
+    const tight = checkNavBudget(distDir, files, { ...nav, perFileGzipCapBytes: 350, mapBaselines: { '0': 1_000, '1': 500 }, totalGzipBudgetBytes: 1_000 }, repoRoot);
+    expect(rulesOf(tight.violations)).toEqual(['nav-budget nav/0/28_36.bin', 'nav-budget nav/1/28_36.bin', 'nav-budget nav/1', 'nav-budget (build)']);
+    writeFiles(repoRoot, { 'public/nav/manifest.json': '{}' });
+    expect(rulesOf(checkNavBudget(distDir, files, { ...nav, mapBaselines: { '0': 1_000 } }, repoRoot).violations)).toEqual(['nav-budget nav/manifest.json', 'nav-budget nav/NOTICE.md', 'nav-budget nav/1']);
+  });
+});
+
 describe('dist-requirements.json', () => {
+  it('the committed file configures the art, terrain and nav budgets, and records a baseline for every committed map-folder file', () => {
+    const parsed = parseDistRequirements(JSON.parse(readFileSync(join(REPO_ROOT, 'tools', 'build', 'dist-requirements.json'), 'utf8')) as unknown);
+    expect(parsed.mapFolders.map((f) => [f.name, f.dir, f.source, f.totalGzipBudgetBytes])).toEqual([
+      ['art', 'maps/art', 'public/maps/art', 12_000_000],
+      ['terrain', 'maps/terrain', 'public/maps/terrain', 600_000],
+    ]);
+    expect(parsed.nav).toMatchObject({ dir: 'nav', totalGzipBudgetBytes: 7_000_000, perFileGzipCapBytes: 300_000, targetGzipBytes: { min: 5_000_000, max: 6_000_000 } });
+    expect(Object.keys(parsed.nav?.mapBaselines ?? {})).toEqual(['0', '1']);
+    for (const folder of parsed.mapFolders) {
+      const source = join(REPO_ROOT, folder.source);
+      if (!existsSync(source)) continue;
+      const committed: string[] = [];
+      const walk = (dir: string, prefix: string): void => {
+        for (const name of readdirSync(dir)) {
+          const p = join(dir, name);
+          if (statSync(p).isDirectory()) walk(p, `${prefix}${name}/`);
+          else committed.push(`${folder.dir}/${prefix}${name}`);
+        }
+      };
+      walk(source, '');
+      expect(Object.keys(folder.baselines).sort()).toEqual(committed.sort());
+      const total = committed.reduce((sum, path) => sum + gzipSize(readFileSync(join(source, path.slice(folder.dir.length + 1)))), 0);
+      expect(total).toBeLessThanOrEqual(folder.totalGzipBudgetBytes);
+    }
+  });
+
   it('the committed file is valid and lists the Milestone 1 and Milestone 2 requirements', () => {
     const parsed = parseDistRequirements(JSON.parse(readFileSync(join(REPO_ROOT, 'tools', 'build', 'dist-requirements.json'), 'utf8')) as unknown);
     expect(parsed.required).toEqual(['index.html', 'LICENSE.txt', 'third-party-notices.txt']);

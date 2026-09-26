@@ -112,11 +112,73 @@
     },
     "syncMeasuresKept": "at most 500 frl:map:sync measures (MAX_SYNC_MEASURES; M3 review PERF-8)"
   },
+  "milestone4Perf2": {
+    "$comment": [
+      "Milestone 4 re-measure of the M3 review's known issue PERF-2 (docs/reviews/review-m3-map.md): the step-marker layer's cache key included the focus, so a selection change rebuilt all 10,000 steps, and a route edit did too. The fix (src/map/layers.ts): route-steps no longer sees the focus (every marker 'normal'; the selection layer draws the focused steps' halos and a strong copy of their markers, the active step's first under its cap), and it is built from caches: a candidate per step input (with its occurrence and leg flag), each candidate's point interned as a small integer so stacks are found with a typed-array count, and merged stacks by their members. The controller asks the route input builder whether a focused step is drawn instead of building a set of every drawn id (src/app/map-controller.ts, map-model.ts).",
+      "node: tests/bench/map-edit.bench.ts (M4 review CR-07), `pnpm exec tsx tests/bench/map-edit.bench.ts`: the real map controller and map/layers over the committed dataset (loadWorkspace through tests/support/fake-fetch.ts), the fake adapter of src/app/map-test-helpers.ts, tsx on Node v22.13.1, a foreground process, 21 runs per case after 3 warm-ups, min / median / p90. The 10,000-step route: the sample's 55 steps repeated, each repeat shifted by up to 1.5 zone percent; the view at zone zoom (-2) over Durotar, the cap biting. 'storeOnly' is the same store change on a store without a map, so the map's share is total - storeOnly. Two runs agreed within 0.2 ms; the rows are the second. With `--check docs/measurements/map-m3.json` the script compares its route medians with 'route10000' below and exits with 1 on a regression over 25% (ARCHITECTURE §14). The first Milestone 4 figures, from the engineer's uncommitted script with the same scenarios, were 2.29 / 6.26 / 3.61 / 2.24 ms median (selection change, move, insert note, edit note).",
+      "browser ('browserRoute10000'): re-measured as the M3 'browser' rows were, with the real Leaflet adapter (src/map/leaflet) under the real controller and the committed dataset, driven from the page with no React in a 1280x800 host, on the Vite dev server (sources as modules, not minified), in the Claude desktop app's built-in browser (Chrome 152) with its pane hidden, so requestAnimationFrame never ran: after each action the canvas renderer was redrawn once by calling its _redraw() ('redrawForced'); 'handler' is the synchronous time of the action (store change, the controller's sync, the adapter's setLayer), 'handlerPlusRedraw' the two together, 'sync' and 'setLayer' the frl:map:sync and frl:map:set-layer User Timing measures (medians). 21 runs per case after 3 warm-ups, each in its own task; two runs, [first, second]. The machine was calm: the CPU probe (2e7 sqrt loop) took 39-40 ms in the page and 38-40 ms in Node. A production build was not measured: its bundled modules cannot be driven from the page this way.",
+      "Scenarios: selection change = store.select of a placed step then controller.setActiveStep with it, as the shell does (the map follows the step, so a pan to another ranking cell can still re-rank the step markers: that is a view change, not the selection); move = moveSelected by one (alternately down and up) of a placed, selected and active step, the middle of the placed steps; insert note at spread positions; edit a step's note. Note inserts and edits set no layer, so their forced redraw is a full redraw that the page itself would not do."
+    ],
+    "date": "2026-09-26",
+    "route10000": {
+      "selectionChange": { "totalMs": { "min": 1.53, "median": 1.84, "p90": 2.33 }, "storeOnlyMs": { "median": 0.02 }, "beforeMs": { "median": 12.17, "p90": 14.85 } },
+      "moveStep": { "totalMs": { "min": 4.8, "median": 5.01, "p90": 5.62 }, "storeOnlyMs": { "median": 2.03 }, "mapShareMedianMs": 2.98, "beforeMs": { "median": 14.83, "p90": 17.75 }, "layersSet": ["route-line", "route-steps", "selection"] },
+      "insertNote": { "totalMs": { "min": 3.15, "median": 3.35, "p90": 4.44 }, "storeOnlyMs": { "median": 2.05 } },
+      "editNote": { "totalMs": { "min": 2.15, "median": 2.25, "p90": 2.55 }, "storeOnlyMs": { "median": 1.78 } },
+      "attachMs": 28.83,
+      "parts": {
+        "$comment": "one 10,000-step move, timed piece by piece (median of 55): route-steps went from 7.4 ms (focus-free but uncached) to 3.8 ms (candidate and stack caches) to 1.4 ms (interned points instead of a map keyed by coordinates)",
+        "routeInputBuilderMs": 0.29,
+        "drawnFilterMs": 0.11,
+        "routeMapSummaryMs": 0.16,
+        "routeLineMs": 1.13,
+        "routeStepsMs": 1.43,
+        "selectionMs": 0.13
+      }
+    },
+    "sampleRoute55": {
+      "selectionChange": { "totalMs": { "min": 1.1, "median": 1.34, "p90": 2.83 } },
+      "moveStep": { "totalMs": { "min": 0.08, "median": 0.09, "p90": 0.13 } },
+      "insertNote": { "totalMs": { "median": 0.06 } },
+      "editNote": { "totalMs": { "median": 0.04 } }
+    },
+    "browserRoute10000": {
+      "paths": 1230,
+      "zoom": -2,
+      "cpuProbeMs": [39, 40],
+      "moveStep": {
+        "handlerMs": { "min": [4.4, 4.2], "median": [5.9, 5.5], "p90": [7.9, 6.4], "max": [8.2, 6.6] },
+        "handlerPlusRedrawMs": { "min": [4.8, 4.7], "median": [6.8, 6.0], "p90": [8.7, 7.2], "max": [9.1, 7.3] },
+        "redrawForcedMs": { "median": [0.8, 0.7] },
+        "syncMs": { "median": [3.8, 3.7] },
+        "setLayerMs": { "median": [0.2, 0.2] },
+        "layersSet": ["route-line", "route-steps", "selection"],
+        "budgetMs": 8
+      },
+      "selectionChange": {
+        "handlerMs": { "min": [1.9, 1.5], "median": [4.7, 3.5], "p90": [7.3, 6.2], "max": [10.0, 6.6] },
+        "handlerPlusRedrawMs": { "min": [3.3, 2.7], "median": [5.9, 5.6], "p90": [9.2, 7.9], "max": [12.3, 8.3] },
+        "redrawForcedMs": { "median": [1.8, 1.7] },
+        "syncMs": { "median": [2.9, 2.6] },
+        "setLayerMs": { "median": [0.5, 0.3] },
+        "layersSet": ["available-quests", "objectives", "selection", "turn-ins"]
+      },
+      "insertNote": {
+        "handlerMs": { "min": [2.6, 2.4], "median": [3.8, 3.4], "p90": [5.3, 4.2], "max": [8.1, 6.5] },
+        "layersSet": []
+      },
+      "editNote": {
+        "handlerMs": { "min": [1.6, 1.6], "median": [2.2, 2.3], "p90": [3.1, 3.1], "max": [3.1, 3.4] },
+        "layersSet": []
+      }
+    },
+    "verdict": "Much faster, but not shown to be within budget. Node (the committed bench): a 10,000-step move 5.0 ms median (5.6 ms p90), was 14.8 ms; a selection change 1.8 ms (2.3 ms p90), was 12.2 ms; the selection change no longer sends the step-marker layer. Browser, unthrottled, with the real adapter: a move applies in 5.5-5.9 ms median (p90 6.4-7.9 ms), 6.0-6.8 ms median with its canvas redraw (p90 7.2-8.7 ms, max 9.1 ms); a selection change 3.5-4.7 ms (5.6-5.9 ms with the redraw, p90 7.9-9.2 ms). So an unthrottled median edit fits the 8 ms budget and its slowest tenth does not always; under the 4x CPU throttle ARCHITECTURE §14 prescribes for the browser, the same work would take roughly four times as long. PERF-2 is therefore not closed on these figures: the known issue stays open (with them) until the throttled Playwright run of Milestone 9."
+  },
   "budgetMs": { "routeEditApplied": 8, "moveendRedrawAtCap": 16 },
   "verdict": [
     "Sample route: well within both budgets (a route edit 0.3-1 ms, a selection change about 3 ms, a pan 4-5 ms with its redraw).",
     "10,000 steps, note edits: within budget (inserting or editing a note costs 2.6-4 ms, most of it the store's own dispatch; no route layer is rebuilt).",
-    "10,000 steps, moving a placed step or changing the selection: over the 8 ms budget (13-17 ms in Node, 15-20 ms in the browser when the machine was calmer). The app's own share is about 1 ms (route input 0.5 ms, route summary 0.2 ms); most of the rest is map/layers routeSteps rebuilding all 10,000 steps on any route or focus change (reported to the map core). One selection change is now one sync, where it was two.",
+    "10,000 steps, moving a placed step or changing the selection: over the 8 ms budget at Milestone 3 (13-17 ms in Node, 15-20 ms in the browser when the machine was calmer). The app's own share is about 1 ms (route input 0.5 ms, route summary 0.2 ms); most of the rest is map/layers routeSteps rebuilding all 10,000 steps on any route or focus change (reported to the map core). One selection change is now one sync, where it was two. Milestone 4 (PERF-2) cut a move to 5.0 ms and a selection change to 1.8 ms median in Node, and a move to 6.0-6.8 ms median with its redraw in the unthrottled browser (p90 up to 8.7 ms): see 'milestone4Perf2'. Not closed until the 4x-throttled run of Milestone 9.",
     "Pans: within the 16 ms budget at 1,348 paths (4-5 ms with the redraw); a surface at the full 2,500-path cap is measured in MAPS §7.2 (standalone harness, 3.3-3.5 ms median update-paths)."
   ],
   "beforeReview": {

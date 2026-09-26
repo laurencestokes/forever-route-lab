@@ -2,8 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { type FakeServer, fakeServer, fixtureSite, inFlight, jsonOf, nodeSha256 } from '../../tests/support/fake-fetch';
 import { DatasetLoadError } from '../infra/data';
 import { GeometryLoadError } from '../infra/maps';
+import { sequentialIdSource } from '../domain';
+import { manualClock } from './clock';
+import { renameRoute } from './commands';
 import { datasetViewInputOf, staticDatasetSource } from './dataset-source';
+import { createProjectSession } from './persistence';
+import { broadcastChanges, webLocks } from '../infra/persistence';
+import { createMemoryProjectStorage, fakeChannelHub, fakeLockManager, manualAutosaveHost } from './persistence-test-helpers';
 import { createPlaceholderWorkspace } from './placeholder-project';
+import { createEditorStore } from './store';
 import { SAMPLE_PROJECT_NAME, SAMPLE_ROUTE_NAME, SAMPLE_ROUTE_NOTICE } from './sample-route';
 import { describeLoadFailure, FrameMismatchError, loadWorkspace, pairingProblems, type WorkspaceProgress } from './workspace';
 
@@ -150,6 +157,62 @@ describe('loadWorkspace', () => {
     controller.abort(reason);
     await expect(start(server, undefined, { signal: controller.signal })).rejects.toBe(reason);
     expect(server.requests).toEqual([]);
+  });
+});
+
+describe('loadWorkspace with project storage (ARCHITECTURE §12.3)', () => {
+  it('opens the sample at the first start, saved, and the last open project at the next', async () => {
+    const storage = createMemoryProjectStorage();
+    const clock = manualClock(NOW);
+    const opened = () => Promise.resolve({ storage, unavailable: null });
+    const first = await start(fakeServer(SITE), undefined, { storage: opened(), clock, ids: sequentialIdSource(900) });
+    expect(first.projectName).toBe(SAMPLE_PROJECT_NAME);
+    expect(first.routeNotice).toBe(SAMPLE_ROUTE_NOTICE);
+    expect(first.persistence?.startup.origin).toBe('sample');
+    expect((await storage.listProjects()).map((row) => [row.name, row.sample])).toEqual([[SAMPLE_PROJECT_NAME, true]]);
+
+    // The user renames the route and starts a second project, which is open when the page closes.
+    const persistence = first.persistence;
+    if (persistence === null) throw new Error('storage was given');
+    const store = createEditorStore({ project: first.project, ids: sequentialIdSource(2000), clock });
+    const host = manualAutosaveHost();
+    const session = createProjectSession({ store, data: first.data, clock, ids: sequentialIdSource(3000), host: host.host, ...persistence });
+    store.dispatch(renameRoute('Renamed sample'));
+    await session.flush();
+    await session.newProject('Mine');
+    session.dispose();
+
+    const second = await start(fakeServer(SITE), undefined, { storage: opened(), clock });
+    expect(second.persistence?.startup.origin).toBe('restored');
+    expect(second.projectName).toBe('Mine');
+    expect(second.routeNotice).toBeNull();
+    expect(second.project.route.steps).toEqual([]);
+    expect(second.project.dataRevision).toBe(second.data.identity.dataRevision);
+    expect((await storage.listProjects()).length).toBe(2);
+  });
+
+  it('takes the restored project’s lock, and hands the links to other tabs to the session (CR-02)', async () => {
+    const storage = createMemoryProjectStorage();
+    const manager = fakeLockManager();
+    const hub = fakeChannelHub();
+    const opened = () => Promise.resolve({ storage, unavailable: null, locks: webLocks(manager), channel: broadcastChanges(hub.connect()) });
+    const first = await start(fakeServer(SITE), undefined, { storage: opened(), clock: manualClock(NOW) });
+    expect(first.persistence?.startup.openElsewhere).toBe(false);
+    expect(first.persistence?.locks).not.toBeNull();
+    expect(first.persistence?.channel).not.toBeNull();
+    // A second page restores the same project and finds it open in the first.
+    const second = await start(fakeServer(SITE), undefined, { storage: opened(), clock: manualClock(NOW) });
+    expect(second.project.id).toBe(first.project.id);
+    expect(second.persistence?.startup.openElsewhere).toBe(true);
+    first.persistence?.startup.lock?.release();
+  });
+
+  it('passes on why browser storage is unavailable', async () => {
+    const workspace = await start(fakeServer(SITE), undefined, {
+      storage: Promise.resolve({ storage: createMemoryProjectStorage(), unavailable: 'This browser offers no IndexedDB here' }),
+    });
+    expect(workspace.persistence?.unavailable).toBe('This browser offers no IndexedDB here');
+    expect(workspace.projectName).toBe(SAMPLE_PROJECT_NAME);
   });
 });
 

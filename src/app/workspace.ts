@@ -1,4 +1,4 @@
-import type { ProjectV1 } from '../domain';
+import type { IdSource, ProjectV1 } from '../domain';
 import {
   createDatasetView,
   type DataManifest,
@@ -13,15 +13,22 @@ import {
 import { defaultSha256, type Sha256Digest } from '../infra/hash';
 import type { FetchLike } from '../infra/http';
 import { describeGeometry, GeometryLoadError, loadGeometry, type LoadedGeometry } from '../infra/maps';
+import type { OpenedProjectStorage, ProjectLocks, StorageChangeChannel } from '../infra/persistence';
+import { type Clock, fixedClock } from './clock';
 import { type DatasetSource, datasetViewInputOf, preparedDatasetSource } from './dataset-source';
+import { randomIdSource } from './ids';
+import { restoreStartupProject, type StartupProject } from './persistence';
+import { createProjectLibrary, type ProjectLibrary } from './project-library';
 import { createSampleProject, SAMPLE_PROJECT_NAME, SAMPLE_ROUTE_NOTICE } from './sample-route';
 
 /**
  * Startup (ARCHITECTURE §5.2, §7.3, §14): the dataset and the map geometry load in parallel under
  * one abort signal (a failure of either cancels the other's requests), the two are checked to come
  * from one QuestieDB pin, frame build and `conversion.json`, the dataset is prepared once against
- * the geometry (spawns become world points), and the sample project is built from it. Until
- * storage exists (Milestone 4) every start opens the sample.
+ * the geometry (spawns become world points). Then the project opens: with project storage, the
+ * one the last visit had open (ARCHITECTURE §12.3; `restoreStartupProject`, which also takes its
+ * lock, or finds another tab has it open), and the sample only when storage holds no project at
+ * all; without storage (tests), the sample.
  *
  * Budget (§14): dataset fetch to ready within 1 s, with no task over 100 ms; `report` carries the
  * measured phases (docs/measurements/data-m2.json, `loader`).
@@ -53,6 +60,15 @@ export interface WorkspaceLoadOptions {
   readonly signal?: AbortSignal | undefined;
   /** Accept the test fixture slice as the dataset (tests only; see `loadDataset`). */
   readonly allowSlice?: boolean | undefined;
+  /**
+   * Project storage, opening alongside the data (`openBrowserProjectStorage`). Omitted: no storage;
+   * the sample opens and nothing is saved.
+   */
+  readonly storage?: Promise<OpenedProjectStorage> | undefined;
+  /** Stamps saves and backups; defaults to a clock fixed at `nowIso`. */
+  readonly clock?: Clock | undefined;
+  /** Ids for new projects and backups; defaults to random ids. */
+  readonly ids?: IdSource | undefined;
 }
 
 export interface WorkspaceReport {
@@ -69,6 +85,8 @@ export interface WorkspaceReport {
   /** The first `DatasetView` (the sample character's). */
   readonly viewMs: number;
   readonly sampleMs: number;
+  /** Reading and opening the stored project (0 without storage). */
+  readonly restoreMs: number;
   /** Start to ready. */
   readonly totalMs: number;
   readonly spawnStats: SpawnStats;
@@ -87,6 +105,23 @@ export interface Workspace {
   /** The verified `data/NOTICE.md`. */
   readonly dataNotice: string;
   readonly report: WorkspaceReport;
+  /** Project storage and what the start opened from it; null without storage. */
+  readonly persistence: WorkspacePersistence | null;
+}
+
+/** What `createProjectSession` needs from the start. */
+export interface WorkspacePersistence {
+  readonly library: ProjectLibrary;
+  readonly startup: StartupProject;
+  /** Why browser storage is unavailable (projects then live in memory); null when it is used. */
+  readonly unavailable: string | null;
+  /** Builds the sample project again (after the last stored project is deleted). */
+  readonly createSample: () => ProjectV1;
+  readonly sampleName: string;
+  /** The project locks shared with other tabs; null without (memory storage, or no Web Locks). */
+  readonly locks: ProjectLocks | null;
+  /** Storage changes other tabs make; null without (memory storage, or no BroadcastChannel). */
+  readonly channel: StorageChangeChannel | null;
 }
 
 /** The load errors, for callers that cannot import infra (ui, ARCHITECTURE §4). */
@@ -144,6 +179,8 @@ export async function loadWorkspace(opts: WorkspaceLoadOptions): Promise<Workspa
     throw error;
   };
   const common = { fetch: opts.fetch, baseUrl: opts.baseUrl, sha256: opts.sha256, signal: controller.signal };
+  // A failed data load must not leave the storage promise's rejection unhandled.
+  opts.storage?.catch(() => undefined);
 
   let geometryMs = 0;
   let geometryReloaded = false;
@@ -190,12 +227,37 @@ export async function loadWorkspace(opts: WorkspaceLoadOptions): Promise<Workspa
 
   // The sample character is fixed (Horde Orc Warrior); the sample is built from its view, and the
   // project's own view (memoised, the one the app shows first) is made once the project exists.
-  const sampleStart = now();
-  const project = createSampleProject({
-    dataset: createDatasetView(prepared, { faction: 'Horde', class: 'WARRIOR', customQuests: [], questOverrides: {} }),
-    nowIso: opts.nowIso,
-  });
-  const sampleMs = now() - sampleStart;
+  const clock = opts.clock ?? fixedClock(opts.nowIso);
+  let sampleMs = 0;
+  const createSample = (): ProjectV1 => {
+    const sampleStart = now();
+    const sample = createSampleProject({
+      dataset: createDatasetView(prepared, { faction: 'Horde', class: 'WARRIOR', customQuests: [], questOverrides: {} }),
+      nowIso: clock.nowIso(),
+    });
+    sampleMs = now() - sampleStart;
+    return sample;
+  };
+
+  const restoreStart = now();
+  let project: ProjectV1;
+  let projectName = SAMPLE_PROJECT_NAME;
+  let sample = true;
+  let persistence: WorkspacePersistence | null = null;
+  if (opts.storage === undefined) {
+    project = createSample();
+  } else {
+    const opened = await opts.storage;
+    const ids = opts.ids ?? randomIdSource();
+    const library = createProjectLibrary({ storage: opened.storage, clock, ids });
+    const locks = opened.locks ?? null;
+    const startup = await restoreStartupProject({ library, data, clock, ids, createSample, sampleName: SAMPLE_PROJECT_NAME, locks });
+    project = startup.project;
+    projectName = startup.handle.name;
+    sample = startup.handle.sample;
+    persistence = { library, startup, unavailable: opened.unavailable, createSample, sampleName: SAMPLE_PROJECT_NAME, locks, channel: opened.channel ?? null };
+  }
+  const restoreMs = now() - restoreStart - sampleMs;
   const viewStart = now();
   data.view(datasetViewInputOf(project));
   const viewMs = now() - viewStart;
@@ -203,8 +265,8 @@ export async function loadWorkspace(opts: WorkspaceLoadOptions): Promise<Workspa
   report({ stage: 'ready', filesDone: last.filesDone, filesTotal: last.filesTotal, bytesDone: last.bytesDone, bytesTotal: last.bytesTotal });
   return {
     project,
-    projectName: SAMPLE_PROJECT_NAME,
-    routeNotice: SAMPLE_ROUTE_NOTICE,
+    projectName,
+    routeNotice: sample ? SAMPLE_ROUTE_NOTICE : null,
     data,
     geometry,
     geometrySummary: describeGeometry(geometry),
@@ -218,9 +280,11 @@ export async function loadWorkspace(opts: WorkspaceLoadOptions): Promise<Workspa
       prepareMs,
       viewMs,
       sampleMs,
+      restoreMs,
       totalMs: now() - start,
       spawnStats: prepared.spawnStats,
     },
+    persistence,
   };
 }
 

@@ -5,6 +5,7 @@ import { useEditor } from '../../app/react';
 import { isLayerId, LAYER_IDS, LAYER_LABELS, parseSurfaceId, type LayerId, type MapAdapterFactory, type SurfaceId, type SurfaceInfo, type UnplacedReason } from '../../map/adapter';
 import { type ActiveRow, type RouteView } from '../app-model';
 import { formatInteger, plural } from '../kit';
+import { isModalDialogOpen } from '../lib/modal';
 import { MapFrame, MapHoverText, type MapChoiceProps, type MapCommand, type MapEngineState, type MapLayerRow } from '../shell/MapFrame';
 import type { MapGlyphKind } from '../shell/MapLegend';
 import type { Announce } from './LiveAnnouncer';
@@ -68,6 +69,9 @@ export const MAP_INSTRUCTIONS =
   'The map is supplementary: the route list, the Available tab, Details and the top bar’s Jump to zone do everything it does.';
 
 export const NO_MAP_ENGINE = 'The map engine or its geometry is not available in this view.';
+
+/** The status line while a pick is in progress ("Pick on map" in Details, docs/UI.md §14). */
+export const pickText = (label: string): string => `Picking ${label}: click the map to place it. Escape cancels.`;
 export const SCHEMATIC_NOTICE = 'Schematic map: zone frames, not terrain';
 export const SCHEMATIC_NOTICE_SHORT = 'Schematic';
 export const LOCAL_ART_NOTICE = 'Local map art (this machine only), over zone frames';
@@ -187,6 +191,7 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
     () => controller?.getStatus() ?? null,
     () => controller?.getStatus() ?? null,
   );
+  const picking = status?.pick?.label ?? null;
   const storedSurface = useEditor(store, selectSurface);
   const zoomBand = useEditor(store, selectZoomBand);
   const layersOpen = useEditor(store, selectLayersOpen);
@@ -296,8 +301,21 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
           else if (result.kind === 'no-surface') announce(`${noSurfaceText(activeNumber, result.mapId)}.`);
         },
       },
+      ...(picking === null
+        ? []
+        : [
+            {
+              id: 'cancel-pick',
+              label: 'Cancel pick',
+              title: `Stop picking ${picking} (Escape)`,
+              unavailable: null,
+              onRun: () => {
+                if (controller?.cancelPick() === true) announce('Pick on map cancelled.');
+              },
+            },
+          ]),
     ],
-    [controller, canFit, focusReason, activeStepId, activeNumber, surfaces, announce],
+    [controller, canFit, focusReason, activeStepId, activeNumber, surfaces, announce, picking],
   );
 
   const layerRows = useMemo(() => {
@@ -321,14 +339,33 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
     return { kind: 'ready' };
   }, [map, controller, engine, startFailure, retry]);
 
+  // A pick in progress: the next click is a point. Escape anywhere cancels it (before any other
+  // Escape handler: the route list's clear-selection, a search field's clear), except while a
+  // modal dialog is open: the map is inert then, and Escape closes the dialog (UI-F8). The pick
+  // waits behind it.
+  useEffect(() => {
+    if (picking === null || controller === null) return undefined;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape' || isModalDialogOpen() || !controller.cancelPick()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      announce('Pick on map cancelled.');
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [picking, controller, announce]);
+
   const routeLine = status === null ? null : routeStatusText(status.route, surfaceName);
   const statusLines = useMemo(() => {
     const lines: string[] = [];
+    if (picking !== null) lines.push(pickText(picking));
     if (routeLine !== null) lines.push(routeLine);
     if (zoomBand === 'continent') lines.push('Zoomed out: quest points shown as zone counts');
     if (unreachable !== null) lines.push(unreachable);
     return lines;
-  }, [routeLine, zoomBand, unreachable]);
+  }, [picking, routeLine, zoomBand, unreachable]);
 
   const hover = useMemo(() => (controller === null ? null : <PointerLine controller={controller} />), [controller]);
 

@@ -1,0 +1,113 @@
+-- forever-route-lab RXP parser fixture 04: edge cases. Self-authored (GPL-3.0-or-later).
+-- THIS FILE MUST KEEP ITS EXACT BYTES: CRLF line endings, a tab and trailing spaces (E03) and
+-- no final newline (E35). .gitattributes marks docs/research/rxp-samples/*-crlf.txt -text and
+-- .editorconfig has a matching section, so neither git nor editors normalise it. Edit it only
+-- with a tool that preserves bytes. Tests also build CR-only and mixed-ending variants from
+-- every fixture.
+-- Each case is tagged Enn. The expected RXP behaviour and our parser's diagnostic for each
+-- case are listed in docs/RXP.md section 11. Quest and NPC IDs reuse fixture 01. Coordinates
+-- are placeholders, except Gornek's position: Durotar 42.06,68.33 in E03 and at the end, world form in E09.
+#forever
+#name 10-11 Edge Cases
+#version 1
+#group Forever Route Lab Fixtures
+#name A second #name line is ignored because the first one wins (E01)
+.goto Durotar,50.00,50.00
+-- E02: the command line above sits before the first step. RXP ignores it (header branch).
+
+step
+-- E03: a tab-indented line and trailing spaces; indentation is not significant.
+	.goto Durotar,42.06,68.33   
+    .accept 788 >>Pick up Cutting Teeth
+    .accept 789 >>Pick up Sting of the Scorpid
+-- E04: several accepts in one step; one with no ">>" text (RXP shows "Accept *quest*" and fills
+-- in the quest name at runtime) and one whose own text uses the *quest* placeholder.
+    .accept 792
+    .accept 790 >>Accept *quest* now
+-- E05: a stray line with no prefix. RXP drops it silently. We keep it and warn.
+    Talk to Gornek before you leave
+-- E06: an unknown command. RXP prints an error and drops the line. We keep it opaque and warn.
+    .frobnicate 1,2,3 >>This text survives as a note in RXP even though the command fails
+-- E07: command names are case-sensitive; ".Accept" is unknown.
+    .Accept 788
+step
+-- E08: .goto with no zone. RXP reads 45.20 as the zone and fails. We report an error; no guessing.
+    .goto 45.20,33.10
+-- E09: world-coordinate form UiMapID/instance,y,x (82% of RXP Forever gotos use it), at Gornek.
+    .goto 1411/1,-4186.42,-600.30
+-- E10: pseudo-zones that RXP converts between Classic and later Stormwind/EPL maps.
+    .goto StormwindClassic,60.00,70.00
+-- E11: a localised (German) zone name. RXP only knows English keys and numeric UiMapIDs.
+    .goto Wald von Elwynn,40.00,60.00
+-- E12: a malformed number (two decimal points). RXP cannot read it and drops the element.
+    .goto 1411/1,-4000.00,-600.00.00
+-- E13: an empty argument field. RXP drops empty fields, so this means radius 25 with the 0 flag.
+    .goto 1411,42.00,68.00,,25,0
+-- E14: a trailing comma is also dropped.
+    .goto 1411,42.00,68.00,
+-- E15: spaces around commas are removed before splitting.
+    .goto Durotar , 42.10 , 68.20 , 10
+step
+-- E16: the filter must come after the text. Here RXP reads the filter as "Horde >> text",
+-- i.e. Horde AND "text", which never matches, so the whole line is dropped for everyone.
+    .turnin 788 << Horde >> Turn in Cutting Teeth
+-- E17: correct order.
+    .turnin 789 >>Turn in Sting of the Scorpid << Horde
+-- E18: "--" anywhere starts a comment, even inside ">>" text. RXP shows only "Kill boars".
+    >>Kill boars -- not the scorpids
+-- E19: .link keeps the whole rest of the line as one argument (commas allowed); "\-" is an escaped "-".
+    .link https://example.org/a,b?x=1\-\-2 >>A link whose URL has commas and an escaped double dash
+-- E20: .mob/.target/.unitscan split on ";" not ","; "Name::id" pairs a name with an NPC ID.
+    .mob Scorpid Worker;Vile Familiar
+    .target Gornek::3143
+-- E21: negative quest ID on .turnin means "skip this element if the quest is not in the log".
+    .turnin -792 >>Turn in Vile Familiars if you have it
+-- E22: .complete with objMax and flags (flags odd = text only, does not block the step).
+    .complete 788,1,5,1
+-- E23: a manual objective line; it blocks the step until ticked.
+    +Tick when ready
+-- E24: a star note with an escaped line break.
+    *First line\nSecond line
+-- E25: RXP colour tokens and WoW escape sequences are plain text to the parser.
+    >>|cRXP_WARN_Careful|r |T100000:0|t[Example]
+-- E26: non-ASCII text.
+    >>Übersetzung / 翻译 / перевод
+step
+-- E27: every .xp level expression.
+    .xp 5
+    .xp 5+200
+    .xp 5-300
+    .xp 5.5
+    .xp 5.5,1
+    .xp <5,1
+    .xp <5,1,SkipTarget
+    .maxlevel 9
+    .money <0.5
+    .money >1.25
+-- E28: typo'd and unknown step tags are stored silently by RXP. We keep them and warn.
+    #completwith next
+    #somethingnew 42
+-- E29: function-assignment step tag; RXP looks up a Lua function by name. Opaque for us.
+    #OnComplete = noop
+-- E30: a duplicate step tag; the first value wins.
+    #label First
+    #label Second
+stepwise text that starts with the letters step
+-- E31: the line above starts with "step", so RXP opens a new step there. We warn.
+    >>Inside the accidental step
+    Step << skip
+-- E32: "Step" is not a step line (the prefix test is case-sensitive). RXP drops the line (its
+-- "<< skip" filter fails, and without the filter it would be stray text), so the lines below stay
+-- in the accidental step instead of being disabled. We warn (possible typo of "step").
+    .accept 4402 >>This accept is NOT disabled
+step
+-- E33: a step whose elements are all text-only completes immediately in RXP.
+    >>Just a note
+step
+-- E34: an empty step. RXP hides it (hidewindow) and marks it optional; labels on it still resolve.
+    #label SkipTarget
+step
+    .goto Durotar,42.06,68.33
+    .turnin 790 >>Hand in Sarkoth
+-- E35: a comment on the very last line, with no line break after it, is NOT stripped by RXP.
+    .turnin 4402 --last line, no trailing newline

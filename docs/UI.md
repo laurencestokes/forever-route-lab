@@ -216,7 +216,9 @@ the limits). Widths are clamped to 320-380px (`clampLeftWidth`).
 
 Landmarks: the top bar is a `header` (banner); the route editor is `main` ("Route editor"); the
 map is a region ("Map"); the side panel is an `aside` ("Quests and details"); the status bar is a
-region ("Route status").
+region ("Route status"). With project storage connected (Milestone 4, §13) the top row also holds
+the project strip, a region ("Project storage") to the right of the top bar in the same 44px row;
+at 720px and below it wraps onto its own line under the top bar.
 
 **Scrolling.** Above 720px the shell owns all scrolling and the document never scrolls: `html`
 and `body` clip overflow (`AppShell.css`), every shell area and the tab panel is a containing
@@ -269,11 +271,39 @@ All exported from `src/ui/kit.ts`.
 | `AboutDialog` | `shell/AboutDialog.tsx` | Licence (GPL-3.0-or-later) and no-warranty line, data notice (D-016, with the LIC-10 carve-out verbatim; with `dataUpstreamCommit` set it is the real-data notice with the pinned commit, `dataIdentity`'s revision and frame build, and the "Full data notice" link to `data/NOTICE.md`), non-affiliation, source commit link |
 | `LoadingScreen`, `LoadErrorScreen` | `shell/BootScreen.tsx` | The screens before the shell (Milestone 2): loading the dataset and geometry, with a progress bar and a `status` line ("Fetching and verifying data files: 3 of 7 (2.9 MB of 9.0 MB)"), then "placing … on the map geometry"; a failed start as an `alert` with title, message, a details disclosure and what can fix it (`remedy`): "Try again" for `reload`, or a sentence instead of the button for `redeploy` ("the deployed files need to be regenerated and redeployed") and `open-over-https` (no WebCrypto: "open the site over https (or on localhost)"). The heading takes focus. `src/ui/Boot.tsx` drives them |
 | `Button`, `IconButton` | `primitives/` | Text and icon buttons; `IconButton` requires `label`, supports `pressed` and `shortcut` (tooltip text and `aria-keyshortcuts`, §9 rule 3). Both style `disabled` and `aria-disabled="true"` alike |
-| `Select`, `TextInput` | `primitives/` | Native controls, restyled, always labelled (`hideLabel` keeps the label for assistive technology) |
+| `Select`, `TextInput` | `primitives/` | Native controls, restyled, always labelled (`hideLabel` keeps the label for assistive technology). `TextInput` also takes `inputMode` (the on-screen keyboard; the value stays text), `describedBy`, `invalid` (`aria-invalid`, with the reason in a described-by element), `readOnly` (focusable and copyable, drawn with a dashed edge on the raised surface) and `onBlur` |
+| `Checkbox` | `primitives/Checkbox.tsx` | A native checkbox with its label after it (`label`, `checked`, `onChange`, `describedBy`) |
 | `Toolbar`, `ToolbarSeparator` | `primitives/Toolbar.tsx` | `role="toolbar"` with one tab stop and arrow-key movement |
 | `PanelHeader` | `primitives/PanelHeader.tsx` | 32px header: title, meta, actions |
 | `Badge`, `PlaceholderTag`, `VisuallyHidden` | `primitives/Badge.tsx` | Identity badges; the "Placeholder" label (`label` "Sample" for stand-in content built from real data, same style) |
 | `Icon` | `primitives/Icon.tsx` | Interface icons in `currentColor` |
+
+The project-storage components (§13) are not kit components: they read the project session, so
+they live in `src/ui/app/` beside the other store-bound panels and are not exported from the kit.
+
+| Component | File | Purpose and key props |
+|---|---|---|
+| `ProjectBar` | `app/ProjectMenu.tsx` | The project strip: the Projects button (described by the full save status), the save status in words with the warning shape when nothing is kept, "Data changed" (the drift report) and a notices button; owns `ProjectMenuDialog` and `DriftDialog` |
+| `ProjectMenuDialog` | `app/ProjectMenu.tsx` | The Projects dialog: notices, the open project (status, conflict and retry actions, Rename, Duplicate, Export, Delete), the other stored projects (Open, Rename, Duplicate, Export, Delete; a project that cannot be opened says why, path by path, and can still be exported and deleted), New project, and Recently deleted with Restore |
+| `DriftDialog` | `app/ProjectMenu.tsx` | The drift report (ARCHITECTURE §5.5): old and new data revision, missing quests, quests whose objectives or prerequisites changed (named from the loaded data), "unknown" where nothing can be compared; Keep the report / Dismiss the report |
+| `ImportDialog`, `ExportDialog` | `app/ImportExport.tsx` | Native project files: pick or drop a `.frl.json` file (opened as a new project; refused with every problem by path, never repaired), or download the open project; an `rxp` slot each, which the top bar fills with `RxpImportEntry` and `RxpExportEntry` (§15) |
+| `RxpImportDialog` | `app/RxpImportDialog.tsx` | "Import RXP custom guide" (§15): paste or open a `.lua`/`.txt` file, target (new project or the end of the route), percent frame of the four changed zone maps, check, diagnostics, quests the data lacks, import. Loaded on first use (§11) |
+| `RxpExportDialog` | `app/RxpExportDialog.tsx` | "Export RXP custom guide" (§15): byte-identical or canonical in words, `.txt` or `.lua`, preview, Copy (with a visible "Copied" for a few seconds), Download, what the export cannot keep. Loaded on first use (§11) |
+| `RxpImportEntry`, `RxpExportEntry` | `app/RxpEntries.tsx` | The Import and Export dialogs' RXP sections: a sentence and the button that opens the RXP dialog (in the entry chunk; the dialogs are not) |
+| `RxpDiagnosticList`, `SourceExcerpt`, `RadioGroup` | `app/RxpParts.tsx` | The RXP diagnostics list (severity shape and word, line and column, message, code, whether RestedXP itself drops the line; counts, a severity filter, pages of 100); an item with a line is a disclosure button whose excerpt follows it. The excerpt: the line and two around it, numbered, the line marked (▶ and a tint) and its column outlined, a focusable region because long lines scroll sideways. Native radio buttons in a fieldset, each hint its option's description |
+| `ModalDialog` | `app/ModalDialog.tsx` (re-exported by `app/ProjectMenuDialog.tsx`) | The native modal `<dialog>` every app dialog uses (§9 rule 7): title (focusable, the focus fallback), close button, optional footer, `onEscape` so an inner step (a name field, a delete confirmation) takes Escape first, `dismissOnBackdrop` (default true; false for a dialog that holds a draft), `onFileDrop` (a file dropped anywhere on it that no target inside took; without it such a drop is refused, never left to the browser); its own polite live region; Ctrl/Cmd keys pressed inside stop at the dialog; header and footer are plain elements, not landmarks |
+| `LazyDialogFallback` | `app/lazy.tsx` | What stands in for a dialog that loads on first use (§11): the same modal and title, "Loading…", or why it could not be loaded with "Try again" |
+
+The route editor's store-bound components (§14) live in `src/ui/app/` for the same reason:
+
+| Component | File | Purpose and key props |
+|---|---|---|
+| `LocationEditor` | `app/StepEditors.tsx` | A location as a `fieldset`: what it is now, a typed zone point (Zone, X % and Y % kept together, "Set point": the keyboard path), "Pick on map" (`pick`: the map controller and what the point is for; a toggle that keeps its name) and Clear; controlled (`value`, `onChange`): the typed fields follow the value whenever it changes |
+| `DurationEditor` | `app/StepEditors.tsx` | A step's duration override, typed in minutes and stored in whole seconds, the conversion said in words; Set, Clear. Keyed per step, not per value, so Enter keeps focus in the field; the text follows the value |
+| `CustomQuestEditor` | `app/CustomQuestEditor.tsx` | Create, edit or replace-a-dataset-quest form (`edit`: `new` with an optional id, `edit`, `replace`), in the Details tab; DATA001 info; Save, Cancel, Delete (saying how many steps use the quest); the id is read-only except for a new quest. `onClose` says how it closed (`saved`, `cancelled`, `deleted`). Loaded on first use (§11) |
+| `FormProblems` | `app/FormProblems.tsx` | The problems that stop a form's save, at its top, focused after every failed save (`useFocusProblems`); `fieldProblemProps` gives each field it names `aria-invalid` and the problems as its description |
+| `SettingsDialog` | `app/SettingsDialog.tsx` | The Settings dialog (`ModalDialog`, not closed by a backdrop press): character and route profile as a draft; Cancel and "Save settings" (one command) in the footer. Loaded on first use (§11) |
+| `QuestDetails` | `app/QuestDetails.tsx` | One quest in Details; with `actions` it adds the quest's steps and opens the custom quest editor, with `baseDataset` it says when a custom quest replaces a dataset quest |
 
 View-model types: `StepRowModel`, `GroupRowModel`, `RouteRowModel` (`route/rows.ts`, with
 `routeRowContext` for step positions and group membership),
@@ -320,6 +350,19 @@ and truncate rather than round up (level 12.99 reads 12.9).
   | Delete | Delete |
   | L | Lock or unlock |
   | Ctrl/Cmd+D | Duplicate |
+  | Ctrl/Cmd+X | Cut the selection to the clipboard |
+  | Ctrl/Cmd+C | Copy the selection (also while editing is locked) |
+  | Ctrl/Cmd+V | Paste the clipboard after the selection |
+  | J | Join the selection's sections: every later run of selected steps moves to follow the first |
+  | Escape | Clear the selection (while a map pick is in progress, cancel the pick first) |
+
+  The list handles the row keys itself; Ctrl/Cmd+X/C/V, J and Escape are the route editor's
+  (`useShortcuts.ts`), so they act only while focus is inside the route editor and never in a text
+  field. Global keys: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redo, Ctrl/Cmd+K quest
+  search (not in text fields, and not while any modal dialog is open, whoever owns it and wherever
+  focus is: `isModalDialogOpen`, `lib/modal.ts`). Every key also has a button: the
+  route toolbar has Note, Travel, Grind, Duplicate, Lock, Delete, Cut, Copy, Paste and Join, each
+  `aria-disabled` while it cannot run (Copy stays available while editing is locked).
 
   Click selects (`replace`), Ctrl/Cmd+click toggles, Shift+click extends. The caller owns the
   selection anchor and applies `range`. `readOnly` (optimiser running, proposal open) turns off
@@ -354,17 +397,43 @@ and truncate rather than round up (level 12.99 reads 12.9).
    scrolling. Nothing may freeze into a false value when its animation stops: the indeterminate
    optimiser bar then shows the unknown hatching across the whole track instead of a still 40%
    bar that would read as "40% done".
-6. Live regions stay quiet and polite, and never announce percentages. Two exist: the status
-   bar's optimiser state, and the shell's one app region (`src/ui/app/LiveAnnouncer.tsx`),
-   mounted empty at startup and never remounted, because a region inserted together with its
-   text is often not read. The app region says only the result of what the user just did:
+6. Live regions stay quiet and polite, and never announce percentages. They are the status
+   bar's optimiser state, the shell's one app region (`src/ui/app/LiveAnnouncer.tsx`), mounted
+   empty at startup and never remounted, because a region inserted together with its text is
+   often not read, and one region per modal dialog (M4 review UI-F2). A modal dialog makes the
+   page outside it inert, and inert content is not exposed to assistive technology, so while
+   dialogs are open the announcer (`createAnnouncer`, given to them through `AnnouncerContext`)
+   speaks in the top-most open dialog's region, mounted with the dialog. When a dialog closes,
+   a message said by the action that closed it (no press or key in the dialog since: "Settings
+   saved.", "Imported …") is said again in the region below, the shell's once no dialog is open;
+   older messages are not repeated. The regions say only the result of what the user just did:
    the selection count once it settles ("12 steps selected", "Selection cleared"; arrowing,
    which keeps one step selected, says nothing), and brief results of row commands, inserts,
-   undo and redo ("3 steps deleted. Undo with Ctrl+Z."). Unavailable actions are not
+   undo and redo ("3 steps deleted. Undo with Ctrl+Z.", "2 steps cut. Paste with Ctrl+V; undo
+   with Ctrl+Z.", "Cull: accept quest, complete objectives, turn in quest added as steps 4 to 6."),
+   of the editors ("Duration of step 3 set to 2 minutes 30 seconds.", "Click the map to place the
+   location of step 3. Escape cancels.", a field that cannot be saved: "Not set: …"), and the
+   results of project actions
+   ("Opened “Durotar run”.", "Imported “x” as a new project and opened it."), and of the RXP
+   dialogs ("Imported “Guide”: 40 steps added as steps 13 to 52. Undo with Ctrl+Z.", "Copied the
+   guide text to the clipboard." with a visible "Copied" beside Copy for a few seconds,
+   "Exported “Guide.lua”."; §15). A save that fails
+   is announced once, when it fails ("Not saved: …"), because the edit just made is not kept; the
+   save status itself is not a live region. Unavailable actions are not
    announced: they render `aria-disabled` (focusable, and in toolbars in the arrow-key order),
    with the reason as their description and tooltip ("Arrives in Milestone 4 …"), and their
    handlers do nothing.
-7. Dialogs are native modal `<dialog>`s: focus moves in, Escape closes, focus returns.
+7. Dialogs are native modal `<dialog>`s (`ModalDialog`): focus moves in, Escape closes, focus
+   returns. When the control that has focus removes itself ("Try again" replaced by progress,
+   the last "Show more"), focus goes to the dialog's title (or, where the dialog knows better,
+   to what took its place), never to the page body. A press that starts and ends on the backdrop
+   closes a dialog, except one that holds a draft (Settings, RXP import): those close only by
+   Escape, Cancel or Close, so a slip of the pointer loses nothing (UI-F10). While a dialog is
+   open the shell's global keys are off and Escape belongs to the dialog, even with a map pick
+   waiting behind it (UI-F1, UI-F8). A form's failed save moves focus to its list of problems,
+   every time, and marks each field a problem names (`aria-invalid`, described by it). A file
+   dropped on a dialog outside its drop target is never opened by the browser in place of the app:
+   the RXP import takes it as its file, other dialogs refuse it (UI-F14).
 8. Placeholder content is labelled "Placeholder" visibly and in text, and must not resemble real
    quest data.
 9. Forced colours (Windows high contrast) drop author backgrounds, background gradients and box
@@ -467,6 +536,51 @@ and truncate rather than round up (level 12.99 reads 12.9).
 - *Milestone 2:* the map panel's geometry line says why a local map set is not used ("local set:
   refused (… changed after the set was activated …)"), except when there is none at all.
   *Milestone 3:* the line is the layer panel's footer ("Geometry loaded: …").
+- *Milestone 4:* `src/main.tsx` opens project storage beside the data load, restores the last open
+  project (`loadWorkspace`), creates the project session (`createProjectSession`) and provides it
+  with `ProjectSessionProvider` (`src/ui/app/ProjectMenuContext.tsx`). `App`'s `projectName` and
+  `routeNotice` follow the session's open project (the sample notice only while the sample is
+  open). `AppTopBar` reads the session from the context: with one, Import and Export open their
+  dialogs and the project strip renders; without one (component tests) they stay unavailable and
+  say that no project storage is connected (§13).
+- *Milestone 4 (route editor):* `App` wraps its `DatasetSource` in `cachedDatasetSource`
+  (`src/app/dataset-views.ts`), so the project's view and the view without its custom quests
+  (`datasetBaseView`: what a custom quest with a real id replaces) are both kept, and the map
+  controller reads through the same cache. `createRouteActions(store, announce, { geometry })`
+  takes the map geometry (null without a map) for placing quest steps. `AppTopBar` gets
+  `onOpenSettings` (Settings is then available and opens `SettingsDialog`); `AppSidePanel` gets
+  `baseDataset`, `mapController` and `announce`, and holds the custom quest editor's state.
+- *Milestone 5 (RXP custom guides, §15):* `AppTopBar` fills the Import and Export dialogs' `rxp`
+  slots and owns the two RXP dialogs. It takes two optional props for them: `geometry` (the map
+  geometry, `map?.geometry`: `RXP035` at import, and the map frame of points made in the app at
+  export) and `data` (the `DatasetSource`, so a guide imported as a new project is checked against
+  the data alone, without the open project's custom quests). `App` passes both (`map?.geometry`
+  and its cached `DatasetSource`); without them (component tests) the import does not check world
+  points against their map, the export cannot place an app-made world point that has no UiMap,
+  and the open project's view stands in for a new project's.
+- *Milestone 4 review (UI-F2):* `App` provides its announcer through `AnnouncerContext`
+  (`src/ui/app/LiveAnnouncer.tsx`), so every `ModalDialog` speaks in its own region (§9 rule 6).
+- *Milestone 4 review (CR-19):* the Settings dialog, the custom quest editor and the two RXP
+  dialogs load on first use: one dynamic import (`src/ui/app/lazy.tsx`, `lazy-parts.ts`) for all
+  four, so the kit modules they share stay in the entry chunk instead of in extra shared chunks
+  (separate imports made the entry and its static imports larger, not smaller). `useLazy` keeps a
+  part once loaded (a dialog then stays mounted, so its native focus return works); while one
+  loads, `LazyDialogFallback` shows the dialog's title with "Loading…", and a failed load says why
+  with "Try again". Production builds fetch the chunk once the page is idle (`preloadLazyParts`).
+  The Projects dialog, Import and Export are still in the entry chunk: `ProjectMenu.tsx` holds
+  both the always-visible project strip and the Projects dialog, and imports `downloadFile` from
+  `ImportExport.tsx`. Measured by `pnpm build`'s dist audit on 2026-09-26: the entry and its static
+  imports 205.96 kB gzip of the 250 kB budget (210.74 kB before; M3 141.88 kB; the growth since
+  M3 is Milestones 4 and 5: project storage and its dialogs, the editors, zod-validated autosave,
+  the RXP sections), the lazy parts 12.40 kB gzip plus 1.50 kB of CSS.
+- *Milestone 4 review (UI-F7):* text from RestedXP guides is shown plain: `plainGuideText`
+  (`src/app/ui-text.ts`) removes the game's colour (`|cAARRGGBB` … `|r`) and texture (`|T` … `|t`,
+  `|A` … `|a`) escapes and RXP's colour tokens (`|cRXP_FRIENDLY_` … `|r`, keeping their words),
+  keeps a hyperlink's text, and makes `|n` and a written `\n` spaces. `stepTitle`, `stepDetail`
+  and the group rows' guide names use it, so route rows, their spoken labels, Details, the status
+  bar, the map's labels (the controller's label provider applies it too) and announcements read
+  "Talk to Kaltunk", never "Talk to |cRXP_FRIENDLY_Kaltunk|r". The step keeps its text as written
+  (the Details text field edits it), so an unedited guide still exports byte for byte.
 - *Milestone 3:* `src/main.tsx` passes `App` a `map` (`MapEngineSetup`: the merged geometry, the
   local set's art and `loadAdapter`, a dynamic import of `src/map/leaflet` started with the data
   load). `App` creates one map controller (`createMapController`, `src/app/map-controller.ts`) and
@@ -523,6 +637,16 @@ The centre panel (ARCHITECTURE §7, §12.4; MAPS.md §7). By the §4 import rule
   panned out of view or another surface is shown; then both reset (MAP-UX-12).
 - **Route rows.** The pointer over a route row highlights that step's marker (a group header: its
   steps'), on top of every layer, without rebuilding anything.
+- **Pick on map** (Milestone 4, §14). `startPick({ label, onPick })` makes the next click on the
+  map a point and nothing else (it selects nothing); `getStatus().pick` names it, the status line
+  says "Picking the location of step 3: click the map to place it. Escape cancels.", and the
+  toolbar has "Cancel pick". Escape anywhere cancels it first (a capture listener while it lasts),
+  except while a modal dialog is open: the map is inert then, so Escape closes the dialog and the
+  pick waits behind it (UI-F8).
+  The point is world form, where the click was to 0.1 yd, with the zone hint as its UiMap: the
+  zone the map was jumped to when its frame holds the point, else the zone frame the point is
+  most central in (`attributeZone`), else none. A pick ends on detach, and when the editor that
+  started it leaves Details.
 - **Focused quests.** The quests opened in Details while they are shown, otherwise the active
   step's quests: their objectives and turn-ins are drawn, and their givers raw and emphasised at
   any zoom.
@@ -541,6 +665,304 @@ The centre panel (ARCHITECTURE §7, §12.4; MAPS.md §7). By the §4 import rule
 - **Performance.** Only a layer whose inputs changed is rebuilt and sent. Route layers are built
   from the steps they draw (`createDrawnRouteFilter`, `focusWithin`), so inserting, editing,
   deleting or selecting a note rebuilds no route layer; an insert elsewhere changes only the
-  descriptors next to it (no step numbers in them), and a step move sends the route line and the
-  selection. Hover writes nothing to the store, so no panel but the pointer line re-renders for it
+  descriptors next to it (no step numbers in them). The step markers do not see the focus
+  (M3 review PERF-2, Milestone 4): every one is `normal`, and the selection layer draws the
+  selected, hovered and active steps' halos and a strong copy of their markers on top (the active
+  step's first under its cap), so a selection change never rebuilds the step markers. They are
+  built from caches (a candidate per step input, points interned for finding stacks, merged stacks
+  by their members), so a move rebuilds only what it touched; the same descriptor objects in a
+  new order diff to nothing in the adapter. Hover writes nothing to the store, so no panel but the pointer line re-renders for it
   (PERF-14). `docs/measurements/map-m3.json` has the numbers and how they were taken.
+
+## 13. Project storage
+
+The project strip, the Projects dialog, import, export and the drift report (ARCHITECTURE §5.5,
+§8.2, §12.3). The logic is the project session in `src/app/persistence.ts` (with
+`project-library.ts`, `autosave.ts` and `drift.ts`; storage, and the links between tabs, in
+`src/infra/persistence`); the ui only renders it (§4).
+
+**Save status.** The strip always says, in words, what is kept:
+
+| Status | Strip | Full sentence (tooltip, the Projects button's description, the dialog) |
+|---|---|---|
+| saved | "Saved 12:03" (local 24-hour time; the date first on another day) | "All changes are saved in this browser (last saved 12:03)." |
+| pending | "Unsaved changes" | "Changes are saved automatically in a moment." |
+| saving | "Saving…" | "Saving changes in this browser." |
+| failed | "Not saved: storage full", "…: changed elsewhere", "…: open in another tab", "…: storage closed", "Not saved" | "Not saved: <reason>. Last saved 12:00." (storage full adds the usage, what to do and the three largest stored records) |
+| unavailable | "Not saved: storage unavailable" | "<why>. Projects are kept in this tab only and are lost when it closes. Export a project to keep it." |
+
+Failed and unavailable carry the warning triangle as well as the words. A failure stays on show
+until a save succeeds, also while the save is tried again: the strip never switches to "Saving…"
+in between, and the failure is announced once per reason (§9 rule 6), not at every retry. A failed
+save offers "Try saving again".
+
+**Other tabs and windows.** Each tab holds a Web Lock on the project it has open, and every change
+a tab stores is announced to the others on a BroadcastChannel (`src/infra/persistence/tabs.ts`;
+where a browser lacks either, the `writeSeq` check still refuses a stale save, only later).
+
+- A project another tab already has open opens with "Not saved: open in another tab": this tab
+  saves nothing of it until the user chooses "Open anyway" (this tab saves it too) or "Open a copy"
+  (the copy opens and is saved; the other tab's project is left alone). When the other tab lets
+  the project go (it closes, or opens another project), this tab takes the lock and saves again by
+  itself. Opening such a project from the list is refused first, with the same two choices in the
+  failure message.
+- "Changed elsewhere" means another tab or window stored the project since this page did; it shows
+  as soon as the other tab saves. The dialog offers "Save as a copy" (the primary choice) and
+  "Keep this version (overwrite)", which asks first in place and names the version it replaces
+  ("The version saved in another tab or window (“Durotar run”, saved 12:05, 42 steps) is replaced
+  by this page's version, and cannot be restored."). Overwriting keeps the stored name, so a rename
+  made in the other tab stays; a rename alone in another tab is taken over without a conflict.
+  When the other tab deleted the project, the choice reads "Keep this version (store it again)".
+
+**Autosave.** A change starts a quiet period (750 ms, restarted by each change); the save then
+waits for an idle moment (`requestIdleCallback`, at most 2 s; where it is missing, 50 ms). Edits
+that never pause still save every 10 s. Hiding or leaving the page (`visibilitychange`,
+`pagehide`) starts the save at once, inside the event handler: every storage request of the save
+is made before the handler returns. A save already running when the page is hidden is followed by
+another as soon as it ends. While changes cannot be kept (a failed save, "changed elsewhere", "open
+in another tab", or, without browser storage, any edit at all), the browser asks before the page
+closes (`beforeunload`). Opening, creating or importing another project first saves the open one;
+when that fails, the switch is refused with the reason, so changes are never dropped silently.
+
+**Projects dialog.** Actions are buttons whose names include the project ("Open “Durotar run”").
+Rename and New project open a name field in place (focus moves to it; Enter confirms, Escape
+cancels without closing the dialog). While an operation runs the actions are `aria-disabled`
+("Wait for the current operation to finish").
+
+- **Focus.** After an inline step (Cancel, Escape, or an action that succeeds), focus returns to
+  the button that opened it, found again by its project and action after the list re-renders (a
+  renamed project's Rename button included), or to the list heading when that button is gone. A
+  failed action shows its message, with every path-level problem, at the top of the dialog, and
+  focus moves there; the inline step stays open with what was typed (a refused rename keeps its
+  name field and draft).
+- **Delete** asks first, in place, with focus on Cancel. The question says where the project goes:
+  "It moves to Recently deleted and is kept there for 30 days." (`BACKUP_RETENTION_DAYS`), or,
+  without browser storage, "…which is kept only until this tab closes."; for the open project, what
+  opens instead ("This closes it and opens “Durotar run”.", "…opens the sample project.", "…starts a
+  new empty project."). It offers "Delete" and "Delete permanently" (removed now, with no copy to
+  restore). Deleting the open project keeps its latest changes in Recently deleted even when they
+  could not be saved (or were never stored); when another tab's version is the stored one, both are
+  kept. Recently deleted rows offer "Restore" and "Delete permanently", which asks first.
+- **Destructive style.** "Delete", "Delete permanently" and "Overwrite" never use the primary accent
+  fill: they are secondary buttons with a doubled edge in the text colour (`--frl-fg`; a 2px edge
+  under forced colours) and, for deletes, the delete icon. No reserved or severity hue is used.
+- **Storage full.** The failure names the usage, what to do and the three largest records ("The
+  largest: “Durotar run” (8.0 MB), “Old run” in Recently deleted (3.1 MB)."), and each project and
+  backup row shows its size ("· about 8.0 MB") until a save succeeds. Moving a project to Recently
+  deleted needs space too; when that fails, the message says to delete it permanently. A permanent
+  delete frees the space, and the open project's failed save is tried again at once ("The open
+  project is saved now.").
+- **Projects that did not open** are listed with why. Those this version cannot read are "Cannot be
+  opened: …", then the problems; they are kept unchanged and can be exported as stored. Those that
+  could not be read (or whose migration backup failed) are "Not opened: … try opening it again", with
+  a "Try opening again" button. When the stored projects cannot even be listed at the start, a new
+  unsaved project opens, nothing stored changes, and a notice says to reload.
+
+**Import and export.** Import takes a file from the file field ("Choose a project file") or a
+drop on its section (the drop target is outlined; the field is the keyboard path). Files over
+50 MB are refused before reading. The file is decoded as strict UTF-8: a file with an invalid byte
+is refused ("“name” is not valid UTF-8 text…"), never repaired. A good file opens as a new project
+named after the file; a bad one is refused with "“name” is not a project file this app can open."
+and its problems by path, focused. A project built elsewhere (an RXP guide) is checked against the
+project schema before it is stored, the same way. Export downloads the open project as
+`<name>.frl.json` (a Blob behind an object URL); the same project always gives the same bytes
+(`serializeProject`). RXP custom guides go in each dialog's `rxp` slot: its button opens the RXP
+dialog in place of the Import or Export dialog (§15); without a slot the section says RestedXP
+custom guides are not available there.
+
+**Drift.** When the open project was saved with another data revision, the strip shows "Data
+changed" (warning triangle and words). Its dialog lists what changed; "Dismiss the report"
+records the loaded revision with the next save, and "Keep the report" leaves it, so it comes back
+at the next start. Until it is dismissed, saves, copies and exports all record the old revision.
+
+**Checked by hand.** Milestone 4, in the built-in browser, light theme only, at 1366×768,
+1280×600, 1024×768 and 700×900: the strip sits in the top row with no horizontal scroll, and the
+page does not scroll above 720px. The strip takes about 160px of the row, so at 1024px the top
+bar's project and route names are short ellipses. A reload reopens the last open project. The
+review fixes (other tabs, delete permanently, the destructive style) are covered by component and
+session tests, not yet checked by hand.
+
+## 14. Route editing
+
+The route editor's commands and editors (ARCHITECTURE §8.1, §12.2, §12.4; Milestone 4). The logic
+is in `src/app` (`commands.ts`, `quest-steps.ts`, `quest-chains.ts`, `project-commands.ts`); the
+ui runs it through `src/ui/app/route-actions.ts`, which announces each result (§9 rule 6). Every
+edit is one command, so one undo entry; a command that changes nothing adds none.
+
+**Where new steps go.** After the selection (after its last step), else after the focused step,
+else at the end (`insertionIndex`): where the planner is working (docs/research/ux-benchmark.md).
+The new steps become the selection.
+
+**Adding quests.** The Available tab's + on each quest adds its accept, complete and turn-in as
+one command ("Add quest"); the tab also has "New custom quest". A quest in Details has "Add
+accept, complete and turn in", Accept, "Complete" (or "Complete all objectives") and "Turn in",
+and "Complete objective n" beside each objective when there are several. Each step is placed at
+the relevant spawn nearest the insertion context, by straight line: the starter's spawns for an
+accept, the finisher's for a turn-in, the objective targets' (a creature, an object, an item's
+drop sources, an event's points) for a complete. The context is the last step before the
+insertion point whose location resolves, else the character's start location; each added step is
+the next one's context, so the three walk from giver to work to receiver. With no context the
+first spawn the dataset lists is taken. The location is the spawn's published point as published,
+labelled with the entity's name, and `via` names the entity. A spawn with no published zone point
+(inside an instance) is never used; a step with no usable spawn has no location, and the
+announcement says so.
+
+**Chain positions.** A quest in a chain carries "(n/m)" in step titles, the Available list and
+Details ("Chain: Part 2 of 3: A → B → C"), from `nextQuestInChain` and single pre-quest links only
+(`quest-chains.ts`). An ambiguous or missing link ends the chain there; a quest in no chain has no
+label.
+
+**Clipboard and join.** Cut and copy put the selection on the store's clipboard (with the groups
+its steps name); paste inserts fresh copies after the selection (origin `paste`, restoring a group
+the cut pruned). Join moves every later run of selected steps to follow the first run ("Join the 2
+selected sections"); it needs two or more runs.
+
+**Details.** For the active step: the note text (note steps), the step's note, the location, the
+duration override and Lock, Duplicate and Delete. While editing is locked the fields are read-only
+and say why.
+
+- *Location* (`LocationEditor`): the current point in words; a typed zone point (Zone, X %, Y %,
+  "Set point", in the Forever frame, the keyboard path); "Pick on map" (§12: the next click, as a
+  world-form point with the zone hint; Escape, pressing it again or the map's "Cancel pick"
+  cancels; it is a toggle, `aria-pressed` while picking, and keeps its name; without a map it is
+  `aria-disabled` and says to type the point); Clear. The typed fields follow the location
+  whenever it changes (undo, redo, a pick, Clear), so "Set point" never re-applies a point that
+  is gone; pressed on the location's own point it changes nothing, so an Era-frame point stays in
+  the Era frame (CR-17). A travel step's location is its destination.
+- *Duration override* (`DurationEditor`): typed in minutes, stored in whole seconds, and said in
+  both ("Set: 2 minutes 30 seconds (stored as 150 seconds), replacing the estimate."). Empty or
+  Clear removes the override: the estimate applies (unknown until simulation). A negative or
+  unreadable value is refused (`aria-invalid`, the reason described and announced). The editor is
+  not remounted by its own change, so focus stays in the field after Enter.
+- *Clear* is `aria-disabled` with its reason ("Nothing to clear: no value is set") when there is
+  nothing to clear, never natively disabled, so the button keeps the focus it had (UI-F4).
+
+**Custom quests** (ARCHITECTURE §5.5; `CustomQuestEditor`, in the Details tab so the map stays
+usable for picking). "New custom quest" proposes the next invented id (negative); a real id is
+allowed (a Forever quest from a guide, say). Fields: id, name, level, required level, base XP (the
+user's, basis `user`, taken at the quest level, so it needs a level), Forever status (unknown, or
+new or changed as declared by the user) and the starter and finisher locations (each a
+`LocationEditor`). Empty fields are unknown. A dataset quest's Details offer "Replace with a
+custom quest", which starts from the dataset record (starters, objectives, prerequisites) but not
+its XP. Whenever the id is a dataset quest's, the form and Details say `DATA001-custom-shadowed`
+(info): the custom quest replaces the dataset quest in this project; "Use the dataset record"
+deletes the custom quest. Problems stop a save, are listed at the top of the form (which takes
+focus after every failed save), mark the fields they name and are announced. The id is the
+quest's identity, which its steps point at: it is read-only when editing (and when replacing,
+where it is the dataset quest's), and "Delete custom quest" says how many steps use the quest
+and what their id then means (CR-10). The form takes focus when it opens (its Name field);
+Cancel puts focus back on the button that opened it, and Save or Delete on the Details tab
+panel, which then shows the saved quest or the step. "Use the dataset record" removes its own
+button, so focus moves to the "Replace with a custom quest" that takes its place (UI-F5).
+
+**Settings** (`SettingsDialog`, from the top bar). The character: faction, race and class (the
+Forever client's 56 playable pairs; a project holding another pair keeps it, marked as not
+playable), sex, start level (1 to the assumed level cap, 60 unless the project sets another), start
+XP (into the start level), what happened before the route (a new character, exactly the listed
+quests with their ids, or unknown) and riding trained before it. The route profile: XP rate,
+season and phase (empty: unknown), locale, dungeons, and hardcore, self-found, group quests and XP
+step skipping. The fields are a draft: "Save settings" applies them as one command ("Edit
+settings"), Cancel or Escape drops them; a press on the backdrop does not (UI-F10). The actions
+sit in the dialog's footer, Cancel first. A race the character's faction does not have (from an
+imported file) is shown as it is, marked "(not a race of the Alliance)", never replaced by the
+first race. Known flight paths, professions, reputation and the start and hearth locations are
+not edited here yet.
+
+**Checked by hand.** Milestone 4, in the built-in browser on the production preview at 1366×768,
+light theme, by measurement (the pane was hidden, so no screenshots): the route actions wrap onto
+a second line (51 px) instead of being clipped at the 340 px route panel; the Details tab with the
+editors open has no horizontal scroll (330 of 340 px) and the page does not scroll; the Settings
+dialog (680 × 521 px) fits; "Pick on map" then a click on the Leaflet map set the step's location to a world point
+(0.1 yd, with its zone hint). Still to check: 1024×768 and 720px, and the dark theme.
+The component tests cover behaviour, keyboard, names and announcements (happy-dom has no layout).
+
+## 15. RXP custom guides
+
+Import and export of RestedXP custom guides (ARCHITECTURE §10, §12.1; docs/RXP.md; D-019). The
+logic is `src/rxp` (pure) and, over it, `src/app/rxp-context.ts` (the injected lookups),
+`rxp-import.ts` and `rxp-export.ts`; the dialogs only render it (§4). The labels are exactly
+"Import RXP custom guide" and "Export RXP custom guide".
+
+**Loading.** RXP is a lazy boundary: `src/app/rxp-options.ts` (in the entry chunk) holds the option
+types, labels, limits and `loadRxpTools`, a dynamic `import()` of `src/app/rxp-tools.ts`, which
+brings `src/rxp` in its own chunk (about 30 kB gzip) the first time a dialog checks or exports. A
+failed load says so, and the next attempt loads again. The dialogs themselves load on first use
+too (§11, CR-19); the Import and Export dialogs' RXP sections (`RxpEntries.tsx`) do not.
+
+**Lookups** (`createRxpContext`). Zone keys are the view's zone names, which come only from
+`zones.json` (QuestieDB's validated English names): exact, case-sensitive, and a name two UiMaps
+share resolves to nothing. Quest facts (objective count, custom or not) come from the view, for
+`RXP031` and `RXP032`. Geometry, when given, adds `RXP035`. Import and export use the same table,
+so an imported step lowers again exactly as it was imported.
+
+**Display.** Guide text is shown plain wherever the app shows a step (route rows, Details, the
+map, announcements): colour and texture escapes and RXP colour tokens are removed for display
+only, and the step keeps the text as written for export (§11, `plainGuideText`, UI-F7).
+
+**Import** (`RxpImportDialog`, from the Import dialog's "Import RXP custom guide").
+
+- *Input.* A text field ("Guide text or custom-guide .lua file": the text of a guide, or a whole
+  addon `.lua` file; it is read, never run) and a file field ("Or open a file", `.lua` or `.txt`;
+  a drop on the section works too). A file is decoded as UTF-8 keeping a byte-order mark, so an
+  unedited guide exports byte for byte; a file that is not UTF-8 is refused ("… is not UTF-8
+  text, so it cannot be imported unchanged."). Over 8 MB is refused before reading.
+- *Options.* "Import into": a new project (named after the guide's `#name`, or after the file for
+  several guides, with the default character; the open project is kept) or the end of the current
+  route (one command, "Import RXP guide": one undo removes all of it). "Percent coordinates in
+  Mulgore, Eastern Plaguelands, Redridge Mountains and Stormwind City": Forever maps (default) or
+  Era maps (`options.changedZoneFrame`, docs/RXP.md §10.4). Without project storage only the route
+  is offered.
+- *Check guide* runs unwrap, CST, diagnostics and lowering with throwaway ids and shows the result
+  in a region that takes focus: the guide's name and size ("One guide, “…”: 18 RXP steps, 40 route
+  steps; 2 warnings, 5 notes"), or for a Lua file each guide as a checkbox (all chosen). Changing an
+  option checks the same text again without moving focus; editing the text marks the result stale,
+  and Import waits for a new check. A problem ("Paste guide text or open a file first.") takes
+  focus on every attempt, the same one again included (UI-F12). A press on the backdrop keeps the
+  text and the check (§9 rule 7).
+- *Diagnostics* (`RxpDiagnosticList`): in line order (for a Lua file, lines of the file, with
+  "in “guide”" after the line of a guide's own diagnostic), each with its severity shape and word,
+  "Line 12, column 5", the message, the code and, where it applies, "RestedXP itself drops or
+  changes this". An item with a line is a button; pressing it shows the line right after it
+  (`SourceExcerpt`: two lines either side, the line marked with ▶ and a tint, its column outlined),
+  and pressing it again hides it. Counts by severity ("2 errors, 14 warnings, 30 notes"), a Show
+  filter (all, errors and warnings, errors) and pages of 100.
+- *Refused.* A RestedXP protected import string (docs/RXP.md §3.3) is refused with `RXP019`'s
+  sentence and why: those strings are licensed to one account; nothing is decoded, decrypted or
+  kept. Closing the dialog clears the text field, whatever it held.
+- *Quests the data lacks* (docs/RXP.md §15.4, ARCHITECTURE §5.5): listed with how many steps use
+  each and a "Show line n" disclosure. "Add them as placeholder custom quests" (the default) adds
+  each with its real id, named "Quest 76156 (placeholder from an RXP guide)", and nothing else: the
+  name in the game, level, objectives, givers and XP stay unknown until the user enters them.
+  "Leave them unknown" keeps only the ids on the steps; the validator warns about them (Milestone
+  6). Appending counts the project's custom quests as known; a new project is checked against the
+  data alone.
+- *Import* adds exactly what the check showed (the pipeline is deterministic; it runs again with the
+  store's ids) and keeps every guide's text in `project.imports`. It is `aria-disabled` with the
+  reason beside it until then ("Check the guide first.", "The text or the options changed since
+  the check: check it again.", "This input is refused.", "Choose at least one guide."). The result
+  is announced: "Imported “Guide”: 40 steps added as steps 13 to 52. 1 placeholder custom quest
+  added (900001). Undo with Ctrl+Z.", or the session's "Imported “Guide” as a new project and
+  opened it." with "It has 40 steps."
+
+**Export** (`RxpExportDialog`, from the Export dialog's "Export RXP custom guide").
+
+- It says what the text is: "Byte-identical to the imported guide “…”" (the route is that guide,
+  unedited: docs/RXP.md §13.3 rule 1), "Not byte-identical to an imported guide: … RXP steps left
+  unedited keep their original lines; edited, split and new steps are written in canonical form.",
+  or "Canonical form: nothing in this route came from an imported RXP guide …". A route that
+  cannot be written says so and names each step ("Step 12: a .complete target that means all
+  objectives"); nothing can be copied or downloaded then.
+- Format: "Guide text (.txt)" or "Custom-guide addon file (.lua)" (the text in
+  `RXPGuides.RegisterGuide(…)`, with the group and defaultFor arguments of a two- or
+  three-argument import). A read-only preview of the chosen text, "Copy" (to the clipboard, with
+  "Copied" and a tick beside the button for a few seconds; when the browser refuses, the preview
+  is selected and a note says to press Ctrl+C, without the browser's own error text) and "Download
+  <name>.txt" or "Download <name>.lua" (the route's name, else the project's; plain text, UTF-8,
+  line endings as exported).
+- "What the export cannot keep": the export diagnostics (RXP040-RXP046, docs/RXP.md §11.1) in the
+  same list; one on a line of an imported guide shows that line.
+
+**Checked by hand.** Not yet. The component tests cover behaviour, keyboard paths, names, focus
+and announcements (happy-dom has no layout). The dialogs are at most 880 px wide
+(`min(880px, 100vw - 32px)`) and scroll inside; the layout at 1366×768, 1024×768 and 720px and the
+dark theme are still to check in a browser.

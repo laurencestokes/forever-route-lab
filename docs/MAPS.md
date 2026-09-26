@@ -5,8 +5,10 @@ architect's rulings on the Milestone 0 consistency check; updated in Milestone 2
 built.** Milestone 2 built `src/geo` (coordinates and geometry, [coordinates §15](research/coordinates.md#15-coordinate-model-srcgeo)),
 `tools/maps/import.ts --placeholder`, `tools/maps/validate.ts` (placeholder checks, local-set
 checks and `--activate`), the committed rows file and the committed placeholder
-(`tools/maps/README.md` is the operator's guide). The local extraction pipeline (`import.ts
---build`, `convert.ts`, `vite-local-maps.ts`) is Milestone 3. No map art exists. This file covers:
+(`tools/maps/README.md` is the operator's guide). Milestone 3 built `vite-local-maps.ts`;
+Milestone 3b (step 3b.8) built the extraction from the client, `import.ts --build` and
+`convert.ts`, on the shared CASC reader `tools/casc`, and commits the painted map art under
+`public/maps/art/` (D-033, §5.4 (b)). This file covers:
 
 - where map data comes from and how a developer extracts it locally;
 - what is committed (the placeholder geometry) and how Milestone 2 reproduces it;
@@ -39,7 +41,7 @@ Rule: **never copy maps, tiles, geometry or code from any other WoW route-planne
 | Client build | **1.60.1.70009**, Build Key `05215079e3905ef5922ae0b03ffefb73`. The brief said 69977; the launcher updated the client on 2026-09-25 (D-013). | `<wow-install>/.build.info`; `us.version.battle.net/wow_classic_beta/versions` |
 | Data frame | **1.60.1.69893**, QuestieDB's DBC target (D-013). `UiMapAssignment` is byte-identical at 69893 and 70009. | [coordinates §10-11](research/coordinates.md) |
 | Frame compatibility | A local map set is accepted when its rows for the 49 shared zone frames **hash-equal** the committed rows, not when build strings match (D-018, F09). It may only **add** UiMaps: a local row for a UiMap the committed file already has must be identical, or the whole set is rejected (ARCHITECTURE §6). | §5.6 |
-| Map art | UI world-map art: `UiMapXMapArt → UiMapArt → UiMapArtStyleLayer + UiMapArtTile` BLP tiles, plus `WorldMapOverlay(Tile)` explored overlays. Every Forever map with 1002 × 668 art uses 4 × 3 tiles of 256 px. Art is **local only**: never committed or deployed (D-018). | DB2 at 70009 (§3) |
+| Map art | UI world-map art: `UiMapXMapArt → UiMapArt → UiMapArtStyleLayer + UiMapArtTile` BLP tiles, plus `WorldMapOverlay(Tile)` explored overlays. Every Forever map with 1002 × 668 art uses 4 × 3 tiles of 256 px. **Committed and deployed** under `public/maps/art/` with a manifest and NOTICE (D-033, which superseded D-018's art rule); extracted by `tools/maps/convert.ts` (§5.4 (b)). | DB2 at 70009 (§3) |
 | Map metadata | DB2 tables `UiMap`, `UiMapAssignment`, `UiMapArt`, `UiMapArtTile`, `UiMapArtStyleLayer`, `UiMapXMapArt`, `WorldMapOverlay`, `WorldMapOverlayTile`, `AreaTable`, `Map`, `TaxiNodes`, `TaxiPath`, `TaxiPathNode`, decoded with WoWDBDefs `cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd` (has the 1.60.1.x layouts) | §3, §5 |
 | Primary tools (scripted, local) | **TACTTool** (wowdev/TACTSharp, declares MIT, `a507ff7b`) for read-only extraction by FileDataID. **DBC2CSV** (Marlamin, `1e4aaa46`) for DB2 → CSV. Our own `tools/maps/*.ts` for BLP decoding, stitching and manifests. | §4 |
 | Fallback tool (GUI) | **wow.export 0.2.19** (declares MIT, commit `c2fd7bde`, 2026-06-22). NW.js GUI only, with no CLI or headless mode. Never scripted (D-011). **Use CDN mode or disable cache collection first** (§4.1). | `.cache/wow.export` |
@@ -48,7 +50,7 @@ Rule: **never copy maps, tiles, geometry or code from any other WoW route-planne
 | Committed geometry | `public/maps/placeholder/geometry.placeholder.json` plus `NOTICE.md`, produced only by `tools/maps/import.ts --placeholder` from the pinned QuestieDB `conversion.json` and the committed `tools/maps/inputs/db2-rows-1.60.1.70009.json`, so it is reproducible. It holds 49 zone frames (`source: 'questiedb-conversion'`, build 1.60.1.69893) and 12 DB2-only rows for 11 UiMaps (`source: 'db2-csv'`, build 1.60.1.70009), taken from CSVs fetched as individual requests during research (not scripted crawling). Every row records its source and build (D-018, D-026). | §8 |
 | Coordinates | Dataset spawns ship as published zone percent and are converted to `WorldPoint` at load. A route `Location` stores the authored `SourcedPoint`; `resolve()` derives world coordinates at runtime, and nothing derived is persisted (D-017). | §6; [coordinates §15](research/coordinates.md#15-coordinate-model-srcgeo) |
 | Renderer | Leaflet 1.9.4 (declares BSD-2-Clause) behind `MapAdapter`, `L.CRS.Simple`, **one surface per world map**. Canvas renderer with level of detail. The combined overview surface is deferred until after the MVP (F23). No react-leaflet (D-005). | §7 |
-| Images | One image per UiMap at native `LayerWidth × LayerHeight` (1002 × 668), **WebP** (lossy, q≈90), optional PNG. No tile pyramid is needed at this size. Local only. | §5.4 |
+| Images | One image per UiMap and style layer at native `LayerWidth × LayerHeight` (1002 × 668; 512 × 512 for 1463, 1464, 2665), fully explored, **WebP** (lossy, quality 80, `drawing` preset): 60 images, 9.05 MB gzip-6 with the manifest and NOTICE, within the 12 MB `art` budget (D-034 item 4). No tile pyramid is needed at this size. | §5.4 |
 
 ## 2. Client, build and data locations
 
@@ -160,18 +162,22 @@ The first is ID 5358 at offset (427, 78), a 256 × 256 texture, AreaID 370.
 Milestone 2 built `import.ts --placeholder` (§8) and the local-set checks. Milestone 3 built the
 serving side: `vite-local-maps.ts` (§5.7), the art checks and the manifest's `art` section
 (`validate.ts`, `lib/art.ts`; §5.3, §5.5), and art entries in `infra/maps` (§5.6 step 7).
-**Extraction from the client** (`import.ts --build`, `convert.ts`) moved to Milestone 3b, because
-it needs the read-only CASC reader (D-028). Until then a developer can only place art by hand
-(§5.4 (c)); the checks treat it exactly as `convert.ts` output.
+**Extraction from the client** was built in Milestone 3b (step 3b.8), on the shared read-only CASC
+reader `tools/casc` (D-028; terrain-navigation.md §15): `import.ts --build` writes a developer's
+local geometry from the client's own tables (§5.4 (a)), and `convert.ts` writes the **committed**
+painted art in `public/maps/art/` (§5.4 (b); D-033). Hand-placed local art (§5.4 (c)) still works
+and is checked exactly like any other local art.
 
 ### 5.1 Principles
 
 1. **Developer-supplied, local, outside `public/`.** Raw inputs (DB2, CSV, BLP) go in the
-   gitignored `assets-source/`. Generated map sets go in the gitignored `local-maps/` at the
+   gitignored `assets-source/`, if a developer extracts any by hand; the CASC reader keeps them in
+   memory and writes none. Generated local map sets go in the gitignored `local-maps/` at the
    repository root. Neither ever lives under `public/`: gitignore stops commits, not publication,
    and Vite copies everything under `public/` into `dist/` (D-018, F03/LIC-01). `tools/maps` writes
-   under `public/` only in `--placeholder` mode, which writes exactly the two committed files from
-   committed or pinned inputs.
+   under `public/` only in two runs: `import.ts --placeholder` (exactly the two committed placeholder
+   files, from committed or pinned inputs) and `convert.ts` (the committed painted art in
+   `public/maps/art/`, D-033; §5.4 (b)). `import.ts --build` refuses an output under `public/`.
 2. **Read-only toward the client.** Tools may read `<wow-install>/Data/` through CASC. Nothing
    may be written under `<wow-install>`, and `WTF/`, `Cache/`, `Logs/` and SavedVariables must
    never be read. Close the game and the launcher first to avoid file locks (the wow.tools.local
@@ -203,16 +209,25 @@ tools/maps/
   README.md
   inputs/db2-rows-1.60.1.70009.json   # committed: the 12 cited DB2 rows and their UiMap rows (§8.3)
   import.ts              # --placeholder: pinned conversion.json + inputs/db2-rows-…json → public/maps/placeholder/ (M2)
-                         # --build <b>: csv/ → local-maps/geometry.local.json; writes extract-list.txt (M3b)
-  convert.ts             # BLP decode → stitch → crop → overlays → local-maps/art/ (WebP/PNG) (M3b)
-  validate.ts            # §5.5 checks; --activate writes local-maps/maps.manifest.json after a pass (M2; art M3)
+                         # --build <b>: the client's UiMap + UiMapAssignment (tools/casc) → local-maps/geometry.local.json (M3b)
+  convert.ts             # the client's art tables and BLP tiles (tools/casc) → decode → stitch → crop → overlays
+                         #   → WebP → public/maps/art/ (committed, D-033) (M3b)
+  validate.ts            # §5.5 checks (placeholder, committed art A1-A5); --activate writes local-maps/maps.manifest.json
   vite-local-maps.ts     # dev/preview-only Vite plugin (§5.7) (M3)
+  art.client.test.ts     # 3b.8 checks against the pinned client (skipped with a banner without it)
   lib/                   # M2: checks, local-set, placeholder, notice, db2-rows, make-db2-rows (rows file), pin,
                          #     conversion, csv, git, hash, json, args, inputs; M3: art (L3, the art section);
-                         #     tools/maps/README.md lists them
+                         #     M3b: client-tables, art-plan, blp, raster, compose, encode, art-build, art-manifest,
+                         #     art-notice, art-checks, local-build, tool-tree; tools/maps/README.md lists them
 public/maps/placeholder/                        # committed (§8.2)
   geometry.placeholder.json
   NOTICE.md
+public/maps/art/                                # committed and deployed (D-033; §5.3 "Committed art", §5.4 (b))
+  <uiMapId>.webp         # one per UiMap (and <uiMapId>-<layer>.webp for a style layer other than 0)
+  manifest.json          # pin, build, tool tree hashes, encoder, rules; per file SHA-256, size, UiMap, bounds, input hash
+  NOTICE.md              # Blizzard Entertainment as the owner, non-affiliation, D-033 and its four rules
+public/maps/terrain/                            # committed and deployed terrain byproducts (D-032; terrain-navigation.md §13)
+  <mapId>/zones.json, <mapId>/coast.json, <mapId>/relief.png, manifest.json, NOTICE.md
 local-maps/                                     # gitignored except README.md; outside public/; never built or deployed
   maps.manifest.json     # written only by validate.ts --activate; its presence activates the set (§5.3)
   geometry.local.json    # rows with source "local-db2" (§5.3)
@@ -235,8 +250,9 @@ separate `validation.json`. It also proposed copying the two placeholder CSVs to
 rows file instead of CSVs.
 
 `.gitignore` already has `assets-source/*` with `!assets-source/README.md`, and `local-maps/*`
-with `!local-maps/README.md`. It also has `public/maps/*` with `!public/maps/placeholder/` and
-`!public/maps/README.md`; that README is optional. These rules keep stray files out of Git.
+with `!local-maps/README.md`. It also has `public/maps/*` with `!public/maps/placeholder/`,
+`!public/maps/art/` and `!public/maps/terrain/` (the committed outputs). These rules keep stray
+files out of Git.
 They do not keep anything out of `dist/`, which is why nothing local may be written under
 `public/`.
 
@@ -390,9 +406,48 @@ covers: the UiMap's only row in `geometry.local.json` (assignment ID, world map 
 edges, as the row writes them), so the image is one axis-aligned rectangle on one world surface
 (coordinates §4.1, §14.1). A UiMap with several rows (Azeroth 947, one per continent) or a partial
 UI rectangle has no art entry; its art needs the deferred UiSurface. `tileFdids` (the tiles an
-image was stitched from) is left to `convert.ts` in Milestone 3b, which can add it; hand-placed
-art has none to record. A manifest written before Milestone 3 has `images: {}` and no `art`; the
-app reads that as "no art".
+image was stitched from) is recorded by the committed art's manifest (below), not in a local
+set; hand-placed art has none to record. A manifest written before Milestone 3 has `images: {}`
+and no `art`; the app reads that as "no art".
+
+**Committed art** (`public/maps/art/manifest.json`, Milestone 3b; `tools/maps/lib/art-manifest.ts`).
+`convert.ts` writes it with the images and `NOTICE.md`; there is no timestamp, so the same inputs,
+tools and encoder give the same bytes. Abridged:
+
+```jsonc
+{ "_generated": { "by": "tools/maps convert", "notice": "NOTICE.md", "edit": "do not edit; …" },
+  "schema": 1, "kind": "map-art",
+  "artwork": { "owner": "Blizzard Entertainment", "notice": "NOTICE.md", "decision": "D-033", "what": "…" },
+  "client": { "product": "wow_classic_beta", "version": "1.60.1.70009", "buildKey": "05215079e3905ef5922ae0b03ffefb73" },
+  "tool": { "toolTreeHash": { "tools/casc": "<git tree id>", "tools/maps": "<git tree id>" }, "treeMethod": "git",
+            "layouts": "WoWDBDefs cf84e010… (tools/casc/layouts.ts, build 1.60.1.70009)",
+            "encoder": { "name": "sharp", "sharp": "0.35.4", "libvips": "8.18.6", "libwebp": "1.6.0", "platform": "win32-x64" },
+            "webp": { "quality": 80, "alphaQuality": 100, "effort": 6, "smartSubsample": true, "preset": "drawing" } },
+  "rules": { "phase": "…", "tiles": "…", "overlays": "…", "decoding": "…", "inputHash": "…", "pixelsSha256": "…" },
+  "tables": [ { "table": "UiMapArtTile", "fileDataId": 1957210, "ckey": "<MD5>", "rows": 1672 } ],   // the 8 DB2s read
+  "skipped": { "uiMaps": [], "overlays": [ { "uiMapId": 1434, "overlayId": 5252, "reason": "no WorldMapOverlayTile rows" } ] },
+  "totals": { "files": 60, "bytes": 9019600, "tiles": 687, "overlays": 572, "overlayTiles": 972 },
+  "files": [
+    { "path": "1411.webp", "uiMapId": 1411, "name": "Durotar", "uiMapType": 3, "uiMapArtId": 2169, "styleId": 1, "layer": 0,
+      "contentType": "image/webp", "width": 1002, "height": 668, "bytes": 183520, "sha256": "…",
+      "pixelsSha256": "…",   // SHA-256 of "frl-rgba8 <w> <h>\n" + the composed RGBA, before encoding
+      "inputHash": "…",      // SHA-256 over "<FileDataID> <CKey>\n" lines of its BLP tiles and the 8 tables (tools/casc/input-hash.ts)
+      "tiles": [8073638, 8074081, …],                                  // base tiles, row-major
+      "overlays": [ { "id": 5358, "areaIds": [370], "tiles": [8073637] }, … ],
+      "bounds": { "assignment": 46721, "mapId": 1, "xMin": -1716.6666259765625, "xMax": 1808.333251953125,
+                  "yMin": -7249.99951171875, "yMax": -1962.4998779296875 },   // null without a single full-rectangle row (947)
+      "assignments": [46721] } ] }
+```
+
+- `files[].path` and `files[].sha256` are what the dist audit's image allowlist reads (§5.7).
+- `bounds` is the UiMap's single `UiMapAssignment` row with OrderIndex 0 and the full UI rectangle,
+  as the float32 values the DB2 stores (they equal the placeholder's rows after `Math.fround`, A4).
+  Azeroth 947 has one row per continent, so it has no `bounds` (its art needs the deferred
+  UiSurface, as in a local set).
+- `pixelsSha256` does not depend on the encoder: a rebuild on another platform or with another
+  sharp can tell an encoder difference (same pixels, different bytes) from an input or tool change.
+- The full per-file (FileDataID, CKey) lists, compose statistics and gzip sizes go to the gitignored
+  `generated/maps-art-report.json`.
 
 ### 5.4 Extraction steps (local sets; extraction is Milestone 3b)
 
@@ -412,23 +467,78 @@ the tools' READMEs.
    `local-maps/geometry.local.json` (rows `source: "local-db2"`) and appends every art and overlay
    tile FDID to `extract-list.txt`.
 
-**(b) Art (scripted; Milestone 3b, with the CASC reader).**
+*As built (Milestone 3b):* steps 2-4 are replaced by one command that needs neither TACTTool nor
+DBC2CSV. `pnpm tsx tools/maps/import.ts --build 1.60.1.70009 [--out <dir>] [--check]` opens the
+client through `tools/casc` (read-only; `.build.info` and `Data/` under `WOW_INSTALL`, pinned to
+1.60.1.70009 and its build key: any other build is refused), reads `UiMap` and `UiMapAssignment`
+with `readDb2` (every column equals the research CSVs, `tools/casc/casc.client.test.ts`), removes
+`local-maps/maps.manifest.json` and writes `local-maps/geometry.local.json`: 60 UiMaps and 61 rows,
+the values as the float32s the DB2 stores, `inputs.tables` with each table's rows, FileDataID and
+CKey. Rows with a Z or WMO restriction are refused, as the placeholder importer refuses them. It
+refuses an output under `public/`. The set passes L0-L4 and L7 as built: its frame hash is the
+committed `2cb10551…` and every shared row is identical (`tools/maps/art.client.test.ts`), so the
+client read reproduces the committed placeholder frames. Nothing is written to `extract-list.txt`:
+`convert.ts` reads the tiles through the same reader.
 
-1. Run TACTTool again on the list: `blp/<fdid>.blp`.
-2. `convert.ts` performs these steps and writes only under `local-maps/art/`:
-   - Decode BLP2: palette (encoding 1), DXT1/3/5 (encoding 2) and BGRA (encoding 3). Port this from
-     wow.export's `casc/blp.js` and `3D/loaders/DXTDecoder.js` (both declare MIT), keeping their
-     headers and listing them in THIRD_PARTY_NOTICES under "Ported code" (ARCHITECTURE §16).
-   - Draw tiles at `(col·256, row·256)` on a `LayerWidth × LayerHeight` canvas (1002 × 668), so
-     edge tiles are cropped.
-   - Draw every overlay tile at `(OffsetX + col·256, OffsetY + row·256)` to get a fully explored
-     map.
-   - Encode WebP. Suggested dev-only encoders: `sharp` (declares Apache-2.0), or `pngjs`
-     (declares MIT) for PNG. Both must pass `licence-gate` before they are added.
-3. `pnpm tsx tools/maps/validate.ts --activate` runs the §5.5 local-set checks, hashes every set
-   file, and on a pass writes `local-maps/maps.manifest.json` (§5.3), which activates the set. It
-   takes the build from `geometry.local.json`, and product, method and tool versions from that
-   build's `source.json`.
+**(b) Art (scripted; built in Milestone 3b with the CASC reader; committed, D-033).**
+
+*Superseded by D-033:* the earlier plan fetched the tiles with TACTTool, wrote the art only under
+`local-maps/art/` and suggested porting wow.export's `casc/blp.js` and `3D/loaders/DXTDecoder.js`.
+As built, `convert.ts` reads the tiles through `tools/casc`, writes the committed
+`public/maps/art/`, and decodes BLP with this project's own decoder (nothing ported,
+THIRD_PARTY_NOTICES "Ported code").
+
+`pnpm tsx tools/maps/convert.ts [--out <dir>] [--report <file>] [--check]`, with the pinned client
+at `WOW_INSTALL`:
+
+1. **Tables** (`lib/client-tables.ts`): `UiMap`, `UiMapAssignment`, `UiMapXMapArt`, `UiMapArt`,
+   `UiMapArtStyleLayer`, `UiMapArtTile`, `WorldMapOverlay` and `WorldMapOverlayTile` through
+   `readDb2`, each required complete (none has an encrypted section at the pin).
+2. **Plan** (`lib/art-plan.ts`, pure). For every UiMap: its phase-0 `UiMapXMapArt` row (one per
+   UiMap at the pin; phased-only art would be skipped and reported), the art's style layers (one
+   image per layer: `<uiMapId>.webp` for layer 0, `<uiMapId>-<layer>.webp` otherwise), and:
+   - base tiles at `(ColIndex · TileWidth, RowIndex · TileHeight)` on a `LayerWidth × LayerHeight`
+     canvas, so edge tiles are cropped; every cell of the tile grid must have exactly one tile;
+   - the **fully explored** map: every `WorldMapOverlay` of the art with `PlayerConditionID` 0 (all
+     580 at the pin), in ID order, its `WorldMapOverlayTile` rows at `(OffsetX + ColIndex ·
+     TileWidth, OffsetY + RowIndex · TileHeight)`, drawn at the file's own pixel size and cut to the
+     overlay rectangle `(OffsetX, OffsetY, TextureWidth, TextureHeight)`. An overlay without tiles
+     is skipped and listed in the manifest (8 at the pin: 5551 in 1412, 5252 in 1434, 5545-5549 in
+     2521, 5550 in 2548).
+3. **Decode** (`lib/blp.ts`): BLP2 mip 0 to straight RGBA: palette (1-, 4- and 8-bit alpha), DXT1
+   (with and without 1-bit alpha), DXT3, DXT5 and B8G8R8A8; arithmetic only (D-012). At the pin
+   every one of the 1,659 tiles is DXT (345 DXT1, 371 DXT1 with 1-bit alpha, 943 DXT5), none
+   encrypted or missing; base tiles are 256 × 256 (512 × 512 for style 4) and must be exactly the
+   layer's tile size.
+4. **Compose** (`lib/compose.ts`, `lib/raster.ts`): source-over with integer rounding. The client's
+   Lua sizes an edge overlay tile file as the next power of two from 16; 19 of the 972 overlay
+   tiles are 32 px on a side where that rule gives 16. They are drawn at their pixel size (the
+   visible part is at most 16 px), and counted in the report. Every composed image is opaque at
+   the pin.
+5. **Encode** (`lib/encode.ts`): lossy WebP through `sharp` 0.35.4 (libvips 8.18.6, libwebp 1.6.0;
+   a development dependency, not shipped), one thread, no metadata, the alpha plane dropped for an
+   opaque image. The settings were chosen by measurement on all 60 images (gzip-6 total, mean PSNR
+   against the composed pixels): quality 75 → 7.21 MB; 78 → 8.37 MB (33.11 dB); **80 with the
+   `drawing` preset and smart subsampling → 9.02 MB (33.65 dB)**; 80 default preset → 9.18 MB
+   (33.59 dB); 82 → 10.11 MB (34.10 dB); 85 → 11.68 MB; 88 → 13.73 MB; 90 → 15.41 MB. Quality 80
+   leaves 25% of the 12 MB budget free; 85 and above would not fit with per-file tolerance.
+6. **Write**: the images, `manifest.json` (§5.3 "Committed art") and `NOTICE.md` into
+   `public/maps/art/` (stale `<uiMapId>.webp` files removed), refusing to write over the budget;
+   the report to the gitignored `generated/maps-art-report.json`. `--check` rebuilds in memory and
+   compares instead of writing.
+
+**Measured** (this machine, Ryzen 7 7800X3D, Node 22.13.1, warm cache; `convert.ts` wall time):
+27 s for all 60 images (CASC open 0.9 s, tables and compose about 10 s, WebP effort 6 about
+15 s). Output: 60 images, 9,019,600 B; with the manifest (98,322 B, 22,324 B gzip-6) and NOTICE
+9,047,639 B gzip-6, 75.4% of the `art` budget; largest image 1438 Teldrassil, 202,013 B gzip-6;
+the three 512 × 512 maps 40-46 kB. `tools/maps/art.client.test.ts` recomposes all 60 images to
+the recorded `pixelsSha256` and input hashes and re-encodes three to the committed bytes.
+
+**Local sets.** `pnpm tsx tools/maps/validate.ts --activate` runs the §5.5 local-set checks,
+hashes every set file, and on a pass writes `local-maps/maps.manifest.json` (§5.3), which activates
+the set. It takes the build from `geometry.local.json`, and product, method and tool versions from
+that build's `source.json`. A developer who wants art in a local set copies committed images into
+`local-maps/art/`; the committed art itself needs no activation.
 
 **(c) Manual fallback (wow.export GUI).**
 
@@ -436,19 +546,18 @@ the tools' READMEs.
    disable cache collection (§4.1) before selecting the local folder.
 2. Data tab: select the §1 tables → Export as CSV → copy to `csv/`.
 3. Zones tab (optional): export zone PNGs. They match the `convert.ts` output for zones, but
-   there are no continents and no sidecar. *Until `convert.ts` exists (Milestone 3b)* this is the
-   only way to get art: save each one as `local-maps/art/<uiMapId>.png`. L3 checks it like any
-   other art file (name, headers, `LayerWidth × LayerHeight`, placement), and `--activate` lists
-   it in the manifest.
+   there are no continents and no sidecar. Save each one as `local-maps/art/<uiMapId>.png`. L3
+   checks it like any other art file (name, headers, `LayerWidth × LayerHeight`, placement), and
+   `--activate` lists it in the manifest. Since Milestone 3b `convert.ts` makes this unnecessary.
 4. Textures tab: export the tile FDIDs as "BLP (Raw)" into `blp/`, then run `convert.ts` as in (b).
 5. Record "wow.export-gui" and the version in `source.json`. This path is less reproducible: its
    DBDs are unpinned and it needs a GUI.
 
-**Recommendation.** For (a), use a developer-local DB2 extraction (TACTTool + DBC2CSV, or the
-wow.export Data tab), checked against the committed geometry by the frame hash (§5.6). wago.tools
-is a manual cross-check only (D-011). For (b), use TACTTool raw BLP by FDID plus our own
-`convert.ts`, so that zones, continents and Azeroth go through one code path. Use the wow.export
-Zones tab only as a visual reference.
+**Recommendation.** For (a), use `import.ts --build` on the CASC reader, checked against the
+committed geometry by the frame hash (§5.6); TACTTool + DBC2CSV or the wow.export Data tab remain
+manual fallbacks. wago.tools is a manual cross-check only (D-011). For (b), use `convert.ts`, so
+that zones, continents and Azeroth go through one code path. Use the wow.export Zones tab only as a
+visual reference.
 
 ### 5.5 `validate.ts` checks
 
@@ -470,6 +579,19 @@ committed file with the inputs directly, not only with the importer's output.
 | P7 | Isotropy (coordinates §4.1): `(Ymax−Ymin)/(Xmax−Xmin)`, scaled by the UI rectangle, equals the art aspect within 0.2%: 1.5 (1002 × 668 art) for every UiMap except 1463 and 1464 (1.0: 512 × 512 art, square regions); 2665 (a 1.5 region on 512 × 512 art) is exempt. All 60 applicable rows pass. |
 | P8 | `contentHash` equals the SHA-256 of `canonicalGeometryContent` of the committed file (§5.3), recomputed exactly as `infra/maps` does at load, and equals a fresh import's content hash. A hand edit that also rewrites `contentHash` passes the loader's self-check but fails P8 (and P1, P2 or P5). |
 
+**Committed art checks** (Milestone 3b; `tools/maps/lib/art-checks.ts`) run in CI with the
+placeholder checks (`pnpm maps:validate`); they need no client. `convert.ts --check` is the rebuild
+from the client, and `tools/maps/art.client.test.ts` recomposes every image to its recorded pixel
+hash.
+
+| # | Check |
+|---|---|
+| A1 | `public/maps/art/manifest.json` and `NOTICE.md` exist; the manifest parses (schema, `kind: "map-art"`, Blizzard Entertainment as the owner, tool tree hashes, tables, every file entry well formed and in UiMap order) and records the pinned client build and build key. |
+| A2 | Every listed image exists with its recorded byte count and SHA-256, and its headers (`readImageHeader`, shared with `infra/maps`) give a still WebP of the recorded size; no unlisted file is in the folder. |
+| A3 | `NOTICE.md` equals the text regenerated from the manifest (`lib/art-notice.ts`). |
+| A4 | Against the committed placeholder: every placeholder UiMap has an image or a recorded reason (60 of 60 have images); every image's UiMap is in the placeholder with its art size (1002 × 668; 512 × 512 for 1463, 1464, 2665); `bounds` equal the UiMap's single full-rectangle row after `Math.fround`, and are null exactly where there is no such row (947). |
+| A5 | The folder is within the `art` budget: gzip-6 of every file ≤ 12,000,000 B (9,047,639 B at the pin). The dist audit also gates each file against its baseline + 10%. |
+
 **Local-set checks** run on the developer's machine, in `validate.ts --local [dir]` (report
 only) or `validate.ts --activate` (writes the manifest on a pass, removes an existing one on a
 failure), implemented in `tools/maps/lib/local-set.ts` and tested with synthetic sets. They run
@@ -480,7 +602,7 @@ only after the placeholder checks pass. Any failure leaves the set inactive.
 | L0 | `geometry.local.json` exists and parses as a local geometry: `"kind": "local"`, `"redistribution": "local-only"`, a top-level `build`, rows `local-db2`, the placeholder's product. |
 | L1 | Every Type 3/6 UiMap with art has exactly one `OrderIndex 0` assignment with `UiMin (0,0)`, `UiMax (1,1)`, WMO 0 and Z `±1e6`. Anything else is reported. *As built (Milestone 2):* the geometry format has no WMO or Z columns, so L1 checks the OrderIndex 0 row and the UI rectangle of every Type 3/6 UiMap; WMO and Z are for `import.ts --build` to check when it reads the CSVs (Milestone 3), as the placeholder importer already does for the 12 rows. |
 | L2 | Isotropy: `(Ymax−Ymin)/(Xmax−Xmin)` equals `LayerWidth/LayerHeight` to within 0.2%. *As built (Milestone 2):* against the same art-aspect table as P7, since art dimensions are unknown before Milestone 3. |
-| L3 | Image dimensions equal `LayerWidth × LayerHeight`, and every tile listed in `extract-list.txt` decoded. (`validate.ts` then hashes the set files into the manifest; `infra/maps` checks those hashes at runtime, §5.6.) *As built (Milestone 3, `lib/art.ts`):* every file directly in `art/` must be named `<uiMapId>.png` or `<uiMapId>.webp` (no subfolders or links; `Thumbs.db`, `desktop.ini` and `.DS_Store` are skipped), one per UiMap; its PNG or WebP headers must parse and match the extension, and animated images are refused (headers only: chunk structure, IHDR, VP8/VP8L/VP8X; nothing is decoded, and PNG CRCs are not checked, the SHA-256 is the integrity check); the UiMap must be in `geometry.local.json` with exactly one row, OrderIndex 0 with the full UI rectangle; the size must be the UiMap's art size (1002 × 668; 512 × 512 for 1463, 1464, 2665: the P7 table, until `import.ts --build` reads `UiMapArtStyleLayer`); and the image aspect must equal the row's world aspect within 0.2% (2665 exempt). The tile check waits for `convert.ts` (Milestone 3b). A geometry-only set passes. |
+| L3 | Image dimensions equal `LayerWidth × LayerHeight`, and every tile listed in `extract-list.txt` decoded. (`validate.ts` then hashes the set files into the manifest; `infra/maps` checks those hashes at runtime, §5.6.) *As built (Milestone 3, `lib/art.ts`):* every file directly in `art/` must be named `<uiMapId>.png` or `<uiMapId>.webp` (no subfolders or links; `Thumbs.db`, `desktop.ini` and `.DS_Store` are skipped), one per UiMap; its PNG or WebP headers must parse and match the extension, and animated images are refused (headers only: chunk structure, IHDR, VP8/VP8L/VP8X; nothing is decoded, and PNG CRCs are not checked, the SHA-256 is the integrity check); the UiMap must be in `geometry.local.json` with exactly one row, OrderIndex 0 with the full UI rectangle; the size must be the UiMap's art size (1002 × 668; 512 × 512 for 1463, 1464, 2665: the P7 table, until `import.ts --build` reads `UiMapArtStyleLayer`); and the image aspect must equal the row's world aspect within 0.2% (2665 exempt). The tile check is not needed for a local set: `convert.ts` fails closed on any tile that does not decode, and the committed art's A1-A5 cover its output. A geometry-only set passes. |
 | L4 | **Frame compatibility** (§5.6). The frame hash of the set's rows for the 49 shared UiMaps equals the committed `frameHash`, and every row for a UiMap the placeholder already has is identical to the committed row (§5.6 step 4). On a hash mismatch the build's geometry has changed, so QuestieDB percentages would be read in the wrong frame. On a shared-row mismatch, resolution would differ between machines. Either way the set is not activated. *Superseded by D-018:* revision 1 compared DB2 bounds with `target_bounds` directly; the hash is the same test in a form `infra/maps` can also run. |
 | L5 | Every `TaxiNodes` position on MapID *m* falls inside 0..100 of at least one zone on *m*. *As built:* runs with `--taxi-nodes <TaxiNodes.csv>` (a local CSV at the set's build, read by column name: `ID`, `ContinentID`, `Pos_0`, `Pos_1`) against the merged geometry's zone rows (AreaID > 0). Without the CSV, L5 and L6 are recorded under `validation.notRun` in the manifest and do not block activation. |
 | L6 | Landmarks: each QuestieDB flight master is within 30 yd of a TaxiNode on the same MapID. Six landmarks (`TAXI_LANDMARKS` in `tools/maps/lib/local-set.ts`): nodes 2, 22 and 23 (Stormwind, Thunder Bluff, Orgrimmar) at 11.9, 3.6 and 2.6 yd, and nodes 5 (Lakeshire), 67 and 68 (Light's Hope Chapel) at 7.0, 4.9 and 3.8 yd. Four of them sit on three of the four changed frames (1453, 1433, 1423); reading their Forever percent in the Era frame gives 108.9, 107.2, 450.5 and 445.0 yd ([coordinates §9](research/coordinates.md#9-independent-cross-check-flight-masters-vs-taxinodes)). The TaxiNodes inputs are local. The six landmark rows are cited client values that `src/geo` tests pin (D-022, ARCHITECTURE §6). |
@@ -597,10 +719,16 @@ serves contains none.
 - contains `local-maps/`;
 - contains any `maps.manifest.json` or JSON file with `"redistribution": "local-only"` (which
   also catches a copied `geometry.local.json` or `taxi.local.json`);
-- contains images outside an allowlist of app assets (so no map WebP or PNG), by extension and,
-  since Milestone 3, by content: PNG, JPEG, GIF, WebP and AVIF/HEIF signatures under a name that
-  does not declare them are refused as images, and BLP texture content under any other name as a
-  client file (`checkFileSignature`, `tools/build/lib/audit.ts`);
+- contains images outside an allowlist of app assets, by extension and, since Milestone 3, by
+  content: PNG, JPEG, GIF, WebP and AVIF/HEIF signatures under a name that does not declare them
+  are refused as images, and BLP texture content under any other name as a client file
+  (`checkFileSignature`, `tools/build/lib/audit.ts`). *Since Milestone 3b (D-033, the one image
+  allowlist of terrain-navigation.md §13.3):* an image may also ship under `maps/art/` or
+  `maps/terrain/` (`mapFolders` in `tools/build/dist-requirements.json`), only when that folder's
+  `NOTICE.md` and `manifest.json` ship with it and the manifest lists the file with its SHA-256;
+  every other file of those folders must be listed too, every listed file must be present, and once
+  the repository has the folder's manifest the folder must ship. Each folder has its own gzip-6
+  budget with per-file baselines + 10%: `art` ≤ 12 MB, `terrain` ≤ 600 kB (D-034 item 4);
 - contains local paths, `.cache` references, `.lua`, `.blp` or source maps;
 - contains files over budget;
 - lacks a required notice file;
@@ -1293,7 +1421,12 @@ conclusions.
 2. **Legal FAQ.** Blizzard's Legal FAQ describes a limited, revocable permission to use its images
    on web pages for personal, non-commercial purposes, with notices and without alteration.
    Whether stitched or composited map images would fit it was not assessed. The owner's posture
-   is that no map art is committed or deployed (D-018; STATUS OD-10, default "never").
+   was that no map art is committed or deployed (D-018; STATUS OD-10, default "never").
+   *Superseded by D-033 (2026-09-26):* the owner decided to commit and deploy the painted map art
+   with a NOTICE naming Blizzard Entertainment as its owner, under four project rules
+   (non-commercial, notices kept, prompt removal on request, no hacks or cheats); D-033 records the
+   Legal FAQ as the governing source and draws no legal conclusion (§5.4 (b), THIRD_PARTY_NOTICES
+   "Map art").
 3. **Tool licences.** wow.export, TACTSharp, DBCD and CascLib declare MIT in their licence files.
    The project does not treat any tool's licence as permission for the files the tool extracts.
 4. **Beta status.** The owner states that the Forever beta has no NDA and is public (D-022). On

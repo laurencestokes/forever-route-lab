@@ -1,0 +1,217 @@
+{
+  "_generated": {
+    "by": "tools/terrain byproducts",
+    "notice": "NOTICE.md",
+    "edit": "do not edit; regenerate with pnpm tsx tools/terrain/byproducts.ts (needs the pinned client at WOW_INSTALL)"
+  },
+  "schema": 1,
+  "kind": "terrain-byproducts",
+  "derivedFrom": "World of Warcraft: Forever client terrain data (MCNK heights, liquids, per-chunk AreaTable ids); not game files and not the painted map art",
+  "decision": "D-032",
+  "client": {
+    "product": "wow_classic_beta",
+    "version": "1.60.1.70009",
+    "buildKey": "05215079e3905ef5922ae0b03ffefb73"
+  },
+  "tool": {
+    "toolTreeHash": {
+      "tools/terrain/byproducts.ts": "da6354cf3a2e488388311932dc1d42cbe70b4b5584e910388a702964fff45610"
+    },
+    "treeMethod": "module closure of tools/terrain/byproducts.ts (37 files, tools/terrain/lib/tool-tree.ts)",
+    "zlib": "1.3.0.1-motley-82a5fec"
+  },
+  "parameters": {
+    "zones": {
+      "cellYd": 33.333333333333336,
+      "simplifyYd": 8,
+      "quantumYd": 1,
+      "rollUp": "AreaTable.ParentAreaID to a row whose parent is 0"
+    },
+    "coast": {
+      "cellYd": 4.166666666666667,
+      "simplifyYd": 4,
+      "quantumYd": 1,
+      "minWaterDepthYd": 0.3,
+      "hazards": "LiquidType SoundBank 2 or 3 are not water"
+    },
+    "relief": {
+      "pixelYd": 16.666666666666668,
+      "light": {
+        "east": -0.5,
+        "north": 0.5,
+        "up": 0.7071067811865476
+      },
+      "exaggeration": 2,
+      "palette": "0 transparent, 1 water, 2-15 grey",
+      "encoding": "PNG colour type 3, 4 bits, deflate level 9 (node:zlib)"
+    },
+    "orientation": "On a map drawn with east to the right and north up (east = -Y, north = +X), label `left` lies left of the arc direction; arcs are stored with left < right. Coast arcs have land on the left.",
+    "inputHash": "SHA-256 over \"<FileDataID> <CKey>\\n\" lines, ascending: the WDT, every root ADT, and the AreaTable, LiquidType and Map DB2 files"
+  },
+  "tables": [
+    {
+      "table": "Map",
+      "fileDataId": 1349477,
+      "ckey": "c7f3134e35c4f8c8bfd736e0a4ed3046",
+      "rows": 72
+    },
+    {
+      "table": "AreaTable",
+      "fileDataId": 1353545,
+      "ckey": "65ca0ed314f02647991a9cf56cf63513",
+      "rows": 1371
+    },
+    {
+      "table": "LiquidType",
+      "fileDataId": 1371380,
+      "ckey": "ddd1be6948c742b457f88bad605d652a",
+      "rows": 52
+    }
+  ],
+  "maps": [
+    {
+      "mapId": 0,
+      "name": "Eastern Kingdoms",
+      "wdt": 775971,
+      "tiles": 736,
+      "tileRows": [
+        20,
+        61
+      ],
+      "tileCols": [
+        23,
+        45
+      ],
+      "rect": {
+        "xMin": -16000.000000000004,
+        "xMax": 6400,
+        "yMin": -7466.666666666668,
+        "yMax": 4800
+      },
+      "inputFiles": 740,
+      "inputHash": "59c06d16080d1aca9ccea2db43112291d45aad57f141bef3636201e8a4eee525"
+    },
+    {
+      "mapId": 1,
+      "name": "Kalimdor",
+      "wdt": 782779,
+      "tiles": 988,
+      "tileRows": [
+        0,
+        55
+      ],
+      "tileCols": [
+        0,
+        48
+      ],
+      "rect": {
+        "xMin": -12800,
+        "xMax": 17066.666666666668,
+        "yMin": -9066.666666666668,
+        "yMax": 17066.666666666668
+      },
+      "inputFiles": 992,
+      "inputHash": "91a74c2d9a724c2af4f6fc95d112eb6c4fe5a9d8b03f1197b51c0fed0dc300ab"
+    }
+  ],
+  "files": [
+    {
+      "path": "0/zones.json",
+      "mapId": 0,
+      "bytes": 12313,
+      "sha256": "71f7ba435f5fdf59c16ab046b35660f0b1f96e9f05b94f8e28a37aeeeb13eab1",
+      "rect": {
+        "xMin": -16000.000000000004,
+        "xMax": 6400,
+        "yMin": -7466.666666666668,
+        "yMax": 4800
+      },
+      "kind": "zones",
+      "arcs": 109,
+      "vertices": 1808,
+      "zones": 28
+    },
+    {
+      "path": "0/coast.json",
+      "mapId": 0,
+      "bytes": 97152,
+      "sha256": "2e9da2c2703740b5a5600ab7f1a9bfe9da0c36af3a273fee61bd3717130fa3a3",
+      "rect": {
+        "xMin": -16000.000000000004,
+        "xMax": 6400,
+        "yMin": -7466.666666666668,
+        "yMax": 4800
+      },
+      "kind": "coast",
+      "arcs": 876,
+      "vertices": 15552
+    },
+    {
+      "path": "0/relief.png",
+      "mapId": 0,
+      "bytes": 157239,
+      "sha256": "f100bd96532ebca6dadbbb02b834fdd5dbbca1323ad1881b08fb640ec2e39f56",
+      "rect": {
+        "xMin": -16000.000000000004,
+        "xMax": 6400,
+        "yMin": -7466.666666666668,
+        "yMax": 4800
+      },
+      "kind": "relief",
+      "contentType": "image/png",
+      "width": 736,
+      "height": 1344,
+      "pixelYd": 16.666666666666668,
+      "indicesSha256": "f28ac71af8675c25da9bef1a10f7d7cb5e36205dd8eba321d5350b0ce1d7990a"
+    },
+    {
+      "path": "1/zones.json",
+      "mapId": 1,
+      "bytes": 13557,
+      "sha256": "d76a06ee2abdf0566d0abdad22717626520465e89566309c5752643d911517d3",
+      "rect": {
+        "xMin": -12800,
+        "xMax": 17066.666666666668,
+        "yMin": -9066.666666666668,
+        "yMax": 17066.666666666668
+      },
+      "kind": "zones",
+      "arcs": 127,
+      "vertices": 1973,
+      "zones": 26
+    },
+    {
+      "path": "1/coast.json",
+      "mapId": 1,
+      "bytes": 110952,
+      "sha256": "e34efc64ee9a7d4a0ba105d3c3ac53205e2926875b5de23a67ce180326a2c8f2",
+      "rect": {
+        "xMin": -12800,
+        "xMax": 17066.666666666668,
+        "yMin": -9066.666666666668,
+        "yMax": 17066.666666666668
+      },
+      "kind": "coast",
+      "arcs": 916,
+      "vertices": 18031
+    },
+    {
+      "path": "1/relief.png",
+      "mapId": 1,
+      "bytes": 218763,
+      "sha256": "ac6d18144727d7f3deb6cf1886e0faffeb2c780a13257320aa3591a651d94174",
+      "rect": {
+        "xMin": -12800,
+        "xMax": 17066.666666666668,
+        "yMin": -9066.666666666668,
+        "yMax": 17066.666666666668
+      },
+      "kind": "relief",
+      "contentType": "image/png",
+      "width": 1568,
+      "height": 1792,
+      "pixelYd": 16.666666666666668,
+      "indicesSha256": "eae1a36c5652ec5ce23b471cfea9f185b1d8e559a208a341856244c98cc60943"
+    }
+  ]
+}

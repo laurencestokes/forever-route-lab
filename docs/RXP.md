@@ -5,7 +5,11 @@
   conditions.ts, project.ts), which are authoritative where this document and they differ. A
   second pass the same day applied the architect's rulings on the Milestone 0 consistency check
   (any-of turn-ins, exact `.xp` offsets, the world-form UiMapID, `Location.radius`,
-  `SourceLineRef`, `RxpDiagnostic`). Nothing here is implemented yet.
+  `SourceLineRef`, `RxpDiagnostic`). Implemented in Milestone 5 as `src/rxp` (import, lowering,
+  canonical form and export); a third pass on 2026-09-26 recorded the implementation's choices
+  (sections 12.2-12.6 and 13.4-13.6) and applied the behaviour corrections of the Milestone 5 RXP
+  review (sections 3.3, 4 P7, 6.2, 9.4, 9.7, 10.4, 12.3). Where the code and this document
+  differ, this document is the specification and the code is fixed.
 - **What this is:** the behavioural specification that D-019 requires. `src/rxp` (ARCHITECTURE
   §10) is built from this document and the self-authored fixtures in
   [docs/research/rxp-samples/](research/rxp-samples/).
@@ -176,11 +180,23 @@ and fails with an account-mismatch error for any other account (`GuideLoader.lua
 `1318-1345`, `274-358`).
 
 Our rule: **detect and refuse.** Our own detection heuristics, as JavaScript regular
-expressions: if pasted input (after trimming) matches `^\D*\d+\|-?\d+:`, or contains runs of
-`-?\d+\D[A-Za-z0-9+/=]{16,}%`, or ends with `\|\d+\s*$` without containing a `step` line, reply
-with `RXP019-protected-format`: "This looks like a RestedXP protected import string. Those are
-licensed to one account and are not supported. Paste guide text or a custom-guide .lua file
-instead." Do not attempt to decode, decrypt, inflate or fingerprint it. Do not log or store it.
+expressions, on the pasted input after trimming. Input that has a line whose content (after
+leading spaces and tabs) starts with `#` or `step` is guide text and is never refused. Other
+input is refused when
+
+1. it matches `^[^\d\r\n]*\d+\|-?\d+:` (the count, `|`, the hash and `:` on the first line, with
+   no line break before them), or
+2. it contains runs of `-?\d+\D[A-Za-z0-9+/=]{16,}%`, or
+3. it ends with `\|\d+\s*$`.
+
+Then reply with `RXP019-protected-format`: "This looks like a RestedXP protected import string.
+Those are licensed to one account and are not supported. Paste guide text or a custom-guide .lua
+file instead." Do not attempt to decode, decrypt, inflate or fingerprint it. Do not log or store
+it. The line conditions keep real guides from being refused: a header line such as
+`#name 01|02: x` (below `#forever` or not), and a header-only text that ends with `#version 3|12`,
+are guide text. A protected string is one line of digits, `|`, `:`, base64 and `%` and has no
+such line. (The first revision anchored rule 1 at `^\D*`, which spans line breaks, applied it to
+every input, and exempted only texts with a `step` line from rules 2 and 3; superseded.)
 
 The addon also keeps an internal cache format (text prefixed by `--<digits>` and deflated,
 `GuideLoader.lua:371-390`). Users never see it. We do not support it.
@@ -202,7 +218,7 @@ diagnostics.
 | P4 | Trim | Leading and trailing whitespace (spaces and tabs) is removed. Indentation has no meaning. | `GuideLoader.lua:1042-1043` |
 | P5 | Step start | A line whose **first four characters are `step`** starts a new step (a case-sensitive prefix test, so `stepwise…` also does and `Step` does not). `<<` + filter anywhere after it is the step filter. A failing step filter skips every line until the next step line. When a new step starts and the previous one has no elements, the previous one gets `hidewindow`. | `GuideLoader.lua:1045-1094` |
 | P6 | Game/metadata gate | At the first step: if the header has any of `#classic #tbc #wotlk #df #retail #cata` but not the current game's tag (on Forever: `#forever` or `#classic` both pass), or `#name`/`#group` is missing, the guide is skipped. | `GuideLoader.lua:1049-1071` |
-| P7 | Header lines (before the first step) | `code << filter`: if `code` is empty the filter becomes the guide's `enabledFor` (first one wins; a failing one disables the guide for this character); otherwise a failing filter blanks the line. Then `#key value` or `#key = functionName` sets `guide[key]` **if not already set** (first wins). `#name` sets the guide name. **Every other header line is ignored**, including dot-commands. | `GuideLoader.lua:1100-1128` |
+| P7 | Header lines (before the first step) | `code << filter`: if `code` is empty the filter becomes the guide's `enabledFor`, and the first such line wins for `enabledFor`. But RXP re-decides for **every** such line whether the guide is skipped for this character (the empty code counts as present), so the **last** `<< filter` header line decides whether the guide loads at all; `enabledFor` keeps the first. Otherwise (a non-empty `code`) a failing filter blanks the line. Then `#key value` or `#key = functionName` sets `guide[key]` **if not already set** (first wins). `#name` sets the guide name. **Every other header line is ignored**, including dot-commands. | `GuideLoader.lua:1100-1128` |
 | P8a | Line filter | Inside a step, the filter starts at the first `<<` that has at least one character after it. That `<<`, the whitespace directly before and after it, and the rest of the line are cut off; the rest is the filter. If the filter is false the line is dropped. A `<<` at the very end of a line is not a filter and stays in the line. | `GuideLoader.lua:872-877` |
 | P8b | Step tag | After the filter is cut, a line starting with `#` is a tag. The key is the run of non-space characters after `#`; then comes an optional `=` with optional whitespace around it; the value is the rest of the line. The first value stored for a key wins; keys are not validated. Nothing else on the line is interpreted (a `>>` stays part of the value). Because the key runs to the first whitespace, `#key=value` stores the key `key=value` with an empty value. | `GuideLoader.lua:879-891` |
 | P8c | Text | Next, the text starts at the first `>>`: the `>>`, the whitespace around it and the rest of the line are cut off; the rest, if not empty, is the line's text. Later `>>` belong to the text. | `GuideLoader.lua:895-898` |
@@ -290,7 +306,7 @@ Lexical priorities that the grammar cannot show by itself (evidence: `GuideLoade
 
 | Position | Effect when the filter fails | Source |
 |---|---|---|
-| Header line that is only `<< filter` | The guide is disabled for this character (`enabledFor`). | `GuideLoader.lua:1100-1106`, `576-581` |
+| Header line that is only `<< filter` | The guide is disabled for this character (`enabledFor`). With several such lines, `enabledFor` is the first one, but the last one decides whether the guide loads (section 4 P7). | `GuideLoader.lua:1100-1106`, `576-581` |
 | Header tag line, `#key value << filter` | That line is ignored (a later line with the same key may apply: first *applicable* wins). | `GuideLoader.lua:1107-1116`, `562-568` |
 | `step << filter` | The whole step is skipped. | `GuideLoader.lua:1077-1080` |
 | Any line inside a step (tag, command, note, `+`, `*`) | That line is dropped. | `GuideLoader.lua:873-877` |
@@ -306,12 +322,26 @@ Behaviour of `applies()` (`GuideLoader.lua:36-103`), in our words:
    group's content is evaluated as a filter of its own, and the group then acts as a single word
    that is true or false for this character; `!(…)` inverts it. Groups do not nest: in
    `((a/b) c)` the first group's content is `(a/b`, and the parenthesis characters left over act
-   as word separators.
-2. **Alternatives.** The filter is split on `/`; it is true if **any** alternative is true.
+   as word separators. RXP does this by replacing the group with a token made of word
+   characters. So a group written **directly against** a letter or digit, as in `Orc(Warrior)`,
+   `(Orc)Warrior` or `Orc!(Warrior)`, merges with those letters into one word, and that word
+   never matches (RXP review, `GuideLoader.lua:43-52`). A `!` directly before the letters
+   (`!Orc(Warrior)`) negates the merged word, which is then always true. Two groups written
+   directly together (`(Orc)(Warrior)`) merge the same way, because both tokens are word
+   characters (derived from the same behaviour; **UNVERIFIED** by a direct test).
+2. **Alternatives.** The filter is split into alternatives at each `/`, and an **empty
+   alternative** (no characters at all: two adjacent slashes, or a slash at the start or end of
+   the filter or of a group's content) is **ignored** (RXP splits with a pattern that matches
+   only non-empty runs, `GuideLoader.lua:50`). The filter is true if **any** remaining
+   alternative is true. So `Orc/` and `/Orc` mean `Orc`, `Orc//Troll` means `Orc/Troll`, and a
+   filter whose alternatives are all empty (`/`, or a group `(/)`) has none left and is
+   **false**: RXP drops the line for everyone. The first revision said an empty alternative is
+   true; superseded.
 3. **Words.** In an alternative, every word must be true (AND). A word is a maximal run of ASCII
    letters and digits, optionally preceded **directly** by `!`. Every other character, including
    spaces, `-`, `'`, `_`, leftover parentheses and a second `<<`, only separates words. So
-   `! Orc` is the positive word `Orc`, and an alternative with no words at all is true.
+   `! Orc` is the positive word `Orc`, and an alternative that has characters but no words at
+   all (such as ` - ` in `Orc/ - `) is true.
 4. A word is true when it matches the character (vocabulary and case rules in 6.3); `!word` is
    true when `word` is false.
 5. Results are **cached per filter string for the whole UI session** and never cleared
@@ -321,14 +351,26 @@ The published documentation says the same about operators: space = AND, `/` = OR
 priority `!` > space > `/` (<https://community.restedxp.com/custom-guides/>, "Text Tutor").
 
 Our parser reproduces rules 1-3 exactly and reports nested or unbalanced parentheses, a `!`
-separated from its word, and an alternative without words with `RXP016-filter-quirk`.
+separated from its word, an empty alternative, a filter with no alternative left, an alternative
+without words, and a group written against a word with `RXP016-filter-quirk`.
+
+How the `FilterAst` (src/domain/conditions.ts) represents these cases, so that the engine can
+evaluate them and the serializer can write them back (13.4 rule 10):
+
+| Filter | AST |
+|---|---|
+| empty alternatives | left out |
+| no alternative left (`/`, `(/)`, `()`) | `{ kind: 'or', exprs: [] }`: false |
+| an alternative without words (` - `) | `{ kind: 'and', exprs: [] }`: true |
+| one alternative, one term | the term itself (not wrapped in `or` or `and`) |
+| a merged word (`Orc(Warrior)`) | `{ kind: 'word', word }`, where `word` is the merged spelling with each group's content in canonical form (`Orc(Warrior/Mage)` for `Orc( Warrior / Mage )`); like every word outside the vocabulary it is false (6.5), and `!` in front gives `not` |
 
 ### 6.3 Word vocabulary
 
 | Word | True when | Case rule | Notes |
 |---|---|---|---|
 | Class: `Warrior Paladin Hunter Rogue Priest Shaman Mage Warlock Druid` (and `DeathKnight`/`DK`, `Monk`, `DemonHunter`, `Evoker` on other games) | the upper-cased word equals the class file token (`WARRIOR`, …) | case-insensitive | `DK` → `DEATHKNIGHT` |
-| Race token: `Human Orc Dwarf NightElf Scourge Tauren Gnome Troll …` | the word equals the race file token that the WoW API `UnitRace` returns | **case-sensitive** | `Undead` is rewritten to `Scourge`. `Night Elf` is two words → never true. Forever guides use `Skyborne` (13 times); the Skyborne race token itself is **UNVERIFIED** (local-context K5/K6: Skyborne come as two faction halves), so our engine evaluates race words for a Skyborne character as `unknown` (6.5). |
+| Race token: `Human Orc Dwarf NightElf Scourge Tauren Gnome Troll …` | the word equals the race file token that the WoW API `UnitRace` returns | **case-sensitive** | `Undead` is rewritten to `Scourge`. `Night Elf` is two words → never true. Forever guides use `Skyborne` (13 times); the Skyborne race token itself is **UNVERIFIED** (local-context K5/K6: Skyborne come as two faction halves), so our engine evaluates race words for a Skyborne character as `unknown` (6.5). The project's own race keys for the two Skyborne halves (`src/domain`) are not RXP filter words: until Q1 is answered they are unknown words like any other (false, `RXP016`). |
 | Faction: `Alliance`, `Horde` | equals the player's faction group | **case-sensitive** | Real guides contain the typo `Aliance` (always false). |
 | Number `N` | player level ≥ N | — | `!N` = level < N. Load-time only (rule 5). RXP's number conversion also accepts words such as `1e1` (10) and `0x10` (16); we reproduce that and report `RXP016-filter-quirk`. |
 | Game: `Classic`, `TBC`, `Wotlk`, `Cata`, `MoP`, `Retail`, `Forever`; `DF` → `RETAIL` | the upper-cased word equals the addon's game id | case-insensitive | On Forever only `Forever` is true. **`<< Classic` is false on Forever.** |
@@ -362,7 +404,8 @@ The inputs map onto ProjectV1 (ARCH §8.2):
   and route profile; the serializer never evaluates filters.
 - Evaluation is three-valued: `true`, `false`, `unknown`. AND is false if any term is false,
   else unknown if any term is unknown; OR is true if any alternative is true, else unknown if any
-  is unknown; NOT keeps unknown.
+  is unknown; NOT keeps unknown. So an empty AND (an alternative without words) is true and an
+  empty OR (no alternative left) is false, as in RXP (6.2).
 - **Level words** use `character.startLevel`, the route's start level, as RXP does at guide load
   (`RXP028-level-filter`, info, once per guide that uses them).
 - An **unresolvable word**, one whose truth depends on a profile value the project does not know
@@ -575,7 +618,7 @@ All are text-only (never block). "Skipped" = the step is marked completed while 
 | `.xp L-N` | `L-N` | Until N XP short of level L (i.e. level L-1 with `max-N` XP). | yes | `grind` (offset `xpShort`) | same, `3343-3368` |
 | `.xp L.F` | `L.F` (for example `10.5`) | Until fraction `.F` into level L (`10.5` = 50%, `10.25` = 25%). | yes | `grind` (offset `fraction`) | same |
 | `.xp <expr` | `<` prefix | Reverse logic: condition is "below". | — | with a skip flag: `skipIf` | same |
-| `.xp expr,S` | skip flag S | Text-only: when the target is reached (or, with `<`, not reached), the step is **skipped**. Without `<` this only acts if the user enabled XP step skipping (default on); a negative S also reverses. | no | `skipIf` | `functions.lua:3316`, `3322-3326`, `3361-3390` |
+| `.xp expr,S` | skip flag S | Text-only: when the target is reached (or, with `<`, not reached), the step is **skipped**. Without `<` this only acts if the user enabled XP step skipping (default on); a negative S also reverses. RXP converts S with Lua's `tonumber`, so an S that is not a number reads as no flag at all: the line stays an ordinary grind objective (`functions.lua:3275`, `3291-3293`). | no | `skipIf`; S not a number: as `.xp expr` without S, plus `RXP004` (warning) | `functions.lua:3316`, `3322-3326`, `3361-3390` |
 | `.xp expr,S,label` | + label | Jump to the labelled step instead of skipping. | no | `skipIf` (jump approximated as skip, `RXP034`) | `functions.lua:3281`, `3372-3378` |
 
 Behaviour of the level expression (`functions.lua:3279`), in our words: all spaces are removed
@@ -584,7 +627,10 @@ first. RXP then looks for the first place in the argument where this shape occur
 digits (the offset). Characters before and after that shape are ignored, so RXP keeps the
 element. Our parser accepts the same shape; extra characters are reported as
 `RXP004-malformed-number` with severity warning (RXP keeps the element with the value it found),
-and the lowering uses that value. All three offset forms lower exactly: the engine resolves the
+and the lowering uses that value. A level or offset whose digits do not make a safe integer
+(more than 15 or so digits), a level below 1 for a grind objective, and a fraction whose digits
+round to 1 or more (`10.99999999999999999`) have no form in the route model: the line is
+`RXP004` (error) and is kept as a preserved note. All three offset forms lower exactly: the engine resolves the
 offset with the ruleset's XP table (12.3), so `src/rxp` needs no XP data. The first revision
 approximated `L-N` and `L.F` as "until level L" with `RXP033`; that is superseded by the
 `GrindTarget` offsets of ARCH §8.1 revision 2, and `RXP033` is retired (11.1).
@@ -635,6 +681,19 @@ Recognise by name, keep verbatim, never evaluate. All lower to `preserved`:
   `.areapoiguide`, `.neutralzonefinished`, `.pvp`, `.pve`, `.dmf`, `.nodmf`, `.holiday`, `.beta`,
   `.blastedLands`, `.ironchain`, `.bombdispenser`, `.rescue`, `.niffelen`, `.hsbatching`,
   `.maxskill`, `.noop`.
+
+**Route relevance** (which preserved lines get `RXP034-not-simulated`, 12.3): the first two
+groups above are route-relevant, because running Lua, changing RXP's quest database or RXP's own
+level helpers can change which steps a character does; so are the preserved commands of sections
+9.1-9.6 (`.destroy`, `.stable`, `.tame`, and the blocking `.collect`, `.cast`, `.skill` and
+`.reputation` forms of 12.6, and `.deathskip`). The third group (other games only), `.mirrorquest`
+(it always errors, 9.1) and `.hastyhearth` (a Retail toy check, 9.3) are not: they are preserved
+without a diagnostic.
+
+**Prefix families.** `.multibox*`, `.singlebox*`, `.achievement*` and `.isWorldQuest*` name every
+command that starts with the prefix, **including the bare prefix** (RXP registers `.achievement`,
+`.multibox` and `.singlebox` themselves as well as longer names; RXP review, `functions.lua:7147`,
+`7477`, `7493`).
 
 The full list of 176 registered names was produced with the research script
 `.cache/experiments/rxp/gen-commands.sh <rxpguides clone>` (it lists the function names
@@ -773,6 +832,11 @@ frame.
   arrival radii; they stay in the source line (12.4 rule 7).
 - A number RXP cannot read (`-600.00.00`) is `RXP004-malformed-number` (error); the line yields
   no point.
+- In the world form, the UiMapID before the `/` must be a positive safe integer and the instance
+  after it a safe integer (`.goto 0/1,…` and `.goto 99999999999999999999/1,…` name no map, and a
+  number beyond the safe-integer range cannot be stored exactly): otherwise the line is `RXP004`
+  (error) and yields no point. A numeric UiMapID in the zone form that is not a positive safe
+  integer is read as a missing zone (`RXP003`), as before.
 - Resolution to a `WorldPoint` happens at runtime in `geo` and is never persisted; a point on a
   UiMap without geometry is still storable and resolves to null (unknown travel, ARCH §6).
 
@@ -811,7 +875,7 @@ Fixture references are `file:Enn` or `file:Lnn` in `docs/research/rxp-samples/`.
 | 24 | Required text missing (`.hs`, `.zone`, `.subzone`, `.link`, `.clicknext`, `.macro`, `.fly` without location) | error, element dropped | `RXP018-missing-text` error | — |
 | 25 | Line starting with `step…` | new step | new step + `RXP010-step-prefix` warning | 04:E31 |
 | 26 | Step typos: a capitalised `Step`, or a doubled first letter (the prefix test is case-sensitive; leading spaces are trimmed first, so an indented `step` is fine) | stray (or filtered) | `RXP011-step-typo` "possible step typo" when a stray or filtered-out line matches `/^\w?step\b/i`. A real Forever guide (`Alliance-1-13_Human.lua:2743`) has a doubled-letter typo followed by a `skip` filter, which leaves the following lines active inside the previous step | 04:E32 |
-| 27 | Duplicate header/step tags | first wins | keep all in source order (a later duplicate is shadowed, derived from the order), `RXP013-shadowed-tag` info | 04:E01, E30 |
+| 27 | Duplicate header/step tags; several `<< filter` header lines | first wins; for `<< filter` header lines `enabledFor` is the first, but the last decides whether the guide loads (4 P7) | keep all in source order (a later duplicate is shadowed, derived from the order), `RXP013-shadowed-tag` info (for a later `<< filter` header line the message says that the last one decides loading) | 04:E01, E30 |
 | 28 | Unknown or typo'd step tags (`#completwith`), and `#key=value` without spaces (key `key=value`, P8b) | stored silently | keep; `RXP012-unknown-tag` warning with did-you-mean | 04:E28 |
 | 29 | `#key = functionName` | function reference | opaque tag, `RXP014-function-tag` info | 04:E29 |
 | 30 | Commands before the first step | ignored | keep in the header, `RXP015-header-command` warning. Real case: three `.goto` lines in the header of `RestedXP-Skyborne.lua` | 04:E02 |
@@ -830,6 +894,7 @@ Fixture references are `file:Enn` or `file:Lnn` in `docs/research/rxp-samples/`.
 | 43 | `StormwindNew` / `EPLNew` | converted to the classic map | no point; `RXP036-pseudo-zone-unconverted` warning | 06:L03 |
 | 44 | World-form point outside the named UiMap | element dropped | `RXP035-goto-outside-map` warning when geometry is available | — |
 | 45 | Nested or unbalanced parentheses, `!` separated from its word, number-like words (`1e1`, `0x10`) | 6.2, 6.3 | reproduce; `RXP016-filter-quirk` info | — |
+| 47 | Empty filter alternatives (`Orc/`, `/Orc`, `Orc//Troll`, `/`), an alternative without words (` - `), a group written against a word (`Orc(Warrior)`) | empty alternatives ignored, none left = false; word-less = true; merged word never matches (6.2) | reproduce (AST in 6.2); `RXP016-filter-quirk` info | — |
 | 46 | Filtered `.goto` (location or waypoint), closest-point location, radius objective that is not the last `.goto` | 10.1 | 12.4; `RXP034-not-simulated` info | 06:L04 |
 
 ### 11.1 Diagnostic registry
@@ -862,7 +927,7 @@ interface RxpDiagnostic {
 | `RXP001-unknown-command` | warning | CST | yes | command name not in our list |
 | `RXP002-stray-line` | warning | CST | yes | line with no recognised prefix |
 | `RXP003-goto-missing-zone` | error | lowering | yes | `.goto` whose first argument is a number |
-| `RXP004-malformed-number` | error (warning in a `.xp` expression, 9.4) | lowering | yes | a number RXP cannot read |
+| `RXP004-malformed-number` | error; warning where RXP keeps the element (extra characters in a `.xp` expression, a `.xp` skip flag that is not a number, 9.4) | lowering | yes | a number RXP cannot read, or one the route model cannot hold (a quest ID of 0 or less where RXP gives it no meaning, 12.3; a world-form UiMapID that is not a positive safe integer, 10.4; a `.xp` level or offset beyond the safe-integer range, 9.4) |
 | `RXP005-empty-field` | warning | CST | yes | empty argument field collapsed |
 | `RXP006-filter-before-text` | error | CST | yes | `<<` before `>>` on one line |
 | `RXP007-inline-comment` | info | CST | yes | `--` cuts `>>` text or a rest-of-line argument |
@@ -873,7 +938,7 @@ interface RxpDiagnostic {
 | `RXP013-shadowed-tag` | info | CST | yes | later duplicate of a first-wins tag |
 | `RXP014-function-tag` | info | CST | no | `#key = functionName`, kept opaque |
 | `RXP015-header-command` | warning | CST | yes | command before the first step |
-| `RXP016-filter-quirk` | info | CST | yes | double `<<`, unknown filter word, parenthesis or `!` oddity, number-like word |
+| `RXP016-filter-quirk` | info | CST | yes | double `<<`, unknown filter word, parenthesis or `!` oddity, number-like word, empty alternative or no alternative left, alternative without words, group written against a word (6.2) |
 | `RXP017-command-case` | warning | CST | yes | command known only in another case |
 | `RXP018-missing-text` | error | lowering | yes | command whose `>>` text is required |
 | `RXP019-protected-format` | error | unwrap | no | protected import string; input refused |
@@ -933,22 +998,28 @@ The shapes are defined in `src/domain` (ARCH §8.1); the `.ts` files are authori
 ```ts
 // src/domain/route.ts
 interface SourceLineRef { importId: string; firstLine: number; lastLine: number }
-interface RxpTag { name: string; value: string | null }                 // name without '#'
-interface Waypoint { point: SourcedPoint; role: 'leg' | 'pin' | 'closest'; radius: number | null }
+interface RxpTag { name: string; value: string | null;                  // name without '#'
+                   assignment: boolean; line: SourceLineRef | null }
+interface Waypoint { point: SourcedPoint; role: 'leg' | 'pin' | 'closest'; radius: number | null;
+                     filter: FilterAst | null; line: SourceLineRef | null }
 interface RxpCommandNode { command: string; args: string[]; text: string | null;
-                           line: SourceLineRef | null }
+                           filter: FilterAst | null; line: SourceLineRef | null }
 interface PreservedSource { format: 'rxp'; lines: string[] }
 // src/domain/conditions.ts
 interface StepCondition { filter: FilterAst | null; variant: VariantTag[] | null; skipIf: StatePredicate[] }
-interface VariantTag { name: string; value: string | null }
+interface VariantTag { name: string; value: string | null; filter: FilterAst | null }
 type StatePredicate =
   | { kind: 'questState'; state: 'onQuest' | 'complete' | 'turnedIn' | 'available';
-      questIds: QuestId[]; negate: boolean }
+      questIds: QuestId[]; match: 'any' | 'all'; negate: boolean }
   | { kind: 'levelAtLeast'; level: number; xp: number | null; negate: boolean }
   | { kind: 'opaque'; raw: string };
 // src/domain/project.ts
-RxpImport.options: { changedZoneFrame: 'forever' | 'era' }
+RxpImport.options: { changedZoneFrame: 'forever' | 'era';
+                     lua: { groupArg: string | null; defaultFor: string | null } | null }
 ```
+
+Schema version 1 is frozen from the Milestone 4 commit (D-035): a change to these shapes bumps
+`schemaVersion` and adds a migration.
 
 How lowering fills them:
 
@@ -958,12 +1029,19 @@ How lowering fills them:
 - **`RxpTag`:** `name` is the key without `#` (maximal, so `#key=value` gives the name
   `key=value`, P8b). `value` is the rest of the line after the optional `=`, or null when it is
   empty. A later tag with the same name is shadowed (first wins); that follows from the order.
+  `assignment` is true for the `#key = name` form (`RXP014`); `line` is the tag's source line.
 - **`Waypoint`:** `role` from the table in 10.1 (`.waypoint` → leg, `.pin` → pin); `radius` as
-  written (positive, 0 or negative), or null.
+  written (positive, 0 or negative), or null; `filter` the line filter (12.4 rule 4); `line` the
+  source line.
 - **`RxpCommandNode`:** `command` is the name without the dot, `args` the fields after the
-  separator split and the empty-field collapse (S6), `text` the `>>` text or null.
+  separator split and the empty-field collapse (S6), `text` the `>>` text or null, `filter` the
+  line filter, `line` the source line.
 - **`PreservedSource`:** `lines` holds the physical source line(s) exactly as written, without
-  line endings. The note's `text` is the trimmed line, for display. Why a line was preserved
+  line endings. The note's `text`, for display, is the **canonical code** of the line: what RXP
+  reads (the comment left out) in canonical spelling (13.4 rules 4-13, without indentation), or
+  the trimmed content when the line has no canonical form (a tab inside it). Using the canonical
+  spelling rather than the line as written keeps the model the same when a guide is re-indented
+  or canonicalised (the idempotence obligation of 13.7). Why a line was preserved
   (unknown command, stray line, opaque or unmodelled command) is carried by its diagnostic
   (`RXP001`, `RXP002`, `RXP034`), not stored. A carrier note has `lines: []` (12.1).
 - **`VariantTag`:** a load-time tag is `{ name, value }` as for `RxpTag` (`{ name: 'xprate',
@@ -971,15 +1049,19 @@ How lowering fills them:
   so it cannot collide with a tag name: `{ name: '.dungeon', value: 'RFC' }`, and likewise
   `.group`, `.solo` and `.profession` with their raw arguments as `value` (null when none). The
   implicit entry of `.deathskip` is `{ name: 'softcore', value: null }`; it has no line of its own.
-- **`StatePredicate`:** mapped from the section 9.2 commands as in the table below. This spec
-  reads `questState` as true when **any** of `questIds` is in that state; `src/domain` does not
-  say so yet (Q12).
+  `filter` is the line filter of the tag or command line (the implicit entry takes the filter of
+  the `.deathskip` line).
+- **`StatePredicate`:** mapped from the section 9.2 commands as in the table below. Lowering
+  always writes `match: 'any'`: RXP's multi-ID `.is*` lines hold when **any** of `questIds` is in
+  that state (this answers Q12). An `opaque` predicate's `raw` is the canonical code of its line
+  (as for preserved notes above), so it includes the line filter when there is one.
 - **`RxpImport.options.changedZoneFrame`:** the frame for percent points on the four changed
-  UiMaps (10.4).
+  UiMaps (10.4). **`RxpImport.options.lua`:** null for raw text; for a guide extracted from a Lua
+  file, the group and defaultFor arguments of its `RegisterGuide` call (each null when absent).
 
 | RXP line (section 9.2) | `StatePredicate` |
 |---|---|
-| `.isOnQuest ids` | `{ kind: 'questState', state: 'onQuest', questIds: ids, negate: true }` (skip when none is in the log) |
+| `.isOnQuest ids` | `{ kind: 'questState', state: 'onQuest', questIds: ids, match: 'any', negate: true }` (skip when none is in the log) |
 | `.isNotOnQuest ids` | `questState`, `onQuest`, `negate: false` |
 | `.isQuestTurnedIn ids` | `questState`, `turnedIn`, `negate: true` |
 | `.isQuestComplete id` | `questState`, `complete`, `[id]`, `negate: true` (skip unless it is in the log and complete) |
@@ -989,22 +1071,22 @@ How lowering fills them:
 | `.xp <L,S` or `.xp <L+N,S` (S > 0) | the same with `negate: true` |
 | `.maxlevel N` | `levelAtLeast`, `level: N + 1`, `xp: null`, `negate: false` (level > N) |
 | jump forms (`.xp …,S,label`, `.maxlevel N,label`) | as the form without the label, plus `RXP034` (12.6) |
-| anything else: `.isQuestAvailable` with several IDs, the `,account` forms, `.xp L-N,S`, `.xp L.F,S`, a negative `S`, `.money`, `.itemcount`, `.zoneskip`, `.subzoneskip`, `.bindlocation`, `.train id,1` / `,3`, `.istrained`, `.spellmissing`, `.skill` / `.reputation` with skip, `.questcount`, `.cooldown`, `.bronzetube`, … | `{ kind: 'opaque', raw }`, `raw` being the trimmed line without its comment. The engine evaluates it as `unknown` (section 14 row 5). |
+| anything else: `.isQuestAvailable` with several IDs, the `,account` forms, `.xp L-N,S`, `.xp L.F,S`, a negative `S`, `.money`, `.itemcount`, `.zoneskip`, `.subzoneskip`, `.bindlocation`, `.train id,1` / `,3`, `.istrained`, `.spellmissing`, `.skill` / `.reputation` with skip, `.questcount`, `.cooldown`, `.bronzetube`, …; a quest-state line with a quest ID of 0 or less (`RXP004`, 12.3); any skip line with a line filter (G1 below) | `{ kind: 'opaque', raw }`, `raw` being the canonical code of the line (without its comment). The engine evaluates it as `unknown` (section 14 row 5). |
 
 RXP applies a level skip without `<` only while XP step skipping is on, and one with `<`
 always (9.4). So the engine applies a `levelAtLeast` predicate with `negate: false` only when
 `routeProfile.xpStepSkipping` is true, and one with `negate: true` always (section 14 row 5).
 
-**Proposed domain additions.** RXP lowering needs a few fields that `src/domain` does not have.
-Schema version 1 is unstable until the end of Milestone 6 (ARCH §8.2), so they can be added in
-Milestone 5. Until then, lowering follows the interim rule.
+**Domain additions G1-G4 and their status.** The first revision proposed four additions. The
+domain types above adopted most of them (in Milestone 1), and schema v1 is now frozen (D-035), so
+the rest stay interim rules.
 
-| # | Proposed addition | Needed for | Interim rule with the current types |
+| # | Proposed addition | Status | Rule with the current types |
 |---|---|---|---|
-| G1 | `filter: FilterAst \| null` on `RxpTag`, `Waypoint`, `RxpCommandNode`, `VariantTag` and `StatePredicate` | line filters inside a step (59 filtered `.goto` lines in RXP's Forever guides, 10.2) | A filtered skip line becomes an `opaque` predicate whose `raw` includes the filter (so `unknown`: active with a warning). A filtered variant line is left out of `variant`, so the group stays active, with `RXP034`. A filtered `.goto` waypoint is kept without its filter, with `RXP034`. A filtered tag is kept without its filter, with `RXP034` when lowering reads it (`#sticky`, `#completewith`). Annotation filters matter only for export. Every filter survives in the source line. |
-| G2 | `line: SourceLineRef` on `RxpTag`, `Waypoint`, `VariantTag` and `StatePredicate` | assigning template lines to sidecar entries (13.5 rule 1) | The app never edits sidecar entries (ARCH §8.1 lists no such operation). So the serializer lowers the template group again and pairs the entries it gets with the stored ones in source order. |
-| G3 | `assignment: boolean` on `RxpTag` | `#key = name` versus `#key name` (P8b, `RXP014`) | Sidecar lines are always re-emitted from the template's CST node (G2), which keeps the `=`. |
-| G4 | `lua: { form: 'long-bracket' \| 'quoted'; level: number; groupArg: string \| null; defaultForArg: string \| null; fileLine: number } \| null` on `RxpImport.options` | the Lua wrapper export (13.4 rule 14), `RXP046`, and Lua-file line numbers in diagnostics after the import | Diagnostics made during the import use Lua-file lines; later ones use lines of `text`. The wrapper export writes the one-argument form, and `RXP046` cannot fire. |
+| G1 | `filter: FilterAst \| null` on `RxpTag`, `Waypoint`, `RxpCommandNode`, `VariantTag` and `StatePredicate` (line filters inside a step: 59 filtered `.goto` lines in RXP's Forever guides, 10.2) | **Adopted** for `Waypoint`, `RxpCommandNode` and `VariantTag`; **not** for `RxpTag` and `StatePredicate`. | Filtered waypoint, annotation and variant lines keep their filter in the model; a filtered variant entry applies only to characters whose filter holds (the first revision left such lines out of `variant`; superseded). A filtered skip line becomes an `opaque` predicate whose `raw` includes the filter (so `unknown`: active with a warning). A filtered tag is kept without its filter, with `RXP034` when lowering reads it (`#sticky`, `#completewith`). Every filter also survives in the source line. |
+| G2 | `line: SourceLineRef` on `RxpTag`, `Waypoint`, `VariantTag` and `StatePredicate` (pairing template lines with sidecar entries, 13.5 rule 1) | **Adopted** for `RxpTag`, `Waypoint` and `RxpCommandNode`; **not** for `VariantTag` and `StatePredicate`. | Tags, waypoints and annotations pair with their template lines by `line`. Variant entries and predicates are compared as whole lists with those of the template group lowered again: an equal list keeps its template lines, a changed list is rebuilt from the model (13.5 rule 2). |
+| G3 | `assignment: boolean` on `RxpTag` (`#key = name` versus `#key name`, P8b, `RXP014`) | **Adopted.** | A rebuilt tag writes `#key = name` when `assignment` is true (13.4 rule 5). |
+| G4 | `lua: { form, level, groupArg, defaultForArg, fileLine } \| null` on `RxpImport.options` (the Lua wrapper export, 13.4 rule 14; `RXP046`; Lua-file line numbers after the import) | **Adopted in a reduced shape**: `lua: { groupArg, defaultFor } \| null`. | The wrapper export writes the one-, two- or three-argument form from `lua` (13.4 rule 14), and a raw export of a guide imported with group or defaultFor arguments gets `RXP046`. The string form and the long-bracket level are not kept (the wrapper chooses its own level). Diagnostics made during the import use Lua-file lines; later ones, from lowering the stored import again, use lines of `text`. |
 
 **Superseded by `src/domain` (ARCH §8.1 revision 2):** the first revision's proposed shapes
 (`key`, `kind` and `name` fields, `SourceLineRef { first, last }`, `options.percentFrame`, and
@@ -1016,11 +1098,11 @@ is in its diagnostic.
 
 | RXP line | Lowered to | Payload and rules |
 |---|---|---|
-| `.accept id[,flags[,req]]` | `accept` | `questId: id`, `anyOf: null`, `via: null`. `flags` and `requiredTurnIn` are not modelled (bit 2's conditional completion: `RXP034`); the source line keeps them for export. |
-| `.acceptmultiple` / `.daily ids` | `accept` | `questId: ids[0]`, `anyOf: ids`: done when any one is accepted. |
+| `.accept id[,flags[,req]]` | `accept` | `questId: id`, `anyOf: null`, `via: null`. `flags` and `requiredTurnIn` are not modelled (bit 2's conditional completion: `RXP034`); the source line keeps them for export. An `id` of 0 or less has no meaning for `.accept` in RXP, and negative quest IDs are reserved for the user's own custom quests (ARCH §5.5): the line is `RXP004` (error) and a preserved note. |
+| `.acceptmultiple` / `.daily ids` | `accept` | `questId: ids[0]`, `anyOf: ids`: done when any one is accepted. An ID of 0 or less: `RXP004`, preserved note (as for `.accept`). |
 | `.turnin id[,reward[,flags]]` | `turnin` | `questId: abs(id)`, `skipIfMissing: id < 0`, `rewardIndex`: `reward` as RXP writes it (1-based; the dataset has no reward lists to index), null when absent, 0, or `id < 0` (RXP then ignores it). `.turnin -id,reward` also skips an incomplete quest in RXP: not modelled (`RXP034`). `via: null`. |
-| `.turninmultiple` / `.dailyturnin` | `turnin` | `questId: ids[0]`, `anyOf: ids`, `rewardIndex: null`, `skipIfMissing: false`, `via: null`: done when any one is turned in (0 uses in Forever guides). First revision: a preserved note with `RXP034`; superseded by `turnin.anyOf` (ARCH §8.1 revision 2). |
-| `.complete id,obj[,max[,flags]]` | `complete` | target `{ questId: abs(id), objective: obj − 1 }`. **Consecutive** `.complete` lines (no other element line between them; comments and blank lines allowed) with the same line filter and the same blocking status merge into one step with several targets in source order; `rxp.text` is the first merged line's text and `rxp.line` spans the merged lines. `id < 0` and `max` are not modelled (`RXP034` for `id < 0`). |
+| `.turninmultiple` / `.dailyturnin` | `turnin` | `questId: ids[0]`, `anyOf: ids`, `rewardIndex: null`, `skipIfMissing: false`, `via: null`: done when any one is turned in (0 uses in Forever guides). An ID of 0 or less: `RXP004`, preserved note (as for `.accept`; only the single-quest `.turnin` gives a negative ID a meaning). First revision: a preserved note with `RXP034`; superseded by `turnin.anyOf` (ARCH §8.1 revision 2). |
+| `.complete id,obj[,max[,flags]]` | `complete` | target `{ questId: abs(id), objective: obj − 1 }`. **Consecutive** `.complete` lines (no other element line between them; comments and blank lines allowed) with the same line filter (the same meaning: the parsed filter ASTs are compared, so `<< Orc/Troll` and `<< Orc / Troll` are the same filter and canonicalisation cannot change the merge) and the same blocking status merge into one step with several targets in source order; `rxp.text` is the first merged line's text and `rxp.line` spans the merged lines. `id < 0` and `max` are not modelled (`RXP034` for `id < 0`). |
 | `.collect item,qty,questId[,objFlags…]` | `complete` | one target per set bit of `objFlags` (bit value 2^(k−1) → `objective: k − 1`), or one target with `objective: null` when `objFlags` is absent or 0. Never merged with `.complete` lines. |
 | `.collect item,qty` (no quest) | `preserved` | inventory objective, `RXP034`. |
 | — | — | **`progress`** of a `complete` step: `'partial'` when the group has `#sticky` or `#completewith`, when the line is text-only (odd `flags`; `.collect` flag 1), or when a `.disablecheckbox` follows it; otherwise `'finish'`. |
@@ -1045,7 +1127,7 @@ is in its diagnostic.
 | `+label >>text` | `note` | `text: text` (RXP shows only the text and does not block, P8e). |
 | stray line | `preserved` | `note` with `preserved: { format: 'rxp', lines: [line] }` (12.2); `RXP002`. |
 | unknown command | `preserved` | as above; `RXP001`. |
-| section 9.7 commands and other `preserved` entries of section 9 | `preserved` | as above; `RXP034` for route-relevant ones. |
+| section 9.7 commands and other `preserved` entries of section 9 | `preserved` | as above; `RXP034` for route-relevant ones (section 9.7, **Route relevance**); the others get no diagnostic. |
 | `.target`, `.mob`, `.unitscan`, `.use`, `.usespell`, `.cast`, `.link`, `.clicknext`, `.macro`, `.timer`, gossip commands, `.equip`, `.itemStat`, `.aura`, `.buy`, `.line`, `.loop`, `.questgoto`, `.wpradius`, … | `annotation` | `RxpCommandNode`, in source order. |
 | `.disablecheckbox` | `annotation` | also sets `progress: 'partial'` on a directly preceding `complete` step; no model effect on other kinds. |
 | `.dungeon`, `.group`, `.solo`, `.profession` | `variant` | 12.5. |
@@ -1068,8 +1150,9 @@ is in its diagnostic.
    leg, `.pin` → pin) and its radius. A non-final radius objective becomes a leg with `RXP034`
    (RXP makes it a required visit; 14 lines in RXP's Forever guides).
 4. **Filtered gotos.** A `.goto` with a line filter is never the location. It becomes a
-   waypoint; `Waypoint` has no filter yet (12.2, G1), so the engine treats it as unfiltered, and
-   the filter survives in the source line. `RXP034` notes this, and, when the last `.goto` of the
+   waypoint that carries its filter (`Waypoint.filter`, 12.2 G1), so the engine can apply it per
+   character; the filter also survives in the source line. `RXP034` notes that the line is never
+   the location, and, when the last `.goto` of the
    step is filtered (20 steps in RXP's Forever guides; in 9 of them every `.goto` is filtered),
    that the location from rule 1 is not character-specific. One `RXP034` per line.
 5. **Closest point.** If the location line is a closest-point `.goto` (radius < 0; 28 steps),
@@ -1092,8 +1175,9 @@ is in its diagnostic.
   and `skipIf` holds the skip predicates (9.2) as `StatePredicate`s (12.2 table), each list in
   source order.
 - In RXP, a predicate or variant line with its own line filter applies only to characters whose
-  filter passes (RXP drops the line for the others). The domain types cannot carry that filter
-  yet; the interim rule is G1 in 12.2.
+  filter passes (RXP drops the line for the others). Variant entries carry their filter
+  (`VariantTag.filter`); predicates cannot, so a filtered predicate line becomes `opaque` (G1 in
+  12.2).
 - `group.rxp.tags` holds every other step tag as an `RxpTag` (8.1), including duplicates
   (shadowed by order, `RXP013`), unknown keys (`RXP012`) and `#key = name` (`RXP014`).
 - `#sticky` and `#completewith` also make the group's `complete` steps `partial` (12.3).
@@ -1116,7 +1200,7 @@ approximation:
 | `.accept id,2,req` | conditional completion ignored |
 | jump forms (`.xp …,S,label`, `.maxlevel N,label`, `.skipto`) | treated as a skip of the group |
 | non-final radius-objective `.goto`; filtered `.goto`; closest-point location | 12.4 rules 3-5 |
-| a filtered variant line or a filtered `#sticky` / `#completewith` | 12.2, G1 |
+| a filtered `#sticky` / `#completewith` (the step is treated as sticky for every character) | 12.2, G1 |
 
 `.turninmultiple` and `.dailyturnin` were in this table in the first revision; they now lower
 to `turnin` with `anyOf` (12.3).
@@ -1159,7 +1243,12 @@ ARCH §5.4 fixes the index order.
   they have no RXP form. SHA-256 is computed in pure TypeScript (no WebCrypto), so `src/rxp`
   stays synchronous and pure (ARCH §17).
 - A **group run** is *unedited* when its steps are contiguous in the route, they are all of the
-  group's steps, and the fingerprint recomputed over them equals the stored one.
+  group's steps, and the fingerprint recomputed over them equals the stored one. A run whose RXP
+  content (the canonical JSON above) equals that of its template group lowered again (13.5) is
+  unedited too: its original lines are then exactly what the model says, whatever the stored
+  fingerprint. The serializer checks this first, because comparing canonical JSON is much
+  cheaper than SHA-256 in pure TypeScript, and hashes only a run whose content differs (edited,
+  or lowered differently since the import, for example after the zone-key table changed).
 - An **import** is *unedited* when the route consists of exactly that import's groups, each
   unedited, in their original order.
 
@@ -1217,20 +1306,28 @@ ARCH §5.4 fixes the index order.
    `.money <G|>G`, `.itemcount ids,[<|>][=]N`, `#xprate <R|>R|R1-R2`, `.questcount [<|>]N[*]`.
 10. **Filters** are rebuilt from the AST: alternatives joined by `/`, terms by one space, `!`
     directly before its word or `(`, parentheses kept, **word spelling kept exactly** (race and
-    faction words are case-sensitive in RXP). Never reorder, deduplicate or simplify words.
+    faction words are case-sensitive in RXP). Never reorder, deduplicate or simplify words. The
+    special shapes of 6.2 are written so that they read back the same: an alternative without
+    words (`and []`) as `-`, no alternative left (`or []`) as `/` (inside a group, `(/)`), and a
+    merged word with its spelling (`Orc(Warrior)`).
 11. **Comments:** a full-line comment is emitted on its own line at the indentation of the
     context (0 in the header, 4 in a step) as `-- text` (the original text after `--`, trimmed).
-    A trailing comment is emitted after all other parts as ` --text` with its original text.
+    A trailing comment is emitted after all other parts as ` --text` with its original text
+    (trailing whitespace removed), also when the line itself is rebuilt from the model (13.5
+    rule 2). A tab inside a comment is written as a space: comments carry no RXP meaning, so this
+    is the one place where canonical output changes content instead of refusing it (a tab
+    anywhere else is refused, rule 12).
 12. **Unrepresentable content is an error, never silently changed.** The serializer refuses
     (with the node and reason) when: any text, label, tag value or arg contains `--` (except a
     `.link` URL, where each `-` of a `--` is written `\-`), `<<`, a line break, or (for args) the
-    command's separator; a text starts with `<<`; a filter word is not `[A-Za-z0-9]+`; an arg is
-    empty; a command name contains whitespace; `.goto` has no zone.
+    command's separator; a text starts with `<<`; a filter word is not `[A-Za-z0-9]+` (or a
+    merged word, 6.2); an arg is empty; a command name contains whitespace; `.goto` has no zone;
+    any text, label, tag value, arg or filter holds a tab.
 13. **Opaque nodes** (unknown commands, 9.7 commands, stray lines, `#key = fn`) are emitted as
     their trimmed raw content with canonical indentation.
 14. **Lua wrapper output** (optional): `RXPGuides.RegisterGuide(` + optional group and
-    defaultFor string arguments from `options.lua` (proposed, 12.2 G4; without it the
-    one-argument form is written) + a long bracket `[=*[` + LF + canonical text +
+    defaultFor string arguments from `options.lua` (12.2 G4; with `lua: null`, or neither
+    argument set, the one-argument form is written) + a long bracket `[=*[` + LF + canonical text +
     `]=*]` + `)` + LF per guide, using the smallest bracket level whose closing sequence does not
     occur in the text (level ≥ 1 if the text contains `[[`), guides separated by one blank line.
     Guards and other Lua from the input are not emitted.
@@ -1244,9 +1341,10 @@ The group's original lines, taken from `imports[importId].text`, are the templat
 
 1. Every template line is assigned to one model element: a step through its `rxp.line`, an
    annotation through its `line`, or the steps' shared location (the location `.goto`, which is
-   also the line of the `travel` step that 12.4 rule 2 may create). Tags, variant entries,
-   predicates and waypoints have no `line` yet (12.2, G2); the serializer lowers the template
-   group again and pairs its entries with the stored ones in source order. Comment lines anchor
+   also the line of the `travel` step that 12.4 rule 2 may create). Tags and waypoints pair
+   through their `line` as well. Variant entries and predicates have no `line` (12.2, G2): the
+   serializer lowers the template group again and compares the two lists as a whole. Comment
+   lines anchor
    to the next non-comment line; blank lines are dropped (13.4 rule 3); lines that lowered to
    nothing (for example an `RXP036` goto) are unchanged elements.
 2. A line's element is **unchanged** when it equals what lowering that single line produces
@@ -1254,13 +1352,26 @@ The group's original lines, taken from `imports[importId].text`, are the templat
    zone tokens and lexemes survive). A changed element is rebuilt from the model, keeping what
    the template line holds and the model does not: the note prefix (`>>`, `+`, `*`), `.accept`
    flags and `requiredTurnIn`, `.complete` `objMax` and flags, the NPC ID of `.trainer` and
-   `.vendor`, the area ID of `.home`, and the `.fp` flags. A deleted element's line is omitted,
-   and so are the comments anchored to it (`RXP045`).
+   `.vendor`, the area ID of `.home`, the `.fp` flags, and the line's trailing comment, which is
+   written after the rebuilt line (13.4 rule 11). A deleted element's line is omitted, and so
+   are the comments anchored to it (`RXP045`). A comment that cannot stay with a surviving line
+   also gets `RXP045`: the trailing comment of a sidecar line dropped because its list changed,
+   of a line rebuilt to nothing (an empty note, 13.6), or of a merged `.complete` line whose
+   target was removed.
+
+   The **text-only flag** follows the model's `progress`: a `partial` step outside a sticky
+   group gets the flag (odd `.complete` flags, `.collect` flag 1), and a `finish` step loses it
+   (an odd `.complete` flags value moves one step towards 0; a positive odd `.collect` flags value
+   loses 1). When the template step was `partial` only because a `.disablecheckbox` follows it,
+   the flags are left as they are, and a `finish` in the model is counted in `RXP041` (the
+   `.disablecheckbox` annotation still makes the step partial in RXP).
 3. If the steps' shared location changed (its `source` or `radius`), the location line is
    rebuilt from the model: the point by 13.4 rule 8, and the radius from `Location.radius`. When
    `Location.radius` is null, a template radius of 0 or less is kept (it is not an arrival
    radius, 12.4 rule 7) and a positive one is dropped. The template line's flag is written only
-   after a radius.
+   after a radius. When the location's `travel` step was deleted (or moved away) but a positive
+   radius stays, the line is written `.goto …,R,0`: the flag keeps the radius without making the
+   line an arrival objective, which would create a travel step again on re-import (10.1).
 4. **Order:** the `step` line (with the group filter) first. Non-step lines anchor to the nearest
    preceding step line in the template, or to the group start. Emit the lines anchored to the
    group start, then each step of the run **in route order**, each followed by the lines anchored
@@ -1269,6 +1380,7 @@ The group's original lines, taken from `imports[importId].text`, are the templat
    directly after the step that precedes them in the route.
 5. A merged `complete` step whose targets changed is rebuilt as one `.complete` line per target;
    only the first carries `rxp.text`, and texts of later original lines are dropped (`RXP044`).
+   Each rebuilt line keeps the trailing comment of the template line of its target.
 
 ### 13.6 App-created steps, splits and headers
 
@@ -1277,12 +1389,15 @@ The group's original lines, taken from `imports[importId].text`, are the templat
   emitted as one RXP step: `step`, the location line, then one line per step. The location line
   carries `Location.radius` when it is set; a `travel` step's destination without one gets
   radius 10 (our constant), because only a positive radius makes a `.goto` an arrival objective
-  in RXP.
+  in RXP. When the run has no `travel` step, a positive radius is followed by the flag `,0`, so
+  the radius is kept without making the line an arrival objective (a re-import would otherwise
+  add a travel step the model never had, 10.1). The same rule applies to every location line
+  written from the model without a template line.
 
   | Kind | Line |
   |---|---|
   | `accept` | `.accept id`; with `anyOf`: `.acceptmultiple ids` |
-  | `complete` | one `.complete q,objective+1` per target; a `partial` step's RXP step gets `#completewith next`; a target with `objective: null` → `RXP042` |
+  | `complete` | one `.complete q,objective+1` per target; a `partial` step's RXP step gets `#completewith next`. A target with `objective: null` (all objectives) becomes one `.complete q,i` per objective, for i from 1 to n, when the export context knows the quest's objective count n > 0 (from the dataset or the project's custom quest); this is counted in `RXP041`. When the count is not known, the step is an `RXP042` note. It is never a refusal. A target that comes up twice is written once. |
   | `turnin` | `.turnin id[,rewardIndex]`, with `-id` when `skipIfMissing`; with `anyOf`: `.turninmultiple ids` (it has no reward or skip form, so `rewardIndex` and `skipIfMissing` then count in `RXP041`) |
   | `abandon` | `.abandon id` |
   | `travel` | the location line with its radius, nothing else; no location → `RXP042` |
@@ -1291,14 +1406,17 @@ The group's original lines, taken from `imports[importId].text`, are the templat
   | `flight` | `.fp query` / `.fly query`; `nodeQuery: null` → `RXP042` |
   | `train` | `.train spellId`; `spellId: null` → `.trainer` |
   | `vendor` | `.vendor`, with ` >> what` when `what` is set |
-  | `note` | `>> text`; `preserved`: each of its `lines`, trimmed, with canonical indentation; a carrier (`lines: []`) emits nothing |
+  | `note` | `>> text`; `preserved`: each of its `lines`, trimmed, with canonical indentation; a carrier (`lines: []`) emits nothing; a note whose text is empty or only whitespace emits nothing either (RXP drops `>>` without text) and is counted in `RXP041` |
 
   Every line gets ` >> rxp.text` when `rxp.text` is set and ` << filter` from `condition.filter`.
   `RXP042-unrepresentable-step` emits `>> (not representable in RXP) <kind>: <detail>` instead.
 - **Fields without an RXP form** (`note`, `locked`, `durationOverride`, `ext`, `location.label`,
   travel `mode`/`transport`, train `skill`/`skillId`/`rank`/`what`/`cost`, grind
   `mobLevel`/`xpPerHour`, and `rewardIndex`/`skipIfMissing` of an any-of turn-in) are not
-  exported; one `RXP041-app-fields-not-exported` per export gives their counts.
+  exported; one `RXP041-app-fields-not-exported` per export gives their counts, together with
+  the other lossy writes named in 13.5 and in this section (empty notes, all-objective targets
+  written per objective, a `finish` step followed by `.disablecheckbox`, a `finish` step in a
+  sticky group).
 - **Split groups** (`RXP040-group-split`, one per group): each maximal contiguous run of a group
   is emitted as its own RXP step, and a run whose steps no longer share one location is split
   further at each change of location. Every run repeats the step filter, the variant entries,
@@ -1440,7 +1558,7 @@ Why is not stated (**UNKNOWN**). Treat `.deathskip` as a route variant the user 
 | 7 | Static-only Lua input | **Adopted** (ARCH §10 step 1). |
 | 8 | Detect and refuse protected strings | **Adopted** (ARCH §10 step 1). |
 | 9 | Fixture 04 byte rules need an owner decision | **Done**: `.gitattributes` has `docs/research/rxp-samples/*-crlf.txt -text` and `tests/fixtures/rxp/*-crlf.txt -text`, and `.editorconfig` has the matching section (`end_of_line = unset`, `trim_trailing_whitespace = false`, `insert_final_newline = unset`). Edit fixture 04 only with byte-preserving tools. Tests still build CR-only and mixed variants. |
-| 10 | CI marker check for RXPGuides strings | **Superseded by D-019 / ARCH §17**: `tools/build/rxp-overlap.ts` compares trimmed lines of 24 or more characters in `src/`, `public/`, `tests/` and `docs/research/rxp-samples/` with RXPGuides guides at a pinned SHA, with a reviewed allowlist. Marker strings would also have matched our own fixtures, which use RXP colour tokens as vocabulary. |
+| 10 | CI marker check for RXPGuides strings | **Superseded by D-019 / ARCH §17**: `tools/build/rxp-overlap.ts` compares trimmed lines of 24 or more characters in `src/`, `public/`, `tests/` and `docs/research/rxp-samples/` with RXPGuides guides at a pinned SHA, with a reviewed allowlist; fixture lines are also compared in canonical form (19.2). Marker strings would also have matched our own fixtures, which use RXP colour tokens as vocabulary. |
 | 11 | (added) Parser review | The Milestone 5 review checks that `src/rxp` is not a structural translation of the addon's loader (D-019). |
 
 ---
@@ -1460,7 +1578,7 @@ Why is not stated (**UNKNOWN**). Treat `.deathskip` as a route variant the user 
 | Q9 | ~~Should the engine route travel through `leg` waypoints?~~ **Resolved by ARCH §9.2**: yes, in order (12.4 rule 8). | travel time for 1,575 multi-goto steps | — |
 | Q10 | ~~Should `turnin` gain `anyOf` for `.turninmultiple`/`.dailyturnin`?~~ **Resolved by ARCH §8.1 revision 2**: `turnin.anyOf` exists (12.3). | — | — |
 | Q11 | ~~Should `grind.until` gain exact forms for `.xp L-N` and `.xp L.F`?~~ **Resolved by ARCH §8.1 revision 2**: `GrindTarget` level offsets `xpInto`, `xpShort`, `fraction` (12.3); `RXP033` is retired. | — | — |
-| Q12 | Does a `questState` predicate test **any** or **all** of its `questIds`? This spec reads it as any (12.2). The proposed domain additions G1-G4 (12.2) also need a decision. | skip semantics of multi-ID `.is*` lines; lowering of line filters, Lua call forms | `src/domain` (architect), before schema v1 freezes at the end of Milestone 6 |
+| Q12 | ~~Does a `questState` predicate test **any** or **all** of its `questIds`?~~ **Resolved by `src/domain`**: `questState.match` says which; lowering writes `'any'` (12.2). The domain additions G1-G4 are decided too (12.2: adopted in part; schema v1 frozen, D-035). | — | — |
 
 ---
 
@@ -1513,6 +1631,16 @@ candidates for Milestone 5:
 | Fixture line | Why it coincides |
 |---|---|
 | `03-lua-wrapped.txt:16`, `:59` | the registration API call `RXPGuides.RegisterGuide([[` (interoperability vocabulary) |
+
+The Milestone 5 RXP review ran `tools/build/rxp-overlap.ts` itself and found one more line: the
+golden canonical file of fixture 05 had a `.home` line whose `>>` text equals an RXP guide line.
+The fixture line differed only by the missing space after `>>`, which canonicalisation adds, so
+the raw comparison had not seen it. The `>>` text was reworded on 2026-09-26 in both copies of
+fixture 05 (line 23), and the tool now also compares the **canonical form** of every line (13.4,
+the line parsed on its own and printed without indentation) on both sides: each of our lines
+under `docs/research/rxp-samples/` and `tests/fixtures/rxp/`, and each reference line. A
+spacing-only difference around RXP's separators can therefore no longer hide an overlap. It is
+not allowlisted: it was guide text, not vocabulary.
 
 Shorter lines that also occur are vocabulary or minimal syntax examples and fall below the tool's
 threshold: single tags such as `#softcore`, `#version 1` or `#xprate <1.5`, `.mob <NPC name>`,

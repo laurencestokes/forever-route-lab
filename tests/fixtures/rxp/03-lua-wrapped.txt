@@ -1,0 +1,72 @@
+-- forever-route-lab RXP parser fixture 03: Lua-wrapped guides (the form used in an addon's .lua file).
+-- Self-authored (GPL-3.0-or-later). Saved as .txt so no tool treats it as runnable Lua.
+-- The importer must extract guide text statically. It must NEVER execute this Lua.
+-- Expected: 4 guides extracted (A-D), 1 dynamic call reported and skipped (E), the block
+-- comment ignored, and the faction guard below reported as ignored (RXP021-lua-guard-ignored).
+-- Guide C also checks that whitespace before "(" and after "," is accepted.
+-- Coordinates are placeholders. "RXPGuides.RegisterGuide([[" is the addon's registration API
+-- (interoperability vocabulary, D-019). It is the only line of 24 or more characters here that
+-- also occurs in RXP guides (docs/RXP.md section 19.2).
+
+local playerFaction = UnitFactionGroup("player")
+if playerFaction ~= "Horde" then return end
+
+-- Guide A: single-argument form with a level-0 long bracket.
+-- The first newline right after "[[" is not part of the string (Lua rule).
+RXPGuides.RegisterGuide([[
+#forever
+<< Horde
+#name 6-8 Fixture Three
+#version 3
+#group Forever Route Lab Fixtures
+#subgroup Parser Samples
+
+step
+    .goto Durotar,52.00,43.00
+    >>Wrapped guide A, first step
+    .zone Durotar >>Enter Durotar
+]])
+
+-- Guide B: level-2 long bracket, because the text itself contains "]]".
+RXPGuides.RegisterGuide([==[
+#forever
+#name 6-8 Fixture Three (Alt)
+#version 1
+#group Forever Route Lab Fixtures
+
+step
+    *A star note that mentions a closing bracket pair ]] which would end a level-0 string\nand has an escaped line break
+    .goto 1411,52.50,43.50,20
+]==])
+
+-- Guide C: two-argument form. The group comes from the first argument and any #group line
+-- inside the text is ignored by RXP. The third argument is the defaultFor filter.
+RXPGuides.RegisterGuide ("Forever Route Lab Fixtures", [[
+#forever
+#name 8-9 Fixture Four
+#group This Line Is Ignored In The Two Argument Form
+#version 1
+step
+    .goto Durotar,53.00,44.00,15
+    >>Two-argument form
+]], "Orc/Troll")
+
+-- Guide D: a quoted string. Lua escapes (\n, \", \\) must be decoded before RXP parsing.
+RXPGuides.RegisterGuide("#forever\n#name 9-10 Fixture Quoted\n#group Forever Route Lab Fixtures\n#version 1\nstep\n    >>Quoted form with a \"quote\" and a backslash \\ in it\n    .goto Durotar,53.50,44.50,15\n")
+
+--[==[ A Lua block comment that contains a guide-shaped call. It must NOT be extracted.
+(A level-0 "--[[" comment could not hold the "[[" below: Lua 5.1 rejects nested [[ ]].)
+RXPGuides.RegisterGuide([[
+#name Not A Guide
+]])
+]==]
+
+-- Guide E: dynamic content (a variable joined with ".."). It must be reported as
+-- RXP020-lua-dynamic and skipped. It must never be evaluated.
+local prefix = "#forever\n"
+RXPGuides.RegisterGuide(prefix .. [[
+#name 10-10 Dynamic
+#group Forever Route Lab Fixtures
+step
+    >>Never extracted
+]])

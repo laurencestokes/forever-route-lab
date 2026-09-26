@@ -3,6 +3,7 @@
 *.jpg binary
 *.webp binary
 *.blp binary
+*.bin binary
 
 # RXP edge-case fixtures that must keep CRLF, trailing spaces and no final newline
 docs/research/rxp-samples/*-crlf.txt -text
@@ -11,4 +12,11 @@ tests/fixtures/rxp/*-crlf.txt -text
 # Generated data: reviewable, but collapsed in diffs
 public/data/** linguist-generated=true -diff
 public/maps/placeholder/*.json linguist-generated=true -diff
+# Committed derived map outputs (D-032, D-033): the images are binary above; the manifests and
+# data JSON collapse in diffs; the NOTICEs stay readable.
+public/maps/art/** linguist-generated=true
+public/maps/art/*.json -diff
+public/maps/terrain/** linguist-generated=true
+public/maps/terrain/**/*.json -diff
 tests/fixtures/data/** linguist-generated=true -diff
+public/nav/** linguist-generated=true -diff

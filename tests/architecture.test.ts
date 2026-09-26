@@ -40,6 +40,8 @@ const MODULES = [
   'optimizer/core',
   'optimizer/worker',
   'optimizer/index',
+  'nav',
+  'nav/worker',
   'infra',
   'map/adapter',
   'map/layers',
@@ -61,6 +63,7 @@ const PURE_MODULES: readonly ModuleName[] = [
   'diff',
   'project',
   'optimizer/core',
+  'nav',
   'map/adapter',
   'map/layers',
 ];
@@ -83,6 +86,11 @@ const MAY_IMPORT: Readonly<Record<ModuleName, readonly ModuleName[]>> = {
   'optimizer/core': ['domain', 'geo', 'rules', 'sim', 'engine'],
   'optimizer/worker': ['optimizer/core'],
   'optimizer/index': ['optimizer/core', 'optimizer/worker', 'domain', 'engine', 'geo', 'rules', 'sim'],
+  // terrain-navigation.md §18: nav may import domain and geo; nav/worker may import nav; infra and
+  // app may import nav (infra through PURE_MODULES, app through its "everything" rule); engine, sim
+  // and optimizer/core get only types (`import type` from a pure module is always allowed).
+  nav: ['domain', 'geo'],
+  'nav/worker': ['nav'],
   infra: PURE_MODULES,
   'map/adapter': ['domain', 'geo'],
   'map/layers': ['domain', 'geo'],
@@ -156,6 +164,8 @@ function moduleOf(file: string): ModuleName | null {
     case 'app':
     case 'ui':
       return top;
+    case 'nav':
+      return parts.length > 2 && second === 'worker' ? 'nav/worker' : 'nav';
     case 'optimizer':
       if (parts.length === 2) return second !== undefined && ['index', 'types'].includes(stem(second)) ? 'optimizer/index' : null;
       if (second === 'core') return 'optimizer/core';
@@ -845,6 +855,9 @@ describe('architecture scanner (self-test)', () => {
     expect(moduleOf('src/map/leaflet/LeafletMapAdapter.ts')).toBe('map/leaflet');
     expect(moduleOf('src/map/other.ts')).toBeNull();
     expect(moduleOf('src/infra/persistence/db.ts')).toBe('infra');
+    expect(moduleOf('src/nav/legs.ts')).toBe('nav');
+    expect(moduleOf('src/nav/worker.ts')).toBe('nav');
+    expect(moduleOf('src/nav/worker/nav.worker.ts')).toBe('nav/worker');
     expect(moduleOf('src/main.tsx')).toBe('ui');
     expect(moduleOf('src/stray.ts')).toBeNull();
     expect(moduleOf('src/widgets/x.ts')).toBeNull();
@@ -908,6 +921,29 @@ describe('architecture scanner (self-test)', () => {
     expect(check('src/rxp/a.ts', "import data from '../../tests/fixtures/sample.json';")[0]).toMatch(/outside src/);
     expect(check('src/app/a.ts', "export const w = () => import('../optimizer/index');")).toEqual([]);
     expect(check('src/app/a.ts', "import W from '../optimizer/core/search?worker';")).toEqual([]);
+  });
+
+  it('applies the nav rows (terrain-navigation.md §18)', () => {
+    const files = new Set(['src/domain/index.ts', 'src/geo/index.ts', 'src/rules/index.ts', 'src/nav/index.ts', 'src/nav/worker/client.ts', 'src/engine/index.ts']);
+    const exists = (file: string): boolean => files.has(file);
+    const check = (file: string, code: string): readonly string[] => {
+      const module = moduleOf(file);
+      if (module === null) throw new Error(`test file ${file} has no module`);
+      const report = { info: { file, module, isTest: TEST_FILE.test(file) }, scan: scanSource(file, code) };
+      return importViolations(report, exists).map((line) => line.replace(/^[^ ]+ /, ''));
+    };
+    expect(check('src/nav/a.ts', ["import { x } from '../geo';", "import { y } from '../domain';"].join('\n'))).toEqual([]);
+    expect(check('src/nav/a.ts', "import { x } from '../rules';")[0]).toMatch(/nav may not import rules/);
+    expect(check('src/nav/a.ts', "import { w } from './worker/client';")[0]).toMatch(/nav may not import nav\/worker/);
+    expect(check('src/nav/worker/w.ts', "import { legsFrom } from '../index';")).toEqual([]);
+    expect(check('src/nav/worker/w.ts', "import { x } from '../../geo';")[0]).toMatch(/nav\/worker may not import geo/);
+    expect(check('src/engine/a.ts', "import { legsFrom } from '../nav';")[0]).toMatch(/engine may not import nav/);
+    expect(check('src/engine/a.ts', "import type { Leg } from '../nav';")).toEqual([]);
+    expect(check('src/infra/a.ts', "import { openMap } from '../nav';")).toEqual([]);
+    expect(check('src/app/a.ts', ["import { openMap } from '../nav';", "import W from '../nav/worker/client?worker';"].join('\n'))).toEqual([]);
+    expect(check('src/ui/a.ts', "import { openMap } from '../nav';")[0]).toMatch(/ui may not import nav/);
+    expect(isPure('nav')).toBe(true);
+    expect(isPure('nav/worker')).toBe(false);
   });
 
   it('keeps the matrix complete, consistent and acyclic', () => {
@@ -1008,15 +1044,16 @@ describe('pure set (ARCHITECTURE §17)', () => {
     };
     expect(config.compilerOptions.lib).toEqual(['ES2023']);
     expect(config.compilerOptions.types).toEqual([]);
-    // map/adapter and map/layers are single files; every other pure module is a directory.
+    // map/adapter and map/layers are single files; every other pure module is a directory, and
+    // nav/worker (not pure) sits inside the pure nav directory, so it is excluded.
     const expected = PURE_MODULES.map((module) => (module.startsWith('map/') ? `src/${module}.ts` : `src/${module}`));
     expect([...config.include].sort()).toEqual([...expected].sort());
-    expect(config.exclude).toEqual(['src/**/*.test.ts', 'src/**/*.test.tsx']);
+    expect(config.exclude).toEqual(['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/nav/worker']);
   });
 
-  it('optimizer/core uses no implementation-approximated Math', () => {
+  it('optimizer/core and nav use no implementation-approximated Math (§11.4; terrain-navigation.md G14)', () => {
     const violations = scanRepository().reports
-      .filter((report) => report.info.module === 'optimizer/core' && !report.info.isTest)
+      .filter((report) => (report.info.module === 'optimizer/core' || report.info.module === 'nav') && !report.info.isTest)
       .flatMap((report) => report.scan.floatMath.map((finding) => `${report.info.file}:${String(finding.line)} ${finding.message}`));
     expect(violations).toEqual([]);
   });

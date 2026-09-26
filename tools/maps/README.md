@@ -1,20 +1,23 @@
 # tools/maps
 
-Map-metadata tooling (docs/MAPS.md, docs/research/coordinates.md; ARCHITECTURE §6-§7; D-011,
-D-017, D-018, D-022, D-026). Everything here runs in Node under `tsx`; the coordinate maths it
-uses is the pure `src/geo` module the app uses.
+Map-metadata and map-art tooling (docs/MAPS.md, docs/research/coordinates.md,
+docs/research/terrain-navigation.md §13.4 and §15; ARCHITECTURE §6-§7; D-011, D-017, D-018, D-022,
+D-026, D-033). Everything here runs in Node under `tsx`; the coordinate maths it uses is the pure
+`src/geo` module the app uses, and the client is read only through `tools/casc`.
 
 ## Commands
 
 | Command | Does |
 |---|---|
 | `pnpm maps:placeholder` | `tsx tools/maps/import.ts --placeholder`: writes `public/maps/placeholder/geometry.placeholder.json` and `NOTICE.md` |
-| `pnpm maps:validate` | `tsx tools/maps/validate.ts`: placeholder checks R1, P1-P8 (MAPS.md §5.5) |
+| `pnpm maps:validate` | `tsx tools/maps/validate.ts`: placeholder checks R1, P1-P8 and committed-art checks A1-A5 (MAPS.md §5.5) |
 | `pnpm tsx tools/maps/import.ts --placeholder --check` | Rebuilds in memory and fails if either committed file differs |
 | `pnpm tsx tools/maps/validate.ts --skip-tracking` | The same checks without P6 (git tracking), for use before the files are committed |
 | `pnpm tsx tools/maps/validate.ts --local [dir] [--taxi-nodes <csv>]` | Also checks a local set (default `local-maps/`): L0-L7, and L8 against an existing manifest |
 | `pnpm tsx tools/maps/validate.ts --activate [--source <source.json>]` | On a pass, writes `local-maps/maps.manifest.json` with its `art` section (activates the set); on a failure removes it |
 | `pnpm tsx tools/maps/lib/make-db2-rows.ts [--check]` | Regenerates (or checks) the committed rows file from the two research CSVs, where they exist |
+| `pnpm tsx tools/maps/convert.ts [--out <dir>] [--report <file>] [--check]` | Milestone 3b, needs the pinned client at `WOW_INSTALL`: extracts the painted art of every UiMap with art into the committed `public/maps/art/` (images, `manifest.json`, `NOTICE.md`); the report goes to `generated/maps-art-report.json`; `--check` compares instead of writing |
+| `pnpm tsx tools/maps/import.ts --build 1.60.1.70009 [--out <dir>] [--check]` | Milestone 3b, needs the pinned client: writes the developer-local `local-maps/geometry.local.json` from the client's `UiMap` and `UiMapAssignment` (and removes `maps.manifest.json`) |
 
 Common options: `--questiedb-repo <dir>` (default: the pin's `cachePath`, `.cache/questiedb`, the
 checkout `tools/questiedb/fetch.ts` provides), `--commit <40-hex sha>` (must equal the pin; there
@@ -71,7 +74,31 @@ raw-lines hash `0aff6391…`, the MAPS.md §8.3 reference table, and (with the Q
 that the other 49 rows are exactly the `conversion.json` UiMaps. **It never downloads anything**
 (D-011). Nothing else reads the CSVs; if they are missing, the placeholder is still reproducible.
 
-## Local sets (checks, activation and serving; extraction from the client is Milestone 3b)
+## The painted map art (Milestone 3b, step 3b.8; D-033)
+
+`convert.ts` opens the client through `tools/casc` (read-only, `.build.info` and `Data/` under
+`WOW_INSTALL`, pinned to `CLIENT_PIN` in `lib/constants.ts`: any other build is refused) and:
+
+1. reads `UiMap`, `UiMapAssignment`, `UiMapXMapArt`, `UiMapArt`, `UiMapArtStyleLayer`,
+   `UiMapArtTile`, `WorldMapOverlay` and `WorldMapOverlayTile`, each complete (`lib/client-tables.ts`);
+2. plans one image per UiMap and style layer (`lib/art-plan.ts`): phase-0 art, base tiles on the
+   layer grid (edge tiles cropped), and every explored-area overlay with `PlayerConditionID` 0 in
+   ID order, cut to its rectangle, so the image is the fully explored map;
+3. decodes the BLP2 tiles with this project's own decoder (`lib/blp.ts`: palette, DXT1/3/5,
+   B8G8R8A8; no bitwise operators), composes them source-over (`lib/compose.ts`, `lib/raster.ts`);
+4. encodes lossy WebP with `sharp` (quality 80, `drawing` preset; `lib/encode.ts`);
+5. writes `public/maps/art/<uiMapId>.webp`, `manifest.json` (`lib/art-manifest.ts`: pin, build,
+   tool tree hashes of `tools/casc` and `tools/maps`, encoder, and per file its SHA-256, size, UiMap,
+   bounds, tile FileDataIDs, encoder-independent `pixelsSha256` and `inputHash`) and `NOTICE.md`
+   (`lib/art-notice.ts`: Blizzard Entertainment as the owner, non-affiliation, D-033 and its rules).
+
+At 1.60.1.70009: 60 images (57 of 1002 × 668, three of 512 × 512), 9.05 MB gzip-6 with the
+manifest and NOTICE, 75% of the 12 MB `art` budget; about 27 s. `validate.ts` checks the committed
+folder offline (A1-A5, `lib/art-checks.ts`), the dist audit allows the images only with the
+folder's NOTICE and manifest and gates the `art` budget, and `art.client.test.ts` recomposes every
+image from the client to its recorded pixel hash (skipped with a banner without the client).
+
+## Local sets (checks, activation and serving; `import.ts --build` from the client)
 
 `validate.ts --local` checks `local-maps/geometry.local.json` (`"kind": "local"`,
 `"redistribution": "local-only"`, a top-level `build`, rows `source: "local-db2"`):
@@ -101,9 +128,11 @@ The manifest's `art` section lists every art file that passed L3, keyed by UiMap
 entry against the local geometry at load and each file's SHA-256 and headers when it is first
 drawn (docs/MAPS.md §5.3, §5.6).
 
-Until `convert.ts` exists (Milestone 3b, with the CASC reader), art can only be placed by hand, for
-example wow.export Zones-tab PNGs saved as `local-maps/art/<uiMapId>.png` (docs/MAPS.md §5.4 (c));
-L3 checks them like any other art.
+`import.ts --build 1.60.1.70009` writes `geometry.local.json` from the client's own tables through
+`tools/casc` (`lib/local-build.ts`); it passes L0-L4 and L7, with the committed frame hash and
+identical shared rows. Local art can still be placed by hand, for example wow.export Zones-tab PNGs
+saved as `local-maps/art/<uiMapId>.png` (docs/MAPS.md §5.4 (c)), or copied from the committed art;
+L3 checks it like any other art.
 
 `vite-local-maps.ts` (`localMaps()` in `vite.config.ts`) serves `local-maps/` at
 `<base>local-maps/` in `vite` and `vite preview` only: no build hooks, the folder must lie outside
@@ -113,12 +142,24 @@ files answer 404, and every answer is `no-store` with its content type (docs/MAP
 ## Layout
 
 ```
-import.ts               --placeholder (Milestone 2); --build is not built yet (planned with the Milestone 3b extraction)
-validate.ts             placeholder checks; --local / --activate
+import.ts               --placeholder (Milestone 2); --build: the local geometry from the client (Milestone 3b)
+convert.ts              the committed painted art public/maps/art/ from the client (Milestone 3b)
+validate.ts             placeholder checks, committed-art checks A1-A5; --local / --activate
 vite-local-maps.ts      dev/preview-only Vite plugin serving local-maps/ (Milestone 3)
+art.client.test.ts      3b.8 checks against the pinned client (skipped with a banner without it)
 inputs/db2-rows-1.60.1.70009.json   the 12 cited DB2 rows (committed)
 lib/args.ts             strict option parsing
 lib/art.ts              L3 (art files, headers, sizes, placement), the manifest's art section, L8 art drift
+lib/art-build.ts        the art build in memory: plan, compose, encode, manifest and NOTICE texts
+lib/art-checks.ts       A1-A5 on the committed art folder
+lib/art-manifest.ts     public/maps/art/manifest.json: build and parse
+lib/art-notice.ts       public/maps/art/NOTICE.md text
+lib/art-plan.ts         which tiles and overlays make each UiMap's image, and where (pure)
+lib/art-test-support.ts synthetic BLPs and art tables for the tests only
+lib/blp.ts              BLP2 decoding (palette, DXT1/3/5, B8G8R8A8), this project's own
+lib/client-tables.ts    the eight map DB2 tables through tools/casc
+lib/compose.ts          tiles and overlays onto one canvas
+lib/encode.ts           WebP through sharp; encoder identity
 lib/checks.ts           R1, P0-P5, P7, P8 (P6 in validate.ts)
 lib/constants.ts        reference frame hash, expected IDs, research-CSV inventory, art aspects
 lib/conversion.ts       fail-closed reader for conversion.json's geometry block
@@ -128,10 +169,13 @@ lib/git.ts              git blobs, commit resolution, tracking (GIT_NO_LAZY_FETC
 lib/hash.ts             SHA-256, git blob ids, LF normalisation
 lib/inputs.ts           reads the pinned inputs and builds the placeholder in memory
 lib/json.ts             deterministic JSON formatting
+lib/local-build.ts      import --build: geometry.local.json from the client tables
 lib/local-set.ts        L0-L8, activation manifest, deactivation
 lib/make-db2-rows.ts    one-off regeneration script for the rows file
 lib/notice.ts           NOTICE.md text
 lib/pin.ts              QuestieDB pin and conversion.json hash, from tools/questiedb/upstream.json
 lib/placeholder.ts      buildPlaceholder
+lib/raster.ts           RGBA rasters, source-over, pixel hashes
 lib/test-support.ts     fixtures for the tests only (generated test images: src/infra/maps/test-images.ts)
+lib/tool-tree.ts        toolTreeHash: git tree ids of tools/casc and tools/maps
 ```

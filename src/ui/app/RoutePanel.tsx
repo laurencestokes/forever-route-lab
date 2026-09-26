@@ -1,5 +1,5 @@
 import { memo, useMemo, type RefObject } from 'react';
-import type { EditorStore } from '../../app';
+import { type EditorStore, selectionRuns } from '../../app';
 import { useEditor } from '../../app/react';
 import type { StepId } from '../../domain/ids';
 import {
@@ -26,7 +26,7 @@ import {
   type SelectionMode,
 } from '../kit';
 import { INSERT_GRIND_TITLE, type RouteActions } from './route-actions';
-import { selectEditingLocked, selectHistory, selectSelection, useActiveTarget } from './selectors';
+import { selectClipboardCount, selectEditingLocked, selectHistory, selectSelection, useActiveTarget } from './selectors';
 import { routeEditorKeyHandler } from './useShortcuts';
 
 export interface RoutePanelProps {
@@ -73,6 +73,7 @@ export const RoutePanel = memo(function RoutePanel({
   const selection = useEditor(store, selectSelection);
   const editingLocked = useEditor(store, selectEditingLocked);
   const history = useEditor(store, selectHistory);
+  const clipboardCount = useEditor(store, selectClipboardCount);
   const { index: activeIndex } = useActiveTarget(store, view, activeRow);
   const selectedKeys = useMemo(() => selectedRowKeys(view, selection.stepIds), [view, selection.stepIds]);
   const onKeyDown = useMemo(() => routeEditorKeyHandler(store, actions), [store, actions]);
@@ -125,6 +126,9 @@ export const RoutePanel = memo(function RoutePanel({
   const selectionCount = selection.stepIds.size;
   const canEdit = !editingLocked;
   const canEditSelection = canEdit && selectionCount > 0;
+  const sections = useMemo(() => selectionRuns(view.steps, selection.stepIds).length, [view.steps, selection.stepIds]);
+  const canPaste = canEdit && clipboardCount > 0;
+  const canJoin = canEdit && sections >= 2;
   // Handlers guard as well: the toolbar swallows clicks on aria-disabled items, the store refuses
   // edits while locked, and a guard keeps the intent obvious here.
   const whenEditable = (run: () => void) => () => {
@@ -252,6 +256,48 @@ export const RoutePanel = memo(function RoutePanel({
               if (actions.deleteSteps()) onFocusList();
             })}
           />
+          <ToolbarSeparator />
+          <IconButton
+            icon="cut"
+            label="Cut selected steps"
+            shortcut="Ctrl+X"
+            size="sm"
+            aria-disabled={unavailable(!canEditSelection)}
+            onClick={whenSelection(() => {
+              if (actions.cutSteps()) onFocusList();
+            })}
+          />
+          <IconButton
+            icon="copy"
+            label="Copy selected steps"
+            shortcut="Ctrl+C"
+            size="sm"
+            // Copying changes nothing, so it stays available while editing is locked.
+            aria-disabled={unavailable(selectionCount === 0)}
+            onClick={() => {
+              if (selectionCount > 0) actions.copySteps();
+            }}
+          />
+          <IconButton
+            icon="paste"
+            label={clipboardCount > 0 ? `Paste ${plural(clipboardCount, 'step')} after the selection` : 'Paste steps (the clipboard is empty)'}
+            shortcut="Ctrl+V"
+            size="sm"
+            aria-disabled={unavailable(!canPaste)}
+            onClick={() => {
+              if (canPaste) actions.pasteSteps();
+            }}
+          />
+          <IconButton
+            icon="join"
+            label={sections >= 2 ? `Join the ${formatInteger(sections)} selected sections` : 'Join sections (select two or more separate runs of steps)'}
+            shortcut="J"
+            size="sm"
+            aria-disabled={unavailable(!canJoin)}
+            onClick={() => {
+              if (canJoin) actions.joinSections();
+            }}
+          />
         </Toolbar>
       </div>
       <div className="frl-app-route__list">
@@ -289,7 +335,9 @@ export const RoutePanel = memo(function RoutePanel({
                   onHoverSteps(index === null ? null : rowIds(index));
                 }
           }
-          emptyState={<EmptyState title="The route is empty">Insert a note, travel or grind step to begin.</EmptyState>}
+          emptyState={
+            <EmptyState title="The route is empty">Insert a note, travel or grind step, or add a quest from the Available tab, to begin.</EmptyState>
+          }
         />
       </div>
     </div>

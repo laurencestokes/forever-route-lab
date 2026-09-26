@@ -1,0 +1,8 @@
+#forever
+#name 8-9 Fixture Four
+#group This Line Is Ignored In The Two Argument Form
+#version 1
+
+step
+    .goto Durotar,53.00,44.00,15
+    >> Two-argument form

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import fixture01 from '../../tests/fixtures/rxp/01-basic-durotar.txt?raw';
+import fixture02 from '../../tests/fixtures/rxp/02-filters-and-step-tags.txt?raw';
 import { fixtureView } from '../../tests/support/fixture-dataset';
+import * as rxpTools from '../app/rxp-tools';
+import { sequentialIdSource } from '../app/shell-support';
 import { createPlaceholderWorkspace } from '../app/placeholder-project';
 import type { AreaId, NpcId, QuestId, StepId, UiMapId, WorldMapId } from '../domain/ids';
 import type { Location, SourcedPoint } from '../domain/points';
@@ -17,6 +21,7 @@ import {
   grindTargetText,
   locationDetail,
   locationText,
+  mapStepLabel,
   objectiveWhere,
   panelTabOf,
   publishedPointText,
@@ -162,7 +167,8 @@ describe('texts', () => {
     expect(stepTitle(find((s) => s.kind === 'hearth' && s.mode === 'bind'), dataset)).toBe('Set hearthstone');
     expect(stepTitle(find((s) => s.kind === 'flight' && s.mode === 'take'), dataset)).toBe('Fly to Placeholder Ridge');
     const group = find((s) => s.kind === 'complete' && s.targets.length === 2);
-    expect(stepTitle(group, dataset)).toBe('Placeholder Quest 3: object objective (objective 1) + Placeholder Quest 4: follow-up to Quest 1 (objective 1)');
+    // Quest 4 follows Quest 1 (its only pre-quest): its chain position is in the title.
+    expect(stepTitle(group, dataset)).toBe('Placeholder Quest 3: object objective (objective 1) + Placeholder Quest 4: follow-up to Quest 1 (2/2) (objective 1)');
   });
 
   it('names unknown quests without inventing anything', () => {
@@ -205,6 +211,9 @@ describe('texts', () => {
     expect(locationText(world(['-4000.00', '-500.00']), dataset)).toBe('World map 1: X -500.00, Y -4000.00 yd');
     // The same point created in the app has no lexemes, and reads the same way round.
     expect(locationText(world(null), dataset)).toBe('World map 1: X -500, Y -4000 yd');
+    // A world point that names its UiMap (a zone hint) says it after the point.
+    const hinted: Location = { source: { space: 'world', mapId: 1 as WorldMapId, x: -500, y: -4000, uiMapId: 424242 as UiMapId, lexemes: null }, label: null, radius: null };
+    expect(locationText(hinted, dataset)).toBe('World map 1: X -500, Y -4000 yd (UiMap 424242)');
     const published: SourcedPoint = { space: 'world', mapId: 0 as WorldMapId, x: -8835.74, y: 490.16, uiMapId: null, lexemes: null };
     expect(publishedPointText(dataset, published)).toBe('World map 0: X -8835.74, Y 490.16 yd');
   });
@@ -336,5 +345,40 @@ describe('slices and texts', () => {
     expect(selectionMessage(0)).toBe('Selection cleared');
     expect(selectionMessage(1)).toBe('1 step selected');
     expect(selectionMessage(1200)).toBe('1,200 steps selected');
+  });
+});
+
+describe('imported guide text (docs/RXP.md §12 row 32, UI-F7)', () => {
+  function importedRoute(input: string): Route {
+    const VIEW = fixtureView();
+    const ctx = rxpTools.createRxpContext(VIEW, null);
+    const built = rxpTools.rxpImportProject({ input, fileName: null, frame: 'forever' }, { guides: 'all', unknownQuests: 'warn' }, ctx, {
+      identity: VIEW.identity,
+      ids: sequentialIdSource(1),
+      nowIso: '2026-09-26T00:00:00.000Z',
+    });
+    if (built === null) throw new Error('nothing imported');
+    return built.project.route;
+  }
+
+  it('shows route rows, their spoken labels and map labels without colour tokens or escapes, and keeps the text as written', () => {
+    for (const fixture of [fixture01, fixture02]) {
+      const imported = importedRoute(fixture);
+      const VIEW = fixtureView();
+      const rows = buildRouteView(imported, VIEW, 1).rows;
+      for (const row of rows) {
+        const text = row.type === 'step' ? `${row.title} ${row.detail ?? ''}` : row.label;
+        expect(text).not.toMatch(/\|c|\|r|\|T|RXP_[A-Z]+_/);
+      }
+      imported.steps.forEach((step, index) => {
+        expect(mapStepLabel(step, index, VIEW)).not.toMatch(/\|c|\|r/);
+      });
+    }
+    const imported = importedRoute(fixture01);
+    const titles = buildRouteView(imported, fixtureView(), 1).rows.flatMap((row) => (row.type === 'step' ? [row.title] : []));
+    expect(titles).toContain('Talk to Kaltunk');
+    expect(titles).toContain('Hunt Mottled Boars south-east of the Den');
+    // The step itself keeps the guide's text, so an unedited guide exports byte for byte.
+    expect(imported.steps.some((step) => step.kind === 'note' && step.text === 'Talk to |cRXP_FRIENDLY_Kaltunk|r')).toBe(true);
   });
 });

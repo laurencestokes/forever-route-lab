@@ -81,9 +81,96 @@ project or RestedXP. World of Warcraft is a trademark of Blizzard Entertainment,
   `79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a`), and are marked
   `source: 'db2-csv'`, each row citing table, build and row ID. They are Blizzard client-derived
   values, committed by owner approval (D-018; cited individual values are allowed, D-022).
-- **No map art.** No Blizzard artwork is committed or deployed. Local map sets live in the
-  gitignored `local-maps/` folder, outside `public/`. Only a dev/preview plugin serves them, and
-  the build audit fails if map-like files reach `dist/` (D-018; [docs/MAPS.md](docs/MAPS.md)).
+- **Map art is separate.** The geometry file holds no images. Blizzard's painted map art is
+  committed and deployed only under `public/maps/art/` (see "Map art" below, D-033). Developer-local
+  map sets still live in the gitignored `local-maps/` folder, outside `public/`; only a dev/preview
+  plugin serves them, and the build audit fails if they reach `dist/` (D-018;
+  [docs/MAPS.md](docs/MAPS.md)).
+
+## Map art
+
+- **What:** `public/maps/art/`: one WebP image per UiMap with art in the World of Warcraft: Forever
+  client (60 at build 1.60.1.70009: zones, cities, battlegrounds, the continents 1414, 1415, 1463
+  and 1464, Azeroth 947 and the new Forever maps), each the world map's painted art stitched from
+  the client's `UiMapArtTile` textures with every `WorldMapOverlay` explored-area piece drawn in;
+  `manifest.json` (per image: SHA-256, pixel size, UiMap, world rectangle, tile FileDataIDs and an
+  input hash over the (FileDataID, CKey) list of the textures and tables) and `NOTICE.md`.
+- **Owner:** the artwork is Blizzard Entertainment's (© Blizzard Entertainment, Inc.). World of
+  Warcraft, Warcraft and Blizzard Entertainment are trademarks or registered trademarks of Blizzard
+  Entertainment, Inc. The images are extracted from the game client and are not this project's
+  work; this repository's GPL-3.0-or-later licence grants no rights over them.
+- **Owner's decision** (D-033): commit and deploy the painted map art with these notices. The
+  owner's rationale is recorded as stated and not verified: third-party sites already show
+  Blizzard's map art, and the owner believes Blizzard's policies allow this for fan sites. The
+  governing source D-033 records is Blizzard's Legal FAQ, section "Copyright/Trademark Policy for
+  the Internet"
+  (https://www.blizzard.com/en-us/legal/c1ae32ac-7ff9-4ac3-a03b-fc04b8697010/blizzard-legal-faq).
+  No legal conclusion is drawn, and the owner accepts the risk. Project rules adopted from that
+  page's conditions: the site stays non-commercial; Blizzard's copyright and trademark notices
+  accompany the art; the art is removed promptly if Blizzard asks
+  (https://github.com/laurencestokes/forever-route-lab/issues); the project never distributes hacks,
+  cheats or similar content.
+- **How:** `tools/maps/convert.ts` reads the pinned client read-only through this project's CASC
+  reader (`tools/casc`; `.build.info` and `Data/` only, no network), decodes the BLP textures with
+  this project's own decoder (`tools/maps/lib/blp.ts`) and encodes WebP with `sharp` (below). No BLP,
+  DB2 or other client file is committed or deployed.
+- **Where the notices live:** `public/maps/art/NOTICE.md` (shipped as `dist/maps/art/NOTICE.md`,
+  which the build audit requires next to every art image), this file, the README and the in-app
+  About dialog (the last two are for their owners, D-033).
+- **Dist audit:** an image may ship only under `maps/art/` or `maps/terrain/`, only with that
+  folder's `NOTICE.md` and `manifest.json`, and only when the manifest lists it with its SHA-256;
+  the art has its own budget of 12 MB gzip-6 (D-034 item 4; `tools/build/dist-requirements.json`).
+
+## Derived terrain map data
+
+- **What:** `public/maps/terrain/`: for Eastern Kingdoms (map 0) and Kalimdor (map 1), zone outline
+  arcs (`zones.json`), coastline arcs (`coast.json`) and a 4-bit shaded relief (`relief.png`), with
+  `manifest.json` (pin, build, tool tree hash, parameters, per-map input hashes, per-file SHA-256)
+  and `NOTICE.md`.
+- **Origin:** derived by this project's own code (`tools/terrain/byproducts.ts`) from the Forever
+  client's terrain data: MCNK heightmaps, liquid surfaces and per-chunk `AreaTable` ids rolled up
+  through `AreaTable.ParentAreaID`. They are not copies of game files and not the painted map art.
+  World of Warcraft and its game data are Blizzard Entertainment's; GPL-3.0-or-later covers the
+  project's own code and grants no rights over Blizzard content or client-derived values.
+- **Owner's decision:** D-032 (committed and deployed with provenance notices, extending D-028).
+  This is a posture, not a legal conclusion.
+- **Where the notices live:** `public/maps/terrain/NOTICE.md` (shipped next to the files) and this
+  file. Budget: 600 kB gzip-6 (D-034 item 4).
+
+## Derived navigation data
+
+- **What:** `public/nav/` (Milestone 3b): walkable polygon meshes of Eastern Kingdoms and Kalimdor
+  in blocks of 4 × 4 map tiles (`<mapId>/<row0>_<col0>.bin`), per-map components and connector
+  links (`<mapId>/map.bin`), the owner-observed connectors (`connectors.json`), `manifest.json` and
+  `NOTICE.md`.
+- **Origin:** derived by this project from the Forever client's terrain, liquids and placed-object
+  collision (WMO and M2), read-only through `tools/casc` and pinned to a recorded build (D-028). It
+  is a derived mesh in this project's own format, not game files or art. Connectors come from the
+  owner's in-game observations (D-031, D-034).
+- **Owner's decisions:** D-028 (committed and deployed with provenance notices) and D-030 (a
+  7 MB gzip-6 cap in its own `nav` budget, with a spawn-census gate). This is a posture, not a legal
+  conclusion.
+- **Built with:** recast-navigation-js (declares MIT), which embeds Recast and Detour (Mikko
+  Mononen, zlib licence), as a build-time development dependency only; nothing from it reaches
+  `dist/`. Detour's algorithms that the app uses (link matching, the funnel) are reimplemented in
+  this project's own TypeScript, not ported.
+- **Where the notices live:** `public/nav/NOTICE.md` (shipped next to the files, required by the
+  build audit once `public/nav/manifest.json` exists) and this file.
+
+## Format definitions
+
+- **WoWDBDefs** (https://github.com/wowdev/WoWDBDefs), commit
+  `cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd`, © WoWDBDefs contributors. The `definitions/<Table>.dbd`
+  blocks for build 1.60.1.70009 and the `manifest.json` FileDataIDs of 14 DB2 tables (field
+  names, types, sizes and order) are adapted into TypeScript data in `tools/casc/layouts.ts`,
+  which `tools/casc/make-layouts.ts` generates from research copies. The file header names the
+  source.
+- **Licence:** WoWDBDefs' `LICENSE.md` (the same blob at that commit and on master, checked
+  2026-09-26) licenses its "Data", the `definitions/` folder among them, as CC BY-SA 4.0, and its
+  "Code" as BSD-3-Clause. No WoWDBDefs code is included. The adapted layouts are distributed with
+  this repository under GPL-3.0-or-later; Creative Commons lists GPLv3 as compatible with
+  BY-SA 4.0. This is a compliance posture, not a legal conclusion.
+- The layouts are build-tool input only; nothing from them reaches `dist/`.
 
 ## Ported code
 
@@ -91,11 +178,23 @@ None yet. Candidate source, allowed by D-029: WoWF-QRP (https://github.com/tyba-
 declares GPL-3.0, commit `c1e3fcf31be65d742858c1e87a5ce87b3565da60`). Its code only, never its
 data.
 
+The BLP texture decoder of step 3b.8 (`tools/maps/lib/blp.ts`) is this project's own code, written
+from the format descriptions on wowdev.wiki ("BLP") and the S3TC (DXT1, DXT3, DXT5) block formats;
+no wow.export code was ported, so it carries no third-party header.
+
 Rule: code copied or ported into this repository keeps its original copyright and licence header.
 It also gets an entry here, maintained by hand, giving the source repository, commit, original
-path, our path, the source's declared SPDX licence and a summary of changes. The first expected
-case is BLP decoding ported from wow.export (which declares MIT) into `tools/maps`
-(ARCHITECTURE §16).
+path, our path, the source's declared SPDX licence and a summary of changes (ARCHITECTURE §16).
+
+## Build tools (not shipped)
+
+- **sharp** 0.35.4 (https://github.com/lovell/sharp, declares Apache-2.0), a development dependency
+  that `tools/maps/convert.ts` uses to encode the map art as WebP. Its prebuilt platform package
+  (`@img/sharp-<platform>`) declares Apache-2.0 AND LGPL-3.0-or-later: it bundles libvips
+  (LGPL-3.0-or-later) and libwebp (BSD-3-Clause), among others. None of its code reaches `dist/`, so
+  the licence gate and `dist/third-party-notices.txt` do not cover it; the art's manifest records
+  the sharp, libvips and libwebp versions that encoded it.
+- **recast-navigation-js**: see "Derived navigation data".
 
 ## Software dependencies
 
@@ -115,3 +214,8 @@ ARCHITECTURE §16.
 - **Questie/Questie** was read for consumer semantics only; no Questie file is an input
   (DATA_PROVENANCE §2).
 - **wow.export** is not part of any scripted pipeline (D-011).
+- **TrinityCore** (https://github.com/TrinityCore/TrinityCore, commit `85d3c251`, declares
+  GPL-2.0-or-later) was read for rules only during the Milestone 3b research: the WMO collision
+  and group-skip rules and the WMO liquid-type rule that `tools/terrain/lib/formats/wmo.ts` and
+  `liquid.ts` implement in this project's own code (docs/research/terrain-navigation.md §2 and §20). No TrinityCore
+  code is included.

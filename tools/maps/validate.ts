@@ -15,6 +15,11 @@
  *       recomputes it at load.
  * No CSV and no network request is needed (D-011).
  *
+ * Committed art checks (always; Milestone 3b, D-033): A1-A5 on public/maps/art/ (lib/art-checks.ts):
+ * the manifest and NOTICE, every image's bytes, SHA-256 and WebP headers, the NOTICE regenerated
+ * from the manifest, sizes and world rectangles against the placeholder, and the 12 MB art budget.
+ * They need no client; `convert.ts --check` is the rebuild from the client.
+ *
  * Local-set checks (--local [dir], default local-maps/): L0-L7 (lib/local-set.ts; L3 is the art,
  * lib/art.ts), plus L8 (an existing manifest still matches the files) in a report. With
  * --activate, a passing set gets local-maps/maps.manifest.json with its `art` section (which
@@ -22,13 +27,15 @@
  *
  * Usage: pnpm maps:validate [--skip-tracking]
  *        pnpm tsx tools/maps/validate.ts [--questiedb-repo <dir>] [--commit <sha>] [--rows <file>] [--placeholder-dir <dir>]
- *          [--skip-tracking] [--local [dir]] [--activate] [--taxi-nodes <TaxiNodes.csv>] [--source <source.json>]
+ *          [--art-dir <dir>] [--skip-tracking] [--local [dir]] [--activate] [--taxi-nodes <TaxiNodes.csv>] [--source <source.json>]
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { parseGeometryFile } from '../../src/geo/geometry';
 import { REPO_ROOT } from '../build/lib/fs';
 import { parseArgs } from './lib/args';
+import { committedArtChecks } from './lib/art-checks';
+import { ART_DIR } from './lib/art-manifest';
 import { placeholderChecks, type CheckResult } from './lib/checks';
 import { GEOMETRY_FILE, NOTICE_FILE, PLACEHOLDER_DIR, ROWS_FILE } from './lib/constants';
 import { headCommit, isTracked } from './lib/git';
@@ -51,7 +58,7 @@ function format(results: readonly CheckResult[]): string {
 
 function main(argv: readonly string[]): number {
   const args = parseArgs(argv, {
-    values: ['--questiedb-repo', '--commit', '--rows', '--placeholder-dir', '--taxi-nodes', '--source'],
+    values: ['--questiedb-repo', '--commit', '--rows', '--placeholder-dir', '--art-dir', '--taxi-nodes', '--source'],
     flags: ['--skip-tracking', '--activate'],
     optionalValues: ['--local'],
   });
@@ -82,11 +89,21 @@ function main(argv: readonly string[]): number {
   console.log(`maps validate: placeholder ${toPosix(relative(REPO_ROOT, placeholderDir))}/ (inputs: QuestieDB ${expected.conversion.targetBuild} frames, ${ROWS_FILE})`);
   console.log(format(results));
 
+  const parsed = parseGeometryFile(JSON.parse(geometryText) as unknown);
+  const artDir = resolve(REPO_ROOT, args.values.get('--art-dir') ?? ART_DIR);
+  let artOk = false;
+  if (parsed.ok) {
+    const art = committedArtChecks(artDir, parsed.geometry);
+    artOk = art.checks.every((result) => result.problems.length === 0 && result.skipped === null);
+    console.log(`
+maps validate: committed art ${toPosix(relative(REPO_ROOT, artDir))}/ (${String(art.manifest?.files.length ?? 0)} images)`);
+    console.log(format(art.checks));
+  } else console.error('maps validate: the committed art is checked against the placeholder, which does not parse');
+
   const wantsLocal = args.flags.has('--local') || args.values.has('--local') || args.flags.has('--activate');
-  if (!wantsLocal) return placeholderOk ? 0 : 1;
+  if (!wantsLocal) return placeholderOk && artOk ? 0 : 1;
 
   const localDir = resolve(REPO_ROOT, args.values.get('--local') ?? 'local-maps');
-  const parsed = parseGeometryFile(JSON.parse(geometryText) as unknown);
   if (!parsed.ok || !placeholderOk) {
     console.error('maps validate: the local set is checked against the committed placeholder, which must pass first');
     if (args.flags.has('--activate') && deactivate(localDir)) console.error('maps validate: removed the existing maps.manifest.json (set inactive)');

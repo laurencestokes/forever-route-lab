@@ -1,5 +1,5 @@
-import type { DatasetView, PublishedPoint, QuestId, RouteStep, StepId, UiMapId, WorldMapId, WorldPoint } from '../domain';
-import { zoneFramesContaining, type MapGeometry } from '../geo';
+import type { DatasetView, PublishedPoint, QuestId, RouteStep, SourcedPoint, StepId, UiMapId, WorldMapId, WorldPoint } from '../domain';
+import { attributeZone, zoneFramesContaining, type MapGeometry } from '../geo';
 import type { LocalArt, LocalArtEntry, LocalArtLoad } from '../infra/maps';
 import {
   EMPTY_LAYER_STATS,
@@ -42,6 +42,7 @@ import {
   flightMasterModel,
   focusQuestIds,
   focusWithin,
+  isDrawnStep,
   legUnknownAt,
   objectiveModel,
   questGiverModel,
@@ -62,6 +63,7 @@ import {
 } from './map-model';
 import { normaliseQuestIds, openQuestsInDetails, patchMapUi, type MapUiPatch } from './map-view';
 import type { EditorState, EditorStore } from './store';
+import { plainGuideText } from './ui-text';
 
 /**
  * The map controller (docs/ARCHITECTURE.md §7, §12.1; docs/UI.md §12): framework-agnostic glue
@@ -122,7 +124,11 @@ export interface MapControllerOptions {
   readonly geometry: MapGeometry;
   /** The local set's art; null or omitted for none. */
   readonly art?: LocalArt | null | undefined;
-  /** A step's hover text from its current position, for example `12 · Accept: Your Place in the World`. */
+  /**
+   * A step's hover text from its current position, for example `12 · Accept: Your Place in the World`.
+   * The label provider shows it as plain text: guide colour tokens and escapes are removed
+   * (`plainGuideText`, docs/RXP.md §12 row 32).
+   */
   readonly describeStep: (step: RouteStep, index: number, dataset: DatasetView) => string;
   readonly lod?: LodOverrides | undefined;
   /** Default: `URL.createObjectURL` / `revokeObjectURL` where they exist. */
@@ -188,6 +194,27 @@ export interface MapStatus {
   readonly activeStep: { readonly stepId: StepId; readonly number: number; readonly placement: ActivePlacement } | null;
   /** A merged marker's items waiting for the user's choice, or null. */
   readonly choice: MapChoice | null;
+  /** The pick in progress (the next click on the map is taken as a point), or null. */
+  readonly pick: MapPickStatus | null;
+}
+
+/**
+ * A request to take the next click on the map as a point ("pick on map"): for a step's location,
+ * say, or a custom quest's starter.
+ */
+export interface MapPickRequest {
+  /** What the point is for, in words ("the location of step 12"): the status line says it. */
+  readonly label: string;
+  /**
+   * Receives the point: world form, where the click was (to 0.1 yd), with the zone hint (the zone
+   * the map was jumped to when its frame holds the point, else the zone frame the point is most
+   * central in, else null; `attributeZone`).
+   */
+  readonly onPick: (point: SourcedPoint) => void;
+}
+
+export interface MapPickStatus {
+  readonly label: string;
 }
 
 /** An active step's placement, without its point. */
@@ -251,6 +278,14 @@ export interface MapController {
   /** Runs the pending choice's "all" action and closes it. */
   readonly chooseAll: () => void;
   readonly dismissChoice: () => void;
+  /**
+   * Takes the next click on the map as a point for `request` (and nothing else: the click selects
+   * nothing). False when the map is not mounted, so nothing can be clicked. A new pick replaces
+   * the one in progress.
+   */
+  readonly startPick: (request: MapPickRequest) => boolean;
+  /** Ends the pick in progress without a point; false when there was none. */
+  readonly cancelPick: () => boolean;
   /** The adapter's label provider: numbered hover text for a ref, or null to keep the descriptor's own. */
   readonly labelFor: MapLabelProvider;
   readonly getStatus: () => MapStatus;
@@ -422,6 +457,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
   /** The zone whose fit is being applied: the views passed on the way do not clear it. */
   let zoneFit: UiMapId | null = null;
   let choice: OpenChoice | null = null;
+  let pick: MapPickRequest | null = null;
   const sent = new Map<LayerId, LayerContent>();
   const contents = new Map<LayerId, LayerContent>();
   const listeners = new Set<() => void>();
@@ -447,7 +483,16 @@ export function createMapController(options: MapControllerOptions): MapControlle
   const routeOf = createRouteInputBuilder(geometry);
   /** What the route layers draw from: the route without steps they skip, so a note edit rebuilds none of them. */
   const drawnOf = createDrawnRouteFilter();
-  const drawnIdsOf = lastOf((route: RouteInput): ReadonlySet<StepId> => new Set(route.steps.map((step) => step.stepId)));
+  /**
+   * Whether the route layers draw step `id`: asked only for the focused steps, so a route edit
+   * builds no set of every drawn id (M3 review PERF-2). The builder has just built the route.
+   */
+  const drawnStep = {
+    has: (id: StepId): boolean => {
+      const input = routeOf.inputOf(id);
+      return input !== null && isDrawnStep(input);
+    },
+  };
   const positionsOf = lastOf((steps: readonly RouteStep[]): ReadonlyMap<StepId, number> => new Map(steps.map((step, index) => [step.id, index])));
   type Character = EditorState['project']['character'];
   const giversOf = lastOf((dataset: DatasetView, race: Character['race'], cls: Character['class']): GiverLayerModel =>
@@ -463,8 +508,8 @@ export function createMapController(options: MapControllerOptions): MapControlle
   );
   const summaryOf = lastOf((route: RouteInput) => routeMapSummary(route));
 
-  const activeStepOf = (state: EditorState): RouteStep | null =>
-    activeStep === null ? null : (state.project.route.steps.find((step) => step.id === activeStep) ?? null);
+  const findStep = lastOf((steps: readonly RouteStep[], id: StepId | null): RouteStep | null => (id === null ? null : (steps.find((step) => step.id === id) ?? null)));
+  const activeStepOf = (state: EditorState): RouteStep | null => findStep(state.project.route.steps, activeStep);
 
   // Labels -----------------------------------------------------------------------------------
 
@@ -524,7 +569,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
         const badges: string[] = [];
         if (placement?.kind === 'point' && placement.offFrame) badges.push(BADGE_TEXT['off-frame']);
         if (legUnknownAt(route, index)) badges.push(BADGE_TEXT['leg-unknown']);
-        return withBadges(options.describeStep(step, index, datasetOf(state)), badges);
+        return withBadges(plainGuideText(options.describeStep(step, index, datasetOf(state))), badges);
       }
       case 'run': {
         const first = ref.stepIds[0];
@@ -680,6 +725,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
       artDrawn,
       activeStep: index === null || active === undefined ? null : { stepId: active.stepId, number: index + 1, placement: activePlacementOf(active.placement) },
       choice: choice?.choice ?? null,
+      pick: pick === null ? null : { label: pick.label },
     };
   }
 
@@ -801,7 +847,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
     const route = drawnOf(routeOf(state.project.route.steps));
     const focusKey = focusKeyOf(focusQuestIds(state.view.openedQuests, state.selection, activeStepOf(state)));
     const focusQuests = questIdsOfKey(focusKey);
-    const stepFocus = focusWithin(stepFocusOf(state.selection, activeStep), drawnIdsOf(route));
+    const stepFocus = focusWithin(stepFocusOf(state.selection, activeStep), drawnStep);
     const zone = state.view.map.zone;
     const out = new Map<LayerId, LayerContent>();
     out.set('art', layers.art(artFor(at, state), at));
@@ -811,7 +857,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
     out.set('turn-ins', layers.spawns('turn-ins', turnInsOf(dataset, focusKey).input, at, focusQuests, zone));
     out.set('flight-masters', layers.spawns('flight-masters', flightMastersOf(dataset, character.faction, character.race, character.class).input, at, [], zone));
     out.set('route-line', layers.routeLine(route, at));
-    out.set('route-steps', layers.routeSteps(route, at, stepFocus));
+    out.set('route-steps', layers.routeSteps(route, at));
     out.set('proposal', layers.proposal(null, at));
     out.set('selection', layers.selection(route, at, stepFocus));
     return out;
@@ -993,8 +1039,26 @@ export function createMapController(options: MapControllerOptions): MapControlle
     return true;
   }
 
+  /** A clicked point as a world-form SourcedPoint with its zone hint (`MapPickRequest.onPick`). */
+  function pickedPoint(point: WorldPoint): SourcedPoint {
+    const round = (value: number): number => {
+      const rounded = Math.round(value * 10) / 10;
+      return rounded === 0 ? 0 : rounded;
+    };
+    const world: WorldPoint = { mapId: point.mapId, x: round(point.x), y: round(point.y) };
+    const zone = attributeZone(world, store.getState().view.map.zone, geometry)?.uiMapId ?? null;
+    return { space: 'world', mapId: world.mapId, x: world.x, y: world.y, uiMapId: zone, lexemes: null };
+  }
+
   function onClick(hit: MapHit | null, point: WorldPoint): void {
     closeChoice();
+    const picking = pick;
+    if (picking !== null) {
+      pick = null;
+      publish(store.getState());
+      picking.onPick(pickedPoint(point));
+      return;
+    }
     if (hit === null) {
       publish(store.getState());
       if (store.getState().view.map.zoomBand !== 'continent') return;
@@ -1234,6 +1298,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
       mapHovering = false;
       rowTarget = null;
       closeChoice();
+      pick = null;
       setHover(null);
       revokeArt();
       publish(store.getState());
@@ -1284,6 +1349,21 @@ export function createMapController(options: MapControllerOptions): MapControlle
 
     dismissChoice() {
       if (closeChoice()) publish(store.getState());
+    },
+
+    startPick(request) {
+      if (!mounted || adapter === null) return false;
+      closeChoice();
+      pick = request;
+      publish(store.getState());
+      return true;
+    },
+
+    cancelPick() {
+      if (pick === null) return false;
+      pick = null;
+      publish(store.getState());
+      return true;
     },
 
     getStatus: () => status,

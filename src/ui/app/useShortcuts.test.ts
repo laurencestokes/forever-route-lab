@@ -43,6 +43,11 @@ describe('routeEditorShortcutFor', () => {
     expect(routeEditorShortcutFor(key('ArrowUp', { altKey: true }))).toBe('moveUp');
     expect(routeEditorShortcutFor(key('ArrowDown', { altKey: true }))).toBe('moveDown');
     expect(routeEditorShortcutFor(key('Escape'))).toBe('clearSelection');
+    expect(routeEditorShortcutFor(key('x', { ctrlKey: true }))).toBe('cut');
+    expect(routeEditorShortcutFor(key('C', { metaKey: true }))).toBe('copy');
+    expect(routeEditorShortcutFor(key('v', { ctrlKey: true }))).toBe('paste');
+    expect(routeEditorShortcutFor(key('j'))).toBe('join');
+    expect(routeEditorShortcutFor(key('J'))).toBe('join');
   });
 
   it('ignores modified variants and the global keys', () => {
@@ -55,6 +60,9 @@ describe('routeEditorShortcutFor', () => {
       key('Escape', { shiftKey: true }),
       key('z', { ctrlKey: true }),
       key('k', { ctrlKey: true }),
+      key('v', { ctrlKey: true, shiftKey: true }),
+      key('j', { ctrlKey: true }),
+      key('j', { altKey: true }),
     ]) {
       expect(routeEditorShortcutFor(input)).toBeNull();
     }

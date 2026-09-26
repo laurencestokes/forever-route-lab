@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -31,6 +32,48 @@ export interface AllowedImage {
   readonly reason: string;
 }
 
+/** A gzip budget over a folder of dist/: every file within its baseline + tolerance, the folder within its total. */
+export interface GzipBudget {
+  readonly totalGzipBudgetBytes: number;
+  /** A file may grow to baseline × (1 + tolerance) before the gate fails. */
+  readonly baselineTolerance: number;
+  /** dist-relative path → recorded gzip bytes. */
+  readonly baselines: Readonly<Record<string, number>>;
+}
+
+/**
+ * A committed map folder whose images are allowed in dist/ (D-032, D-033; terrain-navigation.md
+ * §13.3, the one image allowlist): only when the folder's `NOTICE.md` and `manifest.json` ship with
+ * it and the manifest lists the file (`files[].path`, relative to the folder) with its SHA-256.
+ */
+export interface MapFolder extends GzipBudget {
+  /** Budget name in reports and messages (`art`, `terrain`). */
+  readonly name: string;
+  /** dist-relative folder, e.g. `maps/art`. */
+  readonly dir: string;
+  /** Repository folder it is built from; the folder is required in dist/ once `<source>/manifest.json` exists. */
+  readonly source: string;
+  readonly reason: string;
+}
+
+/**
+ * The navigation data budget (D-030; terrain-navigation.md §14.3): a hard cap on the whole `nav/`
+ * folder, a cap per file, and per-map totals within their recorded baselines + tolerance. Once the
+ * repository has `activatedBy`, `required` must ship and every map folder needs a baseline.
+ */
+export interface NavBudget {
+  readonly dir: string;
+  readonly activatedBy: string;
+  readonly required: readonly string[];
+  readonly totalGzipBudgetBytes: number;
+  /** D-030's target band; reported, not gated. */
+  readonly targetGzipBytes: { readonly min: number; readonly max: number };
+  readonly perFileGzipCapBytes: number;
+  readonly baselineTolerance: number;
+  /** Map ID → recorded gzip bytes of `nav/<mapId>/`. */
+  readonly mapBaselines: Readonly<Record<string, number>>;
+}
+
 export interface DistRequirements {
   /** Files every build must contain (Milestone 1). */
   readonly required: readonly string[];
@@ -43,13 +86,11 @@ export interface DistRequirements {
   readonly allowedImages: readonly AllowedImage[];
   /** ARCHITECTURE §14: entry chunk plus its static imports, gzip. */
   readonly entryChunkGzipBudgetBytes: number;
-  readonly data: {
-    readonly totalGzipBudgetBytes: number;
-    /** A data file may grow to baseline × (1 + tolerance) before the gate fails. */
-    readonly baselineTolerance: number;
-    /** dist-relative path → recorded gzip bytes. */
-    readonly baselines: Readonly<Record<string, number>>;
-  };
+  readonly data: GzipBudget;
+  /** The committed map folders allowed to ship images (the art and the terrain byproducts). */
+  readonly mapFolders: readonly MapFolder[];
+  /** The navigation data budget, or null when none is configured. */
+  readonly nav: NavBudget | null;
 }
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
@@ -85,22 +126,64 @@ export function parseDistRequirements(value: unknown): DistRequirements {
   });
   const data = value.data;
   if (!isRecord(data) || !isRecord(data.baselines)) throw new Error('dist-requirements.json: data needs "baselines"');
-  // fromEntries defines own properties, so no path (not even `__proto__`) reaches a setter.
-  const baselines: Readonly<Record<string, number>> = Object.fromEntries(
-    Object.entries(data.baselines)
-      .filter(([path]) => !path.startsWith('$'))
-      .map(([path, bytes]) => [path, positiveNumber(bytes, `data.baselines["${path}"]`)]),
-  );
+  const mapFolders = value.mapFolders === undefined ? [] : value.mapFolders;
+  if (!Array.isArray(mapFolders)) throw new Error('dist-requirements.json: mapFolders must be an array');
+  const folders = (mapFolders as readonly unknown[]).map((entry, index): MapFolder => {
+    const where = `mapFolders[${String(index)}]`;
+    if (!isRecord(entry) || typeof entry.name !== 'string' || typeof entry.dir !== 'string' || typeof entry.source !== 'string' || typeof entry.reason !== 'string' || entry.reason.trim() === '') {
+      throw new Error(`dist-requirements.json: ${where} needs "name", "dir", "source" and a non-empty "reason"`);
+    }
+    if (!/^[a-z0-9]+(\/[a-z0-9]+)*$/.test(entry.dir)) throw new Error(`dist-requirements.json: ${where}.dir must be a plain relative folder`);
+    return { name: entry.name, dir: entry.dir, source: entry.source, reason: entry.reason, ...readBudget(entry, where) };
+  });
   return {
     required: stringList(value.required, 'required'),
     milestone2: { activatedBy: m2.activatedBy, required: stringList(m2.required, 'milestone2.required') },
     allowedImages,
     entryChunkGzipBudgetBytes: positiveNumber(value.entryChunkGzipBudgetBytes, 'entryChunkGzipBudgetBytes'),
-    data: {
-      totalGzipBudgetBytes: positiveNumber(data.totalGzipBudgetBytes, 'data.totalGzipBudgetBytes'),
-      baselineTolerance: positiveNumber(data.baselineTolerance, 'data.baselineTolerance'),
-      baselines,
-    },
+    data: readBudget(data, 'data'),
+    mapFolders: folders,
+    nav: value.nav === undefined || value.nav === null ? null : readNav(value.nav),
+  };
+}
+
+function readBudget(value: Readonly<Record<string, unknown>>, where: string): GzipBudget {
+  if (!isRecord(value.baselines)) throw new Error(`dist-requirements.json: ${where} needs "baselines"`);
+  // fromEntries defines own properties, so no path (not even `__proto__`) reaches a setter.
+  const baselines: Readonly<Record<string, number>> = Object.fromEntries(
+    Object.entries(value.baselines)
+      .filter(([path]) => !path.startsWith('$'))
+      .map(([path, bytes]) => [path, positiveNumber(bytes, `${where}.baselines["${path}"]`)]),
+  );
+  return {
+    totalGzipBudgetBytes: positiveNumber(value.totalGzipBudgetBytes, `${where}.totalGzipBudgetBytes`),
+    baselineTolerance: positiveNumber(value.baselineTolerance, `${where}.baselineTolerance`),
+    baselines,
+  };
+}
+
+function readNav(value: unknown): NavBudget {
+  if (!isRecord(value) || typeof value.dir !== 'string' || typeof value.activatedBy !== 'string' || !isRecord(value.targetGzipBytes) || !isRecord(value.mapBaselines)) {
+    throw new Error('dist-requirements.json: nav needs "dir", "activatedBy", "targetGzipBytes" and "mapBaselines"');
+  }
+  const target = value.targetGzipBytes;
+  const mapBaselines: Readonly<Record<string, number>> = Object.fromEntries(
+    Object.entries(value.mapBaselines)
+      .filter(([key]) => !key.startsWith('$'))
+      .map(([key, bytes]) => {
+        if (!/^(0|[1-9]\d*)$/.test(key)) throw new Error(`dist-requirements.json: nav.mapBaselines key "${key}" is not a map ID`);
+        return [key, positiveNumber(bytes, `nav.mapBaselines["${key}"]`)];
+      }),
+  );
+  return {
+    dir: value.dir,
+    activatedBy: value.activatedBy,
+    required: stringList(value.required, 'nav.required'),
+    totalGzipBudgetBytes: positiveNumber(value.totalGzipBudgetBytes, 'nav.totalGzipBudgetBytes'),
+    targetGzipBytes: { min: positiveNumber(target.min, 'nav.targetGzipBytes.min'), max: positiveNumber(target.max, 'nav.targetGzipBytes.max') },
+    perFileGzipCapBytes: positiveNumber(value.perFileGzipCapBytes, 'nav.perFileGzipCapBytes'),
+    baselineTolerance: positiveNumber(value.baselineTolerance, 'nav.baselineTolerance'),
+    mapBaselines,
   };
 }
 
@@ -108,7 +191,12 @@ export function parseDistRequirements(value: unknown): DistRequirements {
 // Path rules
 
 /** Blizzard client formats, raw Lua and source maps never ship (ARCHITECTURE §16). */
-export const FORBIDDEN_EXTENSIONS: readonly string[] = ['.lua', '.blp', '.m2', '.db2', '.dbc', '.map'];
+/**
+ * Raw Lua, source maps and raw Blizzard client files. The client types include the terrain,
+ * object and model files `tools/terrain` reads (ADT, WDT, WDL, WMO, M2 and its skins; G13 of
+ * terrain-navigation.md §16), not only the map-art inputs (BLP, DB2).
+ */
+export const FORBIDDEN_EXTENSIONS: readonly string[] = ['.lua', '.blp', '.m2', '.skin', '.anim', '.adt', '.wdt', '.wdl', '.wmo', '.db2', '.dbc', '.map'];
 
 export const IMAGE_EXTENSIONS: readonly string[] = [
   '.apng', '.avif', '.bmp', '.gif', '.heic', '.heif', '.ico', '.jpeg', '.jpg', '.jxl', '.png', '.svg', '.tga',
@@ -148,30 +236,113 @@ export function checkForbiddenPaths(files: readonly string[]): readonly AuditVio
   return out;
 }
 
-/** Images ship only when an allowlisted app-asset glob matches them (no map art, D-018). */
-export function checkImages(files: readonly string[], allowed: readonly AllowedImage[]): readonly AuditViolation[] {
+/**
+ * Images ship only when an allowlisted app-asset glob matches them, or when a committed map folder's
+ * manifest lists them (`mapImages`, from {@link checkMapFolders}; D-033's one image allowlist).
+ * Every other image, map art under any other path included, is refused.
+ */
+export function checkImages(files: readonly string[], allowed: readonly AllowedImage[], mapImages: ReadonlySet<string> = new Set()): readonly AuditViolation[] {
   const globs = allowed.map((entry) => entry.glob);
   return files
-    .filter((path) => IMAGE_EXTENSIONS.includes(extensionOf(path)) && !matchesAnyGlob(path, globs))
+    .filter((path) => IMAGE_EXTENSIONS.includes(extensionOf(path)) && !matchesAnyGlob(path, globs) && !mapImages.has(path))
     .map((path) => ({
       rule: 'image',
       path,
-      message: 'image is not an allowlisted app asset (tools/build/dist-requirements.json allowedImages)',
+      message: 'image is not an allowlisted app asset (tools/build/dist-requirements.json allowedImages) nor listed by a map folder manifest (mapFolders)',
     }));
 }
 
+export const MAP_FOLDER_NOTICE = 'NOTICE.md';
+export const MAP_FOLDER_MANIFEST = 'manifest.json';
+
+export interface MapFolderReport {
+  readonly name: string;
+  readonly dir: string;
+  readonly files: readonly SizedFile[];
+  readonly totalGzipBytes: number;
+  readonly budgetBytes: number;
+}
+
 /**
- * File signatures of raster images and Blizzard BLP textures, with the extensions each may carry.
- * The image rule above goes by extension; this catches map art that reaches dist/ under another
- * name (`assets/tile-abc.bin`, a PNG saved as `.svg`), docs/MAPS.md §5.7, D-018.
+ * The committed map folders (D-032, D-033; terrain-navigation.md §13.3). For each configured
+ * folder with files in dist/: its `NOTICE.md` and `manifest.json` must be there; the manifest's
+ * `files` array must list every other file of the folder with its SHA-256 (`path` relative to the
+ * folder), and every listed file must be present with that hash. Returns the image paths this
+ * allows. Once the repository has `<source>/manifest.json`, the folder must ship.
  */
-const SIGNATURES: readonly { readonly name: string; readonly extensions: readonly string[]; readonly matches: (bytes: Uint8Array) => boolean }[] = [
-  { name: 'PNG image', extensions: ['.png', '.apng'], matches: (b) => startsWith(b, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) },
-  { name: 'JPEG image', extensions: ['.jpg', '.jpeg'], matches: (b) => startsWith(b, 0, [0xff, 0xd8, 0xff]) },
-  { name: 'GIF image', extensions: ['.gif'], matches: (b) => ascii(b, 0, 6) === 'GIF87a' || ascii(b, 0, 6) === 'GIF89a' },
-  { name: 'WebP image', extensions: ['.webp'], matches: (b) => ascii(b, 0, 4) === 'RIFF' && ascii(b, 8, 4) === 'WEBP' },
-  { name: 'AVIF/HEIF image', extensions: ['.avif', '.heic', '.heif'], matches: (b) => ascii(b, 4, 4) === 'ftyp' && ['avif', 'avis', 'heic', 'heix', 'mif1', 'msf1'].includes(ascii(b, 8, 4)) },
-  { name: 'BLP texture', extensions: ['.blp'], matches: (b) => ascii(b, 0, 4) === 'BLP1' || ascii(b, 0, 4) === 'BLP2' },
+export function checkMapFolders(
+  distDir: string,
+  files: readonly string[],
+  folders: readonly MapFolder[],
+  repoRoot: string,
+): { readonly allowedImages: ReadonlySet<string>; readonly violations: readonly AuditViolation[] } {
+  const allowed = new Set<string>();
+  const violations: AuditViolation[] = [];
+  for (const folder of folders) {
+    const prefix = `${folder.dir}/`;
+    const inside = files.filter((path) => path.startsWith(prefix));
+    const active = existsSync(join(repoRoot, folder.source, MAP_FOLDER_MANIFEST));
+    if (inside.length === 0) {
+      if (active) violations.push({ rule: 'map-folder', path: folder.dir, message: `${folder.source}/manifest.json exists, but dist/ has no ${folder.dir}/ (${folder.name})` });
+      continue;
+    }
+    const noticePath = `${prefix}${MAP_FOLDER_NOTICE}`;
+    const manifestPath = `${prefix}${MAP_FOLDER_MANIFEST}`;
+    const problems: AuditViolation[] = [];
+    if (!inside.includes(noticePath)) problems.push({ rule: 'map-folder', path: noticePath, message: `${folder.name}: the folder's NOTICE.md is missing (D-033)` });
+    const listed = new Map<string, string>();
+    if (!inside.includes(manifestPath)) problems.push({ rule: 'map-folder', path: manifestPath, message: `${folder.name}: the folder's manifest.json is missing` });
+    else {
+      try {
+        const manifest = JSON.parse(readFileSync(join(distDir, manifestPath), 'utf8')) as unknown;
+        const entries = isRecord(manifest) && Array.isArray(manifest.files) ? (manifest.files as readonly unknown[]) : null;
+        if (entries === null) throw new Error('no "files" array');
+        for (const entry of entries) {
+          const path = isRecord(entry) ? entry.path : undefined;
+          const sha256 = isRecord(entry) ? entry.sha256 : undefined;
+          if (typeof path !== 'string' || path === '' || path.startsWith('/') || path.split('/').includes('..') || typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256)) {
+            throw new Error(`invalid files[] entry ${JSON.stringify(entry)}`);
+          }
+          listed.set(`${prefix}${path}`, sha256);
+        }
+      } catch (error) {
+        problems.push({ rule: 'map-folder', path: manifestPath, message: `${folder.name}: cannot read the manifest: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    for (const path of inside) {
+      if (path === noticePath || path === manifestPath) continue;
+      const sha256 = listed.get(path);
+      if (sha256 === undefined) problems.push({ rule: 'map-folder', path, message: `${folder.name}: not listed in ${manifestPath}` });
+      else if (createHash('sha256').update(readFileSync(join(distDir, path))).digest('hex') !== sha256) {
+        problems.push({ rule: 'map-folder', path, message: `${folder.name}: SHA-256 differs from ${manifestPath}` });
+      }
+    }
+    for (const path of listed.keys()) if (!inside.includes(path)) problems.push({ rule: 'map-folder', path, message: `${folder.name}: listed in ${manifestPath} but missing` });
+    violations.push(...problems);
+    if (problems.length === 0) for (const path of listed.keys()) allowed.add(path);
+  }
+  return { allowedImages: allowed, violations };
+}
+
+/**
+ * File signatures of raster images and raw Blizzard client files, with the extensions each may
+ * carry (a client file's own extension is already refused by {@link checkForbiddenPaths}). The
+ * image rule above goes by extension; this catches map art that reaches dist/ under another name
+ * (`assets/tile-abc.bin`, a PNG saved as `.svg`), docs/MAPS.md §5.7, D-018, and client files under
+ * any name (terrain-navigation.md §16 G13).
+ */
+const SIGNATURES: readonly { readonly name: string; readonly client: boolean; readonly extensions: readonly string[]; readonly matches: (bytes: Uint8Array) => boolean }[] = [
+  { name: 'PNG image', client: false, extensions: ['.png', '.apng'], matches: (b) => startsWith(b, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) },
+  { name: 'JPEG image', client: false, extensions: ['.jpg', '.jpeg'], matches: (b) => startsWith(b, 0, [0xff, 0xd8, 0xff]) },
+  { name: 'GIF image', client: false, extensions: ['.gif'], matches: (b) => ascii(b, 0, 6) === 'GIF87a' || ascii(b, 0, 6) === 'GIF89a' },
+  { name: 'WebP image', client: false, extensions: ['.webp'], matches: (b) => ascii(b, 0, 4) === 'RIFF' && ascii(b, 8, 4) === 'WEBP' },
+  { name: 'AVIF/HEIF image', client: false, extensions: ['.avif', '.heic', '.heif'], matches: (b) => ascii(b, 4, 4) === 'ftyp' && ['avif', 'avis', 'heic', 'heix', 'mif1', 'msf1'].includes(ascii(b, 8, 4)) },
+  { name: 'BLP texture', client: true, extensions: ['.blp'], matches: (b) => ascii(b, 0, 4) === 'BLP1' || ascii(b, 0, 4) === 'BLP2' },
+  // Chunked client files store the MVER id reversed: ADT, WDT, WDL and WMO all begin "REVM".
+  { name: 'ADT, WDT, WDL or WMO', client: true, extensions: ['.adt', '.wdt', '.wdl', '.wmo'], matches: (b) => ascii(b, 0, 4) === 'REVM' },
+  { name: 'M2 model', client: true, extensions: ['.m2'], matches: (b) => ascii(b, 0, 4) === 'MD21' || ascii(b, 0, 4) === 'MD20' },
+  { name: 'DB2 table', client: true, extensions: ['.db2', '.dbc'], matches: (b) => ['WDBC', 'WDB2', 'WDC3', 'WDC4', 'WDC5'].includes(ascii(b, 0, 4)) },
+  { name: 'BLTE-encoded CASC data', client: true, extensions: [], matches: (b) => ascii(b, 0, 4) === 'BLTE' },
 ];
 
 function startsWith(bytes: Uint8Array, at: number, prefix: readonly number[]): boolean {
@@ -186,13 +357,12 @@ function ascii(bytes: Uint8Array, at: number, length: number): string {
 export function checkFileSignature(path: string, bytes: Uint8Array): readonly AuditViolation[] {
   const signature = SIGNATURES.find((candidate) => candidate.matches(bytes));
   if (signature === undefined || signature.extensions.includes(extensionOf(path))) return [];
-  const blp = signature.name === 'BLP texture';
   return [
     {
-      rule: blp ? 'file-type' : 'image',
+      rule: signature.client ? 'file-type' : 'image',
       path,
-      message: blp
-        ? 'Blizzard client files (BLP texture content) must not ship, whatever the name'
+      message: signature.client
+        ? `Blizzard client files (${signature.name} content) must not ship, whatever the name`
         : `${signature.name} content under a name that is not an allowlisted image (no map art, D-018)`,
     },
   ];
@@ -455,38 +625,118 @@ export function checkDataBudgets(
   data: DistRequirements['data'],
   requireBaselines: boolean,
 ): { readonly report: DataReport; readonly violations: readonly AuditViolation[] } {
-  const sized = files.filter((path) => path.startsWith('data/')).map((path) => sizeOf(distDir, path));
+  return checkGzipBudget(distDir, files, { prefix: 'data/', section: 'data', rule: 'data-budget', why: 'ARCHITECTURE §14' }, data, requireBaselines);
+}
+
+/**
+ * Every file under `prefix` within its recorded baseline + tolerance, the folder within the total
+ * budget; with `requireBaselines`, a file without a baseline fails too (it must be recorded in
+ * dist-requirements.json deliberately).
+ */
+export function checkGzipBudget(
+  distDir: string,
+  files: readonly string[],
+  where: { readonly prefix: string; readonly section: string; readonly rule: string; readonly why: string },
+  budget: GzipBudget,
+  requireBaselines: boolean,
+): { readonly report: DataReport; readonly violations: readonly AuditViolation[] } {
+  const sized = files.filter((path) => path.startsWith(where.prefix)).map((path) => sizeOf(distDir, path));
   const violations: AuditViolation[] = [];
   for (const file of sized) {
-    const baseline = Object.hasOwn(data.baselines, file.file) ? data.baselines[file.file] : undefined;
+    const baseline = Object.hasOwn(budget.baselines, file.file) ? budget.baselines[file.file] : undefined;
     if (baseline === undefined) {
       if (requireBaselines) {
         violations.push({
-          rule: 'data-budget',
+          rule: where.rule,
           path: file.file,
-          message: `no gzip baseline recorded (${formatBytes(file.gzipBytes)} gzip now); add it to tools/build/dist-requirements.json data.baselines`,
+          message: `no gzip baseline recorded (${formatBytes(file.gzipBytes)} gzip now); add it to tools/build/dist-requirements.json ${where.section}.baselines`,
         });
       }
       continue;
     }
-    const limit = Math.floor(baseline * (1 + data.baselineTolerance));
+    const limit = Math.floor(baseline * (1 + budget.baselineTolerance));
     if (file.gzipBytes > limit) {
       violations.push({
-        rule: 'data-budget',
+        rule: where.rule,
         path: file.file,
-        message: `${formatBytes(file.gzipBytes)} gzip exceeds the recorded baseline ${formatBytes(baseline)} + ${String(Math.round(data.baselineTolerance * 100))}%`,
+        message: `${formatBytes(file.gzipBytes)} gzip exceeds the recorded baseline ${formatBytes(baseline)} + ${String(Math.round(budget.baselineTolerance * 100))}%`,
       });
     }
   }
   const totalGzipBytes = sized.reduce((sum, file) => sum + file.gzipBytes, 0);
-  if (totalGzipBytes > data.totalGzipBudgetBytes) {
+  if (totalGzipBytes > budget.totalGzipBudgetBytes) {
     violations.push({
-      rule: 'data-budget',
+      rule: where.rule,
       path: null,
-      message: `data/ totals ${formatBytes(totalGzipBytes)} gzip, over the ${formatBytes(data.totalGzipBudgetBytes)} budget (ARCHITECTURE §14)`,
+      message: `${where.prefix} totals ${formatBytes(totalGzipBytes)} gzip, over the ${formatBytes(budget.totalGzipBudgetBytes)} budget (${where.why})`,
     });
   }
   return { report: { files: sized, totalGzipBytes }, violations };
+}
+
+export interface NavReport {
+  readonly active: boolean;
+  readonly maps: readonly { readonly mapId: string; readonly files: number; readonly gzipBytes: number; readonly baseline: number | null }[];
+  readonly totalGzipBytes: number;
+  readonly largestFile: SizedFile | null;
+  readonly budget: NavBudget;
+}
+
+/**
+ * D-030 and terrain-navigation.md §14.3: `nav/` within the 7 MB cap, every file within the per-file
+ * cap, and every `nav/<mapId>/` folder within its recorded baseline + tolerance. Once the
+ * repository has `activatedBy`, the `required` files must ship and every map folder needs a
+ * baseline. The 5-6 MB target is reported, not gated.
+ */
+export function checkNavBudget(
+  distDir: string,
+  files: readonly string[],
+  nav: NavBudget,
+  repoRoot: string,
+): { readonly report: NavReport; readonly violations: readonly AuditViolation[] } {
+  const prefix = `${nav.dir}/`;
+  const active = existsSync(join(repoRoot, nav.activatedBy));
+  const sized = files.filter((path) => path.startsWith(prefix)).map((path) => sizeOf(distDir, path));
+  const violations: AuditViolation[] = [];
+  if (active) {
+    const present = new Set(files);
+    for (const path of nav.required) if (!present.has(path)) violations.push({ rule: 'nav-budget', path, message: `required once ${nav.activatedBy} exists` });
+  }
+  const byMap = new Map<string, SizedFile[]>();
+  let largest: SizedFile | null = null;
+  for (const file of sized) {
+    if (largest === null || file.gzipBytes > largest.gzipBytes) largest = file;
+    if (file.gzipBytes > nav.perFileGzipCapBytes) {
+      violations.push({ rule: 'nav-budget', path: file.file, message: `${formatBytes(file.gzipBytes)} gzip is over the ${formatBytes(nav.perFileGzipCapBytes)} per-file cap (terrain-navigation.md §14.3)` });
+    }
+    const segments = file.file.slice(prefix.length).split('/');
+    if (segments.length < 2) continue;
+    const mapId = segments[0] ?? '';
+    const list = byMap.get(mapId);
+    if (list === undefined) byMap.set(mapId, [file]);
+    else list.push(file);
+  }
+  const maps = [...byMap.entries()]
+    .sort((a, b) => compareStrings(a[0], b[0]))
+    .map(([mapId, list]) => {
+      const gzipBytes = list.reduce((sum, f) => sum + f.gzipBytes, 0);
+      const baseline = Object.hasOwn(nav.mapBaselines, mapId) ? (nav.mapBaselines[mapId] ?? null) : null;
+      if (baseline === null) {
+        if (active) violations.push({ rule: 'nav-budget', path: `${prefix}${mapId}`, message: `no gzip baseline recorded for map ${mapId} (${formatBytes(gzipBytes)} now); add it to nav.mapBaselines` });
+      } else if (gzipBytes > Math.floor(baseline * (1 + nav.baselineTolerance))) {
+        violations.push({
+          rule: 'nav-budget',
+          path: `${prefix}${mapId}`,
+          message: `${formatBytes(gzipBytes)} gzip exceeds the map's baseline ${formatBytes(baseline)} + ${String(Math.round(nav.baselineTolerance * 100))}%`,
+        });
+      }
+      return { mapId, files: list.length, gzipBytes, baseline };
+    });
+  const totalGzipBytes = sized.reduce((sum, file) => sum + file.gzipBytes, 0);
+  if (totalGzipBytes > nav.totalGzipBudgetBytes) {
+    violations.push({ rule: 'nav-budget', path: null, message: `${prefix} totals ${formatBytes(totalGzipBytes)} gzip, over the ${formatBytes(nav.totalGzipBudgetBytes)} cap (D-030)` });
+  }
+  return { report: { active, maps, totalGzipBytes, largestFile: largest, budget: nav }, violations };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -499,6 +749,8 @@ export interface AuditResult {
   readonly entryChunks: readonly EntryChunkReport[];
   readonly entryChunkBudgetBytes: number;
   readonly data: DataReport;
+  readonly mapFolders: readonly MapFolderReport[];
+  readonly nav: NavReport | null;
   readonly violations: readonly AuditViolation[];
 }
 
@@ -512,7 +764,8 @@ export function auditDist(options: {
   const files = listFiles(distDir);
   const violations: AuditViolation[] = [];
   let totalBytes = 0;
-  violations.push(...checkForbiddenPaths(files), ...checkImages(files, requirements.allowedImages));
+  const folders = checkMapFolders(distDir, files, requirements.mapFolders, repoRoot);
+  violations.push(...checkForbiddenPaths(files), ...folders.violations, ...checkImages(files, requirements.allowedImages, folders.allowedImages));
   for (const path of files) {
     const bytes = readFileSync(join(distDir, path));
     totalBytes += bytes.length;
@@ -524,6 +777,19 @@ export function auditDist(options: {
   violations.push(...entry.violations);
   const data = checkDataBudgets(distDir, files, requirements.data, required.milestone2Active);
   violations.push(...data.violations);
+  const mapFolders = requirements.mapFolders.map((folder): MapFolderReport => {
+    const active = existsSync(join(repoRoot, folder.source, MAP_FOLDER_MANIFEST));
+    const where = { prefix: `${folder.dir}/`, section: `mapFolders "${folder.name}"`, rule: `${folder.name}-budget`, why: 'D-034 item 4' };
+    const result = checkGzipBudget(distDir, files, where, folder, active);
+    violations.push(...result.violations);
+    return { name: folder.name, dir: folder.dir, files: result.report.files, totalGzipBytes: result.report.totalGzipBytes, budgetBytes: folder.totalGzipBudgetBytes };
+  });
+  let nav: NavReport | null = null;
+  if (requirements.nav !== null) {
+    const result = checkNavBudget(distDir, files, requirements.nav, repoRoot);
+    violations.push(...result.violations);
+    nav = result.report;
+  }
   return {
     fileCount: files.length,
     totalBytes,
@@ -531,6 +797,8 @@ export function auditDist(options: {
     entryChunks: entry.reports,
     entryChunkBudgetBytes: requirements.entryChunkGzipBudgetBytes,
     data: data.report,
+    mapFolders,
+    nav,
     violations,
   };
 }
@@ -569,6 +837,23 @@ export function formatAuditReport(result: AuditResult): string {
   }
   if (result.data.files.length > 0) {
     lines.push('', 'data/ files:', ...result.data.files.map(row), `    ${'total'.padEnd(48)} ${''.padStart(10)}  gzip ${formatBytes(result.data.totalGzipBytes).padStart(10)}`);
+  }
+  for (const folder of result.mapFolders) {
+    if (folder.files.length === 0) continue;
+    const largest = [...folder.files].sort((a, b) => b.gzipBytes - a.gzipBytes)[0];
+    lines.push(
+      '',
+      `${folder.dir}/ (${folder.name} budget ${formatBytes(folder.budgetBytes)} gzip): ${String(folder.files.length)} files, gzip ${formatBytes(folder.totalGzipBytes)} ` +
+        `(${(100 * folder.totalGzipBytes / folder.budgetBytes).toFixed(1)}%)${largest === undefined ? '' : `; largest ${largest.file} ${formatBytes(largest.gzipBytes)}`}`,
+    );
+    if (folder.files.length <= 12) lines.push(...folder.files.map(row));
+  }
+  const nav = result.nav;
+  if (nav !== null && nav.largestFile !== null) {
+    lines.push('', `${nav.budget.dir}/ (cap ${formatBytes(nav.budget.totalGzipBudgetBytes)}, target ${formatBytes(nav.budget.targetGzipBytes.min)}-${formatBytes(nav.budget.targetGzipBytes.max)} gzip): gzip ${formatBytes(nav.totalGzipBytes)}`);
+    for (const map of nav.maps) {
+      lines.push(`    map ${map.mapId.padEnd(6)} ${String(map.files).padStart(5)} files  gzip ${formatBytes(map.gzipBytes).padStart(10)}  baseline ${map.baseline === null ? 'none' : formatBytes(map.baseline)}`);
+    }
   }
   if (result.violations.length === 0) {
     lines.push('', 'dist audit passed. (A guard, not proof: inspect release builds manually as well.)');

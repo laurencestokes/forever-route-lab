@@ -13,9 +13,11 @@ import {
   zoneSourcedPoint,
   type Location,
   type RouteStep,
+  type SourcedPoint,
   type UiMapId,
   type WorldMapId,
 } from '../domain';
+import { zoneFramesContaining } from '../geo';
 import { CROSSROADS_NODE } from '../geo/test-fixtures';
 import type { LocalArt, LocalArtEntry, LocalArtLoad } from '../infra/maps';
 import { LAYER_IDS, refsOf, type LayerId, type MapContainer, type MapDescriptor, type MapHit, type MapRef, type MapViewState } from '../map/adapter';
@@ -199,17 +201,22 @@ describe('store changes', () => {
     expect(adapter.callsOf('setLayer').length).toBe(before);
     s.store.select({ kind: 'single', id: stepAt(s, 3).id });
     // The new focus is the active step at once: its quests' objectives, turn-in and giver emphasis
-    // come with the selection's markers and halo, in one sync.
+    // come with the selection's halo and strong marker, in one sync. The step markers do not see
+    // the focus, so they are not sent again (M3 review PERF-2).
     const afterSelect = adapter.callsOf('setLayer').slice(before).map((call) => call.layer);
-    expect(afterSelect.sort()).toEqual(['available-quests', 'objectives', 'route-steps', 'selection', 'turn-ins']);
+    expect(afterSelect.sort()).toEqual(['available-quests', 'objectives', 'selection', 'turn-ins']);
     const mark = adapter.callsOf('setLayer').length;
+    const markersBefore = itemsOf(adapter, 'route-steps');
     s.store.dispatch(moveSelected({ by: -1 }));
-    // The line's vertices and the leg into the active step change; the step markers carry no
-    // numbers and the moved (active) step is drawn on top either way, so they do not.
+    // The line's vertices and the leg into the active step change. The step markers carry no
+    // numbers and no focus: the same descriptor objects come in the new route order (later steps
+    // on top), so the adapter's diff finds nothing to redraw (M3 review PERF-2).
     const afterMove = adapter.callsOf('setLayer').slice(mark).map((call) => call.layer);
-    expect(afterMove).toEqual(['route-line', 'selection']);
+    expect(afterMove).toEqual(['route-line', 'route-steps', 'selection']);
+    const markersAfter = itemsOf(adapter, 'route-steps');
+    expect(markersAfter.every((item) => markersBefore.includes(item))).toBe(true);
     // The sync after the edit is measured, with what it set.
-    expect(s.timing.measures.at(-1)).toEqual({ name: 'frl:map:sync', detail: { trigger: 'store', layers: ['route-line', 'selection'] } });
+    expect(s.timing.measures.at(-1)).toEqual({ name: 'frl:map:sync', detail: { trigger: 'store', layers: ['route-line', 'route-steps', 'selection'] } });
   });
 
   it('keeps step numbers out of the descriptors: an insert above re-sends nothing, and the labels follow the new order', () => {
@@ -226,6 +233,13 @@ describe('store changes', () => {
     expect(adapter.callsOf('setLayer').length).toBe(sets);
     expect(itemsOf(adapter, 'route-steps').find((item) => item.id === `step:${gather.id}`)).toBe(marker);
     expect(s.controller.labelFor(ref)).toBe('3 · accept');
+  });
+
+  it('labels steps in plain text: guide colour tokens and escapes are removed (docs/RXP.md §12 row 32)', () => {
+    const s = setup({ options: { describeStep: (step, index) => `${String(index + 1)} · Talk to |cRXP_FRIENDLY_Gornek|r |T1:0|t(${step.kind})` } });
+    s.controller.attach(s.factory.factory, EL);
+    const gather = stepAt(s, 1);
+    expect(s.controller.labelFor({ kind: 'step', stepId: gather.id })).toBe('2 · Talk to Gornek (accept)');
   });
 
   it('shows and hides layers from the store', () => {
@@ -261,15 +275,18 @@ describe('store changes', () => {
     const s = setup();
     s.controller.attach(s.factory.factory, EL);
     const adapter = s.adapter();
+    const markers = setLayerCount(adapter, 'route-steps');
     for (const i of [1, 3, 4]) {
-      const steps = setLayerCount(adapter, 'route-steps');
+      const selections = setLayerCount(adapter, 'selection');
       const measures = s.timing.measures.length;
       const step = stepAt(s, i);
       s.store.select({ kind: 'single', id: step.id });
       s.controller.setActiveStep(step.id);
-      expect(setLayerCount(adapter, 'route-steps') - steps).toBe(1);
+      expect(setLayerCount(adapter, 'selection') - selections).toBe(1);
       expect(s.timing.measures.length - measures).toBe(1);
     }
+    // The step markers never see the selection (M3 review PERF-2).
+    expect(setLayerCount(adapter, 'route-steps')).toBe(markers);
     expect(adapter.callsOf('focus')).toHaveLength(3);
   });
 
@@ -673,7 +690,7 @@ describe('detach and remount', () => {
     expect(adapter.callsOf('mount')).toHaveLength(2);
     // No second route fit: the adapter kept its view.
     expect(adapter.callsOf('fitBounds')).toHaveLength(1);
-    expect(adapter.callsOf('setLayer').slice(sets).map((call) => call.layer).sort()).toEqual(['route-steps', 'selection']);
+    expect(adapter.callsOf('setLayer').slice(sets).map((call) => call.layer).sort()).toEqual(['selection']);
   });
 });
 
@@ -823,5 +840,63 @@ describe('local art', () => {
 describe('the default dataset', () => {
   it('is the stub the other tests assume', () => {
     expect(MAP_TEST_DATASET.npc(npcId(20))?.name).toBe('Doras');
+  });
+});
+
+describe('pick on map', () => {
+  it('takes the next click as a world-form point with the zone hint, and selects nothing with it', () => {
+    const s = setup();
+    const picked: unknown[] = [];
+    expect(s.controller.startPick({ label: 'the location of step 2', onPick: (point) => picked.push(point) })).toBe(false);
+    s.controller.attach(s.factory.factory, EL);
+    const adapter = s.adapter();
+    s.controller.jumpToZone(DUROTAR);
+    expect(s.controller.startPick({ label: 'the location of step 2', onPick: (point) => picked.push(point) })).toBe(true);
+    expect(s.controller.getStatus().pick).toEqual({ label: 'the location of step 2' });
+    const selection = s.store.getState().selection;
+    const target = stepAt(s, 1);
+    // A click on a step marker is still just a point while picking.
+    adapter.emit({ type: 'click', point: { mapId: KALIMDOR, x: 12.345, y: -4000.06 }, hit: hit('route-steps', `step:${target.id}`, { kind: 'step', stepId: target.id }), zones: [] });
+    expect(picked).toEqual([{ space: 'world', mapId: KALIMDOR, x: 12.3, y: -4000.1, uiMapId: DUROTAR, lexemes: null }]);
+    expect(s.store.getState().selection).toBe(selection);
+    expect(s.controller.getStatus().pick).toBeNull();
+    // The pick is over: the next click selects as usual.
+    adapter.emit({ type: 'click', point: { mapId: KALIMDOR, x: 0, y: -4000 }, hit: hit('route-steps', `step:${target.id}`, { kind: 'step', stepId: target.id }), zones: [] });
+    expect(s.store.getState().selection.focus).toBe(target.id);
+    expect(picked).toHaveLength(1);
+  });
+
+  it('hints the most central zone frame without a jumped-to zone, and none outside every frame', () => {
+    const s = setup();
+    s.controller.attach(s.factory.factory, EL);
+    const picked: SourcedPoint[] = [];
+    s.controller.startPick({ label: 'x', onPick: (point) => picked.push(point) });
+    s.adapter().emit({ type: 'click', point: { mapId: KALIMDOR, x: 0, y: -4000 }, hit: null, zones: [] });
+    const [first] = zoneFramesContaining({ mapId: KALIMDOR, x: 0, y: -4000 }, mapTestWorkspace().geometry);
+    expect(first).toBeDefined();
+    expect(picked[0]).toMatchObject({ space: 'world', uiMapId: first });
+    s.controller.startPick({ label: 'x', onPick: (point) => picked.push(point) });
+    s.adapter().emit({ type: 'click', point: { mapId: KALIMDOR, x: 900000, y: 900000 }, hit: null, zones: [] });
+    expect(picked[1]).toMatchObject({ uiMapId: null });
+  });
+
+  it('cancels, is replaced by a new pick, and ends on detach', () => {
+    const s = setup();
+    s.controller.attach(s.factory.factory, EL);
+    const first: unknown[] = [];
+    const second: unknown[] = [];
+    s.controller.startPick({ label: 'first', onPick: (point) => first.push(point) });
+    s.controller.startPick({ label: 'second', onPick: (point) => second.push(point) });
+    expect(s.controller.getStatus().pick?.label).toBe('second');
+    s.adapter().emit({ type: 'click', point: { mapId: KALIMDOR, x: 0, y: -4000 }, hit: null, zones: [] });
+    expect([first.length, second.length]).toEqual([0, 1]);
+    s.controller.startPick({ label: 'third', onPick: (point) => first.push(point) });
+    expect(s.controller.cancelPick()).toBe(true);
+    expect(s.controller.cancelPick()).toBe(false);
+    expect(s.controller.getStatus().pick).toBeNull();
+    s.controller.startPick({ label: 'fourth', onPick: (point) => first.push(point) });
+    s.controller.detach();
+    expect(s.controller.getStatus().pick).toBeNull();
+    expect(first).toHaveLength(0);
   });
 });

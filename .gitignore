@@ -13,13 +13,19 @@ coverage/
 assets-source/*
 !assets-source/README.md
 
-# public/maps holds only the committed placeholder geometry. Local map outputs go to local-maps/
-# (outside public/, D-018), never here.
+# public/maps holds only the committed outputs: the placeholder geometry (D-018), the painted map
+# art (D-033) and the terrain byproducts (D-032), each with its manifest and NOTICE. Local map
+# outputs go to local-maps/ (outside public/, D-018), never here.
 public/maps/*
 !public/maps/placeholder/
+!public/maps/art/
+!public/maps/terrain/
 
-# Extraction report (timings, extraction time): not committed (ARCHITECTURE §5.2).
+# Extraction reports (timings, full input lists): not committed (ARCHITECTURE §5.2).
 generated/questiedb-report.json
+generated/terrain-nav-report*.json
+generated/maps-art-report.json
+generated/terrain-report.json
 
 # Editor / OS noise
 .DS_Store

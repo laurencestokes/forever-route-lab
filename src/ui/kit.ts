@@ -36,6 +36,7 @@ export {
 // Primitives
 export { Badge, PlaceholderTag, VisuallyHidden, type BadgeProps, type BadgeTone, type PlaceholderTagProps } from './primitives/Badge';
 export { Button, type ButtonProps, type ButtonVariant, type ControlSize } from './primitives/Button';
+export { Checkbox, type CheckboxProps } from './primitives/Checkbox';
 export { Icon, type IconName, type IconProps } from './primitives/Icon';
 export { IconButton, type IconButtonProps } from './primitives/IconButton';
 export { PanelHeader, type PanelHeaderProps } from './primitives/PanelHeader';

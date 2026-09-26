@@ -1,0 +1,30 @@
+{
+  "$comment": [
+    "Unverified passages (docs/research/terrain-navigation.md §11.3; RC-09, D-034 item 5): walks the mesh finds that may be",
+    "false passes. The polygons whose centroid lies in 'box' (and whose zone is 'zone', when given) are tagged in map.bin, and",
+    "a leg whose corridor crosses them carries 'unverified-passage'. The owner's in-game checks are tracked in STATUS.md:",
+    "'verified-pass' removes the tag; 'verified-block' needs a must-not-connect fixture and a mesh cut (not implemented yet)."
+  ],
+  "schema": 1,
+  "kind": "nav-passages",
+  "passages": [
+    {
+      "id": "undercity-west-tunnel",
+      "map": 0,
+      "status": "unverified",
+      "zone": 1497,
+      "box": { "xMin": 1580, "xMax": 1695, "yMin": 420, "yMax": 735, "zMin": -52, "zMax": 79 },
+      "check": "walk from Varimathras to Brill without an elevator",
+      "note": "the design's tunnel box (terrain-navigation.md §11.3): Undercity polygons climbing continuously from z -52 to +79 on the west side"
+    },
+    {
+      "id": "ironforge-mountain-top",
+      "map": 0,
+      "status": "unverified",
+      "zone": 1,
+      "box": { "xMin": -5085, "xMax": -4570, "yMin": -1340, "yMax": -835, "zMin": 560, "zMax": 900 },
+      "check": "walk from the mountain top above Ironforge to Dun Morogh",
+      "note": "drawn in 3b.4 from the build: the XY extent of the Ironforge (zone 1537) polygons, z -5083..-4573 / -1338..-837 rounded out, and the Dun Morogh (zone 1) polygons above the city's highest floor (z 551) up to the summit (z 886); without snap rule A, 22 Ironforge spawns land there, at z 618-839, in the main component"
+    }
+  ]
+}

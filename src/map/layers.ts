@@ -561,13 +561,30 @@ function mergedStack(stack: readonly Candidate[]): Candidate {
 }
 
 /**
+ * Merged stacks by their first member, for a builder that sees the same candidate objects again
+ * (the route's step markers): a stack whose members are the same objects in the same order keeps
+ * its merged candidate, so a route edit merges only the stacks it touched (M3 review PERF-2).
+ */
+type StackCache = WeakMap<Candidate, { readonly members: readonly Candidate[]; readonly merged: Candidate }>;
+
+function cachedStack(members: readonly Candidate[], cache: StackCache | null): Candidate {
+  const [head] = members;
+  if (cache === null || head === undefined) return mergedStack(members);
+  const hit = cache.get(head);
+  if (hit !== undefined && hit.members.length === members.length && hit.members.every((member, i) => member === members[i])) return hit.merged;
+  const merged = mergedStack(members);
+  cache.set(head, { members, merged });
+  return merged;
+}
+
+/**
  * Merges markers at the identical world point (same kind and style) into one marker (MAPS §7.3):
  * the first item's id, label and ref, every item's refs and labels in order, the union of the
  * badges, the strongest emphasis and the focused tier if any item has it. A stack takes the place
  * of its last item, so it draws where its topmost item would. Other candidates pass through, and
  * nothing changes when no two markers share a point.
  */
-function mergeStacks(candidates: readonly Candidate[]): readonly Candidate[] {
+function mergeStacks(candidates: readonly Candidate[], cache: StackCache | null = null): readonly Candidate[] {
   // Only markers that share an x coordinate can stack, and few do: one numeric map finds them, and
   // only those are compared in full (10,000 steps cost about a millisecond).
   const firstAtX = new Map<number, number>();
@@ -592,18 +609,22 @@ function mergeStacks(candidates: readonly Candidate[]): readonly Candidate[] {
   const stackAt = new Map<number, number[]>();
   const inStack = new Set<number>();
   for (const indices of sharingX.values()) {
-    indices.forEach((head, position) => {
+    for (let position = 0; position < indices.length; position += 1) {
+      const head = indices[position];
+      if (head === undefined) continue;
       const lead = markerAt(head);
-      if (lead === null || inStack.has(head)) return;
+      if (lead === null || inStack.has(head)) continue;
       const members = [head];
-      for (const other of indices.slice(position + 1)) {
+      for (let next = position + 1; next < indices.length; next += 1) {
+        const other = indices[next];
+        if (other === undefined) continue;
         const candidate = markerAt(other);
         if (candidate !== null && !inStack.has(other) && sameStack(lead, candidate)) members.push(other);
       }
-      if (members.length < 2) return;
+      if (members.length < 2) continue;
       for (const member of members) inStack.add(member);
       stackAt.set(members[members.length - 1] ?? head, members);
-    });
+    }
   }
   if (stackAt.size === 0) return candidates;
   const out: Candidate[] = [];
@@ -613,7 +634,7 @@ function mergeStacks(candidates: readonly Candidate[]): readonly Candidate[] {
       return;
     }
     const members = stackAt.get(index);
-    if (members !== undefined) out.push(mergedStack(members.flatMap((member) => candidates[member] ?? [])));
+    if (members !== undefined) out.push(cachedStack(members.flatMap((member) => candidates[member] ?? []), cache));
   });
   return out;
 }
@@ -1152,13 +1173,149 @@ const focusedSteps = (focus: StepFocus): ReadonlySet<StepId> => {
   return ids;
 };
 
-function collectRouteSteps(route: RouteInput, mapId: WorldMapId, focus: StepFocus): Collected {
+type PlacedStep = Extract<StepPlacement, { readonly kind: 'point' }>;
+
+/** A step marker's badges: its point outside its zone's frame, and an unknown leg into it. */
+function stepBadges(placement: PlacedStep, legUnknown: boolean): MarkerBadge[] {
+  const badges: MarkerBadge[] = [];
+  if (placement.offFrame) badges.push('off-frame');
+  if (legUnknown) badges.push('leg-unknown');
+  return badges;
+}
+
+/** A step's own marker (the route layer's `normal`, the selection layer's `strong` copy). */
+function stepMarker(id: string, step: RouteStepInput, placement: PlacedStep, legUnknown: boolean, emphasis: Emphasis): MarkerDescriptor {
+  return singleMarker({
+    id,
+    point: placement.world,
+    kind: 'step',
+    style: 'accent',
+    emphasis,
+    // A label key: the adapter's label provider numbers the step when the label is shown.
+    label: step.stepId,
+    badges: stepBadges(placement, legUnknown),
+    ref: { kind: 'step', stepId: step.stepId },
+  });
+}
+
+/**
+ * The route-steps builder's caches (M3 review PERF-2), so a route edit (a move, an insert, a
+ * delete) builds candidates and stacks only for the steps it touched:
+ * - step-marker candidates by input object, occurrence (a repeated step id's `~2`) and leg flag;
+ * - each candidate's point as a small integer (interned `mapId|x|y`), so stacks are found with a
+ *   typed-array count instead of a map keyed by coordinates (every step marker has one kind and
+ *   style, so steps at the identical point form one stack, as `mergeStacks` would merge them);
+ * - merged stacks by their members.
+ * WeakMaps: inputs that leave the route are dropped with them. The point table is started afresh
+ * (with the candidates) once it holds far more points than the route has steps.
+ */
+interface StepCandidates {
+  /** Called once per collection with the route's length, before any `candidate`. */
+  readonly begin: (steps: number) => void;
+  readonly candidate: (step: RouteStepInput, placement: PlacedStep, occurrence: number, legUnknown: boolean) => StepCandidate;
+  /** Merges the stacks of candidates from `candidate`, in order. */
+  readonly merge: (candidates: readonly StepCandidate[]) => readonly Candidate[];
+}
+
+interface StepCandidate {
+  readonly candidate: Candidate;
+  /** The interned point (cached builders), or -1. */
+  readonly point: number;
+}
+
+/** `step:<id>`, and `step:<id>~<n>` for the n-th step with a repeated id (as `IdAllocator` numbers them). */
+const stepMarkerId = (step: RouteStepInput, occurrence: number): string =>
+  occurrence === 1 ? `step:${step.stepId}` : `step:${step.stepId}~${String(occurrence)}`;
+
+function stepCandidate(step: RouteStepInput, placement: PlacedStep, occurrence: number, legUnknown: boolean): Candidate {
+  return { descriptor: stepMarker(stepMarkerId(step, occurrence), step, placement, legUnknown, 'normal'), tier: 1, anchor: pointAnchor(placement.world) };
+}
+
+const UNCACHED_STEP_CANDIDATES: StepCandidates = {
+  begin: () => undefined,
+  candidate: (step, placement, occurrence, legUnknown) => ({ candidate: stepCandidate(step, placement, occurrence, legUnknown), point: -1 }),
+  merge: (candidates) => mergeStacks(candidates.map((entry) => entry.candidate)),
+};
+
+/** The point table starts afresh when it holds more than this many points per route step (plus a floor). */
+const POINT_TABLE_SLACK = 4;
+const POINT_TABLE_FLOOR = 4096;
+
+interface StepEntry extends StepCandidate {
+  readonly occurrence: number;
+  readonly legUnknown: boolean;
+}
+
+function createStepCandidates(): StepCandidates {
+  let entries = new WeakMap<RouteStepInput, StepEntry>();
+  let points = new Map<string, number>();
+  let stacks: StackCache = new WeakMap();
+  const pointOf = (world: WorldPoint): number => {
+    const key = `${String(world.mapId)}|${String(world.x)}|${String(world.y)}`;
+    const known = points.get(key);
+    if (known !== undefined) return known;
+    const id = points.size;
+    points.set(key, id);
+    return id;
+  };
+  return {
+    begin(steps) {
+      if (points.size <= POINT_TABLE_SLACK * steps + POINT_TABLE_FLOOR) return;
+      entries = new WeakMap();
+      points = new Map();
+      stacks = new WeakMap();
+    },
+    candidate(step, placement, occurrence, legUnknown) {
+      const hit = entries.get(step);
+      if (hit !== undefined && hit.occurrence === occurrence && hit.legUnknown === legUnknown) return hit;
+      const entry: StepEntry = { candidate: stepCandidate(step, placement, occurrence, legUnknown), point: pointOf(placement.world), occurrence, legUnknown };
+      entries.set(step, entry);
+      return entry;
+    },
+    merge(candidates) {
+      const counts = new Int32Array(points.size);
+      let shared = false;
+      for (const entry of candidates) {
+        const count = (counts[entry.point] ?? 0) + 1;
+        counts[entry.point] = count;
+        if (count > 1) shared = true;
+      }
+      if (!shared) return candidates.map((entry) => entry.candidate);
+      const out: Candidate[] = [];
+      const open = new Map<number, Candidate[]>();
+      for (const entry of candidates) {
+        const total = counts[entry.point] ?? 1;
+        if (total === 1) {
+          out.push(entry.candidate);
+          continue;
+        }
+        let members = open.get(entry.point);
+        if (members === undefined) {
+          members = [];
+          open.set(entry.point, members);
+        }
+        members.push(entry.candidate);
+        // A stack takes the place of its last member.
+        if (members.length === total) out.push(cachedStack(members, stacks));
+      }
+      return out;
+    },
+  };
+}
+
+/**
+ * Every placed step on this world map, in route order (later steps on top), stacks merged. The
+ * layer does not see the focus: the selection layer draws the selected, hovered and active steps
+ * strong on top, so a selection change never rebuilds this one (M3 review PERF-2).
+ */
+function collectRouteSteps(route: RouteInput, mapId: WorldMapId, candidates: StepCandidates = UNCACHED_STEP_CANDIDATES): Collected {
   const unresolved = new ReasonTally();
-  const ids = new IdAllocator();
-  const inFocus = focusedSteps(focus);
+  // Occurrences by step id, so a repeated id gets `~2` (IdAllocator's numbering, keyed without building a string per step).
+  const seen = new Map<StepId, number>();
   let otherSurfaces = 0;
   let broken = false;
-  const markers: Candidate[] = [];
+  const markers: StepCandidate[] = [];
+  candidates.begin(route.steps.length);
   for (const step of route.steps) {
     const placement = step.placement;
     if (placement.kind === 'none') continue;
@@ -1169,51 +1326,49 @@ function collectRouteSteps(route: RouteInput, mapId: WorldMapId, focus: StepFocu
     }
     const legUnknown = broken;
     broken = false;
-    const id = ids.take(`step:${step.stepId}`);
+    const occurrence = (seen.get(step.stepId) ?? 0) + 1;
+    seen.set(step.stepId, occurrence);
     if (placement.world.mapId !== mapId) {
       otherSurfaces += 1;
       continue;
     }
-    const badges: MarkerBadge[] = [];
-    if (placement.offFrame) badges.push('off-frame');
-    if (legUnknown) badges.push('leg-unknown');
-    const isFocused = inFocus.has(step.stepId);
-    const descriptor = singleMarker({
-      id,
-      point: placement.world,
-      kind: 'step',
-      style: 'accent',
-      emphasis: isFocused ? 'strong' : 'normal',
-      // A label key: the adapter's label provider numbers the step when the label is shown.
-      label: step.stepId,
-      badges,
-      ref: { kind: 'step', stepId: step.stepId },
-    });
-    markers.push({ descriptor, tier: isFocused ? 0 : 1, anchor: pointAnchor(placement.world) });
+    markers.push(candidates.candidate(step, placement, occurrence, legUnknown));
   }
-  // Route order, later steps on top, stacks merged; focused steps above all.
-  return { candidates: focusedLast(mergeStacks(markers)), aggregated: 0, unresolved, otherSurfaces };
+  return { candidates: candidates.merge(markers), aggregated: 0, unresolved, otherSurfaces };
 }
 
 /**
- * Step markers on the view's world map; selected, hovered and active steps are `strong` and kept
- * first under the cap. Steps at the identical point are merged into one marker with a count.
+ * Step markers on the view's world map, every one `normal`: the selection layer draws the focused
+ * steps strong on top (`buildSelection`). Steps at the identical point are merged into one marker
+ * with a count.
  */
-export function buildRouteSteps(ctx: LayerContext, route: RouteInput, view: MapView, focus: StepFocus): LayerContent {
-  return contentOf('route-steps', collectRouteSteps(route, view.mapId, focus), view, ctx);
+export function buildRouteSteps(ctx: LayerContext, route: RouteInput, view: MapView): LayerContent {
+  return contentOf('route-steps', collectRouteSteps(route, view.mapId), view, ctx);
 }
 
+/**
+ * The focused steps (selected, hovered, active) on this world map: the leg into the active step,
+ * a halo round each, and each one's own marker again, strong, above the route's markers, so a
+ * focused step shows even where the route-steps cap left it out. The active step's items are kept
+ * first under the cap. Stacks are merged per kind.
+ */
 function collectSelection(route: RouteInput, mapId: WorldMapId, focus: StepFocus): Collected {
   const unresolved = new ReasonTally();
   const inFocus = focusedSteps(focus);
   let otherSurfaces = 0;
+  if (inFocus.size === 0) return { candidates: [], aggregated: 0, unresolved, otherSurfaces };
   const leg: Candidate[] = [];
   const halos: Candidate[] = [];
+  const marks: Candidate[] = [];
   const done = new Set<StepId>();
+  let broken = false;
   route.steps.forEach((step, position) => {
+    const placement = step.placement;
+    const legUnknown = broken;
+    if (placement.kind === 'unknown') broken = true;
+    else if (placement.kind === 'point') broken = false;
     if (!inFocus.has(step.stepId) || done.has(step.stepId)) return;
     done.add(step.stepId);
-    const placement = step.placement;
     if (placement.kind === 'none') return;
     if (placement.kind === 'unknown') {
       unresolved.add(placement.reason);
@@ -1223,6 +1378,9 @@ function collectSelection(route: RouteInput, mapId: WorldMapId, focus: StepFocus
       otherSurfaces += 1;
       return;
     }
+    const active = step.stepId === focus.active;
+    const tier = active ? 0 : 1;
+    const anchor = pointAnchor(placement.world);
     halos.push({
       descriptor: singleMarker({
         id: `halo:${step.stepId}`,
@@ -1234,10 +1392,11 @@ function collectSelection(route: RouteInput, mapId: WorldMapId, focus: StepFocus
         badges: [],
         ref: { kind: 'step', stepId: step.stepId },
       }),
-      tier: 0,
-      anchor: pointAnchor(placement.world),
+      tier,
+      anchor,
     });
-    if (step.stepId !== focus.active) return;
+    marks.push({ descriptor: stepMarker(`focus:${step.stepId}`, step, placement, legUnknown, 'strong'), tier, anchor });
+    if (!active) return;
     // The leg into the active step: back to the previous placed step, unless something unplaceable is in between.
     for (let i = position - 1; i >= 0; i -= 1) {
       const before = route.steps[i];
@@ -1258,10 +1417,14 @@ function collectSelection(route: RouteInput, mapId: WorldMapId, focus: StepFocus
       break;
     }
   });
-  return { candidates: [...leg, ...mergeStacks(halos)], aggregated: 0, unresolved, otherSurfaces };
+  return { candidates: [...leg, ...mergeStacks(halos), ...mergeStacks(marks)], aggregated: 0, unresolved, otherSurfaces };
 }
 
-/** Halos for the selected, hovered and active steps, and a highlight polyline for the leg into the active step. */
+/**
+ * The focused steps: a highlight polyline for the leg into the active step, then a halo and a
+ * strong step marker for each selected, hovered and active step (the active step's kept first
+ * under the cap).
+ */
 export function buildSelection(ctx: LayerContext, route: RouteInput, view: MapView, focus: StepFocus): LayerContent {
   return contentOf('selection', collectSelection(route, view.mapId, focus), view, ctx);
 }
@@ -1369,7 +1532,8 @@ export interface MapLayers {
   /** `rawZone`: the zone the user jumped to (`view.map.zone`), drawn raw at any zoom. */
   spawns(layer: SpawnLayerId, input: SpawnLayerInput, view: MapView, focusQuests?: readonly QuestId[], rawZone?: UiMapId | null): LayerContent;
   routeLine(route: RouteInput, view: MapView): LayerContent;
-  routeSteps(route: RouteInput, view: MapView, focus: StepFocus): LayerContent;
+  /** The route's step markers. Independent of the focus, which `selection` draws (M3 review PERF-2). */
+  routeSteps(route: RouteInput, view: MapView): LayerContent;
   proposal(route: RouteInput | null, view: MapView): LayerContent;
   selection(route: RouteInput, view: MapView, focus: StepFocus): LayerContent;
 }
@@ -1383,6 +1547,7 @@ export function createMapLayers(options: MapLayersOptions): MapLayers {
   const lod = createLod(options.lod);
   const ctx = layerContextOf(options.geometry, lod);
   const slots = new Map<LayerId, Slot>();
+  const stepCandidates = createStepCandidates();
   const slot = (layer: LayerId): Slot => {
     const existing = slots.get(layer);
     if (existing !== undefined) return existing;
@@ -1414,8 +1579,7 @@ export function createMapLayers(options: MapLayersOptions): MapLayers {
     },
     routeLine: (route, view) =>
       computeSlot(slot('route-line'), 'route-line', ctx, [route, view.mapId], () => collectRouteLine(ctx, route, view.mapId, null), view),
-    routeSteps: (route, view, focus) =>
-      computeSlot(slot('route-steps'), 'route-steps', ctx, [route, view.mapId, stepFocusKey(focus)], () => collectRouteSteps(route, view.mapId, focus), view),
+    routeSteps: (route, view) => computeSlot(slot('route-steps'), 'route-steps', ctx, [route, view.mapId], () => collectRouteSteps(route, view.mapId, stepCandidates), view),
     proposal: (route, view) =>
       computeSlot(
         slot('proposal'),

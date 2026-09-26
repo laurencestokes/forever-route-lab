@@ -1,0 +1,338 @@
+/* Project storage controls (docs/UI.md §13): the strip beside the top bar and the project dialogs. Tokens only. */
+
+/* The top row: the kit's top bar, then the project strip, sharing the 44px row. */
+.frl-apptop {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  height: 100%;
+}
+
+.frl-apptop > .frl-topbar {
+  flex: 1 1 auto;
+}
+
+.frl-projectbar {
+  /* Contains the status's visually hidden sentence. */
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--frl-space-1);
+  height: var(--frl-topbar-height);
+  padding: 0 var(--frl-space-2);
+  border-bottom: 1px solid var(--frl-border);
+  border-left: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+}
+
+.frl-projectbar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--frl-space-1);
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-projectbar__status.is-problem {
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-projectbar__drift {
+  gap: var(--frl-space-1);
+}
+
+@media (max-width: 1200px) {
+  .frl-projectbar__status {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 720px) {
+  .frl-apptop {
+    flex-wrap: wrap;
+    height: auto;
+  }
+
+  .frl-projectbar {
+    flex: 1 1 100%;
+    border-left: 0;
+  }
+}
+
+/* Modal dialogs of the project menu, import, export and the drift report. */
+.frl-modal {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius-lg);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+  color: var(--frl-fg);
+}
+
+.frl-modal::backdrop {
+  background: var(--frl-overlay);
+}
+
+.frl-modal[open] {
+  display: flex;
+}
+
+.frl-modal__content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-height: inherit;
+}
+
+.frl-modal__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-2);
+  padding: var(--frl-space-2) var(--frl-space-2) var(--frl-space-2) var(--frl-space-4);
+  border-bottom: 1px solid var(--frl-border);
+}
+
+.frl-modal__title {
+  font-size: var(--frl-text-lg);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-modal__body {
+  /* Contains visually hidden button text. */
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--frl-space-3);
+  min-height: 0;
+  padding: var(--frl-space-3) var(--frl-space-4) var(--frl-space-4);
+  overflow-y: auto;
+}
+
+.frl-modal__footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: var(--frl-space-2);
+  padding: var(--frl-space-2) var(--frl-space-4);
+  border-top: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+}
+
+.frl-projects__section,
+.frl-import__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+}
+
+.frl-projects__heading {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.frl-projects__hint,
+.frl-projects__empty {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-projects__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--frl-border);
+}
+
+.frl-projects__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--frl-space-1) var(--frl-space-3);
+  padding: var(--frl-space-2) 0;
+  border-bottom: 1px solid var(--frl-border);
+}
+
+.frl-projects__item.is-current {
+  padding: var(--frl-space-2) var(--frl-space-3);
+  border: 1px solid var(--frl-border);
+  border-left: 3px solid var(--frl-selection-bar);
+  border-radius: var(--frl-radius);
+  background: var(--frl-surface-raised);
+}
+
+.frl-projects__item-main {
+  display: flex;
+  flex: 1 1 260px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--frl-space-half) var(--frl-space-2);
+  min-width: 0;
+}
+
+.frl-projects__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-projects__meta {
+  display: inline-flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: var(--frl-space-1);
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-projects__meta.is-problem {
+  color: var(--frl-fg);
+}
+
+.frl-projects__actions,
+.frl-projects__form,
+.frl-projects__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--frl-space-1);
+}
+
+.frl-projects__confirm p {
+  flex: 1 1 100%;
+  font-size: var(--frl-text-sm);
+}
+
+.frl-projects__name-input {
+  flex: 1 1 220px;
+}
+
+/* Destructive choices (Delete, Delete permanently, Overwrite): never the primary accent fill, and
+   set apart from the other secondary buttons by a doubled edge in the text colour (plus the delete
+   icon). Neutral tokens only: the difficulty and severity hues keep their meanings (docs/UI.md §4). */
+.frl-button.frl-projects__destructive:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--frl-fg);
+  box-shadow: inset 0 0 0 1px var(--frl-fg);
+}
+
+.frl-projects__notice,
+.frl-projects__failure,
+.frl-projects__problem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--frl-space-2);
+  padding: var(--frl-space-2) var(--frl-space-3);
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-projects__problem {
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  padding: var(--frl-space-1) var(--frl-space-2);
+  border-style: dashed;
+}
+
+.frl-projects__notice-text {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  min-width: 0;
+}
+
+.frl-projects__failure {
+  flex-direction: column;
+  border-left-width: 3px;
+}
+
+.frl-projects__failure-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--frl-space-1);
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-projects__issues {
+  margin: 0;
+  padding-left: var(--frl-space-4);
+  overflow-wrap: anywhere;
+}
+
+.frl-projects__issues code,
+.frl-drift code {
+  font-family: var(--frl-font-mono);
+}
+
+.frl-import__pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--frl-space-2);
+}
+
+.frl-import__label {
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-import__section.is-dragging {
+  outline: 2px dashed var(--frl-focus);
+  outline-offset: 4px;
+}
+
+.frl-import__drop {
+  padding: var(--frl-space-3);
+  border: 1px dashed var(--frl-border-strong);
+  border-radius: var(--frl-radius);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  text-align: center;
+}
+
+.frl-drift__lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  margin: 0;
+  padding-left: var(--frl-space-4);
+}
+
+/* Forced colours drop author backgrounds: the open project keeps its edge, the drop target its outline. */
+@media (forced-colors: active) {
+  .frl-projects__item.is-current {
+    border-left-color: Highlight;
+  }
+
+  /* The inset shadow is dropped: a wider edge keeps destructive buttons apart. */
+  .frl-button.frl-projects__destructive:not(:disabled, [aria-disabled='true']) {
+    border-width: 2px;
+  }
+
+  .frl-import__section.is-dragging {
+    outline-color: Highlight;
+  }
+}

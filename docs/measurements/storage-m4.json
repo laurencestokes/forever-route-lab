@@ -1,0 +1,54 @@
+{
+  "$comment": [
+    "Milestone 4 measurements of project storage (docs/ARCHITECTURE.md §12.3, §14: autosave of a 10,000-step project on the main thread ≤ 50 ms), after the fixes of the M4 editor/storage review (CR-01, CR-06).",
+    "Node: tests/bench/autosave.bench.ts (21 runs after 3 warm-up runs, one process). The project is the committed dataset's sample route repeated with its points shifted to 10,000 steps (7,958,366 bytes as a .frl.json file). 'node.medians' is the regression baseline: `pnpm exec tsx tests/bench/autosave.bench.ts --baseline docs/measurements/storage-m4.json` exits 1 when a median is more than 25% over it (§14) and more than 1 ms over it (sub-millisecond medians jitter more than 25%).",
+    "hideMs is the synchronous time of the page's hide handler, which now makes every storage request of the save itself (CR-01): over IndexedDB that includes the structured clone of the project that put() makes on the main thread. totalMs runs to the stored answer. fake-indexeddb's clone is slower than V8's (67 ms against 35 ms for structuredClone), so its figure is a regression gate, not the browser's cost.",
+    "Browser: a scratch page (not committed) in the desktop app's built-in browser (Chromium 152, Windows, no CPU throttling) wrote the same project with one readwrite transaction per run, as writeProject does (a get of the index row, then put of the record and put of the index row), 15 runs after 3 warm-up runs.",
+    "Memory storage (the private-window fallback) used to deep-copy the project on every write: 66 ms median, 102 ms under load (M4 review CR-06). It now keeps the frozen project; the freeze visits only objects not frozen before (15 ms once for a whole 10,000-step project, then only what an edit replaced)."
+  ],
+  "date": "2026-09-26",
+  "machine": {
+    "os": "Windows 11 Home 10.0.26200",
+    "node": "v22.13.1",
+    "arch": "x64",
+    "browser": "Chromium 152.0.7977.130 (the Claude desktop app's built-in browser)"
+  },
+  "project": {
+    "steps": 10000,
+    "jsonBytes": 7958366
+  },
+  "node": {
+    "runs": 21,
+    "medians": {
+      "dataPrintsMs": 0.14,
+      "structuredCloneMs": 34.57,
+      "memoryHideMs": 0.83,
+      "indexeddbHideMs": 67.02
+    },
+    "dataPrintsMs": { "median": 0.14, "min": 0.14, "p90": 0.36, "max": 0.72 },
+    "structuredCloneMs": { "median": 34.57, "min": 32.73, "p90": 36.45, "max": 41.49 },
+    "freezeFirstMs": 14.85,
+    "memorySave": {
+      "hideMs": { "median": 0.83, "min": 0.53, "p90": 0.91, "max": 0.94 },
+      "totalMs": { "median": 0.84, "min": 0.54, "p90": 0.92, "max": 0.97 }
+    },
+    "indexeddbSave": {
+      "hideMs": { "median": 67.02, "min": 49.69, "p90": 73.21, "max": 74.31 },
+      "totalMs": { "median": 67.12, "min": 49.8, "p90": 74.43, "max": 75.79 }
+    },
+    "serializeProjectMs": { "median": 81.22, "min": 75.8, "p90": 117.25, "max": 124.92 },
+    "parseProjectMs": { "median": 70.55, "min": 60.26, "p90": 80.18, "max": 88.38 }
+  },
+  "browser": {
+    "runs": 15,
+    "putSyncMs": { "median": 35.4, "min": 27.8, "p90": 39.2, "max": 42.4 },
+    "putTotalMs": { "median": 41, "min": 32.9, "p90": 46.4, "max": 48.1 },
+    "structuredCloneMs": { "median": 35.5, "min": 23.7, "p90": 39, "max": 41.2 }
+  },
+  "verdict": [
+    "Memory storage: within budget (0.8 ms median for a save, was 66 ms).",
+    "IndexedDB, unthrottled browser: within budget, narrowly: 35 ms median and 42 ms at worst on the main thread for the put of a 10,000-step project, all of it the structured clone of the whole document.",
+    "IndexedDB at the 4x CPU throttle §14 prescribes for the Playwright gauntlet: an estimated 140 ms, over budget. Not yet measured (no throttled browser before Milestone 9)."
+  ],
+  "proposal": "Over budget only under throttling, so nothing is changed now. If the Milestone 9 gauntlet confirms it, store the route's steps in chunks (for example one record per 500 steps, keyed by project id and chunk index, each with a content fingerprint), so a save rewrites only the chunks an edit touched plus the project head; writeSeq stays on the index row and all records of one save stay in one transaction. That needs a database version and an architect's decision (ARCHITECTURE §12.3)."
+}

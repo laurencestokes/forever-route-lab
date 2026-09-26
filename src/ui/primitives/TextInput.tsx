@@ -15,12 +15,21 @@ export interface TextInputProps {
   readonly placeholder?: string | undefined;
   readonly icon?: IconName | undefined;
   readonly disabled?: boolean | undefined;
+  /** The value can be read, selected and copied but not changed; the field stays focusable. */
+  readonly readOnly?: boolean | undefined;
   readonly size?: ControlSize | undefined;
   /** Shortcut hint for assistive technology, in `aria-keyshortcuts` syntax (e.g. `'Control+K'`). */
   readonly keyShortcuts?: string | undefined;
   readonly id?: string | undefined;
   readonly className?: string | undefined;
   readonly inputRef?: Ref<HTMLInputElement> | undefined;
+  /** The on-screen keyboard to offer (`decimal`, `numeric`); the value stays text. */
+  readonly inputMode?: 'text' | 'numeric' | 'decimal' | undefined;
+  /** Ids of elements that describe the field (a hint, a problem), for `aria-describedby`. */
+  readonly describedBy?: string | undefined;
+  /** The value cannot be used as it is (`aria-invalid`); say why in a described-by element. */
+  readonly invalid?: boolean | undefined;
+  readonly onBlur?: (() => void) | undefined;
 }
 
 /**
@@ -37,11 +46,16 @@ export function TextInput({
   placeholder,
   icon,
   disabled = false,
+  readOnly = false,
   size = 'md',
   keyShortcuts,
   id,
   className,
   inputRef,
+  inputMode,
+  describedBy,
+  invalid = false,
+  onBlur,
 }: TextInputProps) {
   const autoId = useId();
   const inputId = id ?? autoId;
@@ -59,7 +73,12 @@ export function TextInput({
           value={value}
           placeholder={placeholder}
           disabled={disabled}
+          readOnly={readOnly}
           aria-keyshortcuts={keyShortcuts}
+          aria-describedby={describedBy}
+          aria-invalid={invalid ? true : undefined}
+          inputMode={inputMode}
+          onBlur={onBlur}
           autoComplete="off"
           spellCheck={false}
           onChange={(event) => {

@@ -284,10 +284,12 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
     expect(store.getState().view.theme).toBe('light');
   });
 
-  it('renders the unfinished actions unavailable, saying which milestone brings them', () => {
+  it('renders the actions this shell cannot run unavailable, saying why', () => {
     setup();
     const toolbar = within(screen.getByRole('toolbar', { name: 'Project actions' }));
-    const expected = { Import: NOT_YET.import, Export: NOT_YET.export, Settings: NOT_YET.settings } as const;
+    // Settings opens its dialog (Milestone 4); import and export need project storage, which this shell has none of.
+    expect(isUnavailable(toolbar.getByRole('button', { name: 'Settings' }))).toBe(false);
+    const expected = { Import: NOT_YET.import, Export: NOT_YET.export } as const;
     for (const [name, reason] of Object.entries(expected)) {
       const button = toolbar.getByRole('button', { name });
       expect(isUnavailable(button)).toBe(true);
