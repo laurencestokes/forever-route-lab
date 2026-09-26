@@ -1,3 +1,4 @@
+import type { EstimateBasis, Estimated } from '../domain/estimate';
 import type { NpcId, QuestId, WorldMapId } from '../domain/ids';
 import type { TravelWarning } from '../domain/travel';
 
@@ -61,8 +62,39 @@ export type SimFact =
     }
   /** SIM-16 (TIME-10), engine: a `complete` target whose quest is not in the log. */
   | { readonly kind: 'complete-not-in-log'; readonly questId: QuestId }
-  /** TIME-11 (VAL-30), engine: a turn-in's unfinished objectives were assumed completed incidentally. */
+  /**
+   * TIME-11 (VAL-30), engine: a turn-in's unfinished objectives were assumed completed incidentally,
+   * at 0 s and 0 kill XP: the quest was in the log before the route (`priorQuestLog`) or assumed to
+   * be (unknown history), so their progress is unknown.
+   */
   | { readonly kind: 'objectives-incidental'; readonly questId: QuestId; readonly objectives: readonly number[] }
+  /**
+   * TIME-11 (VAL-30, D-040), engine: a turn-in of a quest an accept step of the route put in the log
+   * carried the work of its unfinished objectives (0-based indices): their TIME-9 time and kill XP,
+   * combined as TIME-10, at no point (as a `complete` step without a location), without the travel
+   * to them.
+   * - `time`: whether the turn-in's time counts that work (`counted`), a `durationOverride` stands
+   *   in for it (`overridden`, TIME-8), or it cannot be estimated (`unknown`, TIME-13).
+   * - `killXp`: the carried kill XP (never unknown), granted even when the quest XP is unknown; route
+   *   metrics count it then, as the level does.
+   * - `level` (with its basis): the level the quest XP is taken at, after the kill XP, which LINT-4 reads.
+   */
+  | {
+      readonly kind: 'objectives-carried';
+      readonly questId: QuestId;
+      readonly objectives: readonly number[];
+      readonly time: 'counted' | 'overridden' | 'unknown';
+      readonly killXp: Estimated<number>;
+      readonly level: number;
+      readonly levelBasis: EstimateBasis;
+      readonly levelEraFallback: boolean;
+    }
+  /**
+   * TIME-10, TIME-11 (D-040), engine: an accept marked these `item` objectives (0-based) done,
+   * because a `complete` step collected their items while the quest was not in the log (SIM-16).
+   * Not an issue: that step's SIM-16 is the warning.
+   */
+  | { readonly kind: 'objectives-before-accept'; readonly questId: QuestId; readonly objectives: readonly number[] }
   /** TIME-2 (SIM-17..21): a travel leg's warning, passed through from the TravelModel unchanged. */
   | { readonly kind: 'travel-warning'; readonly warning: TravelWarning }
   /** TIME-2: a navigation leg is not computed yet and its seconds are the fallback. Not an issue. */

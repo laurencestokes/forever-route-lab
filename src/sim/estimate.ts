@@ -115,7 +115,7 @@ export interface RouteMetrics {
   /** True when some step's time is unknown: the route takes at least `duration`. */
   readonly durationIsLowerBound: boolean;
   readonly stepsWithUnknownTime: number;
-  /** Known XP gained over the route (quest and kill XP). */
+  /** Known XP gained over the route (quest and kill XP, including the known kill XP a turn-in with unknown quest XP carries, D-040). */
   readonly xpGained: Estimated<number>;
   /** Steps whose XP was unknown; the XP and level are then lower bounds. */
   readonly unknownXpSteps: number;
@@ -205,8 +205,17 @@ export function accumulateMetrics(acc: MetricsAccumulator, estimates: readonly S
       if (d.eraFallback) acc.durationEraFallback = true;
     }
     const g = step.xpGained;
-    if (g.value === null) acc.unknownXpSteps += 1;
-    else {
+    if (g.value === null) {
+      acc.unknownXpSteps += 1;
+      // TIME-11 (D-040): a turn-in with unknown quest XP still granted its carried kill XP, which is
+      // known; it counts here as it does in the level (as a step's known seconds count, TIME-13).
+      for (const fact of step.facts) {
+        if (fact.kind !== 'objectives-carried' || fact.killXp.value === null) continue;
+        acc.xp += fact.killXp.value;
+        if (fact.killXp.basis === 'assumption') acc.xpAssumed = true;
+        if (fact.killXp.eraFallback) acc.xpEraFallback = true;
+      }
+    } else {
       acc.xp += g.value;
       if (g.basis === 'assumption') acc.xpAssumed = true;
       if (g.eraFallback) acc.xpEraFallback = true;

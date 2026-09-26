@@ -302,6 +302,8 @@ function numberItems(numbers: StepNumbers, override: number | null): DetailItem[
       value: <ReadoutValue readout={derived?.xpGained ?? duration} format={formatInteger} formatLong={xpWords} assumptionDetail={detail} />,
     },
     { term: 'Level after', value: <ReadoutValue readout={derived?.projectedLevel ?? duration} format={formatLevel} /> },
+    // D-040: a turn-in that carries objective work, or an accept that counts items collected before it, says so.
+    ...(derived === null || derived.objectiveWork === null ? [] : [{ term: 'Objective work', value: `${derived.objectiveWork}.` }]),
   ];
 }
 

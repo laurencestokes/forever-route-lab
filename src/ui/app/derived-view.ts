@@ -77,13 +77,72 @@ const POSITION_UNKNOWN: Readonly<Record<UnknownPositionCause, string>> = {
   'transport-arrival': 'An earlier transport arrives somewhere unknown, so the travel from there cannot be estimated',
 };
 
+type CarriedFact = Extract<SimFact, { readonly kind: 'objectives-carried' }>;
+
+/** The step's carried objective work (D-040), or null. */
+function carriedOf(facts: readonly SimFact[]): CarriedFact | null {
+  for (const fact of facts) if (fact.kind === 'objectives-carried') return fact;
+  return null;
+}
+
+/** `objective 1`, `objectives 1 and 3`: 0-based indices as the 1-based numbers the quest log shows. */
+function objectiveWords(indices: readonly number[]): string {
+  return `${indices.length === 1 ? 'objective' : 'objectives'} ${listWords(indices.map((index) => String(index + 1)))}`;
+}
+
+/**
+ * What a turn-in's numbers include when it carries objective work no Complete step finishes
+ * (SIMULATION TIME-11, D-040), in a sentence; null when it carries none. A duration override stands
+ * in for the carried time, and an objective without a time estimate leaves it out; the kill XP is
+ * always included.
+ */
+export function carriedWorkSentence(facts: readonly SimFact[]): string | null {
+  const carried = carriedOf(facts);
+  if (carried === null) return null;
+  const which = `${objectiveWords(carried.objectives)}, which no Complete step finishes`;
+  switch (carried.time) {
+    case 'counted':
+      return `This turn-in includes the time and kill XP of ${which}; the travel to that work is not included`;
+    case 'overridden':
+      return `This turn-in includes the kill XP of ${which}; the step’s duration override stands in for the time of that work`;
+    case 'unknown':
+      return `This turn-in includes the kill XP of ${which}; the time of that work cannot be estimated`;
+  }
+}
+
+/**
+ * What an accept's objectives include (TIME-10, D-040): items a Complete step collected before the
+ * quest was accepted count at once. Null for other steps.
+ */
+function itemsBeforeAcceptSentence(facts: readonly SimFact[]): string | null {
+  for (const fact of facts) {
+    if (fact.kind !== 'objectives-before-accept') continue;
+    const one = fact.objectives.length === 1;
+    const words = objectiveWords(fact.objectives);
+    return `${words.charAt(0).toUpperCase()}${words.slice(1)} ${one ? 'counts' : 'count'} as soon as the quest is accepted: a Complete step collected ${one ? 'its' : 'their'} items before this accept`;
+  }
+  return null;
+}
+
+/** The Details "Objective work" sentence of a step (D-040): a turn-in's carried work, or an accept's items collected before it. */
+export function objectiveWorkSentence(facts: readonly SimFact[]): string | null {
+  return carriedWorkSentence(facts) ?? itemsBeforeAcceptSentence(facts);
+}
+
 /**
  * Why a step's time is unknown, from what the simulation recorded (SIMULATION TIME-13): a sentence,
  * shown after "Unknown: ". The step's own causes come first, then an unknown position it moved from.
+ * An objective a turn-in carries (D-040) says so.
  */
 export function unknownTimeReason(facts: readonly SimFact[]): string {
   for (const fact of facts) {
-    if (fact.kind === 'time-unknown') return TIME_UNKNOWN[fact.reason];
+    if (fact.kind !== 'time-unknown') continue;
+    const objective = fact.objective;
+    const carried = objective === null ? null : carriedOf(facts);
+    if (objective !== null && carried !== null && carried.questId === fact.questId && carried.objectives.includes(objective)) {
+      return `${TIME_UNKNOWN[fact.reason]}: this turn-in carries its work, because no Complete step finishes ${objectiveWords([objective])}`;
+    }
+    return TIME_UNKNOWN[fact.reason];
   }
   for (const fact of facts) {
     if (fact.kind === 'grind-zero-rate') return 'The grind is set to 0 XP per hour, so it never reaches its level';
@@ -155,6 +214,11 @@ export interface StepDerived {
   readonly issues: readonly ValidationIssue[];
   /** The character's level as the step starts, and whether it is a lower bound. */
   readonly levelBefore: { readonly level: number; readonly lowerBound: boolean } | null;
+  /**
+   * What the step's numbers include of objective work no step of its own prices (D-040), in a
+   * sentence: a turn-in's carried work, or an accept's items collected before it; else null.
+   */
+  readonly objectiveWork: string | null;
 }
 
 const NO_STEP_ISSUES: readonly ValidationIssue[] = [];
@@ -215,6 +279,7 @@ export function stepDerivedAt(results: DerivedResults, index: number, reason: Pe
     assumptions: stepAssumptionWords(results, index, estimate),
     issues: results.stepIssues[index] ?? NO_STEP_ISSUES,
     levelBefore,
+    objectiveWork: objectiveWorkSentence(estimate.facts),
   };
 }
 
@@ -260,6 +325,7 @@ export function sameStepNumbers(a: StepNumbers, b: StepNumbers): boolean {
     sameReadout(x.xpGained, y.xpGained) &&
     x.pending === y.pending &&
     x.assumptions === y.assumptions &&
+    x.objectiveWork === y.objectiveWork &&
     x.issues.length === y.issues.length &&
     x.issues.every((issue, i) => {
       const other = y.issues[i];
@@ -467,6 +533,23 @@ export function travelSentence(state: Pick<DerivedState, 'travel'>, mapName?: Ma
 
 const NO_PARAMETERS: readonly RuleParameter[] = [];
 
+const carriedCounts = new WeakMap<readonly StepEstimate[], number>();
+
+/**
+ * How many turn-ins of a walk count the time of objective work they carry (D-040), counted once
+ * per walk: not those whose duration override stands in for it, nor those whose time is unknown
+ * (the unknown-time note counts them).
+ */
+function carriedTurnIns(estimates: readonly StepEstimate[]): number {
+  let count = carriedCounts.get(estimates);
+  if (count === undefined) {
+    count = 0;
+    for (const estimate of estimates) if (carriedOf(estimate.facts)?.time === 'counted') count += 1;
+    carriedCounts.set(estimates, count);
+  }
+  return count;
+}
+
 /**
  * XP per hour with its bound (UI-10): it divides the known XP by the known time. Unknown time makes
  * the true rate at most this (`≤`), unknown XP at least this (`≥`); with both it is bounded in no
@@ -521,6 +604,12 @@ export function routeMetricsView(state: DerivedState | null, editorRevision: num
   if (state.status === 'failed' && state.failure !== null) notes.push(state.failure);
   if (m.stepsWithUnknownTime > 0) notes.push(`${plural(m.stepsWithUnknownTime, 'step')} with unknown time ${m.stepsWithUnknownTime === 1 ? 'is' : 'are'} not counted: the route takes at least this long.`);
   if (m.unknownXpSteps > 0) notes.push(`${plural(m.unknownXpSteps, 'step')} with unknown XP ${m.unknownXpSteps === 1 ? 'is' : 'are'} not counted: the XP and level are at least these.`);
+  const carried = carriedTurnIns(results.estimates);
+  if (carried > 0) {
+    notes.push(
+      `${plural(carried, 'turn-in')} ${carried === 1 ? 'includes' : 'include'} the time and kill XP of objectives no Complete step finishes, but not the travel to them, so the route may take longer.`,
+    );
+  }
   notes.push('XP per hour and the shares are over the known time and XP.');
   notes.push(travelSentence(state, mapName));
   // Over the known time only: with some steps' time unknown the shares are partial, bounded in no

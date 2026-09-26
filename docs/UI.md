@@ -1154,7 +1154,11 @@ time shares, so they go where they take least room:
   its basis in words: duration, XP gained, level reached, XP per hour, and the shares of travel,
   combat and objectives, interaction and waiting (the time-based ones pending while provisional),
   then notes: the pending sentence, "Updating: …" while the walk lags an edit, what is not counted
-  ("2 steps with unknown time are not counted: the route takes at least this long."), that XP per
+  ("2 steps with unknown time are not counted: the route takes at least this long.", and the travel
+  to objective work turn-ins carry, D-040: "3 turn-ins include the time and kill XP of objectives no
+  Complete step finishes, but not the travel to them, so the route may take longer.", counting only
+  the turn-ins whose time includes that work: not those whose duration override stands in for it
+  or whose time is unknown), that XP per
   hour and the shares are over the known time and XP, and the travel model in a sentence; then
   every parameter the route reads that is an assumption or an Era value, as a list, each with its
   origin ("run speed (Era value)", "seconds per kill (your assumption)"): all of them, never "and 3
@@ -1217,8 +1221,12 @@ the route has been checked. The panel:
 
 **Details.** For the active step: Duration (with the pending marker and its reason, and the
 override when one replaces the step's own work), XP gained and Level after, each with its
-markers, and "Issues at this step" (the kit's `IssueList` without buttons, and a pointer to the
-Validation tab for the explanations).
+markers; for a turn-in that carries objective work (D-040), "Objective work" says which objectives'
+time and kill XP it includes, without the travel to them (or, with a duration override or an
+unknown time, that it includes their kill XP and what stands for the time), and for an accept that
+counts items a Complete step collected before it, which objectives count at once; and "Issues at
+this step" (the kit's `IssueList` without buttons, and a pointer to the Validation tab for the
+explanations).
 
 **Performance** (Milestone 6 review PERF-11). No per-row heavy work: rows are built once per route
 change; the walk's numbers are read as the ~40 mounted rows render. The pipeline publishes the

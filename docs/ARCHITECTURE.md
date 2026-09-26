@@ -463,8 +463,10 @@ interface RouteGroup {
 - A `travel` step with a null location (RXP `.zone`, `.subzone`, `.explore`) moves the character
   somewhere unknown; so does a death skip (kept as a preserved note). The engine then sets the
   position to unknown until a step with a resolvable location.
-- `turnin` of a quest whose objectives were never scheduled is a warning ("assumed completed
-  incidentally"), not an error.
+- `turnin` of a quest whose objectives were never scheduled is a warning, not an error. For a quest
+  an `accept` step of the route put in the log, the turn-in carries the objectives' time and kill
+  XP, without the travel to them (D-040); for one in the log before the route, declared or assumed,
+  they are "assumed completed incidentally" (SIMULATION TIME-11).
 - A **section** is a contiguous selection of steps; it is not persisted. Operations (pure, in
   `domain/route`): insert, delete, move, duplicate, lock, cut section (to a clipboard), paste,
   join sections (move the later section to follow the earlier one), add note/travel/grind/quest.
@@ -748,6 +750,19 @@ interface CharacterState {
   - **Metrics:** `walkMetrics` continues from prefix sums stored every 256 steps, so an edit near
     the end re-sums at most one interval (PERF-07). A restored checkpoint has the initial state's
     property order (PERF-08).
+- **Carried objective work (D-040, 2026-09-26):** each quest-log entry records whether an `accept`
+  step of the route made it (`routeAccepted`; false for `priorQuestLog` entries and entries assumed
+  through an unknown history), and checkpoints copy it. A turn-in of such an entry prices its open
+  objectives as one multi-target `complete` without a location at the turn-in's level (open-world
+  kills, the lowest drop NPC id), grants their kill XP before the quest XP, and records
+  `objectives-carried` with whether its time counts the work (`counted`, `overridden`,
+  `unknown`) and the kill XP; other entries keep `objectives-incidental` (SIMULATION TIME-11). The
+  work asks the travel model for no leg, so leg enumeration is unchanged.
+- **Items collected before the accept (D-040 review):** `CharacterState.itemsBeforeAccept` holds
+  the `item` objectives a `complete` step priced while their quest was not in the log (SIM-16).
+  It is not grow-only (the accept removes the entry), so checkpoints copy it. The accept that next
+  puts the quest in the log marks them done and records `objectives-before-accept`, so nothing
+  prices that work twice (SIMULATION TIME-10).
 - **Zone hints** come from `app/navigation-hints.ts` through `ZoneHintResolver`; `NO_ZONE_HINTS`
   (all 0) serves the straight-line model and tests.
 
@@ -776,20 +791,23 @@ interface Estimated<T> { value: T | null; basis: 'source' | 'assumption' | 'deri
   so time and XP stay consistent. A multi-target `complete` costs
   `max(t) + concurrency × (sum(t) − max(t))` over its targets' times `t` (SIMULATION TIME-10;
   `concurrency` 0 = full overlap, 1 = none; an assumption); a `partial` step costs its override or
-  0 s ("incidental"), with the finishing step carrying the work.
+  0 s ("incidental"), with the finishing step carrying the work. A turn-in carries the work of
+  objectives no step finished, priced as a `complete` step without a location at the turn-in's
+  level, without travel, when the route accepted the quest (SIMULATION TIME-11, D-040).
 - Travel: walking and mounted speed from the ruleset and riding state; cross-world moves need a
   transport step; unresolved locations make travel `unknown`.
 - Route metrics: duration, XP, level reached, XP/hour, travel vs combat/objective vs
-  interaction shares, each with its basis.
+  interaction shares, each with its basis. The known XP includes the carried kill XP of a turn-in
+  whose quest XP is unknown (the level has it too; D-040 review).
 
 **As built (Milestone 6):**
 
 - `StepEstimate.assumptionsUsed` is `RuleKey[]`, not `AssumptionKey[]`: it lists every rule key
   with basis `assumption` or `era-assumed` the step read (SIMULATION §8), ruleset keys included.
 - `StepEstimate` gains `facts: SimFact[]` (`src/sim/facts.ts`): what happened that the validator
-  turns into issues (SIM-1..21, `VAL030-objectives-incidental`), plus `pending-leg` (counted into
-  the route-level SIM-22) and `mob-level-assumed` (not an issue). The simulation and the engine record facts; only `src/validate` owns issue
-  codes (D-037).
+  turns into issues (SIM-1..21, `VAL030-objectives-incidental`, `VAL030-objectives-carried`), plus
+  `pending-leg` (counted into the route-level SIM-22) and `mob-level-assumed` (not an issue). The
+  simulation and the engine record facts; only `src/validate` owns issue codes (D-037).
 - A leg's warnings pass through as `travel-warning` facts; a pending leg adds `pending-leg`. An
   arrival radius shortens a navigation leg in proportion, `(d − r) / d` (an assumption,
   SIMULATION TIME-2).
@@ -866,6 +884,12 @@ Clicking an issue selects its step and focuses the map.
   `SIM005-hearth-cooldown-uncertain` (warning: after a step with unknown time the wait is only an
   upper bound; SIM-07, ENG-09) and a second route-level SIM code, `SIM023-start-xp-beyond-level`
   (warning; ENG-11). A registry test rejects Markdown in messages and explanations (UI-19).
+- **Code added by D-040:** `VAL030-objectives-carried` (warning): a turn-in carries the time and
+  kill XP of objectives no `complete` step finished, without the travel to them, and the message
+  suggests a `complete` step. Its `data.time` (`counted`, `overridden`, `unknown`) picks the
+  words, so an override or an unknown time is not claimed as added. LINT-4 then reads the level
+  after the carried kill XP. The accept's `objectives-before-accept` is not an issue: the earlier
+  step's SIM016 is the warning.
 - **Entry points:** `validateRoute(project, context, { baseDataset?, visitors? }) → { walk,
   issues }`, and `createRouteValidator({ dataset, rules, baseDataset?, graph? })`, which returns
   `{ acceptPolicy, visitor, issues(), stepIssues(i), routeIssues() }`. The rules run as a walker

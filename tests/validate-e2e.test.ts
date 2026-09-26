@@ -154,7 +154,8 @@ const CASES: readonly Case[] = [
       `#21 SIM007-flight-unknown-path | Not a known flight path: the flight's departure node, Tainted Foothills, Mount Hyjal (taxi:3242). | {"end":"from","node":"taxi:3242"}`,
       `#21 SIM008-flight-unresolved | The flight's destination cannot be resolved: no flight node matches. | {"end":"to","reason":"no-node"}`,
       `#26 LINT004-xp-reduced q790 | Sarkoth (790) is turned in 8 levels above its level 5: it gives 40% of its XP, 270 XP less. | {"level":13,"levelBasis":"assumption","levelEraFallback":true,"questLevel":5,"percent":40,"xp":180,"fullXp":450,"xpLost":270,"xpBasis":"assumption","eraFallback":true,"assumed":"questXpRounding,questXpMultiplier"}`,
-      `#26 VAL030-objectives-incidental q790 | Sarkoth (790) is turned in, but no step finishes objective 1; assumed completed along the way. | {"objectives":"0"}`,
+      // D-040: 790 was accepted in the route (#10), so the turn-in carries the work of its one item objective (320 s, and no kill XP: the drop mob is grey at level 13); 788 (#1) was only assumed in the log and stays incidental.
+      `#26 VAL030-objectives-carried q790 | Sarkoth (790) is turned in, but no step finishes objective 1: the time and kill XP of that work are added to the turn-in, without the travel to it. Add a Complete step where the work is done. | {"objectives":"0","time":"counted"}`,
     ],
   },
   // Skip conditions the walker cannot decide keep their steps (SIM-13); a listed history makes VAL-32 an error.
@@ -234,7 +235,8 @@ describe('real Forever records (the committed dataset, SIMULATION §9)', () => {
     expect(run(steps, { race: 'Human', startLevel: 44, priorHistory: 'listed', priorCompletedQuests: [questId(48)] })).toEqual([
       '#2 VAL002-already-completed q48',
       '#2 VAL011-later-chain-step q48',
-      '#3 VAL030-objectives-incidental q49',
+      // D-040: 49 was accepted by step 1, so the turn-in carries the work of its three item objectives (objectives 1 to 3, 240 s).
+      '#3 VAL030-objectives-carried q49',
       '#5 VAL008-prequest-single q53',
     ]);
     // With an unknown history the missing prerequisite of 49 may have been done before the route.

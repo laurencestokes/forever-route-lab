@@ -38,7 +38,7 @@ import { hearthUse } from '../sim/hearth';
 import type { Interaction } from '../sim/interaction';
 import type { KillPlace } from '../sim/kill-xp';
 import { type ObjectiveWork, partialWork } from '../sim/objectives';
-import type { Basis } from '../sim/provenance';
+import { type Basis, sumEstimates } from '../sim/provenance';
 import { flightTime, type LocalTaxiData, nearestLocalTaxiNode } from '../sim/taxi';
 import { transportCrossing } from '../sim/transport';
 import { type GroundTravel, groundTravel, type StepSpeeds, trainRiding } from '../sim/travel';
@@ -47,7 +47,7 @@ import { evaluateFilter, evaluateSkipIf, or3 } from './conditions';
 import { newStepWork, reportUnresolved, type StepWork, type WalkEnv, ZERO_XP } from './env';
 import { here, reportUnknownPosition, setLocation, unknownTravel, walkTo } from './movement';
 import { newLogEntry, type VisitKey, type WalkMemo } from './state';
-import type { CharacterState, StepDelta, StepRecord } from './types';
+import type { CharacterState, QuestLogEntry, StepDelta, StepRecord } from './types';
 
 /**
  * One step of the walk (docs/ARCHITECTURE.md §9.2; docs/SIMULATION.md §6, §7.1): its activity
@@ -256,7 +256,7 @@ function untouched(state: CharacterState, questId: QuestId): boolean {
  */
 function assumeInLog(env: WalkEnv, state: CharacterState, work: StepWork, questId: QuestId): boolean {
   if (env.project.character.priorHistory !== 'unknown' || !untouched(state, questId)) return false;
-  state.questLog.set(questId, newLogEntry(env.dataset.quest(questId)));
+  state.questLog.set(questId, newLogEntry(env.dataset.quest(questId), false));
   (work.assumedInLog ??= []).push(questId);
   return true;
 }
@@ -296,10 +296,39 @@ function accept(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: StepW
   interaction(env, work, moved || !sameVisit(memo.visitKey, key) ? ACCEPT_FIRST : ACCEPT_FURTHER);
   memo.visitKey = key;
   if (!state.questLog.has(chosen)) {
-    state.questLog.set(chosen, newLogEntry(env.dataset.quest(chosen)));
+    const entry = newLogEntry(env.dataset.quest(chosen), true);
+    state.questLog.set(chosen, entry);
     work.accepted = chosen;
+    countItemsBeforeAccept(state, work, chosen, entry);
   }
   state.acceptedInRoute.add(chosen);
+}
+
+/**
+ * TIME-10, TIME-11 (D-040): the items a `complete` step collected while the quest was not in the
+ * log are in the bags, so the accept marks those `item` objectives done: neither a later step nor
+ * the turn-in prices them again. Kill, use and event work before the accept does not count toward
+ * the quest, so it stays open.
+ */
+function countItemsBeforeAccept(state: CharacterState, work: StepWork, questId: QuestId, entry: QuestLogEntry): void {
+  const items = state.itemsBeforeAccept.get(questId);
+  if (items === undefined) return;
+  state.itemsBeforeAccept.delete(questId);
+  const counted: number[] = [];
+  for (const index of items) {
+    if (entry.objectives[index] !== 'open') continue;
+    entry.objectives[index] = 'done';
+    markDone(work, questId, index);
+    counted.push(index);
+  }
+  if (counted.length > 0) work.facts.push({ kind: 'objectives-before-accept', questId, objectives: counted });
+}
+
+/** Remembers an `item` objective a `complete` step priced while its quest was not in the log. */
+function rememberItems(state: CharacterState, questId: QuestId, index: number): void {
+  const known = state.itemsBeforeAccept.get(questId) ?? NONE;
+  if (known.includes(index)) return;
+  state.itemsBeforeAccept.set(questId, [...known, index].sort((a, b) => a - b));
 }
 
 /** The turn-in candidate: the first in the log and not failed, else (unknown history) the first the route never touched. */
@@ -325,15 +354,34 @@ function turnIn(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: StepW
   if (!state.questLog.has(chosen)) assumeInLog(env, state, work, chosen);
   const entry = state.questLog.get(chosen);
   if (entry === undefined || entry.failed) return;
-  // TIME-11: objectives never finished are assumed completed incidentally, at 0 s and 0 kill XP.
-  let incidental: number[] | null = null;
+  const record = env.dataset.quest(chosen);
+  let open: number[] | null = null;
   for (let index = 0; index < entry.objectives.length; index += 1) {
     if (entry.objectives[index] !== 'open') continue;
-    (incidental ??= []).push(index);
+    (open ??= []).push(index);
     markDone(work, chosen, index);
   }
-  if (incidental !== null) work.facts.push({ kind: 'objectives-incidental', questId: chosen, objectives: incidental });
-  const record = env.dataset.quest(chosen);
+  // TIME-11 (D-040): the work of objectives no step finished is carried by the turn-in when an
+  // accept step of the route put the quest in the log; otherwise (a pre-route or assumed entry,
+  // whose progress is unknown) they are assumed completed incidentally, at 0 s and 0 kill XP.
+  // Items collected before the accept were marked done by it, so they are not open here.
+  let killXp: Estimated<number> | null = null;
+  if (open !== null && entry.routeAccepted && record !== undefined) {
+    const carried = carryWork(env, state, work, record, open);
+    killXp = carried.killXp;
+    // TIME-8: a valid override replaces the carried time, as runStep applies it.
+    const time = overrides(step.durationOverride) ? 'overridden' : carried.seconds.value === null ? 'unknown' : 'counted';
+    work.facts.push({
+      kind: 'objectives-carried',
+      questId: chosen,
+      objectives: open,
+      time,
+      killXp,
+      level: state.level,
+      levelBasis: state.xpBasis,
+      levelEraFallback: state.xpEraFallback,
+    });
+  } else if (open !== null) work.facts.push({ kind: 'objectives-incidental', questId: chosen, objectives: open });
   const xp = env.sim.questXp({
     questId: chosen,
     xp: record?.xp ?? null,
@@ -345,13 +393,43 @@ function turnIn(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: StepW
   for (const fact of xp.facts) work.facts.push(fact);
   if (xp.xp.value === null) state.unknownXpEvents += 1;
   else grant(env, state, work, xp.xp);
-  work.xpGained = xp.xp;
+  // The step's XP is its kill XP and its quest XP; unknown quest XP makes the sum unknown (the known
+  // kill XP is still granted, as TIME-13 keeps a step's known seconds).
+  work.xpGained = killXp === null ? xp.xp : sumEstimates([killXp, xp.xp]);
   state.questLog.delete(chosen);
   state.completed.add(chosen);
   work.turnedIn = chosen;
   for (const reward of record?.reputationReward ?? NONE) {
     state.reputationDelta.set(reward.factionId, (state.reputationDelta.get(reward.factionId) ?? 0) + reward.value);
   }
+}
+
+/**
+ * TIME-11 (D-040): a turn-in carries the work of its quest's open objectives, priced as a
+ * multi-target `complete` (TIME-9, TIME-10) at the character's level at the turn-in and, as a
+ * `complete` step without a location, at no point: the open world for kill XP (KXP-5) and the
+ * lowest drop NPC id for items. Where the work was done is not known; the turn-in's place is not it.
+ * The kill XP is granted before the quest XP, as a `complete` step before the turn-in would be.
+ * Travel to the objectives is not priced. Returns the block's time and kill XP.
+ */
+function carryWork(env: WalkEnv, state: CharacterState, work: StepWork, record: QuestRecord, open: readonly number[]): { readonly seconds: Estimated<number>; readonly killXp: Estimated<number> } {
+  const at = null;
+  const place = killPlace(env.graph, at);
+  const works: ObjectiveWork[] = [];
+  for (const index of open) {
+    const objective = record.objectives[index];
+    works.push(
+      objective === undefined
+        ? unpriceable(record.id, index)
+        : env.sim.objective({ questId: record.id, index, objective, countOverride: null, playerLevel: state.level, at, place }),
+    );
+  }
+  const block = env.sim.complete(works);
+  if (block.used.length > 0) work.used.push(block.used);
+  for (const fact of block.facts) work.facts.push(fact);
+  work.parts.push({ bucket: 'objective', seconds: block.seconds });
+  grant(env, state, work, block.killXp);
+  return { seconds: block.seconds, killXp: block.killXp };
 }
 
 function abandon(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: StepWork, step: AbandonStep, group: RouteGroup | null, speeds: StepSpeeds): void {
@@ -446,7 +524,11 @@ function complete(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: Ste
   work.parts.push({ bucket: 'objective', seconds: block.seconds });
   for (const done of works) {
     const entry = inLog.includes(done.questId) ? state.questLog.get(done.questId) : undefined;
-    if (entry === undefined) continue;
+    if (entry === undefined) {
+      // SIM-16: nothing is marked, but collected items stay in the bags until the accept (D-040).
+      if (env.dataset.quest(done.questId)?.objectives[done.index]?.kind === 'item') rememberItems(state, done.questId, done.index);
+      continue;
+    }
     entry.objectives[done.index] = 'done';
     markDone(work, done.questId, done.index);
   }
@@ -826,6 +908,11 @@ const ZERO_DURATION: Estimated<number> = { value: 0, basis: 'derived', eraFallba
  */
 const OVERRIDDEN: ReadonlySet<SimFactKind> = new Set<SimFactKind>(['time-unknown', 'grind-zero-rate', 'target-level-late', 'grind-upper-bound']);
 
+/** TIME-8: whether a `durationOverride` replaces the step's own work (a finite number, 0 or more). */
+function overrides(override: number | null): override is number {
+  return override !== null && Number.isFinite(override) && override >= 0;
+}
+
 /**
  * Folds a step's duration into the route clock since the last hearth cast (TIME-4): `unknown` once
  * a duration is unknown, else the combined basis of the durations (SIMULATION §8).
@@ -937,7 +1024,7 @@ export function runStep(
   let facts: readonly SimFact[] = work.facts;
   const override = step.durationOverride;
   const partial = step.kind === 'complete' && step.progress === 'partial';
-  if (override !== null && !partial && Number.isFinite(override) && override >= 0) {
+  if (override !== null && !partial && overrides(override)) {
     parts = applyDurationOverride(parts, override, overrideBucket(step));
     // The override replaces the work those facts describe (TIME-8; TIME-9: "unless overridden").
     if (facts.some((fact) => OVERRIDDEN.has(fact.kind))) facts = facts.filter((fact) => !OVERRIDDEN.has(fact.kind));

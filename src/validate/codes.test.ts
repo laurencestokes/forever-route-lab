@@ -9,7 +9,8 @@ import { formatIssueMessage, ISSUE_CODE_PATTERN, ISSUE_CODES, issueCodeSpec, isR
 
 /**
  * SIMULATION §7.7 and §7.8, plus the ARCHITECTURE §9.4 variants and SIM-22 added in Milestone 6,
- * and the Milestone 6 review's DATA003, SIM005-uncertain and SIM-23 (§1.5).
+ * the Milestone 6 review's DATA003, SIM005-uncertain and SIM-23 (§1.5), and D-040's
+ * VAL030-objectives-carried.
  */
 const EXPECTED: Readonly<Record<string, 'info' | 'warning' | 'error'>> = {
   'VAL001-already-in-log': 'error',
@@ -48,6 +49,7 @@ const EXPECTED: Readonly<Record<string, 'info' | 'warning' | 'error'>> = {
   'VAL030-not-in-log-unverifiable': 'warning',
   'VAL030-failed': 'error',
   'VAL030-objectives-incidental': 'warning',
+  'VAL030-objectives-carried': 'warning',
   'VAL030-finisher-mismatch': 'warning',
   'VAL032-not-in-log': 'error',
   'VAL032-not-in-log-unverifiable': 'warning',
@@ -114,6 +116,7 @@ const WORDS: ReadonlySet<string> = new Set([
   'stepsText',
   'passageText',
   'nodeText',
+  'workText',
 ]);
 
 describe('issue-code registry', () => {

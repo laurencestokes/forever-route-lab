@@ -616,3 +616,94 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
 - **Superseded before commit:** the map specialist's "one art image at a time" rendering stays only
   until the seamless atlas replaces it (owner feedback, 2026-09-26). Its relief opacity and
   zone-frame settings will be revisited there.
+
+## D-039: Map presentation data and icons (owner, 2026-09-26)
+
+- **Date:** 2026-09-26
+- **Decided by:** project owner (A, B, C and E); architect defaults (D and F), which the owner may
+  overrule.
+- **Context:** docs/research/map-presentation.md §22. The presentation layer (quests, dungeons,
+  flight paths, transports, zone colouring) is modelled on WoWF-QRP and MapGenie.
+- **Decisions:**
+  - **A. Icons:** our own glyphs. No Blizzard interface icons are extracted or deployed. D-033
+    stays limited to map art.
+  - **B. Taxi graph: commit.** This covers the flight nodes, edges, 3D path lengths, shapes
+    simplified to 25 yd, and the transport stops, from the client's `TaxiNodes`, `TaxiPath` and
+    `TaxiPathNode` (build 1.60.1.70009, with FileDataIDs, CKeys, the WoWDBDefs commit and the tool
+    tree hash recorded), about 27 kB gzip, with a NOTICE naming Blizzard. This settles OD-6:
+    deployed builds get per-leg flight times from real path lengths (TIME-6 semantics). Transports
+    get dock positions, which closes the dock gap left by NAV-08.
+  - **C. Zone faction and sanctuary: commit** (`AreaTable.FactionGroupMask` and the sanctuary bit,
+    about 0.5 kB; the decodes are INFERRED). They drive only an optional overlay, off by default,
+    drawn as hatching and words, never red or blue fills.
+  - **D. Client zone level proxies (`AreaTable.ExplorationLevel` spans): not committed** (architect
+    default). Zone spans are derived at run time from the committed dataset, and cited ruleset text
+    covers the new zones.
+  - **E. Dungeon tuning levels: commit** (`LFGDungeons.ContentTuningID` → `ContentTuning`, about 30
+    rows). Each is shown as one number labelled "LFG tuning level (client), meaning unverified",
+    never as a range.
+  - **F. Raids with no dungeon-finder row** (AQ20, AQ40, Naxxramas): hidden by default (architect
+    default).
+- **Rules that still apply:**
+  - The difficulty colours are used only for difficulty, and cyan only for provenance.
+  - Every committed client table has a manifest, a NOTICE and reproducible extraction with
+    `--check`.
+  - Nothing is fabricated.
+
+## D-040: A turn-in carries objective work that no step completed (owner, 2026-09-26)
+
+- **Date:** 2026-09-26
+- **Decided by:** project owner. The details are the architect's, and the owner may overrule them.
+- **Context:** TIME-11 treated objectives still open at turn-in as completed incidentally, at 0 s
+  and 0 kill XP. A route with only accept and turn-in steps therefore undercounted both time and
+  XP.
+- **Decision:** when a quest accepted in this route reaches its turn-in with objectives that no
+  `complete` step finished, the turn-in step carries their work. That means the TIME-9 seconds and
+  kill XP of each open objective, combined as a multi-target `complete` (TIME-10 overlap). The
+  basis is `assumption`.
+  - A fact records the carried objectives.
+  - The validator raises an issue suggesting a `complete` step. Travel to the objective area is
+    not priced, so the time is a lower bound there.
+  - `partial` steps still cost only their override, and the carried work lands on the turn-in.
+- **Not carried:**
+  - quests only assumed to be in the log (unknown prior history) or declared in the prior quest
+    log: their objective state is unknown, so they stay incidental with the existing fact;
+  - failed quests;
+  - objectives already finished.
+- **Rulings (architect, after the D-040 review, 2026-09-26):**
+  1. Carried work is priced at the turn-in's starting level and at no point, as a `complete` step
+     without a location: open-world kills, and the lowest drop NPC id for items.
+  2. Carried kill XP is granted before the quest XP, so the quest XP and LINT-4 use the level
+     after the kills.
+  3. Unknown quest XP on the turn-in still counts the known kill XP into the level and the route's
+     known XP total (both lower bounds then).
+  4. An item objective priced by a `complete` step while its quest was not in the log counts at
+     the next accept (`itemsBeforeAccept`), so it is never priced twice. This is the review's
+     reading of the game, not yet checked in game.
+  5. Kill, `killCredit`, object, spell and event work done before the accept does not count in
+     game, so the turn-in carries it again. The route then includes it twice, as the game needs it
+     twice, and SIM-16 warns on the early step.
+  6. `VAL030-objectives-carried` is a warning. Its wording follows the fact's `time` (`counted`,
+     `overridden` or `unknown`).
+
+## D-041: Map look, quest-mark colour and external links (owner, 2026-09-26)
+
+- **Date:** 2026-09-26
+- **Decided by:** project owner (G, H and J); architect defaults (I and K), which the owner may
+  overrule.
+- **Context:** docs/research/map-presentation.md revision 2, "Decisions for the owner".
+- **Decisions:**
+  - **H. Base-map look: Blizzard's painted art** (D-033), composed seamlessly from world to zone
+    by the atlas design (docs/research/map-atlas.md). Our own tint appears only where the art fails
+    the design's acceptance criteria. No flat biome-tint "terrain" style is built.
+  - **G. Quest marks take the quest's difficulty colour**, meaning the exact WoW
+    grey/green/yellow/orange/red against the character's level at the selected step, from 11 px
+    upwards.
+    - Pips carry the same information, so colour is never the only cue.
+    - Smaller marks stay ink-coloured.
+    - This is a difficulty use of the difficulty colours, so the colour reservation holds.
+  - **J. A Wowhead link in a quest's pop-up**, marked as an external site and opening in a new tab.
+  - **I. Graveyards:** not now; no sourced table.
+  - **K. Other sites' pages** (WoWF-QRP, MapGenie) are studied with read-only viewing only. Facts
+    obtained earlier by running scripts in MapGenie's page are marked INSPECTED and carry no design
+    weight.

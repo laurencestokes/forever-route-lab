@@ -85,8 +85,12 @@
    the level known again (XP-4, TIME-12).
    Objective time and objective kill XP use the same assumed kill count (TIME-9).
 9. **Work on objectives.** A multi-target `complete` step costs the largest target plus a
-   concurrency share of the others; a `partial` step costs 0 s or its override; a turn-in whose
-   objectives were never finished is a warning, "assumed completed incidentally" (TIME-10, TIME-11).
+   concurrency share of the others; a `partial` step costs 0 s or its override. A turn-in of a
+   quest the route accepted carries the time and kill XP of the objectives no step finished, without
+   the travel to them, with a warning; for a quest that was in the log before the route (declared or
+   assumed) they are "assumed completed incidentally" at 0 s, also a warning. Items a `complete`
+   step collected before the accept count when the quest is accepted, so they are priced once
+   (TIME-10, TIME-11, D-040).
 10. **State before the route is declared.** `character.priorHistory` (`fresh`, `listed` or
     `unknown`), `priorCompletedQuests`, `priorQuestLog` and `riding` seed the walker. With
     `priorHistory: 'unknown'`, unmet prerequisites are `-unverifiable` warnings, not errors
@@ -271,7 +275,7 @@ and `src/domain/*.ts` were patched. This file now follows those rulings:
 ### 1.5 Milestone 6 edits and errata
 
 Applied when `src/rules` and `src/sim` were implemented (2026-09-26). Errata are marked; the other
-rows are additions or clarifications for the architect to confirm.
+rows are additions or clarifications, confirmed by the architect in D-038 (item 10).
 
 | Change | Where | Driver |
 |---|---|---|
@@ -292,7 +296,7 @@ rows are additions or clarifications for the architect to confirm.
 
 **Milestone 6 review (2026-09-26).** The review of `src/rules`, `src/sim`, `src/engine` and
 `src/validate` found places where this file contradicted itself or was silent; these rows record the
-rulings the fixes follow. Every row is for the architect to confirm.
+rulings the fixes follow. The architect confirmed every row in D-038.
 
 | Change | Where | Driver |
 |---|---|---|
@@ -312,6 +316,22 @@ rulings the fixes follow. Every row is for the architect to confirm.
 | **Erratum:** the riding parameter is `ridingSpells` (entries with a tier), as the ruleset names it | 1.2, TIME-3, TIME-T 23, SIM-10, §8 | review SIM-13 |
 | From an unknown position the nearest spawn is undefined: an entity with spawns at more than one point leaves the position unknown. A move from an unknown position records `position-unknown` with its cause (not an issue) | TIME-2, 7.1 | review ENG-02, ENG-03, UI-16 |
 | A start XP at or beyond the start level's span is carried over by XP-2, with the route-level warning `SIM023-start-xp-beyond-level` | 7.1, 7.7, 7.8 | review ENG-11 |
+
+**D-040 (owner, 2026-09-26): carried objective work.** The owner decided that a turn-in carries the
+work of objectives no `complete` step finished. The rows below are the implementation's readings,
+confirmed by the architect in D-040 ("Rulings").
+
+| Change | Where | Driver |
+|---|---|---|
+| **Erratum:** a turn-in of a quest an `accept` step of the route put in the log carries the TIME-9 time and kill XP of its open objectives, combined as TIME-10, without the travel to them; `VAL030-objectives-carried` (warning). Pre-route, assumed and failed quests keep the incidental rule. TIME-11 said every unfinished objective was incidental at 0 s and 0 kill XP | TIME-11, TIME-T 17, 33-37, 7.5, 7.8 | D-040 |
+| The carried work is priced at the turn-in's level (the level at the start of the step) and at no point, as a `complete` step without a location: the open world for KXP-5 and the lowest drop NPC id for items. Where the work was done is not known, and the turn-in's place is not it (a first reading used the turn-in's place, so an item's drop NPC and a kill's instance multiplier could differ from the explicit route's) | TIME-9, TIME-11, TIME-T 37 | D-040; review D40-02 |
+| The carried kill XP is granted before the quest XP (as a `complete` step just before the turn-in), so the quest XP and LINT-4 use the level after it; the fact carries that level with its basis for LINT-4 | TIME-11, QXP-3, 7.5 | D-040 |
+| The turn-in's `xpGained` is kill XP plus quest XP by the §8 rule; unknown quest XP makes it unknown while the known kill XP is still granted. The fact carries that kill XP, and the route's known XP total (ARCHITECTURE §9.3) counts it, as the level does and as the known seconds of a step with unknown time count (TIME-13); both are lower bounds then | TIME-11, XP-4, §8 | D-040; review D40-04 |
+| An entry in the log before the route that the route accepts again (VAL-1) keeps its pre-route progress, so it stays incidental; one abandoned and accepted again is carried | TIME-11, 7.1 | D-040 |
+| `VAL030-objectives-carried` is a warning, like `VAL030-objectives-incidental`: the route's time is short by the travel to the carried work until a `complete` step prices it, and the warning asks for that step | 7.8 | D-040 |
+| A `durationOverride` on the turn-in replaces the carried time (TIME-8) and drops SIM-15 for it; the kill XP and `VAL030-objectives-carried` stay. The fact's `time` (`counted`, `overridden` or `unknown`) makes the warning, Details and the Summary note say whether the turn-in's time includes the work: an override stands in for it, and an unknown time is not claimed | TIME-8, TIME-11, 7.8 | D-040; review D40-03 |
+| An `item` objective a `complete` step priced while the quest was not in the log (SIM-16) is remembered in the state (`itemsBeforeAccept`, copied by checkpoints), and the `accept` that next puts the quest in the log marks it done (fact `objectives-before-accept`, not an issue): the items are in the bags, which the game counts at the accept (the review's reading, not checked in game here; the RXP guides rely on it with `.collect` before the accept). Quest-only drops that need the quest in the log are the route author's to order. Neither a later step (SIM-12) nor the turn-in prices it again | TIME-10, TIME-11, 7.1, TIME-T 35 | review D40-01 |
+| **Ruled (architect, D-040):** kill, `killCredit`, object, spell and event work a `complete` step priced before the accept does not count toward the quest in game (SIM-16 says so), so it stays open after the accept and the turn-in carries it again. The route's time and XP then include the work twice, as the game would need it done twice. SIM-16 already warns on the early step. The RXP Forever guides have no such case (the 19 double-priced turn-ins before this fix were all item objectives) | TIME-10, TIME-11, TIME-T 36 | review D40-01 |
 
 ---
 
@@ -664,9 +684,10 @@ Era. Red mobs cap at +4 levels (+20%).
   everything else.
 - An NPC with no level range, or no record, counts as a same-level mob (`M = P`, ASSUMPTION, as
   TIME-12 does for grind steps); the simulation records that the level was assumed (Milestone 6).
-- Objective kills (TIME-9) and grind kills (TIME-12) are the only kill-XP sources in v1. Objective
-  kill XP uses the same assumed kill count as objective time (DSO-05), so an objective with no known
-  count never yields time without XP.
+- Objective kills (TIME-9, including the objective work a turn-in carries, TIME-11) and grind
+  kills (TIME-12) are the only kill-XP sources in v1. Objective kill XP uses the same assumed kill
+  count as objective time (DSO-05), so an objective with no known count never yields time without
+  XP.
 
 ### KXP-5 Multipliers
 
@@ -1405,7 +1426,11 @@ killXp = floor(f * sum_i(x_i))
 - **Progress `finish`:** each target objective is marked done in `questLog`. A target already done
   contributes nothing and emits `SIM012-objective-already-done` (info), not an error.
 - A target whose quest is not in the log emits `SIM016-complete-not-in-log` (warning); the work and
-  its kill XP are still charged, and nothing is marked.
+  its kill XP are still charged, and nothing is marked. The `item` objectives priced this way are
+  remembered (`itemsBeforeAccept`, 7.1): the items are in the bags, so the `accept` that next puts
+  the quest in the log marks those objectives done (fact `objectives-before-accept`), and nothing
+  prices them again (D-040 review). Kills, uses and events do not count toward a quest that is not
+  in the log, so those objectives stay open after the accept.
 - Time goes to `breakdown.objective`.
 
 #### TIME-11 Partial work and incidental completion (ARCHITECTURE §8.1; DSO-07)
@@ -1413,9 +1438,46 @@ killXp = floor(f * sum_i(x_i))
 - **Progress `partial`** (RXP sticky and `#completewith` windows, ARCHITECTURE §10): objective time
   is `durationOverride ?? 0` s ("incidental"), kill XP is 0, and no objective is marked. Travel and
   interaction are still charged. The finishing step carries the whole work of its targets.
-- **Turn-in with unfinished objectives** (never scheduled, or only `partial` steps): the objectives
-  are assumed completed incidentally. They are marked done at 0 s and 0 kill XP, and the turn-in
-  emits `VAL030-objectives-incidental` (warning), not an error. Quest XP is granted as usual.
+- **Turn-in with unfinished objectives** (never scheduled, or only `partial` steps), **of a quest
+  an `accept` step of the route put in the log** (D-040): the turn-in carries their work.
+  - Each open objective is priced by TIME-9 as a `complete` step without a location at the
+    turn-in: `P` is the level at the start of the turn-in step, the kill place is the open world
+    (KXP-5), and an item's drop NPC is the lowest id. Where the work was done is not known; the
+    turn-in's place is not it. So the carried work equals that of an explicit `complete` step
+    without a location just before the turn-in.
+  - The open objectives are combined as one multi-target `complete` (TIME-10: the overlap, and
+    kill XP scaled by `f`).
+  - The seconds go to the turn-in's `breakdown.objective`. The kill XP is granted by XP-2 before
+    the quest XP, as a `complete` step just before the turn-in would grant it, so the quest XP (and
+    LINT-4) uses the level after it. The step's `xpGained` is the kill XP plus the quest XP, and is
+    unknown when the quest XP is unknown. The known kill XP is still granted, and the route's known
+    XP total counts it, as TIME-13 keeps a step's known seconds.
+  - The objectives are marked done, and the turn-in emits `VAL030-objectives-carried` (warning).
+    The fact's `time` says whether the turn-in's time counts the work (`counted`), a duration
+    override stands in for it (`overridden`) or it is unknown (`unknown`); the warning and the
+    UI say which.
+  - Basis `assumption`, as for `complete` steps. An objective whose time TIME-9 cannot estimate
+    leaves the turn-in's time unknown with `SIM015-time-unknown` (TIME-13), and its kill XP is taken
+    over the known work with `f = 1`.
+  - **Travel to the objectives is not priced.** The route's time is short by that travel, which
+    the warning says; a `complete` step at the objectives' location prices it.
+  - `partial` steps still cost only their override; the carried work lands on the turn-in once.
+  - A `durationOverride` on the turn-in replaces the carried time with the rest of the step's own
+    work (TIME-8) and drops SIM-15 for it. The kill XP is still granted (TIME-9), and the warning
+    stays.
+- **Turn-in with unfinished objectives of any other quest**, that is one in the log before the route
+  (`priorQuestLog`, including one the route accepts again while it is still in the log, VAL-1) or
+  assumed to be (`priorHistory: 'unknown'`): its progress is unknown, so the objectives are assumed
+  completed incidentally. They are marked done at 0 s and 0 kill XP, and the turn-in emits
+  `VAL030-objectives-incidental` (warning), not an error. Quest XP is granted as usual. A pre-route
+  quest abandoned and accepted again in the route is the route's own, so its work is carried.
+- Not carried either: objectives an earlier `complete` step finished (they are done), `item`
+  objectives whose items a `complete` step collected before the accept (the accept marked them
+  done, TIME-10), and a failed quest (it cannot be turned in, VAL-30). Kill, use and event work done
+  before the accept does not count toward the quest, so the turn-in carries it (for the architect
+  to rule, §1.5).
+- **Superseded (D-040):** revision 2 assumed every unfinished objective completed incidentally at
+  0 s and 0 kill XP, so a route of accepts and turn-ins alone under-counted both time and XP.
 - **Superseded (DSO-07):** the first draft had no multi-target or partial work; every `complete`
   step cost a fixed amount at one place and a turn-in before objectives was an error.
 
@@ -1495,7 +1557,7 @@ killXp = floor(f * sum_i(x_i))
 | 14 | `complete` finish with two targets as in 12 (two quests) | S = 240 + 0.5 x 240 = 360 s; f = 0.75; kill XP 1,140 |
 | 15 | `complete` finish with the targets of 12 and 13 | S = 320 + 0.5 x 240 = 440 s; kill XP floor(1710 x 440 / 560) = 1,343 |
 | 16 | `complete` partial, target as in 12, no override | objective 0 s; kill XP 0; objective not marked |
-| 17 | Turn-in of a quest whose objective has no finish step | `VAL030-objectives-incidental`; objective 0 s; quest XP granted |
+| 17 | Accept, then turn-in, of a quest with one `kill` objective and no finish step (count null, P = 10, M = 10 normal) | **Revised (D-040):** the turn-in carries row 12's work: objective 240 s, kill XP 760 granted before the quest XP; `xpGained` 760 + 850 = 1,610; `VAL030-objectives-carried`. The same turn-in of a quest in `priorQuestLog`: `VAL030-objectives-incidental`; objective 0 s; quest XP granted |
 | 18 | Level 5, 0 XP; turn-in A with unknown XP | xp 0; `unknownXpEvents` 1; `levelAfter` 5 with `levelIsLowerBound`; `SIM001-unknown-xp` |
 | 19 | Then turn-in B (era-seed B 840, Q 10) | +850 (100%, `RoundXPValue`); xp 850 of 2,800 |
 | 20 | Then accept a quest with `requiredLevel` 6 | `VAL004-min-level-uncertain` (warning), not an error |
@@ -1511,6 +1573,11 @@ killXp = floor(f * sum_i(x_i))
 | 30 | Step on an instance map whose entrance is 350 yd away on the current continent, on foot | 350 x 1.25 / 7 = 62.5 s to the entrance, 0 s inside; no SIM-4 |
 | 31 | `priorHistory: 'unknown'`; accept a quest whose `preQuestSingle` quest is not in `C` | `VAL008-prequest-single-unverifiable` (warning); the quest is accepted. With `'listed'`: `VAL008-prequest-single` (error) |
 | 32 | `accept { questId: A, anyOf: [A, B] }` at level 5; A has `requiredLevel` 8, B is acceptable | B is accepted; no issue for A |
+| 33 | Accept, then turn-in, of a quest with the two objectives of row 14 (D-040) | objective S = 360 s; kill XP 1,140; after a `complete` step that finished the first objective, the turn-in carries the second alone: 240 s, 760 |
+| 34 | Row 17's accept and turn-in with `durationOverride` 7 on the turn-in (D-040) | the step's own work is 7 s (travel still computed); kill XP 760 still granted; `VAL030-objectives-carried` with `time` `overridden`, saying the override stands in for the time |
+| 35 | `priorHistory: 'listed'`; `complete` finish of an `item` objective, then accept, then turn-in (D-040 review) | the `complete` step prices the work with `SIM016-complete-not-in-log`; the accept marks the objective done (`objectives-before-accept`); the turn-in carries nothing; route time, XP and final state equal accept, `complete`, turn-in |
+| 36 | As 35 with row 17's `kill` objective | the accept marks nothing; the turn-in carries the kills again (240 s, 760 kill XP) with `VAL030-objectives-carried` (ruled in D-040, §1.5) |
+| 37 | Accept and turn-in of a quest whose item drops from NPC 1 (level 10, no spawn) and NPC 3 (level 14, 10 yd from the finisher), P = 10 | the carried work uses NPC 1, as a `complete` step without a location: 950 kill XP, not 1,140; a turn-in inside an instance carries open-world kill XP |
 
 ---
 
@@ -1550,7 +1617,11 @@ The state is (with its `CharacterState` field, ARCHITECTURE §9.2):
   `abandoned` empty;
 - `C = priorCompletedQuests` and `L = priorQuestLog`. A pre-route log entry starts with no
   objective marked done (ASSUMPTION: its progress is not declared), so a turn-in of it without a
-  `complete` step is the usual `VAL030-objectives-incidental` warning (TIME-11).
+  `complete` step is the usual `VAL030-objectives-incidental` warning (TIME-11). Each log entry
+  records whether an `accept` step of the route made it (`routeAccepted`): only such an entry's
+  turn-in carries objective work (TIME-11, D-040). `itemsBeforeAccept` starts empty: it holds the
+  `item` objectives a `complete` step priced while their quest was not in the log, until the
+  `accept` that marks them done (TIME-10).
 - `character.priorHistory` says how complete those lists are:
   - `fresh`: a new character. The lists are expected to be empty; they are used as given.
   - `listed`: the lists are exactly what happened before the route. Every rule is checked as
@@ -1670,14 +1741,14 @@ Informational fields (no gate):
 
 | ID | Rule | Source |
 |---|---|---|
-| VAL-30 | Turn-in needs `q` in `L` and not failed, at a `finishedBy` NPC or object. There is no level requirement on turn-in. XP uses `P` at that moment (XP-2). **Revision 2 (DSO-07):** objectives not finished by a `complete` step are assumed completed incidentally, a warning and not an error (TIME-11). A turn-in with `skipIfMissing` (RXP negative ID) whose quest is not in `L` is skipped without an issue. **Any-of turn-ins** (`TurnInStep.anyOf`, RXP `.turninmultiple`/`.dailyturnin`): the candidates are `questId` followed by the other `anyOf` ids in list order; the first candidate in `L` and not failed is turned in (its XP, and `rewardIndex` if set); if none is, the step is checked as a single turn-in of `questId` | vmangos RewardQuest; QXP-3 |
+| VAL-30 | Turn-in needs `q` in `L` and not failed, at a `finishedBy` NPC or object. There is no level requirement on turn-in. XP uses `P` at that moment (XP-2). **Revision 2 (DSO-07), D-040:** objectives not finished by a `complete` step are not an error: for a quest an `accept` step of the route put in the log the turn-in carries their work (`VAL030-objectives-carried`, warning), and for a pre-route or assumed quest they are assumed completed incidentally (`VAL030-objectives-incidental`, warning) (TIME-11). A turn-in with `skipIfMissing` (RXP negative ID) whose quest is not in `L` is skipped without an issue. **Any-of turn-ins** (`TurnInStep.anyOf`, RXP `.turninmultiple`/`.dailyturnin`): the candidates are `questId` followed by the other `anyOf` ids in list order; the first candidate in `L` and not failed is turned in (its XP, and `rewardIndex` if set); if none is, the step is checked as a single turn-in of `questId` | vmangos RewardQuest; QXP-3 |
 | VAL-31 | A quest with nil `objectivesText` and no `objectives` is auto-complete and can be turned in immediately | foreverQuestDB.lua key comment ("Auto-complete if nil"); Questie `IsComplete` :1586-1599 |
 | VAL-32 | Abandoning removes `q` from `L`. It can be re-accepted (VAL-1..22). Children of an abandoned parent become unavailable (VAL-10) | Questie QuestLifecycle.lua:160-166 (`CompleteQuest`), 212-218 (`AbandonQuest`) |
 | VAL-33 | Accept order: after accepting `q`, re-evaluate every quest whose `exclusiveTo`, `nextQuestInChain`, `breadcrumbs`, `breadcrumbForQuestId`, `disabledByQuest` or `parentQuest` mentions `q` | derived from VAL-10..18 |
 | LINT-1 | Both `preQuestSingle` and `preQuestGroup` set: data warning. Follow Questie precedence (single wins) | IsDoable :970-972 |
 | LINT-2 | An asymmetric `exclusiveTo`, `parentQuest`/`childQuests` mismatch, or dangling prerequisite ID: data warning | `DATA` (1 mismatch found) |
 | LINT-3 | An accepted quest that is grey (COL) or gives 0 XP: warning ("low value"), not an error. Unknown XP is not 0 and does not trigger it | COL-5 |
-| LINT-4 | A turn-in where `P - Q >= 6`: warning showing the XP lost (QXP-3) | QXP-3 |
+| LINT-4 | A turn-in where `P - Q >= 6`: warning showing the XP lost (QXP-3). `P` is the level the quest XP is taken at: after the kill XP of objective work the turn-in carries (TIME-11, D-040) | QXP-3 |
 
 ### 7.6 Revision 2 adjustments (ARCHITECTURE §9.4; DSO-05, DSO-15, F12)
 
@@ -1803,7 +1874,7 @@ here so the list is complete.
 | VAL-20 | `VAL020-quest-log-full` | error | |
 | VAL-21 | `VAL021-previous-chain-active` | warning | |
 | VAL-22 | `VAL022-needs-event` | info | |
-| VAL-30 | `VAL030-not-in-log` | error | `VAL030-not-in-log-unverifiable` (warning; `priorHistory: 'unknown'` and the route never accepted the quest, 7.6), `VAL030-failed` (error), `VAL030-objectives-incidental` (warning), `VAL030-finisher-mismatch` (warning, `via` not among the finishers) |
+| VAL-30 | `VAL030-not-in-log` | error | `VAL030-not-in-log-unverifiable` (warning; `priorHistory: 'unknown'` and the route never accepted the quest, 7.6), `VAL030-failed` (error), `VAL030-objectives-incidental` (warning), `VAL030-objectives-carried` (warning, D-040: the turn-in carries the time and kill XP of objectives no step finished, without the travel to them; it suggests a `complete` step; `data.time` is `counted`, `overridden` or `unknown`), `VAL030-finisher-mismatch` (warning, `via` not among the finishers) |
 | VAL-31 | (definition only) | | |
 | VAL-32 | `VAL032-not-in-log` | error | `VAL032-not-in-log-unverifiable` (warning; as VAL-30's) |
 | VAL-33 | (engine order, no issue) | | |
@@ -1861,7 +1932,7 @@ objective-kill and grind XP alike (Milestone 6 review).
 | TIME-5, TIME-6 | `taxiModel`, `taxiSpeed`, `taxiDetourFactor`, `taxiSpeedBonusPct`, `flightMasterSeconds`, TravelGraph taxi nodes, local `taxi.local.json` legs (dev/preview only) | `knownFlightPaths` (discover), `location`, `timeSec` | `breakdown.travel`, `breakdown.interaction`; `assumption`; `eraFallback` via `taxiSpeed` |
 | TIME-7 | TravelGraph transports and instance entrance edges, `TransportRef`, `transportWaitSeconds`, `transportRideSeconds` | `location`, `timeSec` | `breakdown.waiting` (wait), `breakdown.travel` (walk and ride); `assumption` |
 | TIME-8 | interaction keys, `durationOverride` | `timeSec` | `breakdown.interaction`; `assumption` |
-| TIME-9..11 | `ObjectiveDef`, counts, objective keys, `objectiveConcurrency` | `questLog` objectives (finish only), `xp`, `level`, `timeSec` | `breakdown.objective`, kill part of `xpGained`; `assumption` |
+| TIME-9..11 | `ObjectiveDef`, counts, objective keys, `objectiveConcurrency`; a log entry's `routeAccepted` (D-040) | `questLog` objectives (finish, an accept's items collected before it, and a turn-in's carried or incidental ones), `itemsBeforeAccept`, `xp`, `level`, `timeSec` | `breakdown.objective`, kill part of `xpGained` (a `complete` step's, or a turn-in's carried work, D-040); `assumption` |
 | TIME-12 | `GrindTarget` (level with offset, or duration), `xpToNextLevel` (offsets), `killSeconds`, `mobLevel`, `xpPerHour`, `grindWarnSeconds` | `level`, `xp`, `unknownXpEvents`, `timeSec` | `breakdown.combat`, `xpGained`, `duration` (an upper bound after unknown XP); SIM-2, SIM-11, SIM-15 |
 | TIME-13 | none | `timeSec` (known parts only) | `duration = { null, 'unknown' }`; later `startSec`/`endSec` are lower bounds |
 | VAL-1..22 | quest record, `questLogCapacity`, profile, `priorHistory`, `AcceptStep.anyOf` | `questLog`, `completed`, `abandoned` via accept, turn-in and abandon; reads `skills`, `reputationDelta`, `knownSpells` | `ValidationIssue` only |
@@ -1890,7 +1961,7 @@ objective-kill and grind XP alike (Milestone 6 review).
 | `grindTarget` | TIME-T rows 21 and 26-29: every offset kind, carry-over past a level, unreachable targets above `maxLevel` |
 | `hearth` | TIME-T rows 8-9; unbound hearth gives SIM-6; moving a bind step changes the later destination |
 | `taxi` | TIME-T rows 5-7 (straight-line default); `TaxiNodeRef` resolution by `npcId`, `taxiNodeId` and `name`, and SIM-8 for no match or several; leg length from a synthetic `taxi.local.json`-shaped fixture (never a real extraction); multi-hop sum over known nodes; transports excluded (`Delay > 0`); `taxiModel: 'auto'` falls back to TIME-5 without the local file or for an uncovered leg; `'straight-line'` ignores the file. **Superseded:** the first draft's "model B on three legs" test (research note R-1) |
-| `objectives` | TIME-T rows 12-17; unknown reputation objective gives SIM-15; already-done target gives SIM-12 |
+| `objectives` | TIME-T rows 12-17 and 33-37; unknown reputation objective gives SIM-15; already-done target gives SIM-12; a turn-in carries open objectives only for a quest the route accepted (not pre-route, assumed or failed ones), priced as an explicit `complete` step without a location (the same drop NPC and kill place) and without its travel; items collected before the accept are not priced again; the known kill XP of a turn-in with unknown quest XP counts in the route's XP; a re-walk from a checkpoint equals a full walk, including one between a `complete` step and the accept that counts its items (D-040) |
 | `validator` | One fixture per VAL-1..22, built from real Forever quest IDs after corrections (e.g. the 5-quest "Sweet Amber" chain 48-53, the 2/23/24 `inGroupWith` triple); Skyborne masks 77, 178, 1; `-unverifiable` variants of VAL-15..19; VAL-22 is info only and never blocks; a repeatable quest accepted twice raises no VAL-2. The data has no record with `requiredSpell` or `availableStartingWith`, so VAL-17 and that part of VAL-18 stay synthetic |
 | `priorHistory` | TIME-T row 31; `priorCompletedQuests` satisfies VAL-8/9; `priorQuestLog` satisfies VAL-10 and lets a turn-in pass VAL-30 (with `VAL030-objectives-incidental`); the four `-unverifiable` warnings with `'unknown'`; errors with `'listed'`; VAL-2 and VAL-12 still fire on listed quests |
 | `anyOf` | TIME-T row 32; an any-of accept where every candidate fails reports `questId`'s errors; an any-of turn-in picks the first candidate in the log |

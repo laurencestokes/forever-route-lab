@@ -31,6 +31,12 @@ export interface QuestLogEntry {
   readonly objectives: ObjectiveProgress[];
   /** Nothing in the route model fails a quest yet, so this stays false (VAL-30 reads it). */
   failed: boolean;
+  /**
+   * Whether an `accept` step of the route put the quest in the log. Only then are its open
+   * objectives known to be open, so a turn-in carries their work (TIME-11, D-040). False for an
+   * entry from `priorQuestLog` or one assumed through an unknown history (their progress is unknown).
+   */
+  readonly routeAccepted: boolean;
 }
 
 /**
@@ -58,6 +64,13 @@ export interface CharacterState {
   abandoned: Set<QuestId>;
   /** Quests an `accept` step of the route has accepted so far (the "never accepted" test of §9.4). */
   acceptedInRoute: Set<QuestId>;
+  /**
+   * `item` objectives (0-based, ascending) a `complete` step priced while their quest was not in
+   * the log (TIME-10, SIM-16): the items are in the bags, so the `accept` that next puts the quest
+   * in the log marks them done, and nothing prices them again (TIME-11, D-040). The accept removes
+   * the entry. The arrays are never mutated; an update replaces them.
+   */
+  itemsBeforeAccept: Map<QuestId, readonly number[]>;
   knownFlightPaths: Set<TaxiNodeKey>;
   hearth: WorldPoint | null;
   /** The zone hint of `hearth`. */
@@ -82,6 +95,7 @@ export interface CharacterState {
 export interface ReadonlyQuestLogEntry {
   readonly objectives: readonly ObjectiveProgress[];
   readonly failed: boolean;
+  readonly routeAccepted: boolean;
 }
 
 /** The read-only view of `CharacterState` given to visitors and callers. */
@@ -99,6 +113,7 @@ export interface ReadonlyCharacterState {
   readonly completed: ReadonlySet<QuestId>;
   readonly abandoned: ReadonlySet<QuestId>;
   readonly acceptedInRoute: ReadonlySet<QuestId>;
+  readonly itemsBeforeAccept: ReadonlyMap<QuestId, readonly number[]>;
   readonly knownFlightPaths: ReadonlySet<TaxiNodeKey>;
   readonly hearth: WorldPoint | null;
   readonly hearthHint: number;
@@ -221,7 +236,7 @@ export interface StepDelta {
    * the route never accepted): the validator's `-unverifiable` cases (ARCHITECTURE §9.4).
    */
   readonly assumedInLog: readonly QuestId[];
-  /** Objectives the step marked done: its work, or a turn-in's incidental completion (TIME-11). */
+  /** Objectives the step marked done: its work, or a turn-in's carried or incidental completion (TIME-11). */
   readonly objectivesDone: readonly ObjectiveMark[];
   readonly flightPathsLearned: readonly TaxiNodeKey[];
   readonly spellsLearned: readonly number[];

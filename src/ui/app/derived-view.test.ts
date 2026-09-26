@@ -3,16 +3,20 @@ import { createEditorStore, fixedClock, insertNote } from '../../app';
 import { type DerivedState, INITIAL_DERIVED_STATE, IDLE_PATHS } from '../../app/derived';
 import { mapTestWorkspace } from '../../app/map-test-helpers';
 import { questDifficultyAt, sequentialIdSource } from '../../app/shell-support';
+import type { QuestId } from '../../domain/ids';
+import type { SimFact } from '../../sim/facts';
 import { buildRouteView, NOT_SIMULATED } from '../app-model';
 import type { StepRowModel } from '../route/rows';
 import { derivedResults, issue, known, readyState, unknownValue } from './derived-test-helpers';
 import { sameResultsView } from './selectors';
 import {
+  carriedWorkSentence,
   COUNTING_LEGS_DETAIL,
   createRowDeriver,
   fractionalLevel,
   mapWords,
   noResultsReason,
+  objectiveWorkSentence,
   routeMetricsView,
   sameRowSource,
   sameSimulationStatus,
@@ -364,9 +368,93 @@ describe('unknown step times say what the walk recorded (UI-16)', () => {
     expect(unknownTimeReason([{ kind: 'position-unknown', cause: 'unresolved' }, { kind: 'unresolved-location' }])).toBe('A place of this step cannot be located');
   });
 
+  it('say when the objective without a time estimate is one a turn-in carries (D-040)', () => {
+    const carried: SimFact = {
+      kind: 'objectives-carried',
+      questId: 104 as QuestId,
+      objectives: [0, 1],
+      time: 'unknown',
+      killXp: known(760, 'assumption', true),
+      level: 10,
+      levelBasis: 'assumption',
+      levelEraFallback: true,
+    };
+    const reputation: SimFact = { kind: 'time-unknown', part: 'objective', reason: 'reputation-objective', questId: 104 as QuestId, objective: 1 };
+    expect(unknownTimeReason([reputation, carried])).toBe(
+      'A reputation objective has no time estimate: this turn-in carries its work, because no Complete step finishes objective 2',
+    );
+    expect(unknownTimeReason([reputation])).toBe('A reputation objective has no time estimate');
+    expect(unknownTimeReason([{ ...reputation, questId: 105 as QuestId }, carried])).toBe('A reputation objective has no time estimate');
+  });
+
   it('say that a hearth wait after unknown time is unknown, and keep the generic words for nothing recorded', () => {
     expect(unknownTimeReason([{ kind: 'hearth-cooldown', waitSeconds: 3600, upperBound: true }])).toContain('may still be on cooldown');
     expect(unknownTimeReason([{ kind: 'hearth-cooldown', waitSeconds: 3600, upperBound: false }])).toBe('Part of this step’s time cannot be estimated');
     expect(unknownTimeReason([])).toBe('Part of this step’s time cannot be estimated');
+  });
+});
+
+describe('carried objective work (D-040)', () => {
+  const carried = (objectives: readonly number[], time: 'counted' | 'overridden' | 'unknown' = 'counted'): SimFact => ({
+    kind: 'objectives-carried',
+    questId: 790 as QuestId,
+    objectives,
+    time,
+    killXp: known(0, 'assumption', true),
+    level: 5,
+    levelBasis: 'assumption',
+    levelEraFallback: true,
+  });
+
+  it('says in a sentence what a turn-in’s numbers include, and nothing for other steps', () => {
+    expect(carriedWorkSentence([carried([0])])).toBe(
+      'This turn-in includes the time and kill XP of objective 1, which no Complete step finishes; the travel to that work is not included',
+    );
+    expect(carriedWorkSentence([{ kind: 'pending-leg' }, carried([0, 2])])).toBe(
+      'This turn-in includes the time and kill XP of objectives 1 and 3, which no Complete step finishes; the travel to that work is not included',
+    );
+    expect(carriedWorkSentence([{ kind: 'objectives-incidental', questId: 790 as QuestId, objectives: [0] }])).toBeNull();
+  });
+
+  it('does not claim the time when a duration override stands in for it or it cannot be estimated (review D40-03)', () => {
+    expect(carriedWorkSentence([carried([0], 'overridden')])).toBe(
+      'This turn-in includes the kill XP of objective 1, which no Complete step finishes; the step’s duration override stands in for the time of that work',
+    );
+    expect(carriedWorkSentence([carried([0, 1], 'unknown')])).toBe(
+      'This turn-in includes the kill XP of objectives 1 and 2, which no Complete step finishes; the time of that work cannot be estimated',
+    );
+    // The summary counts only the turn-ins whose time includes the carried work.
+    const results = derivedResults(project, { steps: [{ facts: [carried([0])] }, { facts: [carried([0], 'overridden')] }, { facts: [carried([1], 'unknown')] }] });
+    expect(routeMetricsView(readyState(results), null).notes).toContain(
+      '1 turn-in includes the time and kill XP of objectives no Complete step finishes, but not the travel to them, so the route may take longer.',
+    );
+    const none = derivedResults(project, { steps: [{ facts: [carried([0], 'overridden')] }, { facts: [carried([1], 'unknown')] }] });
+    expect(routeMetricsView(readyState(none), null).notes.some((line) => line.includes('turn-in'))).toBe(false);
+  });
+
+  it('says in Details when an accept counts items collected before it (review D40-01)', () => {
+    expect(objectiveWorkSentence([{ kind: 'objectives-before-accept', questId: 790 as QuestId, objectives: [0] }])).toBe(
+      'Objective 1 counts as soon as the quest is accepted: a Complete step collected its items before this accept',
+    );
+    expect(objectiveWorkSentence([{ kind: 'objectives-before-accept', questId: 790 as QuestId, objectives: [0, 2] }])).toBe(
+      'Objectives 1 and 3 count as soon as the quest is accepted: a Complete step collected their items before this accept',
+    );
+    expect(objectiveWorkSentence([carried([0])])).toBe(carriedWorkSentence([carried([0])]));
+    expect(objectiveWorkSentence([{ kind: 'pending-leg' }])).toBeNull();
+  });
+
+  it('gives Details the sentence, and the summary a note counting the turn-ins that carry work', () => {
+    const results = derivedResults(project, { steps: [{}, { facts: [carried([0])] }, { facts: [carried([1, 2])] }] });
+    const numbers = stepNumbersOf(readyState(results), view, steps[1]?.id ?? null);
+    expect(numbers.kind === 'known' ? numbers.value.objectiveWork : null).toBe(carriedWorkSentence([carried([0])]));
+    const plain = stepNumbersOf(readyState(results), view, steps[0]?.id ?? null);
+    expect(plain.kind === 'known' ? plain.value.objectiveWork : 'missing').toBeNull();
+    const note = '2 turn-ins include the time and kill XP of objectives no Complete step finishes, but not the travel to them, so the route may take longer.';
+    expect(routeMetricsView(readyState(results), null).notes).toContain(note);
+    const one = derivedResults(project, { steps: [{ facts: [carried([0])] }] });
+    expect(routeMetricsView(readyState(one), null).notes).toContain(
+      '1 turn-in includes the time and kill XP of objectives no Complete step finishes, but not the travel to them, so the route may take longer.',
+    );
+    expect(routeMetricsView(readyState(derivedResults(project)), null).notes.some((line) => line.includes('turn-in'))).toBe(false);
   });
 });

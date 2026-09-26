@@ -6,6 +6,7 @@ import { createEditorStore, type DerivedState, type EditorStore, fixedClock, IDL
 import { mapTestWorkspace } from '../app/map-test-helpers';
 import { DerivedStoreProvider } from '../app/react';
 import { sequentialIdSource } from '../app/shell-support';
+import type { QuestId } from '../domain/ids';
 import { App } from './App';
 import { PATHS_PAUSED_MESSAGE, PATHS_RESUMED_MESSAGE } from './app/AppStatusBar';
 import { derivedResults, derivedStoreWith, issue, known, readyState, unknownValue } from './app/derived-test-helpers';
@@ -305,5 +306,31 @@ describe('the validation panel', () => {
     expect(within(section).getByText('Cull needs level 3; the character is level 1.')).toBeTruthy();
     expect(within(section).queryByRole('button')).toBeNull();
     expect(sidePanel().getByText('Duration').closest('div')?.textContent).toContain('8s');
+  });
+
+  it('says in Details what a turn-in’s numbers include when it carries objective work (D-040)', async () => {
+    const s = setup();
+    const turnIn = s.steps[4];
+    if (turnIn === undefined) throw new Error('fixture changed');
+    const { project, revision } = s.store.getState();
+    const carried = {
+      kind: 'objectives-carried',
+      questId: 1 as QuestId,
+      objectives: [0],
+      time: 'counted',
+      killXp: known(760, 'assumption'),
+      level: 2,
+      levelBasis: 'assumption',
+      levelEraFallback: false,
+    } as const;
+    act(() => {
+      s.publish({ results: derivedResults(project, { revision, steps: [{}, {}, {}, {}, { duration: known(243, 'assumption'), xpGained: known(1610, 'assumption'), facts: [carried] }] }) });
+      s.store.select({ kind: 'single', id: turnIn.id });
+    });
+    fireEvent.click(sidePanel().getByRole('tab', { name: /^Details/ }));
+    const term = await sidePanel().findByText('Objective work');
+    expect(term.closest('div')?.textContent).toContain(
+      'This turn-in includes the time and kill XP of objective 1, which no Complete step finishes; the travel to that work is not included.',
+    );
   });
 });

@@ -18,6 +18,7 @@ import { createIssue, questLabel } from './issue';
 export interface TurnInBefore {
   /** Whether `step.questId` was in the log and failed. */
   readonly failed: boolean;
+  /** The level the quest XP is taken at: before the step, or after the objective work it carries (D-040). */
   readonly level: number;
   readonly levelBasis: EstimateBasis;
   readonly levelEraFallback: boolean;
@@ -34,7 +35,8 @@ export function unknownQuestIssues(stepId: StepId, ids: readonly QuestId[], data
 
 /**
  * VAL-30 (with its cases), LINT-4 and DATA002 for a turn-in that ran (not skipped). The
- * incidental objectives (`VAL030-objectives-incidental`) come from the step's facts.
+ * incidental and carried objectives (`VAL030-objectives-incidental`, `VAL030-objectives-carried`)
+ * come from the step's facts.
  */
 export function turnInIssues(
   step: TurnInStep,

@@ -375,7 +375,18 @@ export const ISSUE_CODES = [
     variantOf: 'VAL030-not-in-log',
     params: ['objectives'],
     message: '{quest} is turned in, but no step finishes {objectiveText}; assumed completed along the way.',
-    explanation: 'Objectives that no Complete step finishes are assumed done incidentally, at no time and no kill XP.',
+    explanation:
+      'The quest was in the quest log before the route, or is assumed to have been, so its progress is unknown: objectives that no Complete step finishes are assumed done incidentally, at no time and no kill XP.',
+  },
+  {
+    code: 'VAL030-objectives-carried',
+    rule: 'VAL-30',
+    severity: 'warning',
+    variantOf: 'VAL030-not-in-log',
+    params: ['objectives', 'time'],
+    message: '{quest} is turned in, but no step finishes {objectiveText}: {workText}. Add a Complete step where the work is done.',
+    explanation:
+      'For a quest accepted in the route, the turn-in carries the work of objectives no Complete step finishes, priced as one Complete step without a location at the level of the turn-in. The travel to that work is not priced, so the route may take longer than its time says.',
   },
   {
     code: 'VAL030-finisher-mismatch',
@@ -639,7 +650,8 @@ export const ISSUE_CODES = [
     variantOf: null,
     params: [],
     message: '{quest} is not in the quest log while this step works on it.',
-    explanation: 'Objective work counts only for a quest in the quest log.',
+    explanation:
+      'Kills, object uses and events count toward a quest only while it is in the quest log, so the quest still needs that work after it is accepted. Items collected now stay in the bags and count when the quest is accepted.',
   },
   {
     code: 'SIM016-complete-not-in-log-unverifiable',

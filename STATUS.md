@@ -190,7 +190,7 @@ _None._
 | OD-3 | Questie/QuestieDB publish no licence; Questie's draft says "all rights reserved" | Build, commit **and publish** with prominent notices; owner accepts the risk | decided (D-016) | owner |
 | OD-4 | Is the Forever beta under an NDA? | No; cited client values may appear in docs and tests | decided (D-022) | owner |
 | OD-5 | Commit the 12 DB2-only geometry rows (continents, new zones) | Commit | decided (D-018) | owner |
-| OD-6 | Commit taxi-derived leg timings (TaxiNodes/TaxiPath)? | **Pending.** Default: local-only; clean deploys use straight-line × detour / 32 yd/s | pending | ARCH §19 item 3, D-022 |
+| OD-6 | Commit taxi-derived leg timings (TaxiNodes/TaxiPath)? | Commit the client taxi graph: nodes, edges, path lengths, 25 yd shapes and transport stops, with a NOTICE | decided (D-039 B) | owner |
 | OD-7 | Ship item-start facts that come only from QuestieDB's Wowhead-generated `itemStartFixes`? | **Pending.** Default: shipped, origin noted in the manifest and NOTICE | pending | DATA_PROVENANCE §3.3 |
 | OD-8 | Archive the pinned upstream QuestieDB inputs with each release? | **Pending.** Default: not archived (the pinned commit is public) | pending | DATA_PROVENANCE §3.3 |
 | OD-9 | Contact the Questie team about licensing permission? | Owner's call; not required by D-016 | open | D-016 |
@@ -202,6 +202,15 @@ _None._
 | OD-15 | Elevator/lift connectors | Owner's in-game observations (cited); interim straight-line fallback plus warning | decided (D-031) | owner |
 | OD-16 | Terrain map byproducts (coastlines, zone outlines, low-res relief) | Commit and deploy with notices | decided (D-032) | owner |
 | OD-17 | In-game calibration set (walked legs) | Not now; estimates stay labelled mesh-derived | deferred (D-031) | owner |
+| OD-18 | Blizzard interface icons on the map? | No: our own glyphs | decided (D-039 A) | owner |
+| OD-19 | Commit zone faction and sanctuary from the client? | Commit; optional hatching overlay, off by default | decided (D-039 C) | owner |
+| OD-20 | Commit client zone level proxies (exploration levels)? | Not committed; zone spans derived from the dataset | architect default (D-039 D) | architect |
+| OD-21 | Commit dungeon tuning levels (LFGDungeons → ContentTuning)? | Commit; labelled "LFG tuning level (client), meaning unverified" | decided (D-039 E) | owner |
+| OD-22 | Show raids with no dungeon-finder row (AQ20, AQ40, Naxxramas)? | Hidden by default | architect default (D-039 F) | architect |
+| OD-23 | Base-map look | Blizzard's painted art, composed seamlessly; tint only as a fallback | decided (D-041 H) | owner |
+| OD-24 | Quest-mark colour | Difficulty colour at the selected step, with pips, from 11 px | decided (D-041 G) | owner |
+| OD-25 | Wowhead link in the quest pop-up | Yes, marked external | decided (D-041 J) | owner |
+| OD-26 | Graveyards on the map | Not now (no sourced table) | architect default (D-041 I) | architect |
 
 ## Open questions (research)
 

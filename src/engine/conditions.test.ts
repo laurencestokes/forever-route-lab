@@ -173,10 +173,11 @@ describe('skip predicates (RXP.md §12.2, §14 row 5)', () => {
       unknownXpEvents: 0,
       xpBasis: 'source',
       xpEraFallback: false,
-      questLog: new Map([[questId(1), { objectives: ['open'], failed: false }]]),
+      questLog: new Map([[questId(1), { objectives: ['open'], failed: false, routeAccepted: true }]]),
       completed: new Set([questId(2)]),
       abandoned: new Set(),
       acceptedInRoute: new Set([questId(1)]),
+      itemsBeforeAccept: new Map(),
       knownFlightPaths: new Set(),
       hearth: null,
       hearthHint: 0,
@@ -207,7 +208,7 @@ describe('skip predicates (RXP.md §12.2, §14 row 5)', () => {
     expect(run(quest('turnedIn', [2, 4]))).toBe('true');
     expect(run(quest('turnedIn', [2, 4], false, 'all'))).toBe('false');
     const done = base();
-    done.questLog.set(questId(1), { objectives: ['done'], failed: false });
+    done.questLog.set(questId(1), { objectives: ['done'], failed: false, routeAccepted: true });
     expect(run(quest('complete', [1]), done)).toBe('true');
   });
 

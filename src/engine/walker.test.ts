@@ -310,11 +310,22 @@ describe('quest steps, XP and objective work (TIME-8..TIME-11, XP-4)', () => {
     expect(record(result, 4).delta.objectivesDone).toEqual([]);
   });
 
-  it('TIME-T 17: a turn-in with unfinished objectives assumes them completed incidentally', () => {
-    const result = walk([makeAcceptStep(ids, { questId: q(103) }), makeTurnInStep(ids, { questId: q(103), rewardIndex: 2 })]);
+  it('TIME-T 17 (D-040): a turn-in carries the work of objectives no step finishes', () => {
+    const result = walk([makeAcceptStep(ids, { questId: q(103) }), makeTurnInStep(ids, { questId: q(103), rewardIndex: 2 })], { character: { startLevel: 10 } });
     const turnIn = record(result, 1);
-    expect(turnIn.estimate.facts).toContainEqual({ kind: 'objectives-incidental', questId: q(103), objectives: [0, 1] });
+    expect(turnIn.estimate.facts).toContainEqual({
+      kind: 'objectives-carried',
+      questId: q(103),
+      objectives: [0, 1],
+      time: 'counted',
+      killXp: { value: 1140, basis: 'assumption', eraFallback: true },
+      level: 10,
+      levelBasis: 'assumption',
+      levelEraFallback: true,
+    });
     expect(turnIn.estimate.breakdown.interaction).toBe(5);
+    expect(turnIn.estimate.breakdown.objective).toBe(360);
+    expect(turnIn.estimate.xpGained.value).toBe(1140 + 850);
     expect(turnIn.delta.turnedIn).toBe(q(103));
     expect(result.final.reputationDelta.get(76)).toBe(250);
   });

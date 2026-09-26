@@ -9,9 +9,10 @@ import { countText, createIssue, durationText, listText, type QuestNames, questL
 /**
  * Simulation facts to issues (docs/SIMULATION.md §7.7; D-037: `src/sim` and the engine record
  * facts, only `src/validate` owns codes). Each `SimFact` kind maps to one SIM code, or to
- * `VAL030-objectives-incidental`; `pending-leg` is counted into the route-level SIM-22, and
- * `mob-level-assumed` (KXP-4) and `position-unknown` (TIME-2) are not issues. The travel warnings of one step (SIM-17..21) are
- * merged per kind, so a step that walks several legs through the same passage says so once.
+ * `VAL030-objectives-incidental` or `VAL030-objectives-carried` (TIME-11, D-040); `pending-leg` is
+ * counted into the route-level SIM-22, and `mob-level-assumed` (KXP-4) and `position-unknown`
+ * (TIME-2) are not issues. The travel warnings of one step (SIM-17..21) are merged per kind, so a
+ * step that walks several legs through the same passage says so once.
  */
 
 const END_TEXT = { from: 'departure', to: 'destination' } as const;
@@ -198,7 +199,16 @@ export function factIssues(stepId: StepId, facts: readonly SimFact[], state: Rea
         out.push(
           createIssue('VAL030-objectives-incidental', stepId, fact.questId, { objectives: fact.objectives.join(',') }, {
             quest: questLabel(names, fact.questId),
-            objectiveText: `${fact.objectives.length === 1 ? 'objective' : 'objectives'} ${listNumbers(fact.objectives)}`,
+            objectiveText: objectiveText(fact.objectives),
+          }),
+        );
+        break;
+      case 'objectives-carried':
+        out.push(
+          createIssue('VAL030-objectives-carried', stepId, fact.questId, { objectives: fact.objectives.join(','), time: fact.time }, {
+            quest: questLabel(names, fact.questId),
+            objectiveText: objectiveText(fact.objectives),
+            workText: CARRIED_WORK_TEXT[fact.time],
           }),
         );
         break;
@@ -208,6 +218,7 @@ export function factIssues(stepId: StepId, facts: readonly SimFact[], state: Rea
       case 'pending-leg':
       case 'mob-level-assumed':
       case 'position-unknown':
+      case 'objectives-before-accept':
         break;
     }
   }
@@ -216,6 +227,16 @@ export function factIssues(stepId: StepId, facts: readonly SimFact[], state: Rea
 
 /** 0-based objective indices as the 1-based numbers RXP and the quest log show. */
 const listNumbers = (indices: readonly number[]): string => listText(indices.map((index) => String(index + 1)));
+
+/** `objective 1`, `objectives 1 and 3`. */
+const objectiveText = (indices: readonly number[]): string => `${indices.length === 1 ? 'objective' : 'objectives'} ${listNumbers(indices)}`;
+
+/** What a turn-in's numbers take from the work it carries (D-040), by the fact's `time`. */
+const CARRIED_WORK_TEXT: Readonly<Record<Extract<SimFact, { readonly kind: 'objectives-carried' }>['time'], string>> = {
+  counted: 'the time and kill XP of that work are added to the turn-in, without the travel to it',
+  overridden: "the kill XP of that work is added to the turn-in, and the step's duration override stands in for its time",
+  unknown: 'the kill XP of that work is added to the turn-in, but its time cannot be estimated',
+};
 
 /** SIM-22: the route-level info while navigation legs are pending (their seconds are the fallback). */
 export function pendingLegsIssue(legs: number, steps: number): ValidationIssue {

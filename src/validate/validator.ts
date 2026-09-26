@@ -21,7 +21,7 @@ import { abandonIssues, completeIssues, type ReducedXpCache, type TurnInBefore, 
  *   and notes what a turn-in's checks need from that state.
  * - `leave` reads the step's record: the candidate the walker chose, the quests it assumed were in
  *   the log (`priorHistory: 'unknown'`), and the simulation facts (SIM-1..21, VAL-30's incidental
- *   objectives).
+ *   and carried objectives).
  * - `end` adds the route-level issues: DATA001 for custom quests that replace dataset quests,
  *   SIM-22 while navigation legs are pending, and SIM-23 for a start XP beyond the start level.
  *
@@ -157,7 +157,16 @@ export function createRouteValidator(context: ValidatorContext): RouteValidator 
           break;
         }
         case 'turnin':
-          if (turnInSeen) turnInIssues(step, delta, turnInBefore, dataset, rules, out, reducedXp);
+          if (turnInSeen) {
+            // D-040: carried kill XP is granted before the quest XP, so LINT-4 reads the level after it.
+            for (const fact of record.estimate.facts) {
+              if (fact.kind !== 'objectives-carried') continue;
+              turnInBefore.level = fact.level;
+              turnInBefore.levelBasis = fact.levelBasis;
+              turnInBefore.levelEraFallback = fact.levelEraFallback;
+            }
+            turnInIssues(step, delta, turnInBefore, dataset, rules, out, reducedXp);
+          }
           break;
         case 'abandon':
           abandonIssues(step, delta, dataset, out);

@@ -8,7 +8,7 @@ import { type EntranceEdge, resolveTaxiNodeRef, type TaxiNodeKey, type TravelGra
 import { initialRiding } from '../sim/travel';
 import { grantXp, xpCurveOf } from '../sim/xp';
 import type { Places } from './places';
-import type { CharacterState, EngineDataset, QuestLogEntry, ReadonlyCharacterState } from './types';
+import type { CharacterState, EngineDataset, QuestLogEntry, ReadonlyCharacterState, ReadonlyQuestLogEntry } from './types';
 
 /**
  * The walker's state (docs/ARCHITECTURE.md §9.2, docs/SIMULATION.md §7.1): the initial state from
@@ -36,12 +36,20 @@ export interface WalkerState {
   readonly memo: WalkMemo;
 }
 
-/** A log entry with every objective of the record open (a pre-route entry's progress is not declared). */
-export function newLogEntry(record: QuestRecord | undefined): QuestLogEntry {
+/**
+ * A log entry with every objective of the record open (a pre-route entry's progress is not
+ * declared). `routeAccepted`: an `accept` step of the route put it there (D-040).
+ */
+export function newLogEntry(record: QuestRecord | undefined, routeAccepted: boolean): QuestLogEntry {
   const count = record?.objectives.length ?? 0;
   const objectives: QuestLogEntry['objectives'] = [];
   for (let i = 0; i < count; i += 1) objectives.push('open');
-  return { objectives, failed: false };
+  return { objectives, failed: false, routeAccepted };
+}
+
+/** A copy of a log entry (checkpoints and clones). */
+function copyEntry(entry: ReadonlyQuestLogEntry): QuestLogEntry {
+  return { objectives: [...entry.objectives], failed: entry.failed, routeAccepted: entry.routeAccepted };
 }
 
 function parseIdKeys(record: Readonly<Record<string, number>> | null): Map<number, number> {
@@ -101,7 +109,7 @@ export function createInitialState(
   const start = character.startLocation === null ? null : context.places.location(character.startLocation);
   const hearth = character.hearthLocation === null ? null : context.places.location(character.hearthLocation);
   const questLog = new Map<QuestId, QuestLogEntry>();
-  for (const questId of character.priorQuestLog) questLog.set(questId, newLogEntry(context.dataset.quest(questId)));
+  for (const questId of character.priorQuestLog) questLog.set(questId, newLogEntry(context.dataset.quest(questId), false));
   const start0 = startLevelAndXp(character, context.rules);
   const state: CharacterState = {
     timeSec: 0,
@@ -117,6 +125,7 @@ export function createInitialState(
     completed: new Set(character.priorCompletedQuests),
     abandoned: new Set(),
     acceptedInRoute: new Set(),
+    itemsBeforeAccept: new Map(),
     knownFlightPaths: knownNodeKeys(character, context.graph),
     hearth: hearth?.point ?? null,
     hearthHint: hearth?.zoneHint ?? 0,
@@ -135,7 +144,7 @@ export function createInitialState(
 /** A deep copy of a character state (log entries included): what a checkpoint keeps. */
 export function cloneState(state: ReadonlyCharacterState): CharacterState {
   const questLog = new Map<QuestId, QuestLogEntry>();
-  for (const [questId, entry] of state.questLog) questLog.set(questId, { objectives: [...entry.objectives], failed: entry.failed });
+  for (const [questId, entry] of state.questLog) questLog.set(questId, copyEntry(entry));
   return {
     timeSec: state.timeSec,
     location: state.location,
@@ -150,6 +159,7 @@ export function cloneState(state: ReadonlyCharacterState): CharacterState {
     completed: new Set(state.completed),
     abandoned: new Set(state.abandoned),
     acceptedInRoute: new Set(state.acceptedInRoute),
+    itemsBeforeAccept: new Map(state.itemsBeforeAccept),
     knownFlightPaths: new Set(state.knownFlightPaths),
     hearth: state.hearth,
     hearthHint: state.hearthHint,
@@ -215,9 +225,9 @@ export function checkpointOf(working: WalkerState): Checkpoint {
   const { state, memo } = working;
   const { completed, abandoned, acceptedInRoute, knownFlightPaths, knownSpells, trainedSkills, ...rest } = state;
   const questLog = new Map<QuestId, QuestLogEntry>();
-  for (const [questId, entry] of state.questLog) questLog.set(questId, { objectives: [...entry.objectives], failed: entry.failed });
+  for (const [questId, entry] of state.questLog) questLog.set(questId, copyEntry(entry));
   return {
-    state: { ...rest, questLog, skills: new Map(state.skills), reputationDelta: new Map(state.reputationDelta) },
+    state: { ...rest, questLog, itemsBeforeAccept: new Map(state.itemsBeforeAccept), skills: new Map(state.skills), reputationDelta: new Map(state.reputationDelta) },
     sizes: {
       completed: completed.size,
       abandoned: abandoned.size,
@@ -241,7 +251,7 @@ export function restoreCheckpoint(checkpoint: Checkpoint, current: WalkerState):
   const { state, sizes } = checkpoint;
   const live = current.state;
   const questLog = new Map<QuestId, QuestLogEntry>();
-  for (const [questId, entry] of state.questLog) questLog.set(questId, { objectives: [...entry.objectives], failed: entry.failed });
+  for (const [questId, entry] of state.questLog) questLog.set(questId, copyEntry(entry));
   return {
     // The property order of createInitialState and cloneState, so every working state has one shape.
     state: {
@@ -258,6 +268,7 @@ export function restoreCheckpoint(checkpoint: Checkpoint, current: WalkerState):
       completed: prefixSet(live.completed, sizes.completed),
       abandoned: prefixSet(live.abandoned, sizes.abandoned),
       acceptedInRoute: prefixSet(live.acceptedInRoute, sizes.acceptedInRoute),
+      itemsBeforeAccept: new Map(state.itemsBeforeAccept),
       knownFlightPaths: prefixSet(live.knownFlightPaths, sizes.knownFlightPaths),
       hearth: state.hearth,
       hearthHint: state.hearthHint,

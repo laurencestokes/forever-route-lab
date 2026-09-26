@@ -56,6 +56,7 @@ describe('fact to issue', () => {
       [{ kind: 'grind-zero-rate' }, 'SIM015-time-unknown'],
       [{ kind: 'complete-not-in-log', questId: q }, 'SIM016-complete-not-in-log'],
       [{ kind: 'objectives-incidental', questId: q, objectives: [0, 2] }, 'VAL030-objectives-incidental'],
+      [{ kind: 'objectives-carried', questId: q, objectives: [0, 2], time: 'counted', killXp: { value: 760, basis: 'assumption', eraFallback: true }, level: 10, levelBasis: 'assumption', levelEraFallback: true }, 'VAL030-objectives-carried'],
       [{ kind: 'travel-warning', warning: { kind: 'no-walking-path' } }, 'SIM017-no-walking-path'],
       [{ kind: 'travel-warning', warning: { kind: 'off-navmesh', end: 'from' } }, 'SIM018-off-navmesh'],
       [{ kind: 'travel-warning', warning: { kind: 'unverified-passage', passages: ['Undercity west tunnel'] } }, 'SIM019-unverified-passage'],
@@ -65,8 +66,15 @@ describe('fact to issue', () => {
     for (const [fact, code] of cases) expect(one(fact).code, fact.kind).toBe(code);
   });
 
-  it('records no issue for pending legs (route-level SIM-22), assumed mob levels (KXP-4) or moves from an unknown position (TIME-2)', () => {
-    expect(issues([{ kind: 'pending-leg' }, { kind: 'mob-level-assumed', npcId: npcId(3098) }, { kind: 'position-unknown', cause: 'start-unset' }])).toEqual([]);
+  it('records no issue for pending legs (route-level SIM-22), assumed mob levels (KXP-4), moves from an unknown position (TIME-2) or items counted at an accept (D-040)', () => {
+    expect(
+      issues([
+        { kind: 'pending-leg' },
+        { kind: 'mob-level-assumed', npcId: npcId(3098) },
+        { kind: 'position-unknown', cause: 'start-unset' },
+        { kind: 'objectives-before-accept', questId: questId(790), objectives: [0] },
+      ]),
+    ).toEqual([]);
   });
 
   it('writes messages and data with explicit nulls', () => {
@@ -100,6 +108,38 @@ describe('fact to issue', () => {
     expect(one({ kind: 'flight-unresolved', end: 'from', reason: 'several-nodes' }).message).toBe("The flight's departure cannot be resolved: several flight nodes match.");
     expect(one({ kind: 'objectives-incidental', questId: questId(790), objectives: [0, 2] }).message).toBe(
       'Sarkoth (790) is turned in, but no step finishes objectives 1 and 3; assumed completed along the way.',
+    );
+    // D-040: the carried work's message says what the turn-in counts, what it does not, and what to add.
+    const carried = (objectives: readonly number[], time: 'counted' | 'overridden' | 'unknown'): SimFact => ({
+      kind: 'objectives-carried',
+      questId: questId(790),
+      objectives,
+      time,
+      killXp: { value: 760, basis: 'assumption', eraFallback: true },
+      level: 10,
+      levelBasis: 'assumption',
+      levelEraFallback: true,
+    });
+    expect(one(carried([0], 'counted'))).toEqual({
+      code: 'VAL030-objectives-carried',
+      severity: 'warning',
+      stepId: STEP,
+      questId: 790,
+      message:
+        'Sarkoth (790) is turned in, but no step finishes objective 1: the time and kill XP of that work are added to the turn-in, without the travel to it. Add a Complete step where the work is done.',
+      data: { objectives: '0', time: 'counted' },
+    });
+    expect(one(carried([0, 1], 'counted')).message).toBe(
+      'Sarkoth (790) is turned in, but no step finishes objectives 1 and 2: the time and kill XP of that work are added to the turn-in, without the travel to it. Add a Complete step where the work is done.',
+    );
+    // Review D40-03: an override stands in for the time, and an unknown time is not claimed as added.
+    expect(one(carried([0], 'overridden'))).toMatchObject({
+      message:
+        "Sarkoth (790) is turned in, but no step finishes objective 1: the kill XP of that work is added to the turn-in, and the step's duration override stands in for its time. Add a Complete step where the work is done.",
+      data: { objectives: '0', time: 'overridden' },
+    });
+    expect(one(carried([0, 1], 'unknown')).message).toBe(
+      'Sarkoth (790) is turned in, but no step finishes objectives 1 and 2: the kill XP of that work is added to the turn-in, but its time cannot be estimated. Add a Complete step where the work is done.',
     );
     expect(one({ kind: 'objective-already-done', questId: questId(5), objective: null }).message).toBe('Quest 5: every objective is already done.');
     const late = one({ kind: 'target-level-late', seconds: 839.6, uncertain: true });

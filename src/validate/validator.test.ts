@@ -16,7 +16,22 @@ import {
   makeVendorStep,
 } from '../domain/step-factory';
 import type { TravelLeg, TravelModel } from '../domain/travel';
-import { at, EASTERN_KINGDOMS, fixtureContext, type FixtureContextOptions, fixtureDataset, fixtureProject, killObjective, npcRecord, point, questRecord, spawnAt, testIds } from '../engine/test-helpers';
+import {
+  at,
+  EASTERN_KINGDOMS,
+  fixtureContext,
+  type FixtureContextOptions,
+  fixtureDataset,
+  fixtureProject,
+  itemObjective,
+  itemRecord,
+  killObjective,
+  npcRecord,
+  point,
+  questRecord,
+  spawnAt,
+  testIds,
+} from '../engine/test-helpers';
 import type { EngineContext, StepDelta, WalkProject } from '../engine/types';
 import { createRouteWalker } from '../engine/walker';
 import { effectiveRules } from '../rules/precedence';
@@ -56,8 +71,11 @@ const DATA = fixtureDataset({
     questRecord(700, { xp: { questLevel: 19, baseXp: 1000, basis: 'era-seed' } }),
     questRecord(701, { minLevel: 22, level: 22, xp: { questLevel: 22, baseXp: 2000, basis: 'era-seed' } }),
     questRecord(702, { minLevel: 15, maxLevel: 20, level: 20, xp: { questLevel: 20, baseXp: 2000, basis: 'era-seed' } }),
+    questRecord(800, { level: 4, xp: { questLevel: 4, baseXp: 400, basis: 'era-seed' }, objectives: [killObjective(2)], starters: [GIVER], finishers: [GIVER] }),
+    questRecord(801, { objectives: [itemObjective(900)], starters: [GIVER], finishers: [GIVER] }),
   ],
-  npcs: [npcRecord(1), npcRecord(10), npcRecord(11)],
+  npcs: [npcRecord(1), npcRecord(2, { minLevel: 9, maxLevel: 9 }), npcRecord(10), npcRecord(11)],
+  items: [itemRecord(900, [1])],
   spawns: { 'npc:10': [spawnAt(point(100))], 'npc:11': [spawnAt(point(200))] },
 });
 
@@ -141,10 +159,55 @@ describe('turn-in (VAL-30, LINT-4)', () => {
     expect(run([turnIn(100, { skipIfMissing: true })])).toEqual([]);
   });
 
-  it('objectives no step finishes are incidental; a finished quest is clean', () => {
-    expect(run([accept(100), turnIn(100)])).toEqual(['1 VAL030-objectives-incidental 100']);
+  it('objectives no step finishes are carried for a quest the route accepted, incidental for a pre-route one; a finished quest is clean', () => {
+    expect(run([accept(100), turnIn(100)])).toEqual(['1 VAL030-objectives-carried 100']);
     expect(run([accept(100), complete(100), turnIn(100)])).toEqual([]);
     expect(run([turnIn(100)], { character: { priorQuestLog: [q(100)] } })).toEqual(['0 VAL030-objectives-incidental 100']);
+  });
+
+  it('carried work (D-040): the warning says what the turn-in counts; LINT-4 reads the level after the carried kill XP', () => {
+    const carried = validate([accept(100), turnIn(100)], { character: { startLevel: 10 } });
+    expect(carried.issues).toEqual([
+      {
+        code: 'VAL030-objectives-carried',
+        severity: 'warning',
+        stepId: carried.walk.records[1]?.step.id,
+        questId: 100,
+        message:
+          'Quest 100 (100) is turned in, but no step finishes objective 1: the time and kill XP of that work are added to the turn-in, without the travel to it. Add a Complete step where the work is done.',
+        data: { objectives: '0', time: 'counted' },
+      },
+    ]);
+    // Level 9, 100 XP short of 10: 8 kills of level-9 mobs (720 XP) level the character up before the
+    // turn-in, so quest 800 (level 4) is turned in 6 levels above its level, as after a Complete step.
+    const need = effectiveRules(FOREVER_BETA).values.xpToNextLevel.value[8] ?? 0;
+    const character = { character: { startLevel: 9, startXp: need - 100 } };
+    const steps = [accept(800), turnIn(800)];
+    const viaTurnIn = validate(steps, character);
+    const viaComplete = validate([accept(800), complete(800), turnIn(800)], character);
+    const lint = (issues: readonly ValidationIssue[]) => issues.find((issue) => issue.code === 'LINT004-xp-reduced');
+    expect(summary(steps, viaTurnIn.issues)).toEqual(['0 LINT003-low-value 800', '1 LINT004-xp-reduced 800', '1 VAL030-objectives-carried 800']);
+    expect(lint(viaTurnIn.issues)?.data).toMatchObject({ level: 10, levelBasis: 'assumption', percent: 80 });
+    expect(lint(viaTurnIn.issues)?.data).toEqual(lint(viaComplete.issues)?.data);
+    expect(viaTurnIn.walk.final).toEqual(viaComplete.walk.final);
+  });
+
+  it('carried work with a duration override says the override stands in for its time (review D40-03)', () => {
+    const steps = [accept(100), turnIn(100, { durationOverride: 7 })];
+    const result = validate(steps, { character: { startLevel: 10 } });
+    expect(summary(steps, result.issues)).toEqual(['1 VAL030-objectives-carried 100']);
+    expect(result.issues[0]).toMatchObject({
+      message:
+        "Quest 100 (100) is turned in, but no step finishes objective 1: the kill XP of that work is added to the turn-in, and the step's duration override stands in for its time. Add a Complete step where the work is done.",
+      data: { objectives: '0', time: 'overridden' },
+    });
+  });
+
+  it('items collected before the accept: SIM016 on that step, and the turn-in carries nothing (review D40-01)', () => {
+    const steps = [complete(801), accept(801), turnIn(801)];
+    expect(run(steps)).toEqual(['0 SIM016-complete-not-in-log 801']);
+    // Kills before the accept do not count toward the quest, so the turn-in still carries them.
+    expect(run([complete(100), accept(100), turnIn(100)])).toEqual(['0 SIM016-complete-not-in-log 100', '2 VAL030-objectives-carried 100']);
   });
 
   it('a turn-in at an entity that is not a finisher is a warning', () => {
