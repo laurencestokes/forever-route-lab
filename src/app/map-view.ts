@@ -6,12 +6,13 @@ import type { EditorStore } from './store';
 
 /**
  * The map's part of the editor's view state (docs/ARCHITECTURE.md §7, §12.1; docs/UI.md §12):
- * which surface is shown, the zoom band, the visible layers and the zone last jumped to.
- * Framework-agnostic, not persisted, never part of undo history.
+ * which surface is shown, the zoom band, the visible layers, whether the route follows walking
+ * paths, and the zone last jumped to. Framework-agnostic, not persisted, never part of undo history.
  *
  * The map adapter reports `surface` and `zoomBand` (the map controller writes them from its
- * events); the layer panel writes `layers`; jump-to-zone writes `zone`, and the controller clears it
- * once the user pans the zone out of view or switches surface. What the pointer is over is not here:
+ * events); the layer panel writes `layers` and `walkingPaths`; jump-to-zone writes `zone`, and the
+ * controller clears it once the user pans the zone out of view or switches surface. What the
+ * pointer is over is not here:
  * it changes on every marker the pointer crosses, and every panel that reads the store would
  * re-render for it, so the map controller keeps it (`MapController.getHover`, M3 review PERF-14).
  * Updates go through `patchMapUi`, which returns the current object when nothing changes, so an
@@ -26,19 +27,29 @@ export interface MapUiState {
   /** Layer visibility, by layer. */
   readonly layers: Readonly<Record<LayerId, boolean>>;
   /**
+   * Whether the route line follows walking paths where the navigation model gives them (MAPS
+   * §7.4). A toggle of the layer panel, not a layer: off, every leg is drawn as a straight line.
+   */
+  readonly walkingPaths: boolean;
+  /**
    * The zone the user last jumped to: its frame is drawn emphasised and its quest points raw at any
    * zoom. Null for none, and again once the zone is panned out of view or the surface changes.
    */
   readonly zone: UiMapId | null;
 }
 
-/** Every layer visible. The proposal layer is empty until proposals exist (Milestone 8). */
-export const DEFAULT_MAP_LAYERS: Readonly<Record<LayerId, boolean>> = Object.fromEntries(LAYER_IDS.map((layer) => [layer, true])) as Record<
-  LayerId,
-  boolean
->;
+/** Layers hidden until the user shows them: the coastline (terrain-navigation.md §13.2 makes it optional; UI.md §12). */
+const HIDDEN_BY_DEFAULT: readonly LayerId[] = ['coastline'];
 
-export const DEFAULT_MAP_UI: MapUiState = { surface: null, zoomBand: null, layers: DEFAULT_MAP_LAYERS, zone: null };
+/**
+ * Every layer visible but the coastline: painted art, relief and zone outlines on (UI.md §12). The
+ * proposal layer is empty until proposals exist (Milestone 8).
+ */
+export const DEFAULT_MAP_LAYERS: Readonly<Record<LayerId, boolean>> = Object.fromEntries(
+  LAYER_IDS.map((layer) => [layer, !HIDDEN_BY_DEFAULT.includes(layer)]),
+) as Record<LayerId, boolean>;
+
+export const DEFAULT_MAP_UI: MapUiState = { surface: null, zoomBand: null, layers: DEFAULT_MAP_LAYERS, walkingPaths: true, zone: null };
 
 const sameLayers = (a: Readonly<Record<LayerId, boolean>>, b: Readonly<Record<LayerId, boolean>>): boolean =>
   a === b || LAYER_IDS.every((layer) => a[layer] === b[layer]);
@@ -49,7 +60,11 @@ export type MapUiPatch = Partial<MapUiState>;
 export function patchMapUi(current: MapUiState, patch: MapUiPatch): MapUiState {
   const next: MapUiState = { ...current, ...patch };
   const unchanged =
-    next.surface === current.surface && next.zoomBand === current.zoomBand && next.zone === current.zone && sameLayers(next.layers, current.layers);
+    next.surface === current.surface &&
+    next.zoomBand === current.zoomBand &&
+    next.zone === current.zone &&
+    next.walkingPaths === current.walkingPaths &&
+    sameLayers(next.layers, current.layers);
   if (unchanged) return current;
   return { ...next, layers: sameLayers(next.layers, current.layers) ? current.layers : next.layers };
 }
@@ -106,4 +121,9 @@ export function setMapLayerVisible(store: EditorStore, layer: LayerId, visible: 
   const current = store.getState().view.map;
   const next = withLayerVisible(current, layer, visible);
   if (next !== current) store.setView({ map: next });
+}
+
+/** Turns walking paths on the route line on or off. */
+export function setMapWalkingPaths(store: EditorStore, on: boolean): void {
+  setMapUi(store, { walkingPaths: on });
 }

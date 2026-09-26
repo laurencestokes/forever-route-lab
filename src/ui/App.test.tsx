@@ -6,7 +6,7 @@ import { staticDatasetSource } from '../app/dataset-source';
 import { createPlaceholderWorkspace, PLACEHOLDER_PROJECT_NAME } from '../app/placeholder-project';
 import { sequentialIdSource } from '../app/shell-support';
 import { App } from './App';
-import { PLACEHOLDER_DATA_NOTICE, SIMULATION_PENDING, UNKNOWN_LEGEND } from './app-model';
+import { ESTIMATE_LEGEND_SPOKEN, NOT_SIMULATED, PLACEHOLDER_DATA_NOTICE } from './app-model';
 import { NO_MAP_FOR_ZONES, NOT_YET } from './app/AppTopBar';
 import { SELECTION_ANNOUNCE_DELAY_MS } from './app/LiveAnnouncer';
 
@@ -52,13 +52,17 @@ const pressInEditor = (key: string, init: KeyboardEventInit = {}) => {
 const isUnavailable = (element: HTMLElement) => element.getAttribute('aria-disabled') === 'true';
 
 describe('App over the Milestone 1 placeholder data (editing behaviour)', () => {
-  it('says plainly that the data is a placeholder, with one visible key to "?"', () => {
+  it('says plainly that the data is a placeholder, with one visible key to the marks on numbers', () => {
     setup();
     const banner = screen.getByRole('note');
     expect(banner.textContent).toContain(PLACEHOLDER_DATA_NOTICE);
-    expect(banner.textContent).toContain(UNKNOWN_LEGEND);
-    expect(within(banner).getByText(UNKNOWN_LEGEND).getAttribute('aria-hidden')).toBe('true');
-    expect(banner.textContent).toContain('A question mark means unknown until simulation arrives in Milestone 6.');
+    const marks = banner.querySelector('.frl-app-banner__marks');
+    expect(marks?.getAttribute('aria-hidden')).toBe('true');
+    expect(marks?.textContent).toContain('? unknown');
+    expect(marks?.querySelector('[data-state="pending"]')).not.toBeNull();
+    expect(banner.textContent).toContain(ESTIMATE_LEGEND_SPOKEN);
+    // The rows' estimate column is a labelled choice beside the key.
+    expect(within(banner).getByRole('combobox', { name: 'Rows show' })).toBeTruthy();
     const status = screen.getByRole('region', { name: 'Route status' });
     expect(status.textContent).toContain('Data placeholder');
     expect(document.querySelector('.frl-topbar')?.textContent).toContain('Placeholder project');
@@ -72,9 +76,10 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
   it('shows unknown derived numbers as unknown, with the reason, never as numbers', () => {
     setup();
     const status = screen.getByRole('region', { name: 'Route status' });
-    expect(within(status).getAllByText(`Unknown: ${SIMULATION_PENDING}`)).toHaveLength(2);
+    // Duration, XP and XP per hour; without a route simulation they say so.
+    expect(within(status).getAllByText(`Unknown: ${NOT_SIMULATED}`)).toHaveLength(3);
     const xp = within(status).getByRole('progressbar', { name: 'Projected level' });
-    expect(xp.getAttribute('aria-valuetext')).toBe(`At least level 1, XP unknown: ${SIMULATION_PENDING}`);
+    expect(xp.getAttribute('aria-valuetext')).toBe(`At least level 1, XP unknown: ${NOT_SIMULATED}`);
     expect(status.textContent).toContain('Not available');
   });
 
@@ -270,10 +275,12 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
     expect(quests()).toHaveLength(1);
   });
 
-  it('says honestly that the quest log and validation arrive in Milestone 6', () => {
+  it('never claims "no issues" before the route is checked; the quest log arrives in Milestone 6', async () => {
     setup();
+    expect(tab(/^Validation/).textContent).toBe('Validation');
     fireEvent.click(tab(/^Validation/));
-    expect(within(sidePanel()).getByText('Validation arrives in Milestone 6')).toBeTruthy();
+    expect(await within(sidePanel()).findByText('Not checked yet')).toBeTruthy();
+    expect(within(sidePanel()).getByText(new RegExp(`^${NOT_SIMULATED}\\. No issues are reported`))).toBeTruthy();
     fireEvent.click(tab(/^Quest log/));
     expect(within(sidePanel()).getByText('The quest log arrives in Milestone 6')).toBeTruthy();
   });

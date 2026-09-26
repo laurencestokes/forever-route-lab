@@ -1,4 +1,5 @@
 import {
+  memo,
   useEffect,
   useId,
   useLayoutEffect,
@@ -12,7 +13,7 @@ import {
 } from 'react';
 import { cx } from '../lib/cx';
 import { GroupRow, StepRow } from './StepRow';
-import { routeRowContext, type RouteRowModel } from './rows';
+import { routeRowContext, type EstimateColumn, type RouteRowModel, type StepRowModel } from './rows';
 import {
   DEFAULT_OVERSCAN,
   ROUTE_ROW_HEIGHT,
@@ -30,6 +31,14 @@ import './RouteList.css';
 
 export interface RouteListProps {
   readonly rows: readonly RouteRowModel[];
+  /**
+   * Fills in a step row's derived values (estimates, pending, issues) as it renders. Only mounted
+   * rows call it, so new derived results cost the rows in view, not the whole route (docs/UI.md
+   * §8); omitted: the rows are drawn as they are.
+   */
+  readonly deriveRow?: ((row: StepRowModel, index: number) => StepRowModel) | undefined;
+  /** Which estimate step rows show in their right-hand column; default the level after the step. */
+  readonly estimateColumn?: EstimateColumn | undefined;
   /** Accessible name of the list, e.g. the route name. */
   readonly label: string;
   /** Index of the active (keyboard focus) row, or null. Controlled: the store owns it. */
@@ -85,6 +94,123 @@ function atIndex(callback: ((index: number) => void) | undefined, index: number)
       };
 }
 
+/** The list's row callbacks, by index: one stable object for the list's lifetime (it calls the latest props). */
+interface RowCallbacks {
+  readonly click: (index: number, event: MouseEvent<HTMLDivElement>) => void;
+  readonly activate: (index: number) => void;
+  readonly hover: (index: number) => void;
+  readonly handleDown: (index: number, event: PointerEvent<HTMLElement>) => void;
+  readonly toggleLock: (index: number) => void;
+  readonly duplicate: (index: number) => void;
+  readonly remove: (index: number) => void;
+}
+
+interface StepRowSlotProps {
+  readonly index: number;
+  readonly id: string;
+  readonly model: StepRowModel;
+  readonly top: number;
+  readonly height: number;
+  readonly selected: boolean;
+  readonly active: boolean;
+  readonly dragging: boolean;
+  readonly posInSet: number | undefined;
+  readonly setSize: number;
+  readonly groupLabel: string | null;
+  readonly estimateColumn: EstimateColumn;
+  readonly readOnly: boolean;
+  readonly canDrag: boolean;
+  readonly hasHover: boolean;
+  readonly hasLock: boolean;
+  readonly hasDuplicate: boolean;
+  readonly hasDelete: boolean;
+  readonly callbacks: RowCallbacks;
+}
+
+/**
+ * One mounted step row, memoised on plain values and the row's model (PERF-11): new derived results
+ * re-render only the rows whose model changed (`deriveRow` hands back the same model for a row whose
+ * numbers did not), and a scroll only the rows that enter the window.
+ */
+const StepRowSlot = memo(function StepRowSlot({
+  index,
+  id,
+  model,
+  top,
+  height,
+  selected,
+  active,
+  dragging,
+  posInSet,
+  setSize,
+  groupLabel,
+  estimateColumn,
+  readOnly,
+  canDrag,
+  hasHover,
+  hasLock,
+  hasDuplicate,
+  hasDelete,
+  callbacks,
+}: StepRowSlotProps) {
+  return (
+    <StepRow
+      id={id}
+      selected={selected}
+      active={active}
+      dragging={dragging}
+      style={{ top, height }}
+      onClick={(event) => {
+        callbacks.click(index, event);
+      }}
+      onDoubleClick={() => {
+        callbacks.activate(index);
+      }}
+      onMouseEnter={
+        hasHover
+          ? () => {
+              callbacks.hover(index);
+            }
+          : undefined
+      }
+      onHandlePointerDown={
+        canDrag
+          ? (event) => {
+              callbacks.handleDown(index, event);
+            }
+          : undefined
+      }
+      posInSet={posInSet}
+      setSize={setSize}
+      groupLabel={groupLabel}
+      model={model}
+      estimateColumn={estimateColumn}
+      readOnly={readOnly}
+      onToggleLock={
+        hasLock
+          ? () => {
+              callbacks.toggleLock(index);
+            }
+          : undefined
+      }
+      onDuplicate={
+        hasDuplicate
+          ? () => {
+              callbacks.duplicate(index);
+            }
+          : undefined
+      }
+      onDelete={
+        hasDelete
+          ? () => {
+              callbacks.remove(index);
+            }
+          : undefined
+      }
+    />
+  );
+});
+
 /**
  * The DOM id of a row, derived from its stable key (not its index), so `aria-activedescendant`
  * changes whenever the active item's identity changes (a delete, an undo, a reorder) and stays on
@@ -101,10 +227,12 @@ export function routeRowDomId(baseId: string, key: string): string {
  *
  * Step rows carry `aria-posinset`/`aria-setsize` among the steps only (so "16." is also "16 of
  * 40"), and a step under a group header says "in group …" in its name; header rows carry no
- * position.
+ * position. Derived values come in through `deriveRow`, asked only for the mounted rows.
  */
 export function RouteList({
   rows,
+  deriveRow,
+  estimateColumn = 'level',
   label,
   activeIndex,
   selectedKeys,
@@ -284,6 +412,39 @@ export function RouteList({
     onSelect(index, selectionModeForClick(event));
   };
 
+  // The rows' callbacks: one object for the list's lifetime, calling the latest props, so the
+  // memoised rows are not re-rendered for new handler identities (PERF-11).
+  const latest = useRef({ onRowClick, onActivate, onHoverIndexChange, beginDrag, onToggleLock, onDuplicate, onDelete });
+  useLayoutEffect(() => {
+    latest.current = { onRowClick, onActivate, onHoverIndexChange, beginDrag, onToggleLock, onDuplicate, onDelete };
+  });
+  const callbacks = useMemo<RowCallbacks>(
+    () => ({
+      click: (index, event) => {
+        latest.current.onRowClick(index, event);
+      },
+      activate: (index) => {
+        latest.current.onActivate?.(index);
+      },
+      hover: (index) => {
+        latest.current.onHoverIndexChange?.(index);
+      },
+      handleDown: (index, event) => {
+        latest.current.beginDrag(index, event);
+      },
+      toggleLock: (index) => {
+        latest.current.onToggleLock?.(index);
+      },
+      duplicate: (index) => {
+        latest.current.onDuplicate?.(index);
+      },
+      remove: (index) => {
+        latest.current.onDelete?.(index);
+      },
+    }),
+    [],
+  );
+
   const view = computeVirtualWindow({ scrollTop, viewportHeight, rowHeight, rowCount, overscan });
   const indices: number[] = [];
   for (let i = view.start; i < view.end; i += 1) indices.push(i);
@@ -322,6 +483,32 @@ export function RouteList({
           {indices.map((index) => {
             const row = rows[index];
             if (row === undefined) return null;
+            if (row.type === 'step') {
+              return (
+                <StepRowSlot
+                  key={row.key}
+                  index={index}
+                  id={routeRowDomId(baseId, row.key)}
+                  model={deriveRow === undefined ? row : deriveRow(row, index)}
+                  top={index * rowHeight}
+                  height={rowHeight}
+                  selected={selectedKeys.has(row.key)}
+                  active={index === activeIndex}
+                  dragging={drag?.from === index}
+                  posInSet={context.stepPosition[index] ?? undefined}
+                  setSize={context.stepCount}
+                  groupLabel={context.groupLabel[index] ?? null}
+                  estimateColumn={estimateColumn}
+                  readOnly={readOnly}
+                  canDrag={canDrag}
+                  hasHover={onHoverIndexChange !== undefined}
+                  hasLock={onToggleLock !== undefined}
+                  hasDuplicate={onDuplicate !== undefined}
+                  hasDelete={onDelete !== undefined}
+                  callbacks={callbacks}
+                />
+              );
+            }
             const frame = {
               id: routeRowDomId(baseId, row.key),
               selected: selectedKeys.has(row.key),
@@ -341,22 +528,7 @@ export function RouteList({
                   }
                 : undefined,
             };
-            return row.type === 'step' ? (
-              <StepRow
-                key={row.key}
-                {...frame}
-                posInSet={context.stepPosition[index] ?? undefined}
-                setSize={context.stepCount}
-                groupLabel={context.groupLabel[index] ?? null}
-                model={row}
-                readOnly={readOnly}
-                onToggleLock={atIndex(onToggleLock, index)}
-                onDuplicate={atIndex(onDuplicate, index)}
-                onDelete={atIndex(onDelete, index)}
-              />
-            ) : (
-              <GroupRow key={row.key} {...frame} model={row} />
-            );
+            return <GroupRow key={row.key} {...frame} model={row} />;
           })}
           {showDropIndicator && (
             <div className="frl-routelist__drop" style={{ top: drag.slot * rowHeight }} aria-hidden="true" />

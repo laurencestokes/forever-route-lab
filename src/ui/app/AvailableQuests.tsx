@@ -204,7 +204,7 @@ export const AvailableQuests = memo(function AvailableQuests({ store, dataset, s
       aside={placeholder ? <PlaceholderTag what="quest data" /> : <span className="frl-num">{`${formatInteger(open.length)} open`}</span>}
     >
       <p className="frl-app-hint">
-        {`Quests open to your ${who} by race and class. Availability at a step (level, prerequisites, quest log) arrives with simulation in Milestone 6. Difficulty is taken at the start level.`}
+        {`Quests open to your ${who} by race and class. This list does not check availability at a step (level, prerequisites, quest log): the Validation tab checks each accept in the route. Difficulty here is taken at the start level.`}
         {onAdd !== undefined && ' The + button adds the quest’s accept, complete and turn-in after the selection, each at the spawn nearest the step before it.'}
       </p>
       {onNewCustomQuest !== undefined && (

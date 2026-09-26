@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sequentialIdSource } from '../domain';
 import { fixedClock } from './clock';
 import { insertNote, renameRoute } from './commands';
-import { EditorStoreProvider, useEditor, useEditorSelector, useEditorStore } from './react';
+import { createDerivedStore, IDLE_PATHS } from './derived';
+import { DerivedStoreProvider, EditorStoreProvider, useDerived, useDerivedSelector, useEditor, useEditorSelector, useEditorStore } from './react';
 import { createEditorStore, type EditorState, type EditorStore } from './store';
 import { notesProject, sid } from './test-helpers';
 
@@ -146,5 +147,45 @@ describe('EditorStoreProvider', () => {
   it('useEditorStore throws outside a provider', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(() => render(<RouteName />)).toThrow(/EditorStoreProvider/);
+  });
+});
+
+describe('useDerived and DerivedStoreProvider', () => {
+  function Status() {
+    const status = useDerivedSelector((s) => s?.status ?? 'no simulation');
+    return <output>{status}</output>;
+  }
+
+  function Paths(props: { readonly store: ReturnType<typeof createDerivedStore>['store']; readonly onRender: () => void }) {
+    const state = useDerived(props.store, (s) => s.paths.state);
+    props.onRender();
+    return <output>{state}</output>;
+  }
+
+  it('re-renders only when the derived slice changes', () => {
+    const handle = createDerivedStore();
+    const onRender = vi.fn();
+    render(<Paths store={handle.store} onRender={onRender} />);
+    expect(screen.getByRole('status').textContent).toBe('idle');
+    act(() => handle.publish({ status: 'ready' }));
+    expect(onRender).toHaveBeenCalledTimes(1);
+    act(() => handle.publish({ paths: { ...IDLE_PATHS, state: 'running' } }));
+    expect(onRender).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('status').textContent).toBe('running');
+  });
+
+  it('reads the provided store, and null outside a provider', () => {
+    const handle = createDerivedStore();
+    const { unmount } = render(
+      <DerivedStoreProvider store={handle.store}>
+        <Status />
+      </DerivedStoreProvider>,
+    );
+    expect(screen.getByRole('status').textContent).toBe('loading');
+    act(() => handle.publish({ status: 'ready' }));
+    expect(screen.getByRole('status').textContent).toBe('ready');
+    unmount();
+    render(<Status />);
+    expect(screen.getByRole('status').textContent).toBe('no simulation');
   });
 });

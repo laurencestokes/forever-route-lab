@@ -124,6 +124,30 @@ describe('useSelectionAnnouncements', () => {
     expect(announce).not.toHaveBeenCalled();
   });
 
+  it('leaves a selection to the command that said its own result, such as choosing an issue (UI-11)', () => {
+    const { project } = createPlaceholderWorkspace({ nowIso: NOW });
+    const store = createEditorStore({ project, ids: sequentialIdSource(1000), clock: fixedClock(NOW) });
+    const announcer = createAnnouncer();
+    const said: string[] = [];
+    announcer.subscribe(() => {
+      said.push(announcer.getMessage());
+    });
+    renderHook(() => {
+      useSelectionAnnouncements(store, announcer);
+    });
+    const [first, second] = store.getState().project.route.steps.map((s) => s.id);
+    if (first === undefined || second === undefined) throw new Error('fixture changed');
+    // As the Validation tab does: select the issue's step, then say what was shown.
+    store.select({ kind: 'single', id: first });
+    announcer.announce('Showing step 1 in the route: error VAL004-min-level.');
+    vi.advanceTimersByTime(SELECTION_ANNOUNCE_DELAY_MS * 2);
+    expect(said).toEqual(['Showing step 1 in the route: error VAL004-min-level.']);
+    // A selection change with nothing said after it is still counted.
+    store.select({ kind: 'set', ids: [first, second] });
+    vi.advanceTimersByTime(SELECTION_ANNOUNCE_DELAY_MS);
+    expect(said.at(-1)).toBe('2 steps selected');
+  });
+
   it('stays quiet when the count does not change', () => {
     const { store, announce, stepIds } = setup();
     store.select({ kind: 'set', ids: stepIds.slice(0, 1) });

@@ -24,6 +24,10 @@ function placeholderStep(i: number): StepRowModel {
     title: `Placeholder step ${String(i + 1)}`,
     detail: null,
     projectedLevel: knownReadout(1 + i / 100),
+    duration: knownReadout(60),
+    xpGained: knownReadout(0),
+    pending: null,
+    assumptions: null,
     quest: kind === 'accept' ? { level: 5, difficulty: 'difficult', uncertain: false, provenance: UNKNOWN_FOREVER_PROVENANCE } : null,
     issues: NO_ISSUES,
     locked: false,
@@ -98,6 +102,34 @@ describe('RouteList virtualisation', () => {
     const first = within(listbox()).getAllByRole('option')[0];
     expect(first?.getAttribute('aria-setsize')).toBe('1000');
     expect(first?.style.top).toBe('0px');
+  });
+
+  it('asks deriveRow only for the mounted rows, and shows the chosen estimate column', () => {
+    const asked: number[] = [];
+    const deriveRow = (row: StepRowModel, index: number): StepRowModel => {
+      asked.push(index);
+      return { ...row, xpGained: knownReadout(100 * (index + 1)), pending: index === 1 ? 'path' : null };
+    };
+    render(
+      <RouteList
+        rows={rows(10_000)}
+        deriveRow={deriveRow}
+        estimateColumn="xp"
+        label="Placeholder route"
+        activeIndex={null}
+        selectedKeys={new Set()}
+        onActiveIndexChange={vi.fn()}
+        onSelect={vi.fn()}
+        overscan={2}
+        initialViewportHeight={VIEWPORT}
+      />,
+    );
+    // 10 visible rows and 2 of overscan: 12 of 10,000 rows derived.
+    expect([...new Set(asked)].sort((a, b) => a - b)).toEqual(Array.from({ length: 12 }, (_, i) => i));
+    const options = within(listbox()).getAllByRole('option');
+    expect(options[0]?.querySelector('.frl-steprow__estimate')?.textContent).toContain('+100');
+    expect(options[1]?.className).toContain('is-pending');
+    expect(options[1]?.getAttribute('aria-label')).toContain('XP gained 200 XP');
   });
 
   it('sizes the canvas for every row and positions rows by index', () => {

@@ -56,7 +56,9 @@ G13 (dist audit) was tested on a tampered `dist/`. It refused:
 ## Open items (tracked in STATUS)
 
 - **Census entries:** 283 of the 298 census review entries are rule-drafted geometry notes, not
-  individual reviews. The architect accepted this for the MVP, and the owner can override it.
+  individual reviews. The architect accepted this for the MVP, and the owner can override it
+  (D-037). An individual review of Zamja's upper floor in Orgrimmar, a §4.5 must-connect place,
+  is still owed.
 - **In-game connectors:** the owner has not yet recorded the Thunder Bluff and Undercity elevators
   or the Rut'theran portal (D-031, D-034).
 - **Unverified passages:** the Undercity tunnel, the Ironforge summit and the Ban'ethil ramp are

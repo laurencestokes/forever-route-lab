@@ -9,9 +9,11 @@ import type {
   ArtInput,
   Emphasis,
   FrameDescriptor,
+  ImageLayerId,
   LayerContent,
   LayerId,
   LayerStats,
+  LegPathCounts,
   LegStyle,
   LineStyle,
   MapDescriptor,
@@ -21,10 +23,15 @@ import type {
   MarkerDescriptor,
   MarkerKind,
   MAX_POLYLINE_VERTICES,
+  OutlineDescriptor,
+  OutlineInput,
   PointGroupInput,
   PointSubject,
   PolylineDescriptor,
+  ReliefInput,
   RouteInput,
+  RouteLeg,
+  RoutePathsInput,
   RouteStepInput,
   SpawnLayerId,
   SpawnLayerInput,
@@ -61,7 +68,11 @@ import type {
  *   `stats.otherSurfaces`.
  * - **Route lines** are split into (world map, style) runs, and long runs into pieces of at most
  *   256 vertices; a world-map change ends the run and puts a transition glyph at both ends; an
- *   unplaceable step breaks the line.
+ *   unplaceable step breaks the line. With walking paths (`RoutePathsInput`), a walked leg follows
+ *   its path, and a leg without one is drawn straight in its own style (pending or fallback); the
+ *   256-vertex pieces and the path cap hold with paths too.
+ * - **Terrain and art** (D-032, D-033): the relief image, painted art images, and the zone
+ *   outlines and coastline as one canvas path each per world map.
  * - **No step numbers.** Route descriptors name steps by id (labels are label keys or number-free
  *   text), so an insert changes only the descriptors next to it; the adapter's label provider
  *   numbers them when a label is shown.
@@ -83,7 +94,10 @@ export interface LodSettings {
    * measure it).
    */
   readonly pathCapPerSurface: number;
-  /** Each layer's share of the cap. The canvas layers (all but `art`) sum to at most `pathCapPerSurface`; `art` caps images. */
+  /**
+   * Each layer's share of the cap. The canvas layers (all but the image layers `relief` and `art`)
+   * sum to at most `pathCapPerSurface`; the image layers cap images.
+   */
   readonly budgets: Readonly<Record<LayerId, number>>;
   /** Spawn layers drawn raw at every zoom (flight masters: a few hundred at most, and useful at continent zoom). */
   readonly rawAtAnyZoom: readonly SpawnLayerId[];
@@ -93,8 +107,13 @@ export const DEFAULT_LOD: LodSettings = {
   zoneZoom: -3.5,
   pathCapPerSurface: 2500,
   budgets: {
+    relief: 1,
     art: 16,
-    'zone-frames': 100,
+    // One path each per world map (terrain-navigation.md §13.2), taken from the zone frames' 100:
+    // a world map has at most about 40 frames.
+    coastline: 1,
+    'zone-outlines': 1,
+    'zone-frames': 98,
     'available-quests': 600,
     objectives: 500,
     'turn-ins': 150,
@@ -115,6 +134,11 @@ export function lodLevelAt(zoom: number, lod: LodSettings = DEFAULT_LOD): LodLev
 
 const isCount = (n: number): boolean => Number.isInteger(n) && n >= 0;
 
+/** `IMAGE_LAYER_IDS` in adapter.ts, which this module may import only types from. */
+const IMAGE_LAYERS: readonly ImageLayerId[] = ['relief', 'art'];
+
+const isImageLayer = (layer: string): boolean => (IMAGE_LAYERS as readonly string[]).includes(layer);
+
 /** Why a `LodSettings` is unusable; empty when it is fine. */
 export function lodProblems(lod: LodSettings): readonly string[] {
   const problems: string[] = [];
@@ -123,7 +147,7 @@ export function lodProblems(lod: LodSettings): readonly string[] {
   let canvas = 0;
   for (const [layer, budget] of Object.entries(lod.budgets)) {
     if (!isCount(budget)) problems.push(`budget of ${layer} must be a non-negative integer`);
-    if (layer !== 'art') canvas += budget;
+    if (!isImageLayer(layer)) canvas += budget;
   }
   if (canvas > lod.pathCapPerSurface) {
     problems.push(`canvas layer budgets sum to ${String(canvas)}, above the cap of ${String(lod.pathCapPerSurface)} paths per surface`);
@@ -248,6 +272,26 @@ function wholeMapRow(geometry: MapGeometry, uiMapId: UiMapId): GeometryAssignmen
   const rows = geometry.maps.get(uiMapId)?.assignments ?? [];
   const [only] = rows;
   return rows.length === 1 && only !== undefined && isFullUiRectangle(only) ? only : null;
+}
+
+/** Zone-level UiMaps (a single full-rectangle row with an AreaID, as zone frames are) by their world map, per geometry. */
+const zoneMapsByGeometry = new WeakMap<MapGeometry, ReadonlyMap<UiMapId, WorldMapId>>();
+
+/**
+ * The UiMaps that name a zone: those drawn as zone frames (one full-rectangle row with AreaID > 0),
+ * with their world map. The world map (Azeroth 947, one row per continent) and the continents
+ * (AreaID 0) are not zones.
+ */
+function zoneMapsOf(geometry: MapGeometry): ReadonlyMap<UiMapId, WorldMapId> {
+  const cached = zoneMapsByGeometry.get(geometry);
+  if (cached !== undefined) return cached;
+  const zones = new Map<UiMapId, WorldMapId>();
+  for (const map of geometry.maps.values()) {
+    const row = wholeMapRow(geometry, map.uiMapId);
+    if (row !== null && row.areaId > 0) zones.set(map.uiMapId, row.mapId);
+  }
+  zoneMapsByGeometry.set(geometry, zones);
+  return zones;
 }
 
 // =============================================================================================
@@ -415,6 +459,8 @@ interface Collected {
   readonly aggregated: number;
   readonly unresolved: ReasonTally;
   readonly otherSurfaces: number;
+  /** The route line with walking paths: its walked legs on this world map by path state. */
+  readonly paths?: LegPathCounts;
 }
 
 type Center = { readonly x: number; readonly y: number } | null;
@@ -511,17 +557,15 @@ function finish(
     kept = candidates.filter((_, index) => keep.has(index));
   }
   const items = kept.map((candidate) => candidate.descriptor);
-  return {
-    items,
-    stats: {
-      drawn: items.length,
-      notDrawn: candidates.length - items.length,
-      aggregated: collected.aggregated,
-      unresolved: collected.unresolved.total,
-      unresolvedBy: collected.unresolved.toRecord(),
-      otherSurfaces: collected.otherSurfaces,
-    },
+  const stats: LayerStats = {
+    drawn: items.length,
+    notDrawn: candidates.length - items.length,
+    aggregated: collected.aggregated,
+    unresolved: collected.unresolved.total,
+    unresolvedBy: collected.unresolved.toRecord(),
+    otherSurfaces: collected.otherSurfaces,
   };
+  return { items, stats: collected.paths === undefined ? stats : { ...stats, paths: collected.paths } };
 }
 
 const byDescriptorId = (a: Candidate, b: Candidate): number => compareStrings(a.descriptor.id, b.descriptor.id);
@@ -658,7 +702,7 @@ const contentOf = (layer: LayerId, collected: Collected, view: MapView, ctx: Lay
 // =============================================================================================
 // Zone frames
 
-function collectZoneFrames(ctx: LayerContext, mapId: WorldMapId, focusZone: UiMapId | null): Collected {
+function collectZoneFrames(ctx: LayerContext, mapId: WorldMapId, focusZone: UiMapId | null, filled: boolean): Collected {
   const surface = ctx.surfaces.find((candidate) => candidate.mapId === mapId);
   const frames: { readonly candidate: Candidate; readonly area: number; readonly uiMapId: UiMapId }[] = [];
   for (const map of ctx.geometry.maps.values()) {
@@ -673,6 +717,7 @@ function collectZoneFrames(ctx: LayerContext, mapId: WorldMapId, focusZone: UiMa
         kind: 'zone',
         label: map.name,
         emphasis: focused ? 'strong' : 'normal',
+        filled,
         ref: { kind: 'zone', uiMapId: map.uiMapId },
       };
       frames.push({ candidate: { descriptor, tier: focused ? 0 : 1, anchor: { kind: 'box', ...bounds } }, area: areaOf(bounds), uiMapId: map.uiMapId });
@@ -689,6 +734,7 @@ function collectZoneFrames(ctx: LayerContext, mapId: WorldMapId, focusZone: UiMa
       kind: 'extent',
       label: null,
       emphasis: 'normal',
+      filled: false,
       ref: { kind: 'surface', mapId },
     };
     candidates.push({ descriptor: extent, tier: 0, anchor: { kind: 'box', ...surface.extent } });
@@ -697,13 +743,22 @@ function collectZoneFrames(ctx: LayerContext, mapId: WorldMapId, focusZone: UiMa
   return { candidates, aggregated: 0, unresolved: new ReasonTally(), otherSurfaces: 0 };
 }
 
-/** Zone frames (outlines with labels) of the view's world map, plus its extent frame. */
-export function buildZoneFrames(ctx: LayerContext, view: MapView, focusZone: UiMapId | null = null): LayerContent {
-  return contentOf('zone-frames', collectZoneFrames(ctx, view.mapId, focusZone), view, ctx);
+/**
+ * Zone frames (outlines with labels) of the view's world map, plus its extent frame. `filled`
+ * false leaves out the zone frames' faint fill (over painted map art).
+ */
+export function buildZoneFrames(ctx: LayerContext, view: MapView, focusZone: UiMapId | null = null, filled = true): LayerContent {
+  return contentOf('zone-frames', collectZoneFrames(ctx, view.mapId, focusZone, filled), view, ctx);
 }
 
 // =============================================================================================
-// Art (local sets only)
+// Art (committed, D-033; or a local set's, D-018)
+
+/** A usable image rectangle: finite edges, not empty. */
+const isImageRect = (b: WorldBounds): boolean =>
+  [b.xMin, b.xMax, b.yMin, b.yMax].every((v) => Number.isFinite(v)) && b.xMax > b.xMin && b.yMax > b.yMin;
+
+const clamp01 = (value: number): number => (Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1);
 
 function collectArt(ctx: LayerContext, art: readonly ArtInput[], mapId: WorldMapId): Collected {
   const unresolved = new ReasonTally();
@@ -713,22 +768,23 @@ function collectArt(ctx: LayerContext, art: readonly ArtInput[], mapId: WorldMap
   for (const entry of [...art].sort((a, b) => a.uiMapId - b.uiMapId)) {
     if (seen.has(entry.uiMapId)) continue;
     seen.add(entry.uiMapId);
-    const row = wholeMapRow(ctx.geometry, entry.uiMapId);
-    if (row === null) {
+    // The manifest's own rectangle when it gives one (committed art), else the UiMap's row.
+    const row = entry.bounds === undefined ? wholeMapRow(ctx.geometry, entry.uiMapId) : null;
+    const bounds = entry.bounds ?? (row === null ? null : rowBounds(row));
+    if (bounds === null || !isImageRect(bounds)) {
       unresolved.add('no-geometry');
       continue;
     }
-    if (row.mapId !== mapId) {
+    if (bounds.mapId !== mapId) {
       otherSurfaces += 1;
       continue;
     }
-    const bounds = rowBounds(row);
     const descriptor: ArtDescriptor = {
       type: 'art',
       id: `art:${String(entry.uiMapId)}`,
-      bounds,
+      bounds: { mapId: bounds.mapId, xMin: bounds.xMin, xMax: bounds.xMax, yMin: bounds.yMin, yMax: bounds.yMax },
       url: entry.url,
-      opacity: Number.isFinite(entry.opacity) ? Math.min(1, Math.max(0, entry.opacity)) : 1,
+      opacity: clamp01(entry.opacity),
       label: ctx.geometry.maps.get(entry.uiMapId)?.name ?? null,
       ref: { kind: 'art', uiMapId: entry.uiMapId },
     };
@@ -742,9 +798,108 @@ function collectArt(ctx: LayerContext, art: readonly ArtInput[], mapId: WorldMap
   return { candidates: chosen.map((entry) => entry.candidate), aggregated: 0, unresolved, otherSurfaces };
 }
 
-/** Local map-art images for the view's world map (never committed or deployed, D-018). */
+/**
+ * Map-art images for the view's world map: the continent image alone where it is given, otherwise
+ * the zone images, largest first. An image with no usable rectangle is counted as not placed.
+ */
 export function buildArt(ctx: LayerContext, art: readonly ArtInput[], view: MapView): LayerContent {
   return contentOf('art', collectArt(ctx, art, view.mapId), view, ctx);
+}
+
+// =============================================================================================
+// Terrain: relief, zone outlines and coastline (D-032; terrain-navigation.md §13.2)
+
+/**
+ * The relief's opacity: a full backdrop where no painted art is drawn (none exists, it is hidden,
+ * or it failed to load), and faint under the art, which covers it where it exists (§13.2).
+ */
+export const RELIEF_OPACITY = { backdrop: 0.85, underArt: 0.4 } as const;
+
+/** The first input on the view's world map; the other world maps' inputs are theirs, not counted as items elsewhere. */
+function collectRelief(relief: readonly ReliefInput[], mapId: WorldMapId, underArt: boolean): Collected {
+  const unresolved = new ReasonTally();
+  const candidates: Candidate[] = [];
+  for (const entry of relief) {
+    if (entry.mapId !== mapId || candidates.length > 0) continue;
+    if (entry.bounds.mapId !== mapId || !isImageRect(entry.bounds)) {
+      unresolved.add('no-geometry');
+      continue;
+    }
+    const descriptor: ArtDescriptor = {
+      type: 'art',
+      id: `relief:${String(mapId)}`,
+      bounds: { mapId, xMin: entry.bounds.xMin, xMax: entry.bounds.xMax, yMin: entry.bounds.yMin, yMax: entry.bounds.yMax },
+      url: entry.url,
+      opacity: underArt ? RELIEF_OPACITY.underArt : RELIEF_OPACITY.backdrop,
+      label: 'Shaded relief',
+      ref: { kind: 'terrain', layer: 'relief', mapId },
+    };
+    candidates.push({ descriptor, tier: 1, anchor: { kind: 'box', ...entry.bounds } });
+  }
+  return { candidates, aggregated: 0, unresolved, otherSurfaces: 0 };
+}
+
+/**
+ * The view's world map's shaded relief image, under every other layer: a backdrop at
+ * `RELIEF_OPACITY.backdrop`, or faint (`underArt`) when painted art is drawn over it.
+ */
+export function buildRelief(ctx: LayerContext, relief: readonly ReliefInput[], view: MapView, underArt = false): LayerContent {
+  return contentOf('relief', collectRelief(relief, view.mapId, underArt), view, ctx);
+}
+
+type OutlineLayerId = 'zone-outlines' | 'coastline';
+
+const OUTLINE_KIND: Readonly<Record<OutlineLayerId, OutlineDescriptor['kind']>> = { 'zone-outlines': 'zones', coastline: 'coast' };
+const OUTLINE_LABEL: Readonly<Record<OutlineLayerId, string>> = { 'zone-outlines': 'Zone outlines', coastline: 'Coastline' };
+
+/** Outline descriptors by input, so an unchanged input keeps its descriptor object (and a rebuild compares nothing). */
+const outlineDescriptors = new WeakMap<OutlineInput, Map<OutlineLayerId, OutlineDescriptor | null>>();
+
+function outlineOf(layer: OutlineLayerId, input: OutlineInput): OutlineDescriptor | null {
+  let byLayer = outlineDescriptors.get(input);
+  if (byLayer === undefined) {
+    byLayer = new Map();
+    outlineDescriptors.set(input, byLayer);
+  }
+  const cached = byLayer.get(layer);
+  if (cached !== undefined) return cached;
+  const mapId = input.mapId;
+  const lines = input.lines.filter((line) => line.length >= 2 && line.every((p) => p.mapId === mapId && Number.isFinite(p.x) && Number.isFinite(p.y)));
+  const descriptor: OutlineDescriptor | null =
+    lines.length === 0
+      ? null
+      : {
+          type: 'outline',
+          id: `outline:${OUTLINE_KIND[layer]}:${String(mapId)}`,
+          mapId,
+          kind: OUTLINE_KIND[layer],
+          lines,
+          label: OUTLINE_LABEL[layer],
+          ref: { kind: 'terrain', layer, mapId },
+        };
+  byLayer.set(layer, descriptor);
+  return descriptor;
+}
+
+/** The first input on the view's world map, as one path (see `collectRelief` on other world maps). */
+function collectOutline(layer: OutlineLayerId, outlines: readonly OutlineInput[], mapId: WorldMapId): Collected {
+  const candidates: Candidate[] = [];
+  for (const input of outlines) {
+    if (input.mapId !== mapId || candidates.length > 0) continue;
+    const descriptor = outlineOf(layer, input);
+    if (descriptor !== null) candidates.push({ descriptor, tier: 1, anchor: boxAnchor(descriptor.lines.flat()) });
+  }
+  return { candidates, aggregated: 0, unresolved: new ReasonTally(), otherSurfaces: 0 };
+}
+
+/** The view's world map's zone outlines (terrain arcs), as one canvas path. */
+export function buildZoneOutlines(ctx: LayerContext, outlines: readonly OutlineInput[], view: MapView): LayerContent {
+  return contentOf('zone-outlines', collectOutline('zone-outlines', outlines, view.mapId), view, ctx);
+}
+
+/** The view's world map's coastline (terrain arcs), as one canvas path. */
+export function buildCoastline(ctx: LayerContext, outlines: readonly OutlineInput[], view: MapView): LayerContent {
+  return contentOf('coastline', collectOutline('coastline', outlines, view.mapId), view, ctx);
 }
 
 // =============================================================================================
@@ -825,6 +980,7 @@ function collectSpawns(
   const raw: Candidate[] = [];
   const buckets = new Map<number, Bucket>();
   const kind = SPAWN_MARKER[layer];
+  const zoneMaps = zoneMapsOf(ctx.geometry);
   for (const group of mergeGroups(input.groups)) {
     const isFocused = group.questIds.some((id) => focusQuests.has(id));
     group.spawns.forEach((spawn, spawnIndex) => {
@@ -839,8 +995,11 @@ function collectSpawns(
       }
       // The zone the user jumped to is drawn raw at any zoom, like a focused quest's points.
       if (aggregate && !isFocused && (rawZone === null || spawn.uiMapId !== rawZone)) {
-        const key = spawn.uiMapId ?? -1;
-        const bucket = buckets.get(key) ?? { uiMapId: spawn.uiMapId, sumX: 0, sumY: 0, count: 0, subjects: new Set<string>() };
+        // By the published hint, when it names a zone on this world map; a point published on the
+        // world map (Azeroth 947) or a continent is in no zone, so it joins the world map's bucket.
+        const zone = spawn.uiMapId !== null && zoneMaps.get(spawn.uiMapId) === mapId ? spawn.uiMapId : null;
+        const key = zone ?? -1;
+        const bucket = buckets.get(key) ?? { uiMapId: zone, sumX: 0, sumY: 0, count: 0, subjects: new Set<string>() };
         bucket.sumX += world.x;
         bucket.sumY += world.y;
         bucket.count += 1;
@@ -917,15 +1076,167 @@ const STYLE_WORDS: Readonly<Record<LineStyle, string>> = {
   transport: 'Transport',
   flight: 'Flight',
   hearth: 'Hearthstone',
+  'route-pending': 'Route (walking path pending)',
+  'route-fallback': 'Route (straight line: no walking path)',
   highlight: 'Selected leg',
   proposal: 'Proposed route',
 };
 
+// ---- Walking paths
+
+/** How one leg is drawn: its line style, the path points between its two step points, and its path state. */
+interface LegDrawing {
+  readonly style: LineStyle;
+  /** Path points between the leg's two step points; empty for a straight leg. */
+  readonly interior: readonly WorldPoint[];
+  /** A walked leg's path state (`LayerStats.paths`); null for a leg that takes no path. */
+  readonly path: keyof LegPathCounts | null;
+}
+
+const NO_POINTS: readonly WorldPoint[] = [];
+
+/** Straight legs by style: shared objects, so a route without paths allocates nothing per leg. */
+const STRAIGHT: Readonly<Record<LineStyle, LegDrawing>> = {
+  route: { style: 'route', interior: NO_POINTS, path: null },
+  transport: { style: 'transport', interior: NO_POINTS, path: null },
+  flight: { style: 'flight', interior: NO_POINTS, path: null },
+  hearth: { style: 'hearth', interior: NO_POINTS, path: null },
+  'route-pending': { style: 'route-pending', interior: NO_POINTS, path: 'pending' },
+  'route-fallback': { style: 'route-fallback', interior: NO_POINTS, path: 'fallback' },
+  highlight: { style: 'highlight', interior: NO_POINTS, path: null },
+  proposal: { style: 'proposal', interior: NO_POINTS, path: null },
+};
+
+/**
+ * A walked leg's drawing by the input of the step it leads into, with what it was computed from:
+ * the step it leaves, the leg style, the paths object, and the provider's answer (the array it
+ * returned, or null while pending or not). A route edit recomputes only the legs it touched; a new
+ * paths object asks every leg again but keeps the drawing of a leg whose answer is the same array
+ * (or null in the same state), so a batch of new paths rebuilds only the pieces it changed (the
+ * memoised builders; the stateless ones use none).
+ */
+type LegCache = WeakMap<
+  RouteStepInput,
+  {
+    readonly from: RouteStepInput;
+    readonly leg: LegStyle;
+    readonly paths: RoutePathsInput;
+    readonly answer: readonly WorldPoint[] | null;
+    readonly drawing: LegDrawing;
+  }
+>;
+
+/**
+ * The points between a leg's two step points along `path`, or null when the path is unusable (no
+ * points, a point off the leg's world map or not finite). A path that starts or ends at the step
+ * points has those ends dropped: the line already has them.
+ */
+function pathInterior(leg: RouteLeg, path: readonly WorldPoint[] | null): readonly WorldPoint[] | null {
+  if (path === null || path.length === 0) return null;
+  const mapId = leg.from.mapId;
+  const points: WorldPoint[] = [];
+  for (const point of path) {
+    if (point.mapId !== mapId || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+    points.push({ mapId, x: point.x, y: point.y });
+  }
+  const first = points[0];
+  if (first !== undefined && first.x === leg.from.x && first.y === leg.from.y) points.shift();
+  const last = points.at(-1);
+  if (last !== undefined && last.x === leg.to.x && last.y === leg.to.y) points.pop();
+  return points;
+}
+
+function askPath(paths: RoutePathsInput, leg: RouteLeg): readonly WorldPoint[] | null {
+  try {
+    return paths.pathOf(leg);
+  } catch {
+    // A failing provider must not break the map: the leg is drawn as a straight-line fallback.
+    return null;
+  }
+}
+
+/**
+ * How the leg from `from` to `to` is drawn. Without paths, or for a leg that is not walked
+ * (transport, flight, hearth, the proposal), it is straight in its own style. A walked leg with
+ * paths follows its path (`route`), or is straight as `route-pending` while paths are still being
+ * computed, else as `route-fallback`. A leg that does not move takes no path.
+ */
+function drawLeg(
+  from: { readonly step: RouteStepInput; readonly point: WorldPoint },
+  to: { readonly step: RouteStepInput; readonly point: WorldPoint },
+  leg: LegStyle,
+  override: LineStyle | null,
+  paths: RoutePathsInput | null,
+  cache: LegCache | null,
+): LegDrawing {
+  if (override !== null) return STRAIGHT[override];
+  if (paths === null || leg !== 'route') return STRAIGHT[leg];
+  if (from.point.x === to.point.x && from.point.y === to.point.y) return STRAIGHT.route;
+  const hit = cache?.get(to.step);
+  const same = hit !== undefined && hit.from === from.step && hit.leg === leg;
+  if (same && hit.paths === paths) return hit.drawing;
+  const query: RouteLeg = { fromStepId: from.step.stepId, toStepId: to.step.stepId, from: from.point, to: to.point };
+  const answer = askPath(paths, query);
+  let drawing: LegDrawing;
+  if (same && answer === hit.answer && (answer !== null || hit.drawing.path === (paths.pending ? 'pending' : 'fallback'))) {
+    drawing = hit.drawing;
+  } else {
+    const interior = pathInterior(query, answer);
+    drawing = interior !== null ? { style: 'route', interior, path: 'along' } : paths.pending ? STRAIGHT['route-pending'] : STRAIGHT['route-fallback'];
+  }
+  cache?.set(to.step, { from: from.step, leg, paths, answer, drawing });
+  return drawing;
+}
+
+/**
+ * The walked legs of a route (`RouteLeg`), in route order: what the route line asks
+ * `RoutePathsInput.pathOf` for. Consecutive placed steps on one world map whose leg is `route`
+ * (not after a flight `take`, not by transport or hearth), leaving out legs that do not move.
+ * A navigation model can compute exactly these.
+ */
+export function routeLegsOf(route: RouteInput): readonly RouteLeg[] {
+  const legs: RouteLeg[] = [];
+  let previous: { readonly step: RouteStepInput; readonly point: WorldPoint } | null = null;
+  let departure: LegStyle | null = null;
+  for (const step of route.steps) {
+    const placement = step.placement;
+    if (placement.kind === 'none') {
+      if (step.departs !== null) departure = step.departs;
+      continue;
+    }
+    if (placement.kind === 'unknown') {
+      previous = null;
+      departure = null;
+      continue;
+    }
+    const point = placement.world;
+    const leg = departure ?? step.arrive;
+    if (previous !== null && previous.point.mapId === point.mapId && leg === 'route' && (previous.point.x !== point.x || previous.point.y !== point.y)) {
+      legs.push({ fromStepId: previous.step.stepId, toStepId: step.stepId, from: previous.point, to: point });
+    }
+    previous = { step, point };
+    departure = step.departs;
+  }
+  return legs;
+}
+
+// ---- Runs
+
+/**
+ * A run of one world map and one line style. Its vertices are the steps' points with each leg's
+ * path points before the step it leads into; they are listed only when a piece is built
+ * (`runVertices`), so an edit that changes no piece builds no vertex list.
+ */
 interface OpenRun {
   readonly mapId: WorldMapId;
   style: LineStyle | null;
-  readonly points: WorldPoint[];
+  /** The steps whose points are vertices, in order, and their points. */
   readonly steps: RouteStepInput[];
+  readonly points: WorldPoint[];
+  /** How the leg into each step is drawn (null for the first step): its path points come just before the step's vertex. */
+  readonly legs: (LegDrawing | null)[];
+  /** The vertex index of each step. */
+  readonly stepVertex: number[];
 }
 
 interface Transition {
@@ -948,25 +1259,73 @@ interface RouteWalk {
   readonly transitions: readonly Transition[];
   readonly departures: readonly Departure[];
   readonly unresolved: ReasonTally;
+  /** Walked legs by path state, per world map (only with paths). */
+  readonly paths: ReadonlyMap<WorldMapId, LegPathCounts>;
+}
+
+function openRun(mapId: WorldMapId, style: LineStyle | null, step: RouteStepInput, point: WorldPoint): OpenRun {
+  return { mapId, style, steps: [step], points: [point], legs: [null], stepVertex: [0] };
+}
+
+/** Appends a leg to a run: its path points, then the step's own point. */
+function extendRun(run: OpenRun, drawing: LegDrawing, step: RouteStepInput, point: WorldPoint): void {
+  run.stepVertex.push((run.stepVertex.at(-1) ?? 0) + drawing.interior.length + 1);
+  run.steps.push(step);
+  run.points.push(point);
+  run.legs.push(drawing);
+}
+
+/** A run's vertex count. */
+const vertexCount = (run: OpenRun): number => (run.stepVertex.at(-1) ?? 0) + 1;
+
+/**
+ * The run's vertices `first` to `last` and the step each stands for: a step's own point its step,
+ * a path point the step its leg leads into (so a hit segment `i` is the leg into `stepIds[i + 1]`).
+ * `from` is the last step whose vertex is at or before `first`.
+ */
+function runVertices(run: OpenRun, first: number, last: number, from: number): { readonly points: WorldPoint[]; readonly stepIds: StepId[] } {
+  const points: WorldPoint[] = [];
+  const stepIds: StepId[] = [];
+  let k = from;
+  for (let v = first; v <= last; v += 1) {
+    while (k + 1 < run.steps.length && (run.stepVertex[k + 1] ?? Infinity) <= v) k += 1;
+    const at = run.stepVertex[k] ?? 0;
+    if (v === at) {
+      const point = run.points[k];
+      const step = run.steps[k];
+      if (point === undefined || step === undefined) break;
+      points.push(point);
+      stepIds.push(step.stepId);
+    } else {
+      const point = run.legs[k + 1]?.interior[v - at - 1];
+      const step = run.steps[k + 1];
+      if (point === undefined || step === undefined) break;
+      points.push(point);
+      stepIds.push(step.stepId);
+    }
+  }
+  return { points, stepIds };
 }
 
 /**
- * Walks the placed steps: consecutive points on one world map with one leg style form a run; a
+ * Walks the placed steps: consecutive points on one world map with one line style form a run; a
  * style change starts a new run at the shared point; a world-map change ends the run and records a
  * transition; an `unknown` placement ends the run and forgets the position (recording a departure
  * when the step leaves by a known means, a hearth). `override` (the proposal) draws every leg in
- * one style.
+ * one style. With `paths`, walked legs follow their paths (`drawLeg`), and a pending or fallback
+ * leg is its own style, so it gets its own run.
  */
-function walkRoute(route: RouteInput, override: LineStyle | null): RouteWalk {
+function walkRoute(route: RouteInput, override: LineStyle | null, paths: RoutePathsInput | null = null, cache: LegCache | null = null): RouteWalk {
   const runs: OpenRun[] = [];
   const transitions: Transition[] = [];
   const departures: Departure[] = [];
   const unresolved = new ReasonTally();
+  const counts = new Map<WorldMapId, { along: number; pending: number; fallback: number }>();
   let run: OpenRun | null = null;
   let previous: { readonly step: RouteStepInput; readonly point: WorldPoint } | null = null;
   let departure: LegStyle | null = null;
   const close = (): void => {
-    if (run !== null && run.points.length >= 2) runs.push(run);
+    if (run !== null && run.steps.length >= 2) runs.push(run);
     run = null;
   };
   for (const step of route.steps) {
@@ -987,27 +1346,35 @@ function walkRoute(route: RouteInput, override: LineStyle | null): RouteWalk {
     const leg = departure ?? step.arrive;
     if (previous === null || run === null) {
       close();
-      run = { mapId: point.mapId, style: null, points: [point], steps: [step] };
+      run = openRun(point.mapId, null, step, point);
     } else if (previous.point.mapId !== point.mapId) {
       close();
       transitions.push({ from: previous.step, fromPoint: previous.point, to: step, toPoint: point, leg });
-      run = { mapId: point.mapId, style: null, points: [point], steps: [step] };
+      run = openRun(point.mapId, null, step, point);
     } else {
-      const style: LineStyle = override ?? leg;
-      if (run.style === null || run.style === style) {
-        run.style = style;
-        run.points.push(point);
-        run.steps.push(step);
-      } else {
-        close();
-        run = { mapId: point.mapId, style, points: [previous.point, point], steps: [previous.step, step] };
+      const drawing = drawLeg(previous, { step, point }, leg, override, paths, cache);
+      if (drawing.path !== null) {
+        const tally = counts.get(point.mapId) ?? { along: 0, pending: 0, fallback: 0 };
+        tally[drawing.path] += 1;
+        counts.set(point.mapId, tally);
       }
+      // A walked leg that does not move draws nothing: inside a run of pending or fallback legs it
+      // keeps the run's style, so the run is not cut at every stationary step (PERF-2 with walking
+      // paths: cut runs made several times the pieces).
+      const stationary = previous.point.x === point.x && previous.point.y === point.y;
+      const style = paths !== null && stationary && drawing.style === 'route' && (run.style === 'route-pending' || run.style === 'route-fallback') ? run.style : drawing.style;
+      if (run.style !== null && run.style !== style) {
+        close();
+        run = openRun(point.mapId, style, previous.step, previous.point);
+      }
+      run.style = style;
+      extendRun(run, drawing, step, point);
     }
     previous = { step, point };
     departure = step.departs;
   }
   close();
-  return { runs, transitions, departures, unresolved };
+  return { runs, transitions, departures, unresolved, paths: counts };
 }
 
 // ---- Pieces of long runs
@@ -1051,36 +1418,148 @@ export function routePieces(
   return pieces;
 }
 
-function collectRouteLine(ctx: LayerContext, route: RouteInput, mapId: WorldMapId, override: 'proposal' | null): Collected {
-  const walk = walkRoute(route, override);
+/** One polyline of a run: an inclusive vertex range, the last step at or before its first vertex, and the base of its id. */
+interface RunPiece {
+  readonly first: number;
+  readonly last: number;
+  readonly from: number;
+  /** The id of the step at its first vertex, or `<step>@<n>` for a piece that starts `n` vertices into the leg into that step. */
+  readonly base: string;
+}
+
+/** The polylines of the steps `a` to `b` of a run (one `routePieces` range). */
+interface StepPiece {
+  readonly a: number;
+  readonly b: number;
+  readonly pieces: readonly RunPiece[];
+}
+
+/**
+ * A run's polylines, each of at most `max` vertices, by step range. The steps are cut into pieces
+ * as without paths (`routePieces`, content-defined boundaries). A piece whose legs' path points
+ * take it over `max` vertices is cut again at the last step that fits, or inside a leg longer than
+ * `max` on its own; an edit therefore re-cuts only the pieces of the steps it touched. Without
+ * path points this is exactly `routePieces`.
+ */
+function runPieces(run: OpenRun, max: number = ROUTE_PIECE_MAX_VERTICES): readonly StepPiece[] {
+  const out: StepPiece[] = [];
+  const stepAt = (index: number): string => run.steps[index]?.stepId ?? '';
+  const vertexOf = (index: number): number => run.stepVertex[index] ?? 0;
+  for (const [a, b] of routePieces(run.steps.map((step) => step.stepId))) {
+    const end = vertexOf(b);
+    let start = vertexOf(a);
+    if (end - start + 1 <= max) {
+      out.push({ a, b, pieces: [{ first: start, last: end, from: a, base: stepAt(a) }] });
+      continue;
+    }
+    const pieces: RunPiece[] = [];
+    // `k`: the last step whose vertex is at or before `start`.
+    let k = a;
+    while (start < end) {
+      const limit = start + max - 1;
+      let cut = end;
+      if (limit < end) {
+        let best = -1;
+        for (let j = k + 1; j <= b && vertexOf(j) <= limit; j += 1) best = j;
+        cut = best > k ? vertexOf(best) : limit;
+      }
+      const base = start === vertexOf(k) ? stepAt(k) : `${stepAt(k + 1)}@${String(start - vertexOf(k))}`;
+      pieces.push({ first: start, last: cut, from: k, base });
+      while (k + 1 <= b && vertexOf(k + 1) <= cut) k += 1;
+      start = cut;
+    }
+    out.push({ a, b, pieces });
+  }
+  return out;
+}
+
+/**
+ * The route line's built polylines by the first step input of their step range, with what they
+ * were built from (memoised builders): a range whose steps and leg drawings are the same objects,
+ * in the same style and with the same ids, keeps its descriptors, so a route edit builds only the
+ * pieces it touched and the rest compare by identity.
+ */
+type PieceCache = WeakMap<
+  RouteStepInput,
+  {
+    readonly mapId: WorldMapId;
+    readonly style: LineStyle;
+    readonly steps: readonly RouteStepInput[];
+    readonly legs: readonly (LegDrawing | null)[];
+    readonly ids: readonly string[];
+    readonly candidates: readonly Candidate[];
+  }
+>;
+
+/** Whether the cached range still describes steps `a` to `b` of `run` (the leg into `a` belongs to the piece before). */
+function sameRange(run: OpenRun, a: number, b: number, steps: readonly RouteStepInput[], legs: readonly (LegDrawing | null)[]): boolean {
+  if (steps.length !== b - a + 1) return false;
+  for (let i = a; i <= b; i += 1) {
+    if (run.steps[i] !== steps[i - a]) return false;
+    if (i > a && run.legs[i] !== legs[i - a]) return false;
+  }
+  return true;
+}
+
+function collectRouteLine(
+  ctx: LayerContext,
+  route: RouteInput,
+  mapId: WorldMapId,
+  override: 'proposal' | null,
+  paths: RoutePathsInput | null = null,
+  cache: LegCache | null = null,
+  pieceCache: PieceCache | null = null,
+): Collected {
+  const walk = walkRoute(route, override, paths, cache);
   const ids = new IdAllocator();
   let otherSurfaces = 0;
   const lines: Candidate[] = [];
   for (const run of walk.runs) {
     const style: LineStyle = run.style ?? override ?? 'route';
-    // Ids are taken on every surface, so a piece keeps its id whichever world map is shown.
-    const pieces = routePieces(run.steps.map((step) => step.stepId)).map(([first, last]) => ({
-      first,
-      last,
-      id: ids.take(`run:${String(run.mapId)}:${style}:${run.steps[first]?.stepId ?? ''}`),
-    }));
-    if (run.mapId !== mapId) {
-      otherSurfaces += 1;
-      continue;
-    }
-    for (const piece of pieces) {
-      const points = run.points.slice(piece.first, piece.last + 1);
-      const descriptor: PolylineDescriptor = {
-        type: 'polyline',
-        id: piece.id,
-        mapId: run.mapId,
-        points,
-        style,
-        emphasis: 'normal',
-        label: STYLE_WORDS[style],
-        ref: { kind: 'run', style, stepIds: run.steps.slice(piece.first, piece.last + 1).map((step) => step.stepId) },
-      };
-      lines.push({ descriptor, tier: 1, anchor: boxAnchor(points) });
+    const onMap = run.mapId === mapId;
+    if (!onMap) otherSurfaces += 1;
+    if (vertexCount(run) < 2) continue;
+    for (const range of runPieces(run)) {
+      // Ids are taken on every surface, so a piece keeps its id whichever world map is shown.
+      const pieceIds = range.pieces.map((piece) => ids.take(`run:${String(run.mapId)}:${style}:${piece.base}`));
+      if (!onMap) continue;
+      const head = run.steps[range.a];
+      const hit = head === undefined ? undefined : pieceCache?.get(head);
+      if (
+        hit !== undefined &&
+        hit.mapId === run.mapId &&
+        hit.style === style &&
+        plainEqual(hit.ids, pieceIds) &&
+        sameRange(run, range.a, range.b, hit.steps, hit.legs)
+      ) {
+        lines.push(...hit.candidates);
+        continue;
+      }
+      const candidates = range.pieces.map((piece, index): Candidate => {
+        const { points, stepIds } = runVertices(run, piece.first, piece.last, piece.from);
+        const descriptor: PolylineDescriptor = {
+          type: 'polyline',
+          id: pieceIds[index] ?? '',
+          mapId: run.mapId,
+          points,
+          style,
+          emphasis: 'normal',
+          label: STYLE_WORDS[style],
+          ref: { kind: 'run', style, stepIds },
+        };
+        return { descriptor, tier: 1, anchor: boxAnchor(points) };
+      });
+      if (head !== undefined && pieceCache !== null) {
+        pieceCache.set(head, {
+          mapId: run.mapId,
+          style,
+          steps: run.steps.slice(range.a, range.b + 1),
+          legs: run.legs.slice(range.a, range.b + 1),
+          ids: pieceIds,
+          candidates,
+        });
+      }
+      lines.push(...candidates);
     }
   }
   const glyphs: Candidate[] = [];
@@ -1144,19 +1623,21 @@ function collectRouteLine(ctx: LayerContext, route: RouteInput, mapId: WorldMapI
     });
     glyphs.push({ descriptor, tier: 1, anchor: pointAnchor(departure.point) });
   }
-  return { candidates: [...lines, ...mergeStacks(glyphs)], aggregated: 0, unresolved: walk.unresolved, otherSurfaces };
+  const collected: Collected = { candidates: [...lines, ...mergeStacks(glyphs)], aggregated: 0, unresolved: walk.unresolved, otherSurfaces };
+  return paths === null ? collected : { ...collected, paths: walk.paths.get(mapId) ?? { along: 0, pending: 0, fallback: 0 } };
 }
 
 /**
  * The route line on the view's world map: one polyline per (world map, style) run, cut into pieces
  * of at most 256 vertices, with transition glyphs at world-map changes and a departure glyph where
- * a hearth without a location leaves.
+ * a hearth without a location leaves. With `paths`, walked legs follow their walking paths, and
+ * legs without one are drawn straight as pending or fallback (`LayerStats.paths` counts them).
  */
-export function buildRouteLine(ctx: LayerContext, route: RouteInput, view: MapView): LayerContent {
-  return contentOf('route-line', collectRouteLine(ctx, route, view.mapId, null), view, ctx);
+export function buildRouteLine(ctx: LayerContext, route: RouteInput, view: MapView, paths: RoutePathsInput | null = null): LayerContent {
+  return contentOf('route-line', collectRouteLine(ctx, route, view.mapId, null, paths), view, ctx);
 }
 
-/** The proposal overlay (ARCHITECTURE §12.5): the proposed route's line in the `proposal` style; empty for null. */
+/** The proposal overlay (ARCHITECTURE §12.5): the proposed route's line in the `proposal` style, never along paths; empty for null. */
 export function buildProposal(ctx: LayerContext, route: RouteInput | null, view: MapView): LayerContent {
   const collected: Collected =
     route === null ? { candidates: [], aggregated: 0, unresolved: new ReasonTally(), otherSurfaces: 0 } : collectRouteLine(ctx, route, view.mapId, 'proposal');
@@ -1352,7 +1833,7 @@ export function buildRouteSteps(ctx: LayerContext, route: RouteInput, view: MapV
  * focused step shows even where the route-steps cap left it out. The active step's items are kept
  * first under the cap. Stacks are merged per kind.
  */
-function collectSelection(route: RouteInput, mapId: WorldMapId, focus: StepFocus): Collected {
+function collectSelection(route: RouteInput, mapId: WorldMapId, focus: StepFocus, paths: RoutePathsInput | null = null, cache: LegCache | null = null): Collected {
   const unresolved = new ReasonTally();
   const inFocus = focusedSteps(focus);
   let otherSurfaces = 0;
@@ -1397,23 +1878,42 @@ function collectSelection(route: RouteInput, mapId: WorldMapId, focus: StepFocus
     });
     marks.push({ descriptor: stepMarker(`focus:${step.stepId}`, step, placement, legUnknown, 'strong'), tier, anchor });
     if (!active) return;
-    // The leg into the active step: back to the previous placed step, unless something unplaceable is in between.
+    // The leg into the active step: back to the previous placed step, unless something unplaceable
+    // is in between. It follows the leg's walking path where the route line does.
+    let departure: LegStyle | null = null;
     for (let i = position - 1; i >= 0; i -= 1) {
       const before = route.steps[i];
-      if (before === undefined || before.placement.kind === 'none') continue;
+      if (before === undefined) continue;
+      if (before.placement.kind === 'none') {
+        // The nearest step without a location that leaves by a special means sets the leg (walkRoute's rule).
+        departure ??= before.departs;
+        continue;
+      }
       if (before.placement.kind === 'unknown' || before.placement.world.mapId !== mapId) break;
-      const points = [before.placement.world, placement.world];
-      const descriptor: PolylineDescriptor = {
-        type: 'polyline',
-        id: `leg:${step.stepId}`,
-        mapId,
-        points,
-        style: 'highlight',
-        emphasis: 'strong',
-        label: STYLE_WORDS.highlight,
-        ref: { kind: 'leg', fromStepId: before.stepId, toStepId: step.stepId },
-      };
-      leg.push({ descriptor, tier: 0, anchor: boxAnchor(points) });
+      const drawing = drawLeg(
+        { step: before, point: before.placement.world },
+        { step, point: placement.world },
+        departure ?? before.departs ?? step.arrive,
+        null,
+        paths,
+        cache,
+      );
+      const points = [before.placement.world, ...drawing.interior, placement.world];
+      const ids = new IdAllocator();
+      for (let first = 0; first < points.length - 1; first += ROUTE_PIECE_MAX_VERTICES - 1) {
+        const piece = points.slice(first, first + ROUTE_PIECE_MAX_VERTICES);
+        const descriptor: PolylineDescriptor = {
+          type: 'polyline',
+          id: ids.take(`leg:${step.stepId}`),
+          mapId,
+          points: piece,
+          style: 'highlight',
+          emphasis: 'strong',
+          label: STYLE_WORDS.highlight,
+          ref: { kind: 'leg', fromStepId: before.stepId, toStepId: step.stepId },
+        };
+        leg.push({ descriptor, tier: 0, anchor: boxAnchor(piece) });
+      }
       break;
     }
   });
@@ -1421,12 +1921,12 @@ function collectSelection(route: RouteInput, mapId: WorldMapId, focus: StepFocus
 }
 
 /**
- * The focused steps: a highlight polyline for the leg into the active step, then a halo and a
- * strong step marker for each selected, hovered and active step (the active step's kept first
- * under the cap).
+ * The focused steps: a highlight polyline for the leg into the active step (along its walking path
+ * where `paths` has one, in pieces of at most 256 vertices), then a halo and a strong step marker
+ * for each selected, hovered and active step (the active step's kept first under the cap).
  */
-export function buildSelection(ctx: LayerContext, route: RouteInput, view: MapView, focus: StepFocus): LayerContent {
-  return contentOf('selection', collectSelection(route, view.mapId, focus), view, ctx);
+export function buildSelection(ctx: LayerContext, route: RouteInput, view: MapView, focus: StepFocus, paths: RoutePathsInput | null = null): LayerContent {
+  return contentOf('selection', collectSelection(route, view.mapId, focus, paths), view, ctx);
 }
 
 // =============================================================================================
@@ -1527,15 +2027,21 @@ export interface MapLayers {
   readonly surfaces: readonly SurfaceInfo[];
   readonly lod: LodSettings;
   lodLevel(zoom: number): LodLevel;
-  zoneFrames(view: MapView, focusZone?: UiMapId | null): LayerContent;
+  /** `filled` false (over painted art) leaves out the zone frames' fill. */
+  zoneFrames(view: MapView, focusZone?: UiMapId | null, filled?: boolean): LayerContent;
   art(art: readonly ArtInput[], view: MapView): LayerContent;
+  /** `underArt`: painted art is drawn over the relief, which is then faint (`RELIEF_OPACITY`). */
+  relief(relief: readonly ReliefInput[], view: MapView, underArt?: boolean): LayerContent;
+  zoneOutlines(outlines: readonly OutlineInput[], view: MapView): LayerContent;
+  coastline(outlines: readonly OutlineInput[], view: MapView): LayerContent;
   /** `rawZone`: the zone the user jumped to (`view.map.zone`), drawn raw at any zoom. */
   spawns(layer: SpawnLayerId, input: SpawnLayerInput, view: MapView, focusQuests?: readonly QuestId[], rawZone?: UiMapId | null): LayerContent;
-  routeLine(route: RouteInput, view: MapView): LayerContent;
+  /** `paths`: walking paths for walked legs (MAPS §7.4), or null to draw every leg straight. */
+  routeLine(route: RouteInput, view: MapView, paths?: RoutePathsInput | null): LayerContent;
   /** The route's step markers. Independent of the focus, which `selection` draws (M3 review PERF-2). */
   routeSteps(route: RouteInput, view: MapView): LayerContent;
   proposal(route: RouteInput | null, view: MapView): LayerContent;
-  selection(route: RouteInput, view: MapView, focus: StepFocus): LayerContent;
+  selection(route: RouteInput, view: MapView, focus: StepFocus, paths?: RoutePathsInput | null): LayerContent;
 }
 
 export interface MapLayersOptions {
@@ -1548,6 +2054,9 @@ export function createMapLayers(options: MapLayersOptions): MapLayers {
   const ctx = layerContextOf(options.geometry, lod);
   const slots = new Map<LayerId, Slot>();
   const stepCandidates = createStepCandidates();
+  // One leg cache for the route line and the selection's leg: both draw the same legs.
+  const legs: LegCache = new WeakMap();
+  const pieces: PieceCache = new WeakMap();
   const slot = (layer: LayerId): Slot => {
     const existing = slots.get(layer);
     if (existing !== undefined) return existing;
@@ -1560,9 +2069,15 @@ export function createMapLayers(options: MapLayersOptions): MapLayers {
     surfaces: ctx.surfaces,
     lod,
     lodLevel: (zoom) => lodLevelAt(zoom, lod),
-    zoneFrames: (view, focusZone = null) =>
-      computeSlot(slot('zone-frames'), 'zone-frames', ctx, [view.mapId, focusZone], () => collectZoneFrames(ctx, view.mapId, focusZone), view),
+    zoneFrames: (view, focusZone = null, filled = true) =>
+      computeSlot(slot('zone-frames'), 'zone-frames', ctx, [view.mapId, focusZone, filled], () => collectZoneFrames(ctx, view.mapId, focusZone, filled), view),
     art: (art, view) => computeSlot(slot('art'), 'art', ctx, [art, view.mapId], () => collectArt(ctx, art, view.mapId), view),
+    relief: (relief, view, underArt = false) =>
+      computeSlot(slot('relief'), 'relief', ctx, [relief, view.mapId, underArt], () => collectRelief(relief, view.mapId, underArt), view),
+    zoneOutlines: (outlines, view) =>
+      computeSlot(slot('zone-outlines'), 'zone-outlines', ctx, [outlines, view.mapId], () => collectOutline('zone-outlines', outlines, view.mapId), view),
+    coastline: (outlines, view) =>
+      computeSlot(slot('coastline'), 'coastline', ctx, [outlines, view.mapId], () => collectOutline('coastline', outlines, view.mapId), view),
     spawns: (layer, input, view, focusQuests = [], rawZone = null) => {
       const aggregate = spawnLayerAggregates(layer, view.zoom, lod);
       const focusKey = questFocusKey(focusQuests);
@@ -1577,8 +2092,8 @@ export function createMapLayers(options: MapLayersOptions): MapLayers {
         view,
       );
     },
-    routeLine: (route, view) =>
-      computeSlot(slot('route-line'), 'route-line', ctx, [route, view.mapId], () => collectRouteLine(ctx, route, view.mapId, null), view),
+    routeLine: (route, view, paths = null) =>
+      computeSlot(slot('route-line'), 'route-line', ctx, [route, view.mapId, paths], () => collectRouteLine(ctx, route, view.mapId, null, paths, legs, pieces), view),
     routeSteps: (route, view) => computeSlot(slot('route-steps'), 'route-steps', ctx, [route, view.mapId], () => collectRouteSteps(route, view.mapId, stepCandidates), view),
     proposal: (route, view) =>
       computeSlot(
@@ -1592,8 +2107,15 @@ export function createMapLayers(options: MapLayersOptions): MapLayers {
             : collectRouteLine(ctx, route, view.mapId, 'proposal'),
         view,
       ),
-    selection: (route, view, focus) =>
-      computeSlot(slot('selection'), 'selection', ctx, [route, view.mapId, stepFocusKey(focus)], () => collectSelection(route, view.mapId, focus), view),
+    selection: (route, view, focus, paths = null) =>
+      computeSlot(
+        slot('selection'),
+        'selection',
+        ctx,
+        [route, view.mapId, stepFocusKey(focus), paths],
+        () => collectSelection(route, view.mapId, focus, paths, legs),
+        view,
+      ),
   };
 }
 
@@ -1633,7 +2155,10 @@ const uniform = (noun: StatsNoun): StatsUnits => ({ items: noun, unplaced: noun,
 
 /** The units of every layer's stats. */
 export const LAYER_STATS_UNITS: Readonly<Record<LayerId, StatsUnits>> = {
+  relief: uniform(['image', 'images']),
   art: uniform(['image', 'images']),
+  coastline: uniform(['outline', 'outlines']),
+  'zone-outlines': uniform(['outline', 'outlines']),
   'zone-frames': uniform(['frame', 'frames']),
   'available-quests': SPAWN_UNITS,
   objectives: SPAWN_UNITS,

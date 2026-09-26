@@ -126,6 +126,32 @@
   stroke-linejoin: round;
 }
 
+.frl-mapglyph__relief {
+  fill: var(--frl-surface-raised);
+  stroke: var(--frl-fg-muted);
+  stroke-width: 1;
+}
+
+.frl-mapglyph__relief-shade {
+  fill: var(--frl-fg-muted);
+  fill-opacity: 0.45;
+  stroke: none;
+}
+
+.frl-mapglyph__zone-outline {
+  fill: none;
+  stroke: var(--frl-map-frame);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.frl-mapglyph__coast {
+  fill: none;
+  stroke: var(--frl-fg-muted);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
 .frl-mapglyph__line {
   fill: none;
   stroke-width: 3;
@@ -134,6 +160,18 @@
 .frl-mapglyph__line.is-route {
   stroke: var(--frl-accent);
   stroke-linecap: round;
+}
+
+.frl-mapglyph__line.is-route-pending {
+  stroke: var(--frl-accent);
+  stroke-width: 2.5;
+  stroke-opacity: 0.6;
+  stroke-dasharray: 2 2;
+}
+
+.frl-mapglyph__line.is-route-fallback {
+  stroke: var(--frl-accent);
+  stroke-dasharray: 5 1.5 1 1.5 1 1.5;
 }
 
 .frl-mapglyph__line.is-transport {

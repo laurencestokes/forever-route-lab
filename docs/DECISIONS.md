@@ -538,3 +538,81 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
   - **PERF-2** stays open. The browser p90 for a 10,000-step move is up to 8.7 ms against 8 ms.
     The Node bench (`tests/bench/map-edit.bench.ts --check`) guards against regression.
 
+
+## D-037: The travel contract lives in `src/domain/travel.ts`; census notes accepted for the MVP gate
+
+- **Date:** 2026-09-26
+- **Travel contract.** `TravelEndpoint`, `TravelSpeeds`, `TravelWarning`, `TravelLeg` and
+  `TravelModel` are hand-written domain types, so the pure modules (engine, simulation, optimiser)
+  and the app's navigation model share one contract without an import between them.
+  - It refines terrain-navigation.md §9.3: `leg()` returns the seconds and also how they were
+    obtained (`navigation`, `same-map-transport` or `straight-line`), whether they are pending,
+    and structured warnings. The simulation passes those through, and the validator turns them
+    into `SIM-` codes. Only `src/validate` owns issue codes.
+  - `legSeconds()` from the first sketch is replaced by `leg().seconds`.
+  - A leg exists only on one world map. Moves between maps go through the `TravelGraph`.
+- **Census gate (D-030).** 283 of the 298 census review entries are notes drafted from explicit
+  geometry rules (`pnpm nav:review-draft`, marked "rule:"). The other 15 are individual reviews.
+  The architect accepts this for the MVP gate, for two reasons:
+  - every entry names its rule and can be re-reviewed individually;
+  - the individually reviewed entries cover the must-connect exceptions (Dustwind Cave, the
+    Burning Blade hilltop), the zone checks, Teldrassil and Darnassus, the Thunder Bluff rises,
+    Rut'theran Village and the Ban'ethil chamber.
+
+  One must-connect place from terrain-navigation.md §4.5 has only a rule-drafted note: Zamja's
+  upper floor in Orgrimmar (195 polygons, 22 spawns, anchor npc 2855). All 22 spawns snap to the
+  main floor below it. The note records the geometry and nothing else, so an individual review of
+  this place is owed. The owner may require individual review of every entry instead.
+
+## D-038: Milestone 6 and 3b.6 implementation choices (architect; the owner may overrule)
+
+- **Date:** 2026-09-26
+- **Context:** the Milestone 6 and 3b.6 build and review ([reviews/review-m6-3b6.md](reviews/review-m6-3b6.md)).
+- **Simulation:**
+  1. QXP-3 erratum: the level cap is checked before a missing XP record, and a lower bound that
+     reaches the effective cap is exact.
+  2. New facts `grind-zero-rate` and `position-unknown` (with its cause).
+  3. New codes `DATA003-unknown-objective`, `SIM005-hearth-cooldown-uncertain` and the route-level
+     `SIM023-start-xp-beyond-level`. SIM-22 is a route-level info.
+  4. TIME-7 erratum: a dock-only transport with no step location raises no SIM-4.
+  5. A hearth wait after unknown time is unknown (`SIM005`), never a definite wait.
+  6. Start XP beyond the start level carries over through XP-2, with a warning.
+  7. `dungeonMobXpMultiplier` applies in raids (INFERRED). An instance of unknown type counts as a
+     dungeon.
+  8. A flight master matches a local taxi node within 50 yd.
+  9. Pure caches are shared per (rules, dataset), so a context change walks a cold walker with warm
+     pure caches.
+  10. The remaining SIMULATION §1.5 clarifications are ratified.
+- **Budget scope (ARCHITECTURE §14):** the 20 ms walk + simulate + validate budget applies to a
+  realistic 10,000-step route. The 10,877-issue stress route keeps a 40 ms ceiling as a regression
+  guard. Benches gate bundled, normalised by a CPU probe.
+- **Derived results:**
+  - They live in their own store beside the editor store.
+  - The pipeline is lazy-loaded.
+  - Results are not "final" while legs are pending or the navigation data is being checked.
+  - One pending reason covers the whole route (checking, computing, retrying, paused, failed).
+  - `cancelPaths` pauses automatic computing until `resumePaths` or `computePaths`. A caller's
+    abort of `computePaths` stops only its own wait.
+- **Navigation runtime:**
+  - Blocks are pinned per search, not per request.
+  - The LRU budget counts typed arrays (100 MB of the 128 MB heap target).
+  - A worker that fails to start (20 s timeout) or crashes turns navigation off everywhere
+    (`worker-failed`).
+  - Fetches time out after 30 s. HTTP 408, 425, 429 and 5xx are retried; 403, 404 and 410 turn
+    the map off.
+  - `internal` errors are retried 3 times per map, and then that map is turned off.
+  - A transport composition stays pending until every dock walk is known.
+  - Navigation legs are `derived` with `eraFallback` false.
+  - A user dock is used only when its transport has exactly one stop on that map.
+- **UI:**
+  - Metrics: time, XP and XP/h sit in the status bar. The level reached and the time shares sit in
+    a Summary disclosure.
+  - One estimate column per row, chosen with "Rows show".
+  - The computing-paths item sits in the status bar, with the status-bar priorities and
+    breakpoints of the fix pass. The bar wraps at 1024 px and below.
+  - Focus stays on the status item when computing ends.
+  - XP/h is `?` when both time and XP are missing.
+  - "Info issue(s)" is the wording for the info severity.
+- **Superseded before commit:** the map specialist's "one art image at a time" rendering stays only
+  until the seamless atlas replaces it (owner feedback, 2026-09-26). Its relief opacity and
+  zone-frame settings will be revisited there.

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AboutDialog, DATA_LICENCE_CARVE_OUT } from './AboutDialog';
+import { AboutDialog, DATA_LICENCE_CARVE_OUT, MAP_ART_NOTICE, TERRAIN_DATA_NOTICE } from './AboutDialog';
 
 afterEach(cleanup);
 
@@ -34,6 +34,28 @@ describe('AboutDialog data notice', () => {
     expect(dialog.textContent).not.toContain('has published a licence file');
     expect(dialog.textContent).not.toContain('placeholder data');
     expect(within(dialog).getByRole('link', { name: 'Full data notice' }).getAttribute('href')).toBe('data/NOTICE.md');
+  });
+});
+
+describe('AboutDialog map art notice (D-033)', () => {
+  it.each([
+    ['placeholder data', null],
+    ['real data', COMMIT],
+  ])('names Blizzard Entertainment as the art’s owner and links the deployed notices with %s', (_, commit) => {
+    render(<AboutDialog open onClose={vi.fn()} version="0.1.0" sourceCommit={null} dataUpstreamCommit={commit} />);
+    const dialog = screen.getByRole('dialog', { name: 'About Forever Route Lab' });
+    const text = dialog.textContent;
+    expect(text).not.toContain('No map art is included');
+    expect(text).toContain(MAP_ART_NOTICE);
+    expect(text).toContain(TERRAIN_DATA_NOTICE);
+    // D-033: owner, non-affiliation, non-commercial, removal on request.
+    expect(MAP_ART_NOTICE).toContain('Blizzard Entertainment’s artwork (© Blizzard Entertainment, Inc.)');
+    expect(MAP_ART_NOTICE).toContain('not affiliated with or endorsed by Blizzard Entertainment');
+    expect(MAP_ART_NOTICE).toContain('non-commercial');
+    expect(MAP_ART_NOTICE).toContain('removed promptly if Blizzard Entertainment asks');
+    expect(within(dialog).getByRole('heading', { name: 'Map art' })).toBeTruthy();
+    expect(within(dialog).getByRole('link', { name: 'Map art notice' }).getAttribute('href')).toBe('maps/art/NOTICE.md');
+    expect(within(dialog).getByRole('link', { name: 'Terrain data notice' }).getAttribute('href')).toBe('maps/terrain/NOTICE.md');
   });
 });
 

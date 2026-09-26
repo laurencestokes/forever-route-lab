@@ -3,6 +3,7 @@ import type {
   Emphasis,
   FrameDescriptor,
   LineStyle,
+  OutlineDescriptor,
   MarkerBadge,
   MarkerDescriptor,
   MarkerKind,
@@ -47,6 +48,10 @@ export interface MapPalette {
   readonly hearth: string;
   readonly highlight: string;
   readonly proposal: string;
+  /** Terrain zone outlines (borders from the client's per-chunk areas, D-032). */
+  readonly zoneOutline: string;
+  /** The terrain coastline. */
+  readonly coast: string;
   readonly aggregateFill: string;
   readonly aggregateEdge: string;
   readonly aggregateText: string;
@@ -84,6 +89,9 @@ export const PALETTE_SOURCES: Readonly<Record<PaletteRole, PaletteSource>> = {
   hearth: { token: '--frl-fg-muted', fallback: '#4b5563' },
   highlight: { token: '--frl-accent-hover', fallback: '#2e40a8' },
   proposal: { token: '--frl-fg', fallback: '#14181e' },
+  // Zone outlines take the zone frames' token (3:1 on the map background, WCAG 1.4.11).
+  zoneOutline: { token: '--frl-border-strong', also: ['--frl-map-frame'], fallback: '#737d8b' },
+  coast: { token: '--frl-fg-muted', fallback: '#4b5563' },
   aggregateFill: { token: '--frl-surface-raised', fallback: '#f5f6f8' },
   aggregateEdge: { token: '--frl-border-strong', fallback: '#737d8b' },
   aggregateText: { token: '--frl-fg', fallback: '#14181e' },
@@ -146,15 +154,22 @@ const EMPHASIS_ALPHA: Readonly<Record<Emphasis, number>> = { normal: 1, strong: 
 
 /**
  * Line styles. The dash pattern is the non-colour cue: route solid, transport dashed, flight
- * dotted, hearth dash-dot, proposal long dashes, highlight a thick solid line.
+ * dotted, hearth dash-dot, proposal long dashes, highlight a thick solid line; and, with walking
+ * paths, a walked leg whose path is still being computed in short even dashes (faded), and one
+ * with no path, drawn straight in its place, dash-dot-dot. Every pattern differs from the others
+ * by more than colour.
  */
-const LINE_STYLES: Readonly<Record<LineStyle, { readonly role: PaletteRole; readonly weight: number; readonly dash: string | null; readonly cap: PathStyle['lineCap'] }>> = {
-  route: { role: 'route', weight: 3, dash: null, cap: 'round' },
-  transport: { role: 'transport', weight: 3, dash: '10 6', cap: 'butt' },
-  flight: { role: 'flight', weight: 2.5, dash: '1 6', cap: 'round' },
-  hearth: { role: 'hearth', weight: 2.5, dash: '12 5 2 5', cap: 'butt' },
-  highlight: { role: 'highlight', weight: 6, dash: null, cap: 'round' },
-  proposal: { role: 'proposal', weight: 3, dash: '14 7', cap: 'butt' },
+const LINE_STYLES: Readonly<
+  Record<LineStyle, { readonly role: PaletteRole; readonly weight: number; readonly dash: string | null; readonly cap: PathStyle['lineCap']; readonly opacity: number }>
+> = {
+  route: { role: 'route', weight: 3, dash: null, cap: 'round', opacity: 0.9 },
+  transport: { role: 'transport', weight: 3, dash: '10 6', cap: 'butt', opacity: 0.9 },
+  flight: { role: 'flight', weight: 2.5, dash: '1 6', cap: 'round', opacity: 0.9 },
+  hearth: { role: 'hearth', weight: 2.5, dash: '12 5 2 5', cap: 'butt', opacity: 0.9 },
+  'route-pending': { role: 'route', weight: 2.5, dash: '4 4', cap: 'butt', opacity: 0.6 },
+  'route-fallback': { role: 'route', weight: 3, dash: '10 3 2 3 2 3', cap: 'butt', opacity: 0.9 },
+  highlight: { role: 'highlight', weight: 6, dash: null, cap: 'round', opacity: 0.85 },
+  proposal: { role: 'proposal', weight: 3, dash: '14 7', cap: 'butt', opacity: 0.9 },
 };
 
 export function polylineStyle(style: LineStyle, emphasis: Emphasis, palette: MapPalette): PathStyle {
@@ -164,7 +179,7 @@ export function polylineStyle(style: LineStyle, emphasis: Emphasis, palette: Map
     stroke: true,
     color,
     weight: emphasis === 'strong' ? spec.weight + 2 : spec.weight,
-    opacity: (style === 'highlight' ? 0.85 : 0.9) * EMPHASIS_ALPHA[emphasis],
+    opacity: spec.opacity * EMPHASIS_ALPHA[emphasis],
     fill: false,
     fillColor: color,
     fillOpacity: 0,
@@ -175,11 +190,12 @@ export function polylineStyle(style: LineStyle, emphasis: Emphasis, palette: Map
 }
 
 /**
- * Zone frames: a hairline with a faint fill; the extent a dashed outline; `strong` in the accent
- * colour. Strokes are at full opacity: the frame token is chosen for 3:1 against the map
- * background, and a translucent stroke would fall below it (M3 review MAP-A11Y-6).
+ * Zone frames: a hairline with a faint fill (none over painted art, `filled` false); the extent a
+ * dashed outline; `strong` in the accent colour. Strokes are at full opacity: the frame token is
+ * chosen for 3:1 against the map background, and a translucent stroke would fall below it (M3
+ * review MAP-A11Y-6).
  */
-export function frameStyle(kind: FrameDescriptor['kind'], emphasis: Emphasis, palette: MapPalette): PathStyle {
+export function frameStyle(kind: FrameDescriptor['kind'], emphasis: Emphasis, palette: MapPalette, filled = true): PathStyle {
   if (kind === 'extent') {
     return {
       stroke: true,
@@ -200,12 +216,33 @@ export function frameStyle(kind: FrameDescriptor['kind'], emphasis: Emphasis, pa
     color: strong ? palette.frameStrong : palette.frame,
     weight: strong ? 2.5 : 1,
     opacity: EMPHASIS_ALPHA[emphasis],
-    fill: true,
+    fill: filled,
     fillColor: palette.frameFill,
-    fillOpacity: strong ? 0.45 : 0.25,
+    fillOpacity: filled ? (strong ? 0.45 : 0.25) : 0,
     dashArray: null,
     lineCap: 'butt',
     lineJoin: 'miter',
+  };
+}
+
+/**
+ * Terrain outlines: zone outlines a solid line in the frame colour, 1.5 px, at full opacity (3:1
+ * on the map background, as frames are); the coastline a 1 px solid line in the muted ink. Neither
+ * is interactive, and neither uses a difficulty colour or the provenance cyan.
+ */
+export function outlineStyle(kind: OutlineDescriptor['kind'], palette: MapPalette): PathStyle {
+  const color = kind === 'zones' ? palette.zoneOutline : palette.coast;
+  return {
+    stroke: true,
+    color,
+    weight: kind === 'zones' ? 1.5 : 1,
+    opacity: 1,
+    fill: false,
+    fillColor: color,
+    fillOpacity: 0,
+    dashArray: null,
+    lineCap: 'round',
+    lineJoin: 'round',
   };
 }
 

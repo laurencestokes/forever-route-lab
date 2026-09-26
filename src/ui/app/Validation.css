@@ -1,0 +1,48 @@
+/* The Validation tab (ValidationPanel.tsx, loaded on first use): counts, the severity filter, the issues. */
+
+.frl-app-validation__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-1) var(--frl-space-2);
+  padding: var(--frl-space-1) 0 var(--frl-space-2);
+}
+
+.frl-app-validation__counts {
+  display: inline-flex;
+  gap: var(--frl-space-2);
+}
+
+/* Each count keeps its severity's shape beside the number; the words are the section's aside. */
+.frl-app-validation__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-app-validation__count[data-severity='error'] {
+  color: var(--frl-severity-error);
+}
+
+.frl-app-validation__count[data-severity='warning'] {
+  color: var(--frl-severity-warning);
+}
+
+.frl-app-validation__count[data-severity='info'] {
+  color: var(--frl-severity-info);
+}
+
+.frl-app-validation__filter.frl-field {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--frl-space-1);
+}
+
+/* The issues run edge to edge, like the other side-panel lists. */
+.frl-app-validation__list {
+  margin: 0 calc(-1 * var(--frl-space-3));
+  border-top: 1px solid var(--frl-border);
+}

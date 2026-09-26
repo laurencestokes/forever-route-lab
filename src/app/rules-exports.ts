@@ -4,4 +4,4 @@
  * then cannot drift from src/rules, and group lookups stay own-key safe (routeGroup).
  */
 export { questOverride, routeGroup } from '../domain';
-export { DIFFICULTIES, DIFFICULTY_COLORS, DIFFICULTY_LABELS, type Difficulty } from '../rules';
+export { DIFFICULTIES, DIFFICULTY_COLORS, DIFFICULTY_LABELS, type Difficulty } from '../rules/difficulty';

@@ -5,6 +5,7 @@ import type { UiMapId, WorldMapId } from '../../domain/ids';
 import type { WorldPoint } from '../../domain/points';
 import {
   descriptorMapId,
+  isImageLayer,
   LAYER_IDS,
   labelOf,
   refsOf,
@@ -36,7 +37,7 @@ import {
 import { capItems, diffById, sameData } from './diff';
 import { drawOrder, FrameRectangle, GlyphMarker, GridLayer, MeasuredCanvas, placeAfter, ScaleBarControl } from './leaflet-layers';
 import { createMapPerf, pagePerformance, type MapPerf, type PerformanceLike } from './perf';
-import { aggregateGlyph, frameStyle, markerGlyph, polylineStyle, readMapPalette, type GlyphSpec, type MapPalette, type PathStyle } from './style';
+import { aggregateGlyph, frameStyle, markerGlyph, outlineStyle, polylineStyle, readMapPalette, type GlyphSpec, type MapPalette, type PathStyle } from './style';
 import { boundsToLatLngBounds, latLngBoundsToWorld, latLngToWorld, minZoomFor, nearestSegment, pointToLatLng, zonesAt } from './transform';
 
 /**
@@ -48,9 +49,11 @@ import { boundsToLatLngBounds, latLngBoundsToWorld, latLngToWorld, minZoomFor, n
  *   zoom follows the container, so the largest surface always fits (`minZoomFor`).
  * - One canvas renderer (`L.canvas`, padding 0.1, with User Timing measures, perf.ts) draws every
  *   path. Markers are small original canvas glyphs (glyphs.ts), route and proposal lines polylines,
- *   zone frames rectangles with labels. Local map art (dev/preview only, D-018) is image overlays
- *   in a pane below the canvas; the procedural yard grid has its own canvas above the art, and a
- *   yard scale bar sits bottom left. No Blizzard art ships (MAPS §8.1).
+ *   zone frames rectangles with labels, the terrain zone outlines and coastline one multi-line path
+ *   each. The image layers are image overlays in panes below the canvas: the shaded relief (D-032)
+ *   lowest, then the painted map art (committed, D-033, or a local set's, D-018). The procedural
+ *   yard grid has its own canvas above them, and a yard scale bar sits bottom left. Images load
+ *   asynchronously (`<img>` elements), so switching art never waits for one.
  * - Layers are stacked in `LAYER_IDS` order in the renderer's draw list, which is also the
  *   hit-testing order (the topmost path wins). A created path, or one whose place in its layer's
  *   order changed, is moved to its place in the list (`placeAfter`), which redraws only its own
@@ -115,8 +118,14 @@ const ZOOM_SNAP = 0.25;
 /** The default `rendererPadding`: Leaflet's own (0.25 before the M3 review, PERF-3). */
 const RENDERER_PADDING = 0.1;
 
-/** A glyph marker, polyline or frame rectangle (all canvas paths), or an art image overlay. */
+/** A glyph marker, polyline, outline or frame rectangle (all canvas paths), or an image overlay. */
 type DrawnLayer = L.Path | L.ImageOverlay;
+
+/** Each image layer's pane: below the grid pane (350) and the canvas in the overlay pane (400). */
+const IMAGE_PANES = {
+  relief: { name: 'frl-relief', zIndex: '240', className: 'frl-map__relief' },
+  art: { name: 'frl-art', zIndex: '250', className: 'frl-map__art' },
+} as const;
 
 interface Entry {
   descriptor: MapDescriptor;
@@ -163,7 +172,7 @@ interface PendingFit {
 
 type Handler = (event: MapEvent) => void;
 
-const CANVAS_LAYERS: readonly LayerId[] = LAYER_IDS.filter((layer) => layer !== 'art');
+const CANVAS_LAYERS: readonly LayerId[] = LAYER_IDS.filter((layer) => !isImageLayer(layer));
 
 const leafletLatLng = (point: { readonly x: number; readonly y: number }): L.LatLng => {
   const [lat, lng] = pointToLatLng(point);
@@ -309,9 +318,11 @@ export class LeafletMapAdapter implements MapAdapter {
     });
     this.map = map;
     this.canvas = canvas;
-    const art = map.createPane('frl-art');
-    art.style.zIndex = '250';
-    art.style.pointerEvents = 'none';
+    for (const pane of Object.values(IMAGE_PANES)) {
+      const element = map.createPane(pane.name);
+      element.style.zIndex = pane.zIndex;
+      element.style.pointerEvents = 'none';
+    }
     const gridPane = map.createPane('frl-grid');
     gridPane.style.zIndex = '350';
     gridPane.style.pointerEvents = 'none';
@@ -323,7 +334,7 @@ export class LeafletMapAdapter implements MapAdapter {
     else this.applySurfaceView(info);
 
     for (const layer of LAYER_IDS) {
-      const group = layer === 'art' ? L.layerGroup() : L.featureGroup();
+      const group = isImageLayer(layer) ? L.layerGroup() : L.featureGroup();
       if (group instanceof L.FeatureGroup) this.wireGroup(layer, group);
       const state = this.layers[layer];
       state.group = group;
@@ -677,7 +688,7 @@ export class LeafletMapAdapter implements MapAdapter {
     let paths = 0;
     for (const layer of LAYER_IDS) {
       const state = this.layers[layer];
-      if (layer !== 'art' && state.visible) paths += state.drawn.size;
+      if (!isImageLayer(layer) && state.visible) paths += state.drawn.size;
       layers[layer] = {
         visible: state.visible,
         drawn: state.drawn.size,
@@ -714,7 +725,7 @@ export class LeafletMapAdapter implements MapAdapter {
     if (group === null) return { added: 0, removed: 0, changed: 0, moved: 0 };
     const onSurface = mapId === null ? [] : state.items.filter((descriptor) => descriptorMapId(descriptor) === mapId);
     state.offSurface = state.items.length - onSurface.length;
-    const capacity = layer === 'art' ? Infinity : this.maxPaths - this.pathsOutside(layer);
+    const capacity = isImageLayer(layer) ? Infinity : this.maxPaths - this.pathsOutside(layer);
     const { kept, dropped } = capItems(onSurface, capacity);
     state.truncated = dropped;
     const previous = new Map<string, MapDescriptor>();
@@ -746,7 +757,7 @@ export class LeafletMapAdapter implements MapAdapter {
   private place(layer: LayerId): number {
     const renderer = this.canvas;
     const state = this.layers[layer];
-    if (renderer === null || layer === 'art' || !state.visible) return 0;
+    if (renderer === null || isImageLayer(layer) || !state.visible) return 0;
     let previous = this.topPathBelow(layer);
     let moved = 0;
     for (const id of state.order) {
@@ -800,7 +811,7 @@ export class LeafletMapAdapter implements MapAdapter {
 
   /** A highlighted line is drawn strong in place; markers keep their own emphasis (their highlight is an overlay). */
   private emphasisOf(layer: LayerId, descriptor: MapDescriptor): Emphasis {
-    if (descriptor.type === 'art') return 'normal';
+    if (descriptor.type === 'art' || descriptor.type === 'outline') return 'normal';
     if (descriptor.type === 'polyline' && this.isHighlighted(layer, descriptor.id)) return 'strong';
     return descriptor.emphasis;
   }
@@ -824,23 +835,32 @@ export class LeafletMapAdapter implements MapAdapter {
         applied = polylineStyle(descriptor.style, this.emphasisOf(layer, descriptor), palette);
         leaflet = L.polyline(descriptor.points.map(leafletLatLng), { ...interactive, ...pathOptions(applied), smoothFactor: 1 });
         break;
+      case 'outline':
+        applied = outlineStyle(descriptor.kind, palette);
+        leaflet = L.polyline(
+          descriptor.lines.map((line) => line.map(leafletLatLng)),
+          { renderer, interactive: false, ...pathOptions(applied), smoothFactor: 1 },
+        );
+        break;
       case 'frame':
-        applied = frameStyle(descriptor.kind, descriptor.emphasis, palette);
+        applied = frameStyle(descriptor.kind, descriptor.emphasis, palette, descriptor.filled);
         leaflet = new FrameRectangle(leafletBounds(descriptor.bounds), descriptor.label, { color: palette.frameLabel, font: palette.font }, {
           renderer,
           interactive: false,
           ...pathOptions(applied),
         });
         break;
-      case 'art':
+      case 'art': {
+        const pane = layer === 'relief' ? IMAGE_PANES.relief : IMAGE_PANES.art;
         leaflet = L.imageOverlay(descriptor.url, leafletBounds(descriptor.bounds), {
-          pane: 'frl-art',
+          pane: pane.name,
           opacity: descriptor.opacity,
           interactive: false,
           alt: '',
-          className: 'frl-map__art',
+          className: pane.className,
         });
         break;
+      }
     }
     state.drawn.set(descriptor.id, { descriptor, leaflet, applied });
     this.owners.set(leaflet, { layer, id: descriptor.id });
@@ -871,6 +891,11 @@ export class LeafletMapAdapter implements MapAdapter {
       case 'polyline':
         if (leaflet instanceof L.Polyline && (previous.type !== 'polyline' || !sameData(previous.points, next.points))) {
           leaflet.setLatLngs(next.points.map(leafletLatLng));
+        }
+        break;
+      case 'outline':
+        if (leaflet instanceof L.Polyline && (previous.type !== 'outline' || !sameData(previous.lines, next.lines))) {
+          leaflet.setLatLngs(next.lines.map((line) => line.map(leafletLatLng)));
         }
         break;
       case 'frame':
@@ -911,9 +936,17 @@ export class LeafletMapAdapter implements MapAdapter {
         }
         return;
       }
+      case 'outline': {
+        const style = outlineStyle(descriptor.kind, palette);
+        if (leaflet instanceof L.Polyline && !sameData(style, entry.applied)) {
+          leaflet.setStyle(pathOptions(style));
+          entry.applied = style;
+        }
+        return;
+      }
       case 'frame': {
         if (!(leaflet instanceof FrameRectangle)) return;
-        const style = frameStyle(descriptor.kind, descriptor.emphasis, palette);
+        const style = frameStyle(descriptor.kind, descriptor.emphasis, palette, descriptor.filled);
         if (!sameData(style, entry.applied)) {
           leaflet.setStyle(pathOptions(style));
           entry.applied = style;
@@ -1046,7 +1079,7 @@ export class LeafletMapAdapter implements MapAdapter {
     const tooltip = this.tooltip;
     const descriptor = this.layers[layer].drawn.get(id)?.descriptor;
     if (map === null || tooltip === null || descriptor === undefined) return;
-    const label = descriptor.type === 'art' ? null : labelOf(descriptor, this.labelProvider);
+    const label = descriptor.type === 'art' || descriptor.type === 'outline' ? null : labelOf(descriptor, this.labelProvider);
     if (label === null) {
       this.closeTooltip();
       return;

@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorStore } from '../../app';
 import type { MapController } from '../../app/map-exports';
 import { deleteCustomQuest } from '../../app/project-commands';
-import { useEditor } from '../../app/react';
+import { useDerivedSelector, useEditor } from '../../app/react';
 import type { DatasetView } from '../../domain/dataset';
 import type { QuestId } from '../../domain/ids';
 import type { Route } from '../../domain/route';
@@ -10,11 +10,11 @@ import { type ActiveRow, panelTabOf, rightTabOf, type RouteView } from '../app-m
 import { Button, EmptyState, PanelSection, SidePanel } from '../kit';
 import { AvailableQuests } from './AvailableQuests';
 import type { CustomQuestEdit, CustomQuestEditorClose } from './CustomQuestEditor';
-import { loadCustomQuestEditor, useLazy } from './lazy';
+import { loadCustomQuestEditor, loadValidationPanel, useLazy } from './lazy';
 import type { Announce } from './LiveAnnouncer';
 import type { QuestActions } from './QuestDetails';
 import type { RouteActions } from './route-actions';
-import { selectEditingLocked, selectRightTab } from './selectors';
+import { sameCounts, selectEditingLocked, selectIssueCounts, selectRightTab } from './selectors';
 import { DETAILS_LOCKED, DetailsPanel } from './StepDetails';
 
 export interface AppSidePanelProps {
@@ -39,17 +39,6 @@ const QUEST_LOG = (
   </EmptyState>
 );
 
-const VALIDATION = (
-  <EmptyState title="Validation arrives in Milestone 6" placeholder>
-    <p>
-      Route checks (levels, prerequisites, quest log capacity, travel) need the simulator. Until then no issues are reported,
-      and none are claimed to be absent.
-    </p>
-  </EmptyState>
-);
-
-/** Counts wait for simulation: unknown, so nothing claims "no issues". */
-const COUNTS = { available: null, questLog: null, validation: null } as const;
 
 const quiet: Announce = () => undefined;
 
@@ -93,6 +82,11 @@ export const AppSidePanel = memo(function AppSidePanel({
 }: AppSidePanelProps) {
   const rightTab = useEditor(store, selectRightTab);
   const editingLocked = useEditor(store, selectEditingLocked);
+  // Unknown (null) until the route is checked, so the tab never claims "no issues" early.
+  const issueCounts = useDerivedSelector(selectIssueCounts, sameCounts);
+  const counts = useMemo(() => ({ available: null, questLog: null, validation: issueCounts }), [issueCounts]);
+  // The validation panel loads on first use (lazy.tsx), with the issue-code registry.
+  const validationCode = useLazy(loadValidationPanel, rightTab === 'validation');
   const [editor, setEditor] = useState<CustomQuestEdit | null>(null);
   const [editorKey, setEditorKey] = useState(0);
   // The editor loads on first use (lazy.tsx, CR-19).
@@ -215,8 +209,25 @@ export const AppSidePanel = memo(function AppSidePanel({
       available={<AvailableQuests store={store} dataset={dataset} search={search} questActions={questActions} onNewCustomQuest={onNewCustomQuest} />}
       questLog={QUEST_LOG}
       details={details}
-      validation={VALIDATION}
-      counts={COUNTS}
+      validation={
+        validationCode.kind === 'ready' ? (
+          <validationCode.value.ValidationPanel store={store} view={view} announce={announce} onFocusList={onFocusList} />
+        ) : validationCode.kind === 'failed' ? (
+          <PanelSection title="Issues">
+            <p className="frl-app-hint">{`The validation panel could not be loaded (${validationCode.message}). Check the connection and try again.`}</p>
+            <div className="frl-app-actions">
+              <Button size="sm" onClick={validationCode.retry}>
+                Try again
+              </Button>
+            </div>
+          </PanelSection>
+        ) : (
+          <PanelSection title="Issues">
+            <p className="frl-app-hint">Loading the validation panel…</p>
+          </PanelSection>
+        )
+      }
+      counts={counts}
     />
   );
 });

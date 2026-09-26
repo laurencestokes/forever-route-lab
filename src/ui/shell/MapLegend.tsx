@@ -12,7 +12,8 @@ import './MapLegend.css';
  * Geometry follows the canvas at its base sizes (CSS pixels): step bead r 5.5 with a hole of
  * 0.35 r; quest-start triangle r 6.5; turn-in square of half-side 0.85 × 5.5; objective dot r 3.5;
  * flight-master plus r 6 with arms 0.38 r wide; transition ring r 6.5 with a dot; halo ring; zone
- * count box. Dash patterns are the canvas ones at half scale (the key's lines are 18 px long).
+ * count box. Dash patterns are the canvas ones at half scale (the key's lines are 18 px long). The
+ * relief and painted-art swatches are drawn shapes, not images from the game.
  */
 
 export type MapGlyphKind =
@@ -27,7 +28,12 @@ export type MapGlyphKind =
   | 'frame'
   | 'extent'
   | 'art'
+  | 'relief'
+  | 'zone-outline'
+  | 'coast'
   | 'line-route'
+  | 'line-route-pending'
+  | 'line-route-fallback'
   | 'line-transport'
   | 'line-flight'
   | 'line-hearth'
@@ -118,8 +124,23 @@ function shapeOf(kind: MapGlyphKind): ReactElement {
           <polyline className="frl-mapglyph__art-line" points="3.5,12 8,7 11,10 13,8.5 16.5,12" />
         </>
       );
+    case 'relief':
+      return (
+        <>
+          <rect className="frl-mapglyph__relief" x={2} y={2.5} width={16} height={11} />
+          <polygon className="frl-mapglyph__relief-shade" points="2,13.5 8,6 11,9.5 14,5.5 18,13.5" />
+        </>
+      );
+    case 'zone-outline':
+      return <polyline className="frl-mapglyph__zone-outline" points="2,4 7,3.5 9,8 13,7.5 14,12.5 18,12" />;
+    case 'coast':
+      return <polyline className="frl-mapglyph__coast" points="1,11 4,9 7,10.5 10,7 13,8 16,5 19,5.5" />;
     case 'line-route':
       return line('frl-mapglyph__line is-route');
+    case 'line-route-pending':
+      return line('frl-mapglyph__line is-route-pending');
+    case 'line-route-fallback':
+      return line('frl-mapglyph__line is-route-fallback');
     case 'line-transport':
       return line('frl-mapglyph__line is-transport');
     case 'line-flight':
@@ -209,9 +230,20 @@ export const MAP_KEY: readonly MapKeySection[] = [
     ],
   },
   {
+    title: 'Map',
+    entries: [
+      { glyph: 'art', text: 'Painted map art: Blizzard Entertainment’s artwork (see About)' },
+      { glyph: 'relief', text: 'Relief: shading computed from the game’s terrain, not painted' },
+      { glyph: 'zone-outline', text: 'Zone outline: a border from the game’s terrain areas' },
+      { glyph: 'coast', text: 'Coastline: sea, lake and river shores' },
+    ],
+  },
+  {
     title: 'Route lines',
     entries: [
-      { glyph: 'line-route', text: 'On foot or mounted: solid' },
+      { glyph: 'line-route', text: 'On foot or mounted: solid, along the walking path where there is one' },
+      { glyph: 'line-route-pending', text: 'Walking path still being computed: straight, short dashes' },
+      { glyph: 'line-route-fallback', text: 'No walking path found: straight, dash-dot-dot' },
       { glyph: 'line-transport', text: 'Boat, zeppelin or other transport: dashed' },
       { glyph: 'line-flight', text: 'Flight: dotted' },
       { glyph: 'line-hearth', text: 'Hearthstone: dash and dot' },

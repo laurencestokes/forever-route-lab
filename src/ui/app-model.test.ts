@@ -11,8 +11,8 @@ import type { Route, RouteStep } from '../domain/route';
 import type { DatasetIdentity, DatasetView, EntityRef, QuestRecord, SpawnPoint } from '../domain/dataset';
 import {
   NO_ACTIVE_TARGET,
+  NOT_SIMULATED,
   PLACEHOLDER_DATA_NOTICE,
-  SIMULATION_PENDING,
   buildRouteView,
   characterName,
   dataBadgeDetail,
@@ -101,7 +101,10 @@ describe('buildRouteView', () => {
     for (const row of view.rows) {
       if (row.type !== 'step') continue;
       expect(row.projectedLevel.value).toBeNull();
-      expect(row.projectedLevel.unknownReason).toBe(SIMULATION_PENDING);
+      expect(row.projectedLevel.unknownReason).toBe(NOT_SIMULATED);
+      expect(row.duration).toEqual(row.projectedLevel);
+      expect(row.xpGained).toEqual(row.projectedLevel);
+      expect(row.pending).toBeNull();
       if (row.quest !== null) {
         expect(row.quest.uncertain).toBe(true);
         expect(row.quest.difficulty).not.toBeNull();

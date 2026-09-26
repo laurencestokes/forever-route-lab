@@ -6,9 +6,9 @@ import type { Location } from './points';
 import type { Route, TaxiNodeRef } from './route';
 
 /**
- * Native project format, schema version 1 (docs/ARCHITECTURE.md §8.2). Version 1 is UNSTABLE
- * until the end of Milestone 6: fields may change without migrations until then. From Milestone 7
- * every change adds a migration to src/project/migrations.ts.
+ * Native project format, schema version 1 (docs/ARCHITECTURE.md §8.2). Version 1 is frozen from
+ * the Milestone 4 commit (D-035): every change bumps `schemaVersion` and adds a migration to
+ * src/project/migrations.ts.
  */
 export const PROJECT_SCHEMA_VERSION = 1 as const;
 

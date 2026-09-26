@@ -8,10 +8,12 @@ Last updated: 2026-09-26
 
 ## Current milestone
 
-**Milestones 4 (editor and storage) and 5 (RXP)**, complete. **Milestone 3b part 1** (game-data
-reader, navmesh build and gates, map art and terrain layers, pure `src/nav` runtime), complete.
-Next: **Milestone 3b part 2** (worker, travel model, map rendering of paths/art/terrain, review), then
-**Milestone 6** (rules, simulation and validation).
+**Milestone 6** (rules, simulation, validation, route warnings and estimates) and **Milestone 3b
+step 3b.6** (navigation worker, leg table, navigation travel model, walking paths): complete.
+**Map rework** (owner feedback, 2026-09-26): in design. It covers a seamless atlas with both
+continents and the new islands, continuous zoom, speed, and a presentation layer for quests,
+dungeons, flight paths and zone colouring modelled on WoWF-QRP and MapGenie. It replaces the
+interim one-image-at-a-time art rendering. Then **Milestone 7** (optimiser).
 
 ## Completed work
 
@@ -98,26 +100,43 @@ Next: **Milestone 3b part 2** (worker, travel model, map rendering of paths/art/
 - **Milestones 4/5 review:** three critics (editor/storage, RXP parser, UI/accessibility)
   and a fix pass. Every blocker and major is fixed; see D-036 for the deferred items and
   `docs/reviews/review-m4-m5.md`.
+- **Milestone 3b part 1:** `tools/casc` (read-only CASC and DB2 reader), `tools/terrain` with the
+  committed navmesh `public/nav/` (gates G1-G15), the pure `src/nav` runtime, the painted map art
+  (`public/maps/art/`, D-033) and the terrain byproducts (`public/maps/terrain/`).
+  See [docs/reviews/review-m3b-part1.md](docs/reviews/review-m3b-part1.md).
+- **Milestone 6 and 3b.6:**
+  - `src/rules`: rulesets with per-value provenance, the TravelGraph and the straight-line model.
+  - `src/sim`: XP, levels and the time model.
+  - `src/engine`: the walker, with checkpoints, conditions and leg enumeration.
+  - `src/validate`: the code registry and the VAL, LINT, SIM and DATA rules.
+  - The app's lazy derived pipeline and navigation runtime (`src/nav/worker`, the leg table, the
+    navigation `TravelModel` with the §9.3 fallbacks, the scheduler, and the walking-path feed).
+  - The UI: row estimates with basis and pending markers, the Validation tab, status-bar metrics
+    and Summary, computing-paths status with Cancel and Resume, and the About notice for D-033.
+  - Five critics with sceptic verification, three fixers and a final verifier: 67 findings, 66
+    confirmed, all fixed or tracked. See [docs/reviews/review-m6-3b6.md](docs/reviews/review-m6-3b6.md)
+    and D-038.
 
 ## Branch / commit
 
 - Branch: `main`
-- Commits: `e2e577f` skeleton, `14acc7a` M0, `374354a` M1, `daeefb1` M2, `0b56df9` M3, then the
-  M4/M5/M3b-part-1 commit (see `git log`).
+- Commits: `e2e577f` skeleton, `14acc7a` M0, `374354a` M1, `daeefb1` M2, `0b56df9` M3,
+  `07daaa4` M4/M5/M3b part 1, then the M6/3b.6 commit (see `git log`).
 
 ## Build / test status
 
-As of the Milestones 4/5 and 3b part 1 commit (`pnpm check`, plus the nav, art and terrain gates):
+As of the Milestone 6 / 3b.6 commit (`pnpm check`, plus the nav, maps and RXP gates):
 
 | Check | Status |
 |---|---|
 | Typecheck (pure, app, node configs) | pass |
 | Lint | pass |
-| Tests | 188 files, 2,299 tests, pass (client tests: 25 of 25 ran against the installed client) |
+| Tests | 228 files, 3,177 tests, pass (client tests need the installed client) |
 | Data validation (`data:validate`, public/data and fixture) | pass |
 | Reproducibility (`extract --check`, needs the QuestieDB clone) | byte-identical (manual gate until CI, Milestone 9) |
 | Licence gate | pass (8 shipped packages) |
-| Production build + dist audit | pass; entry 206.1 kB gzip of 250 kB; lazy chunks 98.4 kB; data 938.6 kB gzip of 1.2 MB |
+| Production build + dist audit | pass; entry 236.96 kB gzip of 250 kB; derived pipeline lazy (about 36 kB); nav worker 17.2 kB gzip (reported); data 938.6 kB gzip of 1.2 MB |
+| Benches (`--check`, bundled, probe-normalised) | engine, validate and map-edit pass. Realistic 10,000-step walk + validate: 12.2 ms warm, 16.3 ms cold. `derived --budget` passes bundled; the class change is 51.5 ms under tsx (open) |
 | Navigation (`nav:validate` plain, `--client`, `--partition`; `nav:check`) | 56 / 62 / 60 checks pass; 113 of 113 files byte-identical on rebuild; gates G1-G15 pass (manual until CI; needs the client) |
 | Map art and terrain (`convert.ts --check`, `byproducts.ts --check`, `maps:validate`) | up to date, byte-identical; 14 checks pass |
 | Sizes (gzip-6) | nav 5,437,717 B of 7 MB; art 9,047,639 B of 12 MB; terrain 445,061 B of 600 kB |
@@ -137,8 +156,20 @@ As of the Milestones 4/5 and 3b part 1 commit (`pnpm check`, plus the nav, art a
   (D-036).
 - Autosave of a 10,000-step project is 35 ms unthrottled. Chunked storage is decided after the
   Milestone 9 throttled run (D-036).
-- One quest-giver aggregate is drawn for UiMap 947 (Azeroth). Review it with the terrain map
-  layers (Milestone 3b).
+- **Map (owner feedback, 2026-09-26):** it feels slow; zooming from the world to a zone does not
+  flow, because one art image is shown at a time; both continents are never visible together; and
+  Zephras Isle is missing. The map rework (below) addresses all four. Measured causes are in
+  `.cache/map-atlas/perf.md`, summarised in the design doc when it lands: wheel-zoom settings,
+  route-list re-renders (partly fixed by PERF-11), the art-swap gap, and the dev server over a
+  network.
+- **ENG-01:** no instance world map ids, so there are no entrance edges. Instance steps get SIM-4,
+  and the dungeon and raid multipliers never apply. Source it from QuestieDB's `instanceIdToAreaId`.
+- **NAV-08:** the dataset has no dock NPCs for the seeded transports, so the same-map transport rule
+  fires only with user-entered docks, and not when a transport has two stops on one map.
+- **PERF-09:** a map move with walking paths is 8.0 ms in Node against the 8 ms budget.
+- **NAV-07:** the path "pending" state is per paths object, not per leg; this needs an adapter change.
+- `derived.bench --budget` runs under tsx, where the class change is 51.5 ms; it should bundle
+  itself as the engine and validate benches do.
 - The planned 4× CPU-throttled startup measurement happens with Playwright (Milestone 9).
 
 ## Blockers
@@ -185,20 +216,32 @@ _None._
 
 ## Exact next tasks
 
-**Milestone 3b (terrain navigation and map art).** Design:
+**1. Map rework (owner feedback, 2026-09-26).** Two design runs are in progress, each with
+research, competing designs, judges and an adversarial critic:
+- [docs/research/map-atlas.md](docs/research/map-atlas.md): a seamless atlas surface placing both
+  continents by UiMap 947's UiMapAssignment rows, and a pre-composited tile pyramid built from the
+  painted art, masked to the terrain zone polygons. Continuous zoom from world to zone, wheel-zoom
+  and rendering speed. Zephras Isle is shown as a labelled inset, because the client does not place
+  it on the world map. The benchmarks are WoWF-QRP and MapGenie.
+- [docs/research/map-presentation.md](docs/research/map-presentation.md): quests, dungeons, flight
+  paths, transports and zone colouring, modelled on WoWF-QRP and MapGenie. It includes owner
+  decisions on Blizzard UI icons, a client-derived taxi graph (OD-6), and zone level ranges and
+  faction from the client.
+Then: implement, critique, fix and commit, replacing the interim one-image art layer.
+
+**2. Milestone 7 (optimiser)**, after the map rework: core, beam search, worker, anchors,
+fixtures and critics (ARCHITECTURE §11). Before compile, the optimiser takes its matrix from the
+leg table, via the "computing paths" phase.
+
+**Milestone 3b history (terrain navigation and map art).** Design:
 [docs/research/terrain-navigation.md](docs/research/terrain-navigation.md) (revision 3, re-critique
 RC-01..RC-13 accepted, D-028 to D-034). Steps 3b.1-3b.5, 3b.7 and 3b.8 are built (uncommitted):
 `tools/casc`, `tools/terrain` with `public/nav/` (5,423,019 B gzip-6, gates G1-G15 pass),
 `src/nav` (pure runtime), `public/maps/terrain/` (445,061 B) and `public/maps/art/` (9,047,639 B,
-Blizzard's art under D-033); committed with Milestones 4/5. The build and verifier reports are summarised
-in [docs/reviews/review-m3b-part1.md](docs/reviews/review-m3b-part1.md). Next:
-
-1. 3b.6: `src/nav/worker` (fetch, verify, pin, LRU, resumable search), the leg table, the
-   `TravelModel` 'navigation' with the same-map `TravelGraph` rule (D-034 item 2), the SIM warnings
-   including `SIM-unverified-passage`, progress and cancel for "computing paths".
-2. Map adapter: the art and terrain layers and the path lines.
-3. D-033 notices still owed in the About dialog (it says "No map art is included").
-4. 3b.9 review, fix, commit.
+Blizzard's art under D-033); committed with Milestones 4/5
+([docs/reviews/review-m3b-part1.md](docs/reviews/review-m3b-part1.md)). 3b.6 (worker, leg table,
+navigation model, walking paths) and the D-033 About notice are done with Milestone 6. The 3b.9
+navigation review of the map side folds into the map rework review.
 
 **Owner in-game checks (D-031, D-034 items 1 and 5).** Each is tracked here until recorded:
 
@@ -214,11 +257,9 @@ in [docs/reviews/review-m3b-part1.md](docs/reviews/review-m3b-part1.md). Next:
 **Census gate (D-030), architect's call, open to owner override:** 283 of the 298 census review
 entries are rule-drafted geometry notes from `pnpm nav:review-draft` ("rule:" prefix), not
 individual reviews or in-game checks. They are accepted for the MVP gate because each names its rule
-and can be re-reviewed individually; the 15 largest or oddest components were reviewed one by one.
-
-**In parallel with 3b part 2, Milestone 6 (rules, simulation and validation):** the pure core first
-(rules, engine walker, simulation, validator), then the app and UI integration (route-list warnings,
-validation panel, estimates).
+and can be re-reviewed individually (D-037). 15 entries were reviewed one by one. Owed: an
+individual review of Zamja's upper floor in Orgrimmar, a §4.5 must-connect place that has only a
+rule-drafted note.
 
 ## Important commands
 

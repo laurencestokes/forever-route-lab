@@ -36,8 +36,9 @@ export interface RxpCodeSpec {
 
 /**
  * The RXP family of the diagnostic registry (docs/RXP.md §11.1). Numbers are never reused:
- * RXP008 and RXP023 are unassigned and RXP033 is retired. `src/validate/codes.ts` does not exist
- * yet (Milestone 6); it will re-export this table with the other families.
+ * RXP008 and RXP023 are unassigned and RXP033 is retired. `src/validate/codes.ts` holds the other
+ * families; it does not re-export this table (`validate` may not import `rxp`, ARCHITECTURE §4),
+ * and tests/validate-e2e.test.ts checks that both follow one grammar.
  */
 export const RXP_CODES = [
   { code: 'RXP001-unknown-command', severity: 'warning', stage: 'cst', rxpCompat: true, meaning: 'command name not in our list' },

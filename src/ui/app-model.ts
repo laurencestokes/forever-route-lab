@@ -22,16 +22,21 @@ import type { SidePanelTabId } from './shell/SidePanel';
  * and to one-line texts. Pure functions of their inputs; no store, no React.
  */
 
-/** Why derived numbers are unknown in Milestone 1. Shown as the reason of every `?`. */
-export const SIMULATION_PENDING = 'Simulation arrives in Milestone 6';
+/**
+ * Why derived numbers are unknown where no route simulation is connected (component tests, a view
+ * without one). With one, the reasons come from its state (src/ui/app/derived-view.ts).
+ */
+export const NOT_SIMULATED = 'Not simulated: no route simulation is connected';
 
 export const PLACEHOLDER_DATA_NOTICE = 'Placeholder data — real Forever data arrives in Milestone 2';
 
-/** The one visible key to every `?` in rows and the status bar (their reasons are tooltips). */
-export const UNKNOWN_LEGEND = '? = unknown until simulation (Milestone 6)';
+/** The visible key to the marks on numbers in rows and the status bar (each mark's reason is its tooltip). */
+export const ESTIMATE_LEGEND = ['? unknown', '≈ assumed', 'E Era value', 'time pending'] as const;
 
-/** The legend's spoken form: screen readers may skip a bare question mark. */
-export const UNKNOWN_LEGEND_SPOKEN = 'A question mark means unknown until simulation arrives in Milestone 6.';
+/** The legend's spoken form: screen readers may skip a bare question mark or glyph. */
+export const ESTIMATE_LEGEND_SPOKEN =
+  'Key to the marks on numbers: a question mark means unknown, with the reason in its tooltip; ≈ means the number depends on assumptions; ' +
+  'a boxed E means Era values stand in for unknown Forever values; an hourglass beside a step time means its travel is a straight-line estimate for now, while its walking path is computed or the navigation data is checked.';
 
 const PANEL_TAB: Readonly<Record<RightTab, SidePanelTabId>> = {
   available: 'available',
@@ -411,11 +416,16 @@ function groupLabel(route: Route, groupKey: GroupId, importNames: ReadonlyMap<st
   return `${name}, step ${String(rxp.stepIndex + 1)}`;
 }
 
+/** What a row says before the walk's numbers fill it in (`RouteList deriveRow`). */
+const NOT_SIMULATED_READOUT: Readout<number> = unknownReadout(NOT_SIMULATED);
+
 /**
- * The row model of one step. Quest difficulty is taken at `playerLevel` (the character's start
- * level until simulation exists), which is a lower bound for the level at the step, so it is
- * always marked uncertain. A scaling quest shows its effective level at `playerLevel` (QXP-7).
- * The level after the step stays unknown.
+ * The row model of one step, from the route and the dataset alone. Quest difficulty is taken at
+ * `playerLevel` (the character's start level), which is a lower bound for the level at the step,
+ * so it is marked uncertain. A scaling quest shows its effective level at `playerLevel` (QXP-7).
+ * The estimates are unknown here: the walk's numbers, and the difficulty at the level the step
+ * starts at, are filled in as the row renders (src/ui/app/derived-view.ts `createRowDeriver`), so
+ * a new walk never rebuilds the rows.
  */
 export function stepRowModel(step: RouteStep, number: number, dataset: DatasetView, playerLevel: number | null): StepRowModel {
   const firstQuest = stepQuestIds(step)[0];
@@ -423,7 +433,6 @@ export function stepRowModel(step: RouteStep, number: number, dataset: DatasetVi
   const questLevel = record?.level ?? null;
   const minLevel = record?.minLevel ?? null;
   const level = effectiveQuestLevel(playerLevel, questLevel, minLevel);
-  const projectedLevel: Readout<number> = unknownReadout(SIMULATION_PENDING);
   return {
     type: 'step',
     key: step.id,
@@ -431,7 +440,11 @@ export function stepRowModel(step: RouteStep, number: number, dataset: DatasetVi
     kind: step.kind,
     title: stepTitle(step, dataset),
     detail: stepDetail(step, dataset),
-    projectedLevel,
+    projectedLevel: NOT_SIMULATED_READOUT,
+    duration: NOT_SIMULATED_READOUT,
+    xpGained: NOT_SIMULATED_READOUT,
+    pending: null,
+    assumptions: null,
     quest:
       firstQuest === undefined
         ? null

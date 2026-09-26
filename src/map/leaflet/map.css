@@ -25,14 +25,17 @@
   outline-offset: calc(-1 * var(--frl-focus-width, 2px));
 }
 
-/* The grid and art panes never take pointer events: the path canvas above them does. */
+/* The grid, art and relief panes never take pointer events: the path canvas above them does. */
 .frl-map .leaflet-frl-grid-pane,
 .frl-map .leaflet-frl-art-pane,
+.frl-map .leaflet-frl-relief-pane,
 .frl-map__grid {
   pointer-events: none;
 }
 
-.frl-map__art {
+/* Painted art and the relief are smoothed when scaled (the relief is about 17 yd per pixel). */
+.frl-map__art,
+.frl-map__relief {
   image-rendering: auto;
 }
 

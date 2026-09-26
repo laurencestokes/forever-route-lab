@@ -56,8 +56,38 @@
   gap: var(--frl-space-2);
 }
 
+/* The key to the marks on numbers, and the choice of the rows' estimate column beside it. */
 .frl-app-banner__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-1) var(--frl-space-2);
   color: var(--frl-fg-muted);
+}
+
+.frl-app-banner__marks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  column-gap: var(--frl-space-2);
+}
+
+.frl-app-banner__marks > span {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.frl-app-banner__mark {
+  margin: 0 2px 0 0;
+  vertical-align: baseline;
+}
+
+.frl-app-banner__column.frl-field {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--frl-space-1);
+  white-space: nowrap;
 }
 
 /* Side-panel content. */

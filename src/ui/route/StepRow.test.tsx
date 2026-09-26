@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NO_ISSUES } from '../lib/issues';
 import { knownReadout, unknownReadout } from '../lib/readout';
+import { PENDING_CHECKING_TEXT, PENDING_TRAVEL_TEXT } from '../markers/PendingMarker';
 import { UNKNOWN_FOREVER_PROVENANCE } from '../markers/provenance';
 import { GroupRow, StepRow, describeStepRow } from './StepRow';
 import type { StepRowModel } from './rows';
@@ -17,15 +18,22 @@ const base: StepRowModel = {
   title: 'Placeholder quest A',
   detail: 'Placeholder zone',
   projectedLevel: knownReadout(7.46),
+  duration: knownReadout(125),
+  xpGained: knownReadout(0),
+  pending: null,
+  assumptions: null,
   quest: { level: 8, difficulty: 'difficult', uncertain: false, provenance: UNKNOWN_FOREVER_PROVENANCE },
   issues: NO_ISSUES,
   locked: false,
 };
 
+/** The estimates as the name says them when they are 7.4, 0 XP and 2 minutes 5 seconds. */
+const BASE_ESTIMATES = 'Level after step 7.4. XP gained 0 XP. Time 2 minutes 5 seconds';
+
 describe('describeStepRow', () => {
-  it('names the step in words: number, kind, title, difficulty and level', () => {
+  it('names the step in words: number, kind, title, difficulty and every estimate', () => {
     expect(describeStepRow(base)).toBe(
-      '12. Accept quest: Placeholder quest A, Placeholder zone. Quest level 8, Difficult (yellow). Level after step 7.4.',
+      `12. Accept quest: Placeholder quest A, Placeholder zone. Quest level 8, Difficult (yellow). ${BASE_ESTIMATES}.`,
     );
   });
 
@@ -36,27 +44,59 @@ describe('describeStepRow', () => {
       detail: null,
       quest: { level: 8, difficulty: 'standard', uncertain: true, provenance: { claim: 'new', declaredBy: 'user' } },
       projectedLevel: knownReadout(9.05, { lowerBound: true, assumed: true }),
+      xpGained: knownReadout(450, { assumed: true, eraFallback: true }),
+      duration: knownReadout(3700, { assumed: true }),
       issues: { error: 1, warning: 2, info: 0 },
       locked: true,
     };
     expect(describeStepRow(model)).toBe(
       '12. Turn in quest: Placeholder quest A. Quest level 8, Standard (green), from a lower-bound level: may be easier. ' +
-        'New in Forever (user-declared). Level after step at least 9.0 (depends on assumptions). 1 error, 2 warnings. Locked.',
+        'New in Forever (user-declared). Level after step at least 9.0 (depends on assumptions). ' +
+        'XP gained 450 XP (depends on assumptions, uses Era values). Time 1 hour 1 minute (depends on assumptions). ' +
+        'Issues: 1 error, 2 warnings. Locked.',
     );
+  });
+
+  it('says when a travel time waits for its walking path, or for the navigation data to be checked', () => {
+    expect(describeStepRow({ ...base, pending: 'path' })).toContain(
+      'Time 2 minutes 5 seconds, pending: its walking path is still being computed, so the travel time is a straight-line estimate for now.',
+    );
+    expect(describeStepRow({ ...base, pending: 'checking' })).toContain(
+      'Time 2 minutes 5 seconds, pending: the navigation data is still being checked, so the travel time is a straight-line estimate for now.',
+    );
+  });
+
+  it('says an upper bound as "at most"', () => {
+    expect(describeStepRow({ ...base, xpGained: knownReadout(450, { upperBound: true }) })).toContain('XP gained at most 450 XP');
   });
 
   it('names the group a step sits under', () => {
     expect(describeStepRow(base, 'Placeholder guide, step 3')).toBe(
       '12. Accept quest: Placeholder quest A, Placeholder zone, in group Placeholder guide, step 3. ' +
-        'Quest level 8, Difficult (yellow). Level after step 7.4.',
+        `Quest level 8, Difficult (yellow). ${BASE_ESTIMATES}.`,
     );
     expect(describeStepRow(base, null)).toBe(describeStepRow(base));
   });
 
-  it('keeps an unknown level unknown', () => {
-    const model: StepRowModel = { ...base, kind: 'grind', quest: null, projectedLevel: unknownReadout('Quest XP unknown') };
+  it('keeps unknown estimates unknown, with their reasons', () => {
+    const model: StepRowModel = {
+      ...base,
+      kind: 'grind',
+      quest: null,
+      projectedLevel: unknownReadout('Quest XP unknown'),
+      xpGained: unknownReadout('No XP record'),
+    };
     expect(describeStepRow(model)).toBe(
-      '12. Grind: Placeholder quest A, Placeholder zone. Level after step unknown: Quest XP unknown.',
+      '12. Grind: Placeholder quest A, Placeholder zone. Level after step unknown: Quest XP unknown. XP gained unknown: No XP record. ' +
+        'Time 2 minutes 5 seconds.',
+    );
+  });
+
+  it('says a shared reason once when nothing is simulated', () => {
+    const unknown = unknownReadout<number>('Not simulated yet');
+    const model: StepRowModel = { ...base, quest: null, projectedLevel: unknown, xpGained: unknown, duration: unknown };
+    expect(describeStepRow(model)).toBe(
+      '12. Accept quest: Placeholder quest A, Placeholder zone. Level after step, XP and time unknown: Not simulated yet.',
     );
   });
 });
@@ -80,7 +120,9 @@ describe('StepRow', () => {
     const issues = container.querySelector('.frl-steprow__issues');
     expect(issues?.getAttribute('data-severity')).toBe('warning');
     expect(issues?.textContent).toBe('3');
-    expect(issues?.getAttribute('title')).toBe('2 warnings, 1 note');
+    expect(issues?.getAttribute('title')).toBe('Issues: 2 warnings, 1 info issue');
+    // The row's name carries the indicator in words (option children are presentational).
+    expect(screen.getByRole('option').getAttribute('aria-label')).toContain('Issues: 2 warnings, 1 info issue.');
   });
 
   it('shows a ≥ lower bound and the assumed marker', () => {
@@ -91,7 +133,8 @@ describe('StepRow', () => {
         active={false}
       />,
     );
-    const level = container.querySelector('.frl-steprow__level');
+    const level = container.querySelector('.frl-steprow__estimate .frl-readout');
+    expect(container.querySelector('.frl-steprow__estimate')?.getAttribute('data-column')).toBe('level');
     expect(level?.getAttribute('data-state')).toBe('lower-bound');
     expect(level?.textContent).toContain('≥9.5');
     expect(level?.querySelector('[data-reason="assumption"]')).not.toBeNull();
@@ -101,10 +144,77 @@ describe('StepRow', () => {
     const { container } = render(
       <StepRow model={{ ...base, projectedLevel: unknownReadout('No XP data') }} selected={false} active={false} />,
     );
-    const level = container.querySelector('.frl-steprow__level');
+    const level = container.querySelector('.frl-steprow__estimate .frl-readout');
     expect(level?.getAttribute('data-state')).toBe('unknown');
     expect(level?.textContent).toContain('?');
     expect(level?.textContent).not.toContain('0');
+  });
+
+  it('shows the chosen estimate with its basis markers: XP gained or the step time', () => {
+    const model: StepRowModel = {
+      ...base,
+      xpGained: knownReadout(1250, { assumed: true, eraFallback: true }),
+      duration: knownReadout(125, { eraFallback: true }),
+      assumptions: 'seconds per kill (your assumption)',
+    };
+    const { container, rerender } = render(<StepRow model={model} estimateColumn="xp" selected={false} active={false} />);
+    const cell = () => container.querySelector('.frl-steprow__estimate');
+    expect(cell()?.getAttribute('data-column')).toBe('xp');
+    expect(cell()?.textContent).toContain('+1,250');
+    // Dense rows show one marker; its words cover both the assumption and the Era values.
+    const marker = cell()?.querySelector('[data-reason="assumption"]');
+    expect(marker?.getAttribute('title')).toBe(
+      'Depends on assumptions: this step reads seconds per kill (your assumption); also uses Era values where Forever values are unknown',
+    );
+    rerender(<StepRow model={model} estimateColumn="time" selected={false} active={false} />);
+    expect(cell()?.getAttribute('data-column')).toBe('time');
+    expect(cell()?.textContent).toContain('2m 05s');
+    expect(cell()?.querySelector('[data-reason="era-fallback"]')).not.toBeNull();
+    // Every estimate is in the cell's tooltip, whichever one it shows.
+    expect(cell()?.getAttribute('title')).toBe(
+      'Level after 7.4 · XP +1,250 ≈ E · Time 2m 05s E. This step reads seconds per kill (your assumption)',
+    );
+  });
+
+  it('shows unknown XP and time as ? with the reason, never 0', () => {
+    const model: StepRowModel = { ...base, xpGained: unknownReadout('No XP record'), duration: unknownReadout('No drop source') };
+    const { container, rerender } = render(<StepRow model={model} estimateColumn="xp" selected={false} active={false} />);
+    const readout = () => container.querySelector('.frl-steprow__estimate .frl-readout');
+    expect(readout()?.getAttribute('data-state')).toBe('unknown');
+    expect(readout()?.getAttribute('title')).toBe('No XP record');
+    expect(readout()?.textContent).not.toContain('0');
+    rerender(<StepRow model={model} estimateColumn="time" selected={false} active={false} />);
+    expect(readout()?.getAttribute('title')).toBe('No drop source');
+  });
+
+  it('marks a step whose travel time waits for its walking path', () => {
+    const { container, rerender } = render(
+      <StepRow model={{ ...base, pending: 'path' }} estimateColumn="time" selected={false} active={false} />,
+    );
+    const option = screen.getByRole('option');
+    expect(option.className).toContain('is-pending');
+    const marker = container.querySelector('.frl-steprow__estimate [data-state="pending"]');
+    expect(marker?.getAttribute('title')).toBe(PENDING_TRAVEL_TEXT);
+    // Silent inside the row: the row's name says it once.
+    expect(marker?.textContent).toBe('');
+    expect(option.getAttribute('aria-label')).toContain('pending: its walking path is still being computed');
+    rerender(<StepRow model={{ ...base, pending: 'checking' }} estimateColumn="time" selected={false} active={false} />);
+    expect(container.querySelector('.frl-steprow__estimate [data-state="pending"]')?.getAttribute('title')).toBe(PENDING_CHECKING_TEXT);
+    rerender(<StepRow model={base} estimateColumn="time" selected={false} active={false} />);
+    expect(container.querySelector('[data-state="pending"]')).toBeNull();
+    expect(screen.getByRole('option').className).not.toContain('is-pending');
+  });
+
+  it('draws the hourglass beside the step time only: level and XP do not wait for walking paths (UI-12)', () => {
+    const { container, rerender } = render(<StepRow model={{ ...base, pending: 'path' }} estimateColumn="level" selected={false} active={false} />);
+    expect(container.querySelector('[data-state="pending"]')).toBeNull();
+    // The row still says the travel time is pending, in its name and the cell's tooltip.
+    expect(screen.getByRole('option').getAttribute('aria-label')).toContain('pending: its walking path is still being computed');
+    expect(container.querySelector('.frl-steprow__estimate')?.getAttribute('title')).toContain('(walking path pending)');
+    rerender(<StepRow model={{ ...base, pending: 'path' }} estimateColumn="xp" selected={false} active={false} />);
+    expect(container.querySelector('[data-state="pending"]')).toBeNull();
+    rerender(<StepRow model={{ ...base, pending: 'path' }} estimateColumn="time" selected={false} active={false} />);
+    expect(container.querySelector('[data-state="pending"]')).not.toBeNull();
   });
 
   const action = (name: 'duplicate' | 'delete' | 'lock') => {

@@ -807,9 +807,10 @@ conclusion. The React integration is a thin wrapper of our own (a ref plus effec
 
 | Module | What | May import |
 |---|---|---|
-| `src/map/adapter.ts` (pure) | The `MapAdapter` interface, the plain-data descriptors, the view-model inputs of `layers.ts`, `LAYER_IDS`, surface-id and bounds helpers | `domain`, `geo` |
-| `src/map/layers.ts` (pure) | View models → descriptors: `createMapLayers` (memoised per layer), the stateless `build*` functions, `surfacesOf`, `placeStep`, `legOf`, `routeStepInputOf`, `routeInputOf`, `routePieces`, `layerStatsNotes` with `LAYER_STATS_UNITS` | `domain`, `geo`; only types from `adapter.ts` |
-| `src/map/leaflet/` | `createLeafletMapAdapter` and its helpers: `transform.ts` (world ⇄ lat/lng, scale and zoom maths, grid labels), `diff.ts`, `style.ts` (palette, path styles, glyph specs and extents), `glyphs.ts` (canvas glyphs), `perf.ts` (User Timing), `leaflet-layers.ts` (the Leaflet subclasses and draw-list placement), `leaflet-core.css` (Leaflet's stylesheet without its images), `map.css` | `adapter.ts`, `leaflet`; only types from the pure modules |
+| `src/map/adapter.ts` (pure) | The `MapAdapter` interface, the plain-data descriptors, the view-model inputs of `layers.ts` (with `ReliefInput`, `OutlineInput`, `RouteLeg`, `RoutePathsInput`), `LAYER_IDS` and `IMAGE_LAYER_IDS`, `routeLegKey`, surface-id and bounds helpers | `domain`, `geo` |
+| `src/map/layers.ts` (pure) | View models → descriptors: `createMapLayers` (memoised per layer), the stateless `build*` functions, `surfacesOf`, `placeStep`, `legOf`, `routeStepInputOf`, `routeInputOf`, `routeLegsOf`, `routePieces`, `RELIEF_OPACITY`, `layerStatsNotes` with `LAYER_STATS_UNITS` | `domain`, `geo`; only types from `adapter.ts` |
+| `src/map/leaflet/` | `createLeafletMapAdapter` and its helpers: `transform.ts` (world ⇄ lat/lng, scale and zoom maths, grid labels), `diff.ts`, `style.ts` (palette, path, outline and frame styles, glyph specs and extents), `glyphs.ts` (canvas glyphs), `perf.ts` (User Timing), `leaflet-layers.ts` (the Leaflet subclasses and draw-list placement), `leaflet-core.css` (Leaflet's stylesheet without its images), `map.css` | `adapter.ts`, `leaflet`; only types from the pure modules |
+| `src/infra/maps/` (not pure) | Besides the geometry loader and local art: `art-manifest.ts` and `terrain.ts` (hand-written guards for the committed art manifest, the terrain manifest and the arc files), `map-resources.ts` (`createMapResources`: lazy, verified, memoised, never fatal) | pure modules, browser APIs |
 
 `ui` may import `adapter.ts` but not `layers.ts`, and `map/leaflet` only in the composition root:
 `src/main.tsx` hands the shell a lazy loader (`MapEngineSetup.loadAdapter`) that imports
@@ -821,7 +822,7 @@ There is no `src/map/index.ts`: the architecture test maps only `adapter.ts`, `l
 
 ### 7.1 Surfaces
 
-| Surface | Status | CRS mapping | Art overlay (local sets only) |
+| Surface | Status | CRS mapping | Image overlays (art, relief) |
 |---|---|---|---|
 | `world:<mapId>` (MapIDs 0, 1, 2991, 2997, …) | **MVP.** One surface per world map, chosen with the surface switcher | `L.CRS.Simple`, `latLng = (X, −Y)` in yards (north up, east right) | `L.imageOverlay(url, [[Xmin, −Ymax], [Xmax, −Ymin]])` |
 | Overview (both continents on one canvas, Azeroth 947 layout; revision 1's `UiSurface`) | **Deferred until after the MVP** (F23, ARCHITECTURE §7.2). The surface abstraction keeps it possible; the maths is in [coordinates §14.1](research/coordinates.md#141-surfaces). | `latLng = (−v·668, u·1002)` | `L.imageOverlay(url, [[−668, 0], [0, 1002]])` |
@@ -834,7 +835,7 @@ There is no `src/map/index.ts`: the architecture test maps only `adapter.ts`, `l
   for Durotar and −0.8 for Stormwind.
 - All zones of a continent share one world frame, so lines crossing zone borders need no special
   handling. Zone rectangles overlap and cities sit inside zones: use them for placeholders,
-  hit-testing and "zoom to zone", and use real continent art when a local set has it.
+  hit-testing and "zoom to zone", and the committed continent art (§7.5) for the picture.
 
 *As built:*
 
@@ -891,7 +892,11 @@ pan frame rate.
 
 | Layer | Budget (paths) | Continent zoom |
 |---|---:|---|
-| `zone-frames` | 100 | frames and the extent |
+| `relief` | 1 image (not a canvas path) | the world map's relief |
+| `art` | 16 images (not canvas paths) | the continent image; zoomed in, the viewed zone's (one at a time, §7.5) |
+| `coastline` | 1 | one path per world map |
+| `zone-outlines` | 1 | one path per world map |
+| `zone-frames` | 98 (100 before Milestone 3b) | frames and the extent |
 | `available-quests` | 600 | per-zone aggregates |
 | `objectives` | 500 | per-zone aggregates |
 | `turn-ins` | 150 | per-zone aggregates |
@@ -900,9 +905,9 @@ pan frame rate.
 | `route-steps` | 700 | as at zone zoom |
 | `proposal` | 100 | as at zone zoom |
 | `selection` | 100 | as at zone zoom |
-| `art` | 16 images (not canvas paths) | continent art only |
 
-- The canvas budgets sum to the 2,500 cap, and `createLod` refuses settings where they do not
+- The canvas budgets sum to the 2,500 cap (the two terrain paths come out of the zone frames' 100:
+  a world map has at most about 40 frames), and `createLod` refuses settings where they do not
   fit, so every layer is capped on its own inputs and the surface stays under the cap.
 - Over budget, focused items (the selected or hovered quest's points; selected, hovered and
   active steps) are kept first, then the nearest to the viewport centre (squared distance to a
@@ -918,12 +923,17 @@ pan frame rate.
 - The zone the user jumped to (`view.map.zone`, passed as `rawZone` to `spawns`) is drawn raw at
   any zoom, like a focused quest's points (by the points' published UiMap).
 - Aggregates group by the point's published UiMap (`SpawnPoint.uiMapId`, the hint, never
-  rectangle containment; coordinates §5). Points without one group per world map (`No zone`). The
-  glyph shows the point count (`4.3k` style, rounded down); the label also names the number of
-  distinct subjects.
+  rectangle containment; coordinates §5) when that UiMap is a zone: one drawn as a zone frame (a
+  single full-rectangle row with an AreaID) on the same world map. Points without a hint, and
+  points published on the world map (Azeroth 947, one row per continent) or on a continent
+  (AreaID 0), group per world map (`No zone`). Milestone 3b fixed the one aggregate STATUS listed
+  for Azeroth: QuestieDB publishes the object "Freshly Dug Dirt" (quest "rAnS0m") on 947, south
+  of Tanaris, and the map drew an "Azeroth" count as if it were a zone. The glyph shows the point
+  count (`4.3k` style, rounded down); the label also names the number of distinct subjects.
 - Every layer returns `LayerStats`: `drawn`, `notDrawn` (cut by the cap), `aggregated`,
   `unresolved` by reason, and `otherSurfaces`. `layerStatsNotes(stats, layer)` turns them into
-  panel sentences that always name the unit (M3 review MAP-HONEST-5), from `LAYER_STATS_UNITS`:
+  panel sentences that always name the unit (M3 review MAP-HONEST-5), from `LAYER_STATS_UNITS`
+  (images for the relief and art, outlines for the terrain lines):
   spawn layers count markers cut by the cap and points unplaced or elsewhere ("22 points not
   placed: 22 inside an instance with no known entrance", "377 points on other world maps"); step
   markers count steps; the route line counts logical lines and glyphs on other world maps (not
@@ -938,13 +948,18 @@ pan frame rate.
 
 ### 7.3 Layer updates
 
-- Layers, bottom to top (`LAYER_IDS`): `art`, `zone-frames`, `available-quests`, `objectives`,
-  `turn-ins`, `flight-masters`, `route-line`, `route-steps`, `proposal`, `selection`. Spawn layers
-  sit below the route, so route markers win hit-testing.
+- Layers, bottom to top (`LAYER_IDS`): `relief`, `art`, `coastline`, `zone-outlines`,
+  `zone-frames`, `available-quests`, `objectives`, `turn-ins`, `flight-masters`, `route-line`,
+  `route-steps`, `proposal`, `selection`. `relief` and `art` are the image layers
+  (`IMAGE_LAYER_IDS`), drawn as image overlays in their own panes; the rest share one canvas.
+  Spawn layers sit below the route, so route markers win hit-testing; the terrain lines are not
+  interactive.
 - Descriptors are plain data with stable ids, unique within a layer: `extent:<mapId>`,
-  `frame:<uiMapId>`, `art:<uiMapId>`, `spawn:<npc|object>:<id>:<i>`,
+  `frame:<uiMapId>`, `art:<uiMapId>`, `relief:<mapId>`, `outline:<zones|coast>:<mapId>`,
+  `spawn:<npc|object>:<id>:<i>`,
   `spawn:event:<questId>:<objective>:<i>`, `agg:<layer>:<uiMapId>` (or `agg:<layer>:map-<mapId>`),
-  `run:<mapId>:<style>:<first step of the piece>`, `transition:out:<stepId>`,
+  `run:<mapId>:<style>:<first step of the piece>` (`…:<step>@<n>` for a piece that starts `n`
+  vertices into a walking path longer than a piece), `transition:out:<stepId>`,
   `transition:in:<stepId>`, `departure:<stepId>`, `step:<stepId>`, `halo:<stepId>`,
   `leg:<stepId>`. A repeated base id gets `~2`, `~3`, ….
 - **No positional numbers** (M3 review PERF-2). Route descriptors name steps by id: a step
@@ -1045,6 +1060,42 @@ pan frame rate.
   first. The proposal layer draws the proposed route in one `proposal` style, split only by
   world map.
 
+*Walking paths (Milestone 3b):*
+
+- **Input** (`RoutePathsInput` in adapter.ts): `pathOf(leg)` gives a walked leg's path (its
+  points in order, finite, on the leg's world map), or null; `pending` says paths are still being
+  computed. A `RouteLeg` names the two steps and their placed points; `routeLegKey(leg)` is an
+  exact string key (world map and both end points) for a caller's cache, and `routeLegsOf(route)`
+  lists the legs the route line will ask for, so a navigation model can compute exactly those.
+  The controller takes it with `MapController.setRoutePaths`; a new object is given whenever an
+  answer changes (a batch arrived, computing finished).
+- **Which legs**: from one placed step to the next placed step on the same world map, reached on
+  foot or mounted (`route`: not after a flight `take`, not by transport or hearth), and moving
+  (two steps at one point take no path). Proposal lines never take paths.
+- **Drawing**: a leg with a path runs from the step point through the path's points to the next
+  step point (a path whose ends were snapped away from the step points stays joined to the
+  markers); its style stays `route`. A leg without a path is straight, as `route-pending` while
+  `pending` (short even dashes, faded) or `route-fallback` otherwise (dash-dot-dot). A path that
+  breaks the rules (a point off the leg's world map, not finite, empty) or a provider that throws
+  draws a fallback: the map never breaks. Each of the three is its own run, so a style change
+  starts a new polyline at the shared point, as leg styles always have. Neither new style uses a
+  difficulty colour or the provenance cyan; both take the route colour and differ by dash.
+- **Caps with paths** (§7.2): the steps are cut into pieces as before (`routePieces`,
+  content-defined); a piece whose legs' path points take it over 256 vertices is cut again at the
+  last step that fits, or inside a leg longer than a piece (`…@<n>` ids). Every polyline keeps at
+  most 256 vertices, consecutive pieces share their end vertex, and the `route-line` layer keeps
+  its budget of 150 paths, nearest the centre first, counting the rest as not drawn. The
+  highlighted leg into the active step follows its path too, in pieces of at most 256 vertices.
+- **Cost**: the memoised builder asks `pathOf` once per leg per paths object (a leg cache keyed
+  by the step it leads into, checked against the step it leaves and the paths object), shared by
+  the route line and the selection's leg; and it keeps each piece's descriptor while the steps
+  and leg drawings of its range are the same objects (a piece cache), so an edit builds only the
+  pieces it touched and the rest compare by identity. Without paths the pieces, ids and
+  descriptors are exactly those of Milestone 3.
+- **Counts**: `LayerStats.paths` (route line only, with paths) counts the walked legs on the
+  shown world map along a path, pending and fallback; the layer panel's "Walking paths" row says
+  them in words.
+
 ### 7.5 Drawing, events and theme
 
 - **Glyphs** (`glyphs.ts`), simple original shapes drawn on the canvas, one per kind, so shape
@@ -1062,6 +1113,7 @@ pan frame rate.
   count included (`glyphExtent`), so a dirty-rectangle redraw that clears part of a glyph redraws
   all of it; its hit radius stays the glyph's size plus 2 px (plus the renderer's 2 px tolerance).
 - **Lines**: route solid, transport dashed, flight dotted, hearth dash-dot, proposal long dashes,
+  a walked leg whose path is pending short even dashes (faded), one with no path dash-dot-dot,
   highlight a thick solid line; every style differs by more than colour.
 - **Colours** come from the kit's CSS custom properties, read from the map container
   (`readMapPalette`): an optional `--frl-map-<role>` token first (for example `--frl-map-route`),
@@ -1097,11 +1149,57 @@ pan frame rate.
   splitter drag, at most once a frame) calls `invalidateSize` with a debounced `moveend`, so the
   renderer redraws, the adapter emits one `move` and the controller syncs once, 200 ms after the
   resizing stops (M3 review PERF-5); `resize()` settles at once.
-- **Art** (local sets only, D-018): image overlays in a pane below the grid, drawn from object
-  URLs of the verified image bytes (`infra/maps` local art), never from the plain file URL. The
-  image rectangle comes from the geometry `createMapLayers` was given, so it is built over the
-  merged geometry when a local set adds UiMaps. A surface with continent art shows only that;
-  otherwise zone art is drawn largest first.
+- **Painted art** (D-033, Milestone 3b): the committed images of `public/maps/art/` (Blizzard
+  Entertainment's artwork, with its notice) as image overlays in the `frl-art` pane (z-index 250),
+  below the grid (350) and the canvas (400), placed by the world rectangle the art manifest
+  records for each image (its UiMapAssignment row at the art's build; `ArtInput.bounds`), in
+  `CRS.Simple` as `[[Xmin, −Ymax], [Xmax, −Ymin]]`. The map draws the map being viewed, one image
+  at a time as the game's world map does: zone images carry painted parchment borders, so
+  neighbours drawn together cover each other (checked in a browser, Milestone 3b). Zoomed out,
+  the surface's continent image (never the alternative continents 1463 and 1464); zoomed in, or
+  on a world map without a continent image, the image of the zone being viewed: the zone jumped
+  to while the view centre is in its rectangle, else the zone frame the centre is most central in
+  that has an image (`zoneFramesContaining`). Zoomed in outside every zone image nothing is drawn:
+  the continent image is too coarse there, and the relief is the backdrop. Of two images of one
+  rectangle (Zephras Isle 2521 and 2665) the one with more pixels is drawn. Azeroth 947 spans two
+  world maps and is drawn on none (the art layer says so). The images are drawn from their
+  deployed URLs: they ship with the app as its code does, an `<img>` loads and decodes them off
+  the main thread, and `tools/maps/validate.ts` and the dist audit check their hashes at build
+  time. An art switch therefore never waits for an image; the old image is removed at once and
+  the new one appears when it has loaded.
+- **Local art** (dev and preview only, D-018): a compatible local set's art replaces the
+  committed art while it lists images. It is drawn from object URLs of the verified image bytes
+  (`infra/maps` local art), never from the plain file URL, and its rectangle comes from the
+  geometry `createMapLayers` was given.
+- **Relief** (D-032): the world map's shaded relief PNG (about 17 yd per pixel; maps 0 and 1) as
+  an image overlay in the `frl-relief` pane (z-index 240), under everything, placed by the
+  terrain manifest's rectangle. It is the backdrop at `RELIEF_OPACITY.backdrop` (0.85) where no
+  painted art is drawn on the world map (none exists, the art layer is hidden, or the art could
+  not be loaded), and faint at `RELIEF_OPACITY.underArt` (0.4) while art is drawn over it
+  (terrain-navigation.md §13.2): the art covers it where it exists, and it shows the terrain
+  around the viewed zone. Only its opacity changes (`setOpacity`), never its image. The PNG's own
+  palette (transparent where there is no terrain, a muted blue for water, greys) is the terrain
+  tool's; it is data, not a UI signal.
+- **Zone outlines and coastline** (D-032): one non-interactive canvas path each per world map
+  (`OutlineDescriptor`, a Leaflet multi-line polyline with `smoothFactor` 1), from the arc files
+  decoded to world points (1-yd integers, delta-coded; `infra/maps/terrain.ts`). Zone outlines
+  are stroked 1.5 px in the frame token (`--frl-map-frame`, 3:1 on the map background) at full
+  opacity; the coastline 1 px in the muted ink. A click on them is a click on the map. They are
+  a picture: points are still attributed by their published zone and the frames. Kalimdor's
+  coastline has 916 arcs and 18,031 vertices, the Eastern Kingdoms' 876 and 15,552; the zone
+  outlines 127 and 109 arcs.
+- **Frames over art**: while painted art is drawn on the world map, zone frames lose their faint
+  fill (`FrameDescriptor.filled` false): every frame a city lies in would add another veil over
+  the art. Their stroke and labels stay.
+- **Loading and failures** (`createMapResources`, infra/maps): the art manifest and the terrain
+  manifest are fetched (revalidated) when the map first mounts, never during startup; an arc file
+  is fetched when its layer is first shown on its world map (the coastline, off by default, is
+  not fetched until it is shown), its bytes checked against the terrain manifest's SHA-256 (a
+  mismatch is fetched once more past the HTTP cache), then decoded. Every call resolves: a
+  missing or malformed manifest or file is a `failed` result with the reason, kept unless it
+  could not be fetched (tried again at the next mount). The map then draws what it has: the relief
+  without the art, the zone frames without either, and the route as ever. The layer says why
+  (`unavailable`) and the status line what the map shows instead.
 - **Events**: `click` (the topmost interactive item, or none, with the world point and the zone
   frames under it), `hover` (enter and leave), `move` (`moveend`), `zoom` (`zoomend`) and
   `surface`. Hits come from Leaflet's canvas hit-testing and carry every ref of the hit
@@ -1160,8 +1258,31 @@ pan frame rate.
   zoom floor, a debounced observed resize with one grid redraw, glyph bounds with badges, the
   stack badge, dash handling in a draw pass, departures, and the canvas padding. happy-dom has no
   3D transforms, so Leaflet snaps views to whole zooms there.
-- Not covered yet: a real-browser run (visual check, and the §14 budgets at the cap), which
-  lands with the Playwright smoke test (Milestone 9).
+- Milestone 3b (in the same files, and `src/infra/maps/*.test.ts`): the relief (backdrop and
+  under-art opacity, the manifest's rectangle, an opacity-only change), committed art placed by
+  its own rectangle, outlines as one path per world map with their descriptor kept per input,
+  budgets still summing to the cap, unfilled frames; aggregates of points published on the world
+  map or a continent; walking paths (`routeLegsOf`, legs along paths, pending and fallback runs,
+  rule-breaking paths, snapped ends, the per-vertex step ids, no paths for the proposal); the caps
+  with paths (a 2,000-step route with 20 path points per leg: every piece at most 256 vertices,
+  ends shared, 150 drawn and the rest counted; a leg longer than a piece cut inside with `@` ids;
+  the highlighted leg in pieces); the memoised builders asking only for changed legs and keeping
+  every piece an edit did not touch. The Leaflet adapter: the relief and art panes below the grid
+  and the canvas, images outside the path count and the draw list, an opacity change in place,
+  outlines as non-interactive paths in layer order, a frame drawn without its fill. The loaders
+  over the committed files: the manifests, every listed file present, the decoded arcs, hash
+  verification with one retry past the cache, failures that never reject. The controller with a
+  fake `MapResources`: loading at first mount, one image at a time, the continent zoomed out,
+  relief opacity and frame fill following the art, outlines fetched per world map and the
+  coastline only once shown, failures in the status line and the layer notes, retries at the next
+  mount; walking paths given, counted, toggled off and on, pending and fallback, rebuilt only for
+  a new object.
+- A browser check with a scratch harness over the real adapter, layers and loaders (Milestone 3b,
+  not committed): the Kalimdor and Eastern Kingdoms continent images and the Durotar image line up
+  with the zone outlines and the coastline, and the relief orientation matches known land and sea
+  points (north up, west left).
+- Not covered yet: a real-browser run of the app itself (visual check, and the §14 budgets at the
+  cap), which lands with the Playwright smoke test (Milestone 9).
 
 ## 8. Placeholder map and committed geometry
 

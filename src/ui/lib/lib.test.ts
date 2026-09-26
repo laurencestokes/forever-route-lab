@@ -65,7 +65,7 @@ describe('issues', () => {
   });
 
   it('describes counts in words', () => {
-    expect(describeIssueCounts(counts)).toBe('1 error, 2 warnings, 1 note');
+    expect(describeIssueCounts(counts)).toBe('1 error, 2 warnings, 1 info issue');
     expect(describeIssueCounts({ error: 0, warning: 0, info: 0 })).toBe('No issues');
   });
 });
@@ -79,13 +79,16 @@ describe('readout', () => {
       value: 5,
       unknownReason: null,
       lowerBound: true,
+      upperBound: false,
       assumed: false,
       eraFallback: false,
     });
+    expect(knownReadout(5, { upperBound: true })).toMatchObject({ lowerBound: false, upperBound: true });
     expect(unknownReadout('no data')).toEqual({
       value: null,
       unknownReason: 'no data',
       lowerBound: false,
+      upperBound: false,
       assumed: false,
       eraFallback: false,
     });
@@ -96,6 +99,7 @@ describe('readout', () => {
       value: 10,
       unknownReason: null,
       lowerBound: false,
+      upperBound: false,
       assumed: true,
       eraFallback: true,
     });

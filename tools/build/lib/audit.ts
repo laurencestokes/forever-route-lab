@@ -467,6 +467,12 @@ export interface EntryChunkReport {
   readonly css: readonly SizedFile[];
   /** What the entry loads with dynamic `import()` (the map engine, M3 review PERF-11); reported, not gated. */
   readonly lazy: LazyChunksReport;
+  /**
+   * Scripts the entry or its lazy chunks emit as separate assets: module workers
+   * (`new Worker(new URL('./x.worker.ts', import.meta.url))`, such as the navigation worker). Vite
+   * lists them under the importing chunk's `assets`, not its imports. Reported, not gated.
+   */
+  readonly workers: readonly SizedFile[];
 }
 
 export interface LazyChunksReport {
@@ -501,6 +507,7 @@ interface ManifestChunk {
   readonly imports: readonly string[];
   readonly dynamicImports: readonly string[];
   readonly css: readonly string[];
+  readonly assets: readonly string[];
 }
 
 function parseViteManifest(value: unknown): ReadonlyMap<string, ManifestChunk> {
@@ -516,6 +523,7 @@ function parseViteManifest(value: unknown): ReadonlyMap<string, ManifestChunk> {
       imports: list(raw.imports),
       dynamicImports: list(raw.dynamicImports),
       css: list(raw.css),
+      assets: list(raw.assets),
     });
   }
   return chunks;
@@ -524,8 +532,8 @@ function parseViteManifest(value: unknown): ReadonlyMap<string, ManifestChunk> {
 /**
  * ARCHITECTURE §14: for every entry in dist/.vite/manifest.json, the gzip size of the entry
  * chunk plus its transitive static `imports` (never `dynamicImports`) must stay within budget.
- * The chunks it loads lazily (`dynamicImports`, transitively) are sized and reported, not gated,
- * so a lazy chunk cannot grow unnoticed (M3 review PERF-11).
+ * The chunks it loads lazily (`dynamicImports`, transitively) and the worker scripts those chunks
+ * emit are sized and reported, not gated, so neither can grow unnoticed (M3 review PERF-11).
  */
 export function checkEntryChunks(
   distDir: string,
@@ -595,6 +603,14 @@ export function checkEntryChunks(
       totalGzipBytes: lazyChunks.reduce((sum, file) => sum + file.gzipBytes, 0),
       css: sizedIfPresent(distDir, lazyCss),
     };
+    // Worker scripts: script assets of every chunk reached above (images and fonts are not scripts).
+    const workerFiles = new Set<string>();
+    for (const key of [...seen, ...lazySeen]) {
+      for (const asset of chunks.get(key)?.assets ?? []) {
+        if (/\.[cm]?js$/.test(asset) && !files.has(asset) && !lazyFiles.has(asset)) workerFiles.add(asset);
+      }
+    }
+    const workers = sizedIfPresent(distDir, workerFiles);
     const totalGzipBytes = sized.reduce((sum, file) => sum + file.gzipBytes, 0);
     if (totalGzipBytes > budgetBytes) {
       violations.push({
@@ -603,7 +619,7 @@ export function checkEntryChunks(
         message: `entry "${entry}" plus static imports is ${formatBytes(totalGzipBytes)} gzip, over the ${formatBytes(budgetBytes)} budget (ARCHITECTURE §14)`,
       });
     }
-    return { entry, chunks: sized, totalGzipBytes, css: sheets, lazy };
+    return { entry, chunks: sized, totalGzipBytes, css: sheets, lazy, workers };
   });
   return { reports, violations };
 }
@@ -834,6 +850,7 @@ export function formatAuditReport(result: AuditResult): string {
       );
     }
     if (lazy.css.length > 0) lines.push('  CSS loaded by those chunks (not gated):', ...lazy.css.map(row));
+    if (report.workers.length > 0) lines.push('  Worker scripts (not gated):', ...report.workers.map(row));
   }
   if (result.data.files.length > 0) {
     lines.push('', 'data/ files:', ...result.data.files.map(row), `    ${'total'.padEnd(48)} ${''.padStart(10)}  gzip ${formatBytes(result.data.totalGzipBytes).padStart(10)}`);

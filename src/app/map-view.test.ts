@@ -10,6 +10,7 @@ import {
   patchMapUi,
   setMapLayerVisible,
   setMapUi,
+  setMapWalkingPaths,
   shownOpenedQuests,
   withLayerVisible,
 } from './map-view';
@@ -27,7 +28,7 @@ describe('patchMapUi', () => {
   });
 
   it('holds no hover: what the pointer is over stays with the map controller (PERF-14)', () => {
-    expect(Object.keys(DEFAULT_MAP_UI).sort()).toEqual(['layers', 'surface', 'zone', 'zoomBand']);
+    expect(Object.keys(DEFAULT_MAP_UI).sort()).toEqual(['layers', 'surface', 'walkingPaths', 'zone', 'zoomBand']);
   });
 
   it('returns a new object for a change, keeping unchanged nested values', () => {
@@ -41,7 +42,20 @@ describe('patchMapUi', () => {
     expect(hidden.layers['available-quests']).toBe(false);
     expect(hidden.layers['route-line']).toBe(true);
     expect(withLayerVisible(hidden, 'available-quests', false)).toBe(hidden);
-    expect(Object.values(DEFAULT_MAP_LAYERS).every(Boolean)).toBe(true);
+  });
+
+  it('shows every layer by default but the coastline, and walking paths on (UI.md §12)', () => {
+    const hidden = Object.entries(DEFAULT_MAP_LAYERS).filter(([, visible]) => !visible).map(([layer]) => layer);
+    expect(hidden).toEqual(['coastline']);
+    expect(DEFAULT_MAP_LAYERS).toMatchObject({ art: true, relief: true, 'zone-outlines': true });
+    expect(DEFAULT_MAP_UI.walkingPaths).toBe(true);
+  });
+
+  it('turns walking paths on and off like a layer, without notifying for no-ops', () => {
+    const off = patchMapUi(DEFAULT_MAP_UI, { walkingPaths: false });
+    expect(off.walkingPaths).toBe(false);
+    expect(off.layers).toBe(DEFAULT_MAP_UI.layers);
+    expect(patchMapUi(off, { walkingPaths: false })).toBe(off);
   });
 });
 
@@ -86,6 +100,10 @@ describe('store helpers', () => {
     setMapUi(store, { zoomBand: 'continent' });
     expect(listener).toHaveBeenCalledTimes(2);
     expect(store.getState().view.map).toMatchObject({ zoomBand: 'continent', layers: { 'zone-frames': false } });
+    setMapWalkingPaths(store, true);
+    expect(listener).toHaveBeenCalledTimes(2);
+    setMapWalkingPaths(store, false);
+    expect(store.getState().view.map.walkingPaths).toBe(false);
     expect(store.getState().revision).toBe(0);
   });
 });

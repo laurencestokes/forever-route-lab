@@ -5,10 +5,11 @@ import { ModalDialog } from './ModalDialog';
 /**
  * Parts of the shell that load on first use, each a dynamic `import()` in its own chunk, so the
  * entry chunk holds only what the first screen needs (ARCHITECTURE §12.1 lazy boundaries, §14
- * entry budget; M4 review CR-19): the Settings dialog, the custom quest editor and the two RXP
- * dialogs. Each loader keeps its module once loaded; a failed load is forgotten, so "Try again"
- * imports it afresh (as `loadRxpTools` does). Production builds fetch them when the page is idle
- * after the start (`preloadLazyParts`), so the first use is usually immediate.
+ * entry budget; M4 review CR-19): the Settings dialog, the custom quest editor, the two RXP
+ * dialogs and the validation panel (with the issue-code registry). Each loader keeps its module
+ * once loaded; a failed load is forgotten, so "Try again" imports it afresh (as `loadRxpTools`
+ * does). Production builds fetch them when the page is idle after the start (`preloadLazyParts`),
+ * so the first use is usually immediate.
  */
 
 /** A loader that keeps its module, and forgets a failure. */
@@ -23,13 +24,14 @@ function cached<T>(load: () => Promise<T>): () => Promise<T> {
   };
 }
 
-/** All four parts are one chunk (`lazy-parts.ts`), so the modules they share stay in the entry chunk. */
+/** All five parts are one chunk (`lazy-parts.ts`), so the modules they share stay in the entry chunk. */
 const loadParts = cached(() => import('./lazy-parts'));
 
 export const loadSettingsDialog = loadParts;
 export const loadCustomQuestEditor = loadParts;
 export const loadRxpImportDialog = loadParts;
 export const loadRxpExportDialog = loadParts;
+export const loadValidationPanel = loadParts;
 
 /** Fetches the lazy parts once the page is idle (production builds only; a failure waits for first use). */
 export function preloadLazyParts(): () => void {

@@ -9,6 +9,7 @@ import {
   glyphExtent,
   glyphHitRadius,
   markerGlyph,
+  outlineStyle,
   paletteFrom,
   PALETTE_SOURCES,
   polylineStyle,
@@ -84,13 +85,25 @@ describe('palette', () => {
 });
 
 describe('line styles', () => {
-  const styles: readonly LineStyle[] = ['route', 'transport', 'flight', 'hearth', 'highlight', 'proposal'];
+  const styles: readonly LineStyle[] = ['route', 'transport', 'flight', 'hearth', 'route-pending', 'route-fallback', 'highlight', 'proposal'];
 
   it('gives every leg style its own dash pattern, so colour is never the only cue', () => {
     const patterns = styles.filter((s) => s !== 'highlight').map((s) => polylineStyle(s, 'normal', DEFAULT_MAP_PALETTE).dashArray);
     expect(new Set(patterns).size).toBe(patterns.length);
     expect(polylineStyle('route', 'normal', DEFAULT_MAP_PALETTE).dashArray).toBeNull();
     expect(polylineStyle('highlight', 'normal', DEFAULT_MAP_PALETTE).weight).toBeGreaterThan(polylineStyle('route', 'normal', DEFAULT_MAP_PALETTE).weight);
+  });
+
+  it('draws walked legs without a path straight in the route colour, pending faded in short dashes, fallback dash-dot-dot', () => {
+    const route = polylineStyle('route', 'normal', DEFAULT_MAP_PALETTE);
+    const pending = polylineStyle('route-pending', 'normal', DEFAULT_MAP_PALETTE);
+    const fallback = polylineStyle('route-fallback', 'normal', DEFAULT_MAP_PALETTE);
+    expect([pending.color, fallback.color]).toEqual([route.color, route.color]);
+    expect(pending).toMatchObject({ dashArray: '4 4' });
+    expect(pending.opacity).toBeLessThan(route.opacity);
+    expect(fallback).toMatchObject({ dashArray: '10 3 2 3 2 3', opacity: route.opacity });
+    // Neither looks like the hearth's dash-dot or the flight's dots.
+    expect([pending.dashArray, fallback.dashArray]).not.toContain(polylineStyle('hearth', 'normal', DEFAULT_MAP_PALETTE).dashArray);
   });
 
   it('thickens strong lines and fades dim ones', () => {
@@ -104,6 +117,18 @@ describe('line styles', () => {
     expect(frameStyle('zone', 'normal', DEFAULT_MAP_PALETTE)).toMatchObject({ fill: true, dashArray: null, color: DEFAULT_MAP_PALETTE.frame });
     expect(frameStyle('zone', 'strong', DEFAULT_MAP_PALETTE)).toMatchObject({ color: DEFAULT_MAP_PALETTE.frameStrong, weight: 2.5 });
     expect(frameStyle('extent', 'normal', DEFAULT_MAP_PALETTE)).toMatchObject({ fill: false, dashArray: '6 4' });
+  });
+
+  it('leaves out a zone frame’s fill over painted art', () => {
+    expect(frameStyle('zone', 'normal', DEFAULT_MAP_PALETTE, false)).toMatchObject({ fill: false, fillOpacity: 0, opacity: 1 });
+    expect(frameStyle('zone', 'strong', DEFAULT_MAP_PALETTE, false)).toMatchObject({ fill: false, color: DEFAULT_MAP_PALETTE.frameStrong });
+  });
+
+  it('strokes zone outlines like frames, at full opacity, and the coastline thinner in the muted ink', () => {
+    expect(outlineStyle('zones', DEFAULT_MAP_PALETTE)).toMatchObject({ color: DEFAULT_MAP_PALETTE.zoneOutline, weight: 1.5, opacity: 1, fill: false, dashArray: null });
+    expect(outlineStyle('coast', DEFAULT_MAP_PALETTE)).toMatchObject({ color: DEFAULT_MAP_PALETTE.coast, weight: 1, opacity: 1, fill: false });
+    // The outline role takes the frame token first, as frames do.
+    expect(paletteFrom((property) => (property === '--frl-map-frame' ? '#202020' : '')).zoneOutline).toBe('#202020');
   });
 
   it('strokes frames at full opacity, so the frame token keeps its 3:1 against the map', () => {

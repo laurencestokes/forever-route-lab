@@ -187,5 +187,59 @@
     "browserSampleSelectionChange": { "storeSyncMs": 0.4, "activeStepSyncMs": [5.7, 3.8] },
     "node10000": { "noteEditMs": 9.25, "selectMs": 6.7, "moveStepMs": 9.38, "panSameLodMs": 2.78 },
     "reviewBrowser10000": { "routeEditSyncMs": [23.6, 27.1], "$comment": "the M3 render review (PERF-2), real adapter" }
+  },
+  "paths10000": {
+    "$comment": [
+      "Map route edit with walking paths (docs/ARCHITECTURE.md §14: one route edit applied, 8 ms), stored at the final verification after the Milestone 6 and 3b.6 fix pass (2026-09-26). First stored baseline: the review fixes rebuilt the path feed (NAV-06, NAV-07, NAV-09, PERF-09) and the bench gained --budget and --check.",
+      "Script: pnpm exec tsx tests/bench/map-paths.bench.ts --budget (21 runs after 3 warm-ups); median is the median of three processes' medians (runMedians). `--check <file>` reads paths10000.<case>.median and fails on more than 25% over it. Node only: the browser adds the adapter's setLayer and the canvas redraw (see browser), so moveStep at the budget in Node does not show the budget is met in a browser (review PERF-09).",
+      "Load: two stale background processes kept about two to three of the 16 logical processors busy. Not probe-normalised."
+    ],
+    "steps": 10000,
+    "requested": 135,
+    "pathStats": {
+      "along": 895,
+      "pending": 0,
+      "fallback": 4741
+    },
+    "moveStep": {
+      "median": 8,
+      "runMedians": [
+        8,
+        7.98,
+        8.22
+      ]
+    },
+    "insertNote": {
+      "median": 3.57,
+      "runMedians": [
+        3.53,
+        3.57,
+        3.61
+      ]
+    },
+    "editNote": {
+      "median": 2.44,
+      "runMedians": [
+        2.44,
+        2.46,
+        2.43
+      ]
+    },
+    "newPaths": {
+      "median": 4.21,
+      "runMedians": [
+        4.21,
+        4.71,
+        4
+      ]
+    },
+    "pan": {
+      "median": 0.23,
+      "runMedians": [
+        0.23,
+        0.23,
+        0.27
+      ]
+    }
   }
 }

@@ -203,3 +203,27 @@
   margin-right: 1px;
   color: var(--frl-fg-muted);
 }
+
+/* A provisional value: shown in italics, with the pending marker beside it. */
+.frl-readout--pending .frl-readout__value {
+  font-style: italic;
+}
+
+/* Pending (a walking path being computed): neutral hourglass, never a severity or reserved hue -- */
+.frl-pending {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: 2px;
+  color: var(--frl-assumed);
+  line-height: 1;
+  cursor: help;
+}
+
+.frl-pending__glyph {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

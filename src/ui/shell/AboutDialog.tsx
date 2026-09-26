@@ -17,6 +17,19 @@ export const NO_WARRANTY =
 export const NON_AFFILIATION =
   `${PRODUCT_NAME} is not affiliated with or endorsed by Blizzard Entertainment, the Questie project or RestedXP. World of Warcraft is a trademark of Blizzard Entertainment, Inc.`;
 
+/**
+ * The painted map art's notice (D-033 rules 1-3; public/maps/art/NOTICE.md has the full text):
+ * Blizzard Entertainment owns the artwork, the project is not affiliated with or endorsed by it,
+ * the site is non-commercial, and the art is removed on request. It states facts and the project's
+ * rules; it draws no legal conclusion.
+ */
+export const MAP_ART_NOTICE =
+  'The painted world-map art shown on the map is Blizzard Entertainment’s artwork (© Blizzard Entertainment, Inc.), extracted from the World of Warcraft: Forever client. It is not this project’s work, and this project’s licence grants no rights over it. This project is not affiliated with or endorsed by Blizzard Entertainment. The site is non-commercial: no ads, paid features or sales. The art will be removed promptly if Blizzard Entertainment asks.';
+
+/** The terrain byproducts' line (D-032; public/maps/terrain/NOTICE.md). */
+export const TERRAIN_DATA_NOTICE =
+  'The shaded relief, coastlines and zone outlines are computed by this project from the client’s terrain data; they are not copies of game files or of the painted art.';
+
 /** Keep in step with the README's copyright line. */
 export const DEFAULT_COPYRIGHT = 'Copyright (C) 2026 Laurence Stokes';
 
@@ -44,6 +57,10 @@ export interface AboutDialogProps {
     readonly licence: string;
     readonly thirdPartyNotices: string;
     readonly dataNotice: string;
+    /** The deployed map art notice (default `maps/art/NOTICE.md`). */
+    readonly mapArtNotice?: string | undefined;
+    /** The deployed terrain data notice (default `maps/terrain/NOTICE.md`). */
+    readonly terrainNotice?: string | undefined;
   } | undefined;
 }
 
@@ -51,11 +68,14 @@ const DEFAULT_LINKS = {
   licence: 'LICENSE.txt',
   thirdPartyNotices: 'third-party-notices.txt',
   dataNotice: 'data/NOTICE.md',
+  mapArtNotice: 'maps/art/NOTICE.md',
+  terrainNotice: 'maps/terrain/NOTICE.md',
 } as const;
 
 /**
  * About and licences: the project licence and no-warranty line, the data notice (D-016, stated
- * neutrally), non-affiliation, and the exact source commit. A native modal <dialog>: focus moves
+ * neutrally), the map art notice (D-033) with the terrain data line (D-032), non-affiliation, and
+ * the exact source commit. A native modal <dialog>: focus moves
  * into it, Escape closes it, and focus returns to the opener.
  */
 export function AboutDialog({
@@ -200,20 +220,28 @@ export function AboutDialog({
               )}
               <p className="frl-about__carve-out">{DATA_LICENCE_CARVE_OUT}</p>
               {placeholderData ? (
-                <p>
-                  The full data notice ships with the data from Milestone 2. No map art is included.
-                </p>
+                <p>The full data notice ships with the data from Milestone 2.</p>
               ) : (
                 <>
                   <p>
                     Forever-specific content is not verified: every dataset quest&apos;s Forever status is unknown, and
-                    Forever XP values are assumptions unless you enter observed ones. No map art is included.
+                    Forever XP values are assumptions unless you enter observed ones.
                   </p>
                   <p>
                     <a href={links.dataNotice}>Full data notice</a>
                   </p>
                 </>
               )}
+            </section>
+
+            <section className="frl-about__section" aria-labelledby={`${titleId}-art`}>
+              <h3 id={`${titleId}-art`}>Map art</h3>
+              <p>{MAP_ART_NOTICE}</p>
+              <p>{TERRAIN_DATA_NOTICE}</p>
+              <p>
+                <a href={links.mapArtNotice ?? DEFAULT_LINKS.mapArtNotice}>Map art notice</a> ·{' '}
+                <a href={links.terrainNotice ?? DEFAULT_LINKS.terrainNotice}>Terrain data notice</a>
+              </p>
             </section>
 
             <section className="frl-about__section" aria-labelledby={`${titleId}-affiliation`}>

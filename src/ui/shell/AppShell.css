@@ -123,7 +123,8 @@
       'left right'
       'bottom bottom';
     grid-template-columns: minmax(280px, 36%) minmax(0, 1fr);
-    grid-template-rows: var(--frl-topbar-height) minmax(0, 1.2fr) minmax(0, 1fr) var(--frl-statusbar-height);
+    /* The status bar may wrap onto a second line here (StatusBar.css): its row follows it. */
+    grid-template-rows: var(--frl-topbar-height) minmax(0, 1.2fr) minmax(0, 1fr) minmax(var(--frl-statusbar-height), auto);
   }
 
   .frl-shell__resize {

@@ -921,6 +921,10 @@ interface TravelModel {
   ("passage not verified in game", RC-09, D-034 item 5). The leg keeps basis `derived`; the
   warning keeps the claim honest, so the navigation model stays preferred on map 0.
 - `path()` returns the funnel polyline for drawing; `map/layers` keeps its vertex cap.
+- **As built (D-037):** `legSeconds()` became `leg(from, to, speeds): TravelLeg`, which returns
+  the seconds with the method (`navigation`, `same-map-transport`, `straight-line`), a `pending`
+  flag and structured warnings (`src/domain/travel.ts`); the validator turns the warnings into
+  SIM-17..21 and counts pending legs into SIM-22 (SIMULATION §7.7).
 
 ### 9.4 TIME-2, enumeration and the optimiser
 
@@ -1556,13 +1560,34 @@ Every step ends green on `pnpm check`.
 |---|---|---|---|
 | 3b.1 **(done)** | `tools/casc/*` (§15; API in `tools/casc/README.md`) | Synthetic fixtures built inside the tests: a whole install (`.build.info`, build config, 16 idx buckets with an older version each, one archive), encoding pages, MFST blocks, BLTE N/Z/E/F, headerless and zero-placeholder entries, WDC5 with an encrypted zero section, an inline-ID table with common data, pallets, copies, a relationship map. The client test (`casc.client.test.ts`) asserts §2.1's counts and compares ten tables with the research CSVs; without the client it prints a skip banner. G16. no-bitwise lint. | — |
 | 3b.2 **(done)** | `tools/terrain/lib/formats/{chunked,grid,wdt,adt,liquid,obj0,wmo,m2,transform}.ts`, `lib/geometry.ts` (AABB clip, quantisation, tags, the WMO liquid rule), `lib/zones.ts`; `tools/terrain/README.md` | Synthetic chunks for every format, the geometry and the zones. With the client (`terrain.client.test.ts`): MODF extents (65 of 65), the MCNK grid, the Undercity WMO (20736 → 1497, 216 groups), and block 1:28_36's golden soup hash (equal to the prototype's). | — |
-| 3b.3 | `tools/terrain/lib/recast.ts` (per-tile origin, sorted triangles), `lib/encode.ts` (v3 without the component stream, and the manifest), `extract.ts` (`WOW_INSTALL`, `--check`, `--parts`), `build.json`; maps 0 and 1. **Before the settings freeze:** find Gnarlpine Hold's cause (RC-02), and re-measure sizes and the census with the corrected WMO liquid rule (U14). | G1, G3, G4 on both maps (with the client), decode round trip, G11 | build ≤ 5 min |
-| 3b.4 | `tools/terrain/lib/{link,components,prune,water,census,passages}.ts`, `lib/mapfile.ts` (`map.bin`), `validate.ts`, `inputs/connectors.json` (with the Rut'theran portal row), `inputs/passages.json`, `inputs/census-reviewed.json` (first per-component review), `lib/detour-check.ts` | G5-G10b, G12, G15 (offline parts in CI); `map.bin` sizes into §4.3 | — |
+| 3b.3 **(done)** | `tools/terrain/lib/recast.ts` (per-tile origin, sorted triangles), `lib/encode.ts` (v3 without the component stream, and the manifest), `extract.ts` (`WOW_INSTALL`, `--check`, `--parts`), `build.json`; maps 0 and 1. **Before the settings freeze:** find Gnarlpine Hold's cause (RC-02), and re-measure sizes and the census with the corrected WMO liquid rule (U14). | G1, G3, G4 on both maps (with the client), decode round trip, G11 | build ≤ 5 min |
+| 3b.4 **(done)** | `tools/terrain/lib/{link,components,prune,water,census,passages}.ts`, `lib/mapfile.ts` (`map.bin`), `validate.ts`, `inputs/connectors.json` (with the Rut'theran portal row), `inputs/passages.json`, `inputs/census-reviewed.json` (first per-component review), `lib/detour-check.ts` | G5-G10b, G12, G15 (offline parts in CI); `map.bin` sizes into §4.3 | — |
 | 3b.5 **(done)** | `src/nav/{bytes,grid,manifest,format,mapfile,mesh,link,components,snap,heap,cost,funnel,legs,open}.ts` (pure); `tests/support/nav-mesh.ts`, `tests/nav-runtime.test.ts`, `tests/bench/nav.bench.ts` | Synthetic meshes with exact lengths (a corridor, an L bend, a swim crossing, a portal overlap, a connector link into an unloaded block), tie-break determinism, the split sums, the random-load-order test (RC-06), G14; fixture baselines in `docs/measurements/`, including a realistic section and the 3D ÷ 2D ratio (RC-07, RC-13); the typed layout's heap with Kalimdor resident (RC-07) | §14.3 |
-| 3b.6 | `src/nav/worker/*` (fetch, verify, pin, LRU, resumable search with snap loads), `src/infra/nav/manifest.ts`, `app` leg table, `TravelModel` `navigation` with the same-map `TravelGraph` rule (D-034 item 2), SIM warnings including `SIM-unverified-passage` (§9.3), progress and cancel for "computing paths" (RC-07), `path()` route lines | Engine tests with complete tables; pending state; no-nav-map fallback; cross-component fallback; a same-map transport path; the map draws paths | heap ≤ 128 MB |
-| 3b.7 | `tools/terrain/byproducts.ts`, `public/maps/terrain/**` with per-map input hashes (RC-08), the one image allowlist (§13.3); map adapter layers (map owners) | Sizes, hashes, the arc topology (every arc used once per side) | ≤ 600 kB |
-| 3b.8 | `tools/maps/import.ts --build`, `convert.ts` on `tools/casc`; the committed `public/maps/art/**` with manifest, NOTICE and per-file input hashes (§13.4, D-033) | MAPS §5.5 checks; art hashes; the `art` budget | ≤ 12 MB |
+| 3b.6 **(done)** | `src/nav/worker/*` (fetch, verify, pin, LRU, resumable search with snap loads), `src/infra/nav/manifest.ts`, `app` leg table, `TravelModel` `navigation` with the same-map `TravelGraph` rule (D-034 item 2), SIM warnings including `SIM-unverified-passage` (§9.3), progress and cancel for "computing paths" (RC-07), `path()` route lines | Engine tests with complete tables; pending state; no-nav-map fallback; cross-component fallback; a same-map transport path; the map draws paths | heap ≤ 128 MB |
+| 3b.7 **(done)** | `tools/terrain/byproducts.ts`, `public/maps/terrain/**` with per-map input hashes (RC-08), the one image allowlist (§13.3); map adapter layers (map owners) | Sizes, hashes, the arc topology (every arc used once per side) | ≤ 600 kB |
+| 3b.8 **(done)** | `tools/maps/import.ts --build`, `convert.ts` on `tools/casc`; the committed `public/maps/art/**` with manifest, NOTICE and per-file input hashes (§13.4, D-033) | MAPS §5.5 checks; art hashes; the `art` budget | ≤ 12 MB |
 | 3b.9 | Navigation review: accuracy claims, sizes, privacy and provenance, performance | Benchmarks against baselines | — |
+
+**3b.6-3b.8 as built (2026-09-26).**
+
+- **3b.6:** `src/nav/worker/` (`protocol.ts`, `core.ts`, `host.ts`, `client.ts`, the
+  `nav.worker.ts` entry), `src/infra/nav/manifest.ts`, and in `src/app` the leg table and path
+  cache (`navigation-legs.ts`), the `navigation` model (`navigation-model.ts`), the scheduler with
+  "computing paths" (`navigation-scheduler.ts`), zone hints (`navigation-hints.ts`), the runtime
+  (`navigation-runtime.ts`) and the map's walking-path feed (`route-paths.ts`); ARCHITECTURE §9.1
+  describes them. Tests: 82 in the worker and app files, plus an end-to-end walk of the sample
+  route over the committed `public/nav` (`tests/derived-navigation.test.ts`).
+  - Measured (Node, five runs, an uncommitted scratch script with `--expose-gc`): the realistic Barrens
+    section (116 points, 13,456 legs) from an empty worker, **with** fetch and SHA-256 of 44 files
+    (3.55 MB), took 3.7-4.1 s; heap growth after gc 64.7 MB (typed arrays 57.1 MB), peak 91-99 MB,
+    under the 128 MB target.
+  - Differences from §9.6: while a search runs, every loaded block of its map is kept, not only
+    the blocks it touched (`src/nav` refuses to continue a search after any unload); the 100 MB
+    LRU budget counts typed arrays, not the whole heap; a same-map transport composition stays
+    pending until every dock walk is known.
+  - Not yet run in a browser (Playwright, Milestone 9). No prefetch and no IndexedDB persistence.
+- **3b.7 and 3b.8 map layers:** relief, painted art, coastline and zone outlines, and route lines
+  along paths, in `src/map` and `src/infra/maps` (MAPS.md §7; ARCHITECTURE §7.2).
 
 **Deferred:**
 

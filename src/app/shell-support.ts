@@ -9,7 +9,7 @@ import {
   type RouteStep,
   type StepId,
 } from '../domain';
-import { type Difficulty, questDifficulty } from '../rules';
+import { type Difficulty, questDifficulty } from '../rules/difficulty';
 import type { Command } from './commands';
 
 /**

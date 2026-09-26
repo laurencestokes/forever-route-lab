@@ -3,13 +3,24 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEditorStore, type EditorStore, fixedClock } from '../../app';
 import type { RouteStep } from '../../domain';
-import { createMapController, type MapController, type MapEngineSetup } from '../../app/map-exports';
+import { createMapController, type MapController, type MapEngineSetup, type MapResources } from '../../app/map-exports';
 import { acceptStepsAt, fakeAdapterFactory, mapTestWorkspace, type FakeAdapter } from '../../app/map-test-helpers';
 import { sequentialIdSource } from '../../app/shell-support';
 import type { MapAdapterFactory } from '../../map/adapter';
 import { buildRouteView, mapStepLabel } from '../app-model';
 import { createAnnouncer } from './LiveAnnouncer';
-import { MAP_INSTRUCTIONS, MapPanel, NO_MAP_ENGINE, SCHEMATIC_NOTICE, SCHEMATIC_NOTICE_SHORT, focusUnavailable, noSurfaceText, routeStatusText } from './MapPanel';
+import {
+  MAP_INSTRUCTIONS,
+  MapPanel,
+  NO_MAP_ENGINE,
+  PAINTED_ART_NOTICE,
+  PAINTED_ART_NOTICE_SHORT,
+  SCHEMATIC_NOTICE,
+  SCHEMATIC_NOTICE_SHORT,
+  focusUnavailable,
+  noSurfaceText,
+  routeStatusText,
+} from './MapPanel';
 
 afterEach(cleanup);
 
@@ -42,14 +53,25 @@ interface Setup {
   readonly rerender: () => void;
 }
 
-/** The map panel over the map test workspace (or `steps`), with a fake engine (loaded by `load`, immediate by default). */
-function setup(load?: () => Promise<MapAdapterFactory>, steps?: RouteStep[]): Setup {
+/**
+ * The map panel over the map test workspace (or `steps`), with a fake engine (loaded by `load`,
+ * immediate by default), and optionally the committed map resources.
+ */
+function setup(load?: () => Promise<MapAdapterFactory>, steps?: RouteStep[], resources?: MapResources): Setup {
   const workspace = mapTestWorkspace(steps, NOW);
   const store = createEditorStore({ project: workspace.project, ids: sequentialIdSource(100), clock: fixedClock(NOW) });
   const fake = fakeAdapterFactory();
   const loader = vi.fn(load ?? (() => Promise.resolve(fake.factory)));
-  const controller = createMapController({ store, data: workspace.data, geometry: workspace.geometry, describeStep: mapStepLabel, timing: null, objectUrls: null });
-  const setupMap: MapEngineSetup = { geometry: workspace.geometry, art: null, loadAdapter: loader };
+  const controller = createMapController({
+    store,
+    data: workspace.data,
+    geometry: workspace.geometry,
+    describeStep: mapStepLabel,
+    timing: null,
+    objectUrls: null,
+    resources: resources ?? null,
+  });
+  const setupMap: MapEngineSetup = { geometry: workspace.geometry, art: null, resources: resources ?? null, loadAdapter: loader };
   const map = { setup: setupMap, controller };
   const announce = vi.fn<(message: string) => void>();
   const view = () => buildRouteView(store.getState().project.route, workspace.dataset, 1);
@@ -188,8 +210,12 @@ describe('MapPanel: surfaces, layers and commands', () => {
     expect(givers).toHaveProperty('checked', true);
     fireEvent.click(givers);
     expect(s.store.getState().view.map.layers['available-quests']).toBe(false);
-    expect(adapterOf(s).callsOf('toggleLayer')).toEqual([{ kind: 'toggleLayer', layer: 'available-quests', visible: false }]);
-    const art = panel.getByRole('checkbox', { name: /Map art/ });
+    // The coastline is hidden from the start (UI.md §12).
+    expect(adapterOf(s).callsOf('toggleLayer')).toEqual([
+      { kind: 'toggleLayer', layer: 'coastline', visible: false },
+      { kind: 'toggleLayer', layer: 'available-quests', visible: false },
+    ]);
+    const art = panel.getByRole('checkbox', { name: /Painted map art/ });
     expect(art).toHaveProperty('disabled', true);
     expect(document.getElementById(art.getAttribute('aria-describedby') ?? '')?.textContent).toMatch(/^No local map set/);
     expect(panel.getByRole('checkbox', { name: /Proposal overlay/ })).toHaveProperty('disabled', true);
@@ -210,13 +236,21 @@ describe('MapPanel: surfaces, layers and commands', () => {
       'Proposal overlay',
       'Step markers4 drawn',
       'Route line1 drawn',
+      'Walking paths',
       'Flight masters1 drawn',
       'Turn-ins',
       'Objectives',
       'Available quests',
       'Zone frames6 drawn',
-      'Map art (local set)',
+      'Zone outlines',
+      'Coastline',
+      'Painted map art',
+      'Relief',
     ]);
+    // Without map resources the terrain layers and walking paths say why they are unavailable.
+    const reason = (name: RegExp) => document.getElementById(panel.getByRole('checkbox', { name }).getAttribute('aria-describedby') ?? '')?.textContent;
+    expect(reason(/^Relief/)).toMatch(/^No terrain data in this build/);
+    expect(reason(/Walking paths/)).toMatch(/^No walking paths are available yet/);
   });
 
   it('fits the route, and focuses the active step once there is one', async () => {
@@ -361,5 +395,83 @@ describe('MapPanel texts', () => {
     expect(focusUnavailable({ stepId: 's' as never, number: 6, placement: { kind: 'no-surface', mapId: 36 as never } })).toBe(
       'Step 6 is on world map 36, which this map cannot show',
     );
+  });
+});
+
+describe('MapPanel: painted art, terrain and walking paths', () => {
+  type ArtLoad = Awaited<ReturnType<MapResources['art']>>;
+  type TerrainLoad = Awaited<ReturnType<MapResources['terrain']>>;
+  const DUROTAR_ART: ArtLoad = {
+    kind: 'loaded',
+    manifest: {
+      owner: 'Blizzard Entertainment',
+      build: '1.60.1.70009',
+      images: [
+        {
+          uiMapId: 1411 as never,
+          name: 'Durotar',
+          uiMapType: 3,
+          styleId: 1,
+          bounds: { mapId: 1 as never, xMin: -1716.67, xMax: 1808.33, yMin: -7250, yMax: -1962.5 },
+          url: './maps/art/1411.webp',
+          contentType: 'image/webp',
+          width: 1002,
+          height: 668,
+          sha256: 'a'.repeat(64),
+        },
+      ],
+      unplaced: [],
+    },
+  };
+  const NO_TERRAIN: TerrainLoad = { kind: 'failed', reason: 'invalid', detail: 'maps/terrain/manifest.json is not JSON' };
+  const resources = (art: ArtLoad, terrain: TerrainLoad = NO_TERRAIN): MapResources => ({
+    art: () => Promise.resolve(art),
+    terrain: () => Promise.resolve(terrain),
+    arcs: () => Promise.resolve({ kind: 'failed', reason: 'invalid', detail: 'none' }),
+  });
+
+  it('carries Blizzard Entertainment’s notice while the painted art is drawn, and starts the instructions with it', async () => {
+    setup(undefined, undefined, resources(DUROTAR_ART));
+    await settle();
+    await settle();
+    expect(screen.getByText(PAINTED_ART_NOTICE)).toBeTruthy();
+    expect(screen.getByText(PAINTED_ART_NOTICE_SHORT)).toBeTruthy();
+    expect(PAINTED_ART_NOTICE).toBe('Painted map art \u00a9 Blizzard Entertainment');
+    const surface = document.querySelector('.fake-map');
+    expect(document.getElementById(surface?.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+      `${PAINTED_ART_NOTICE}. Route map: Kalimdor. ${MAP_INSTRUCTIONS}`,
+    );
+    // No terrain: said in the status line, without stopping the map.
+    const status = [...document.querySelectorAll('.frl-mapframe__status-item')].map((item) => item.textContent);
+    expect(status).toContain('Terrain data could not be loaded: no relief, zone outlines or coastline');
+  });
+
+  it('says in the status line when the painted art could not be loaded, and shows the schematic notice', async () => {
+    setup(undefined, undefined, resources({ kind: 'failed', reason: 'unavailable', detail: 'maps/art/manifest.json: HTTP 404' }));
+    await settle();
+    await settle();
+    expect(screen.getByText(SCHEMATIC_NOTICE)).toBeTruthy();
+    const status = [...document.querySelectorAll('.frl-mapframe__status-item')].map((item) => item.textContent);
+    expect(status).toContain('Painted map art could not be loaded: the map shows zone frames instead');
+  });
+
+  it('toggles walking paths from their row under the route line, once the navigation model gives paths', async () => {
+    const s = setup();
+    await settle();
+    fireEvent.click(commands().getByRole('button', { name: 'Layers' }));
+    const panel = within(screen.getByRole('group', { name: 'Layers' }));
+    const row = () => panel.getByRole('checkbox', { name: /Walking paths/ });
+    expect(row()).toHaveProperty('disabled', true);
+    act(() => {
+      s.controller.setRoutePaths({ pending: false, pathOf: (leg) => [leg.from, leg.to] });
+    });
+    expect(row()).toHaveProperty('disabled', false);
+    expect(row()).toHaveProperty('checked', true);
+    expect(row().closest('li')?.textContent).toContain('3 walked legs follow their paths on this map.');
+    fireEvent.click(row());
+    expect(s.store.getState().view.map.walkingPaths).toBe(false);
+    expect(row()).toHaveProperty('checked', false);
+    fireEvent.click(row());
+    expect(s.store.getState().view.map.walkingPaths).toBe(true);
   });
 });

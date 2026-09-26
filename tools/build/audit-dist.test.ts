@@ -302,6 +302,29 @@ describe('size gates', () => {
     const expected = lazyFiles.map((file) => gzipSize(readFileSync(join(distDir, file)))).reduce((a, b) => a + b, 0);
     expect(report?.lazy.totalGzipBytes).toBe(expected);
     expect(report?.lazy.css.map((sheet) => sheet.file)).toEqual(['assets/map-jkl.css']);
+    expect(report?.workers).toEqual([]);
+  });
+
+  it('reports the worker scripts the entry and its lazy chunks emit as assets, without gating them', () => {
+    writeFiles(distDir, {
+      ...cleanDist(),
+      'assets/nav.worker-stu.js': 'self.onmessage = () => {};'.repeat(50),
+      'assets/opt.worker-vwx.js': 'self.onmessage = () => 1;',
+      'assets/icon-yz.png': 'not a script',
+      '.vite/manifest.json': JSON.stringify({
+        ...viteManifest,
+        // Vite lists `new Worker(new URL(...))` scripts under the importing chunk's `assets`.
+        'index.html': { ...viteManifest['index.html'], assets: ['assets/nav.worker-stu.js', 'assets/icon-yz.png'] },
+        'src/lazy.ts': { ...viteManifest['src/lazy.ts'], assets: ['assets/opt.worker-vwx.js'] },
+      }),
+    });
+    expect(rulesOf(checkEntryChunks(distDir, 10).violations)).toEqual(['entry-chunk (build)']);
+    const { reports, violations } = checkEntryChunks(distDir, 250_000);
+    expect(violations).toEqual([]);
+    const report = reports[0];
+    expect(report?.chunks.map((chunk) => chunk.file)).toEqual(['assets/index-abc.js', 'assets/vendor-def.js']);
+    expect(report?.workers.map((file) => file.file)).toEqual(['assets/nav.worker-stu.js', 'assets/opt.worker-vwx.js']);
+    expect(report?.workers[0]?.gzipBytes).toBe(gzipSize(readFileSync(join(distDir, 'assets/nav.worker-stu.js'))));
   });
 
   it('fails above the budget, on a missing manifest and on dangling imports', () => {

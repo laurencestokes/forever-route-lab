@@ -1,5 +1,6 @@
-import type { DatasetIdentity, DatasetView, NpcId, NpcRecord, ProjectV1 } from '../domain';
+import type { DatasetIdentity, DatasetView, NpcId, ProjectV1 } from '../domain';
 import { createDatasetViewCache, type DatasetViewInput, type PreparedDataset } from '../infra/data';
+import { isFlightMaster } from '../rules/travel-graph';
 
 /**
  * Where the app gets its `DatasetView`: the loaded dataset seen through one project's character
@@ -19,18 +20,11 @@ export interface DatasetSource {
 }
 
 /**
- * QuestieDB's Classic `npcFlags.FLIGHT_MASTER` (8, bit 3), the value `tools/questiedb` selects
- * flight masters by (DATA_PROVENANCE §6.3; `byExpansion.Classic.npcFlags`). Tested arithmetically:
- * no bitwise operators (D-012).
+ * Whether an NPC record is a flight master: QuestieDB's Classic `npcFlags.FLIGHT_MASTER` (8, bit 3),
+ * tested arithmetically (D-012). One definition, in src/rules (the TravelGraph seeds its taxi nodes
+ * by it), re-exported for the app's callers.
  */
-export const FLIGHT_MASTER_FLAG_BIT = 3;
-
-/** Whether an `npcFlags` value has the FLIGHT_MASTER bit; false for a value that is not a non-negative safe integer. */
-export function isFlightMaster(npc: Pick<NpcRecord, 'npcFlags'>): boolean {
-  const flags = npc.npcFlags;
-  if (!Number.isSafeInteger(flags) || flags < 0) return false;
-  return Math.floor(flags / 2 ** FLIGHT_MASTER_FLAG_BIT) % 2 === 1;
-}
+export { isFlightMaster };
 
 /** Flight-master ids over the base records and every faction layer, ascending. */
 export function flightMasterIdsOf(prepared: Pick<PreparedDataset, 'base' | 'factions'>): readonly NpcId[] {

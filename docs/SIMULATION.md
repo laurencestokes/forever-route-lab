@@ -16,6 +16,11 @@
 > Recommendations of the first draft that revision 2 replaced are kept where they carry evidence
 > and are marked **Superseded by ...**.
 >
+> **Milestone 6 edits (2026-09-26)** apply terrain-navigation.md §18's TIME-2 edit (ground legs
+> come from the `TravelModel`), add the ruleset parameter `swimSpeed` and the travel-warning codes
+> SIM-17..21, and fix the errata found while implementing `src/rules` and `src/sim`. Section 1.5
+> lists them; each edited rule says so in place.
+>
 > Forever-specific *game* facts (zones, Legacy perks, transports, beta caps) are owned by
 > [`research/forever-game-rules.md`](research/forever-game-rules.md). This file owns the **Classic-family
 > mechanics** and says, for each one, whether Forever is known to match. Where Forever is unknown,
@@ -50,7 +55,9 @@
    uses `d >= -4` for yellow with `UnitQuestTrivialLevelRange`. The Forever thresholds are
    therefore `UNKNOWN`. Questie applies the Era thresholds on both clients (section 5).
 5. **Colour never gates quest availability.** Grey quests stay legal and give reduced XP.
-6. **Time model.** Run speed is 7.0 yd/s (`ERA RULE`). Mounts give +60%/+100% (`SOURCE DATA`,
+6. **Time model.** Run speed is 7.0 yd/s (`ERA RULE`). Ground legs come from one `TravelModel`
+   shared with the engine and the optimiser: the straight line x `groundDetourFactor` by default, or
+   the committed navigation data (TIME-2, Milestone 6). Mounts give +60%/+100% (`SOURCE DATA`,
    Forever spells 86457/86458), but only once riding is trained: from the declared
    `character.riding`, or through a `train` step recognised as riding by `skill: 'riding'` or by a
    riding spell id in the ruleset (Apprentice 33388, Journeyman 33391) (TIME-3). The
@@ -66,7 +73,7 @@
 7. **Validator.** Availability is the conjunction of about 20 predicates over QuestieDB fields,
    defined in section 7 from Questie `QuestieDB.IsDoable` and the vmangos `Player::CanTakeQuest`.
    The implemented rule list is **VAL-1..22, VAL-30..33 and LINT-1..4** (there is no VAL-23..29),
-   plus the simulation checks **SIM-1..16** and the data codes **DATA001-002**; ARCHITECTURE §9.4
+   plus the simulation checks **SIM-1..22** and the data codes **DATA001-002**; ARCHITECTURE §9.4
    names section 7 as the authoritative list. Issue codes follow one grammar, for example
    `VAL004-min-level` (section 7.8). The engine must use the **corrected** records: the raw Forever
    quest file has **zero** breadcrumb and `requiredMaxLevel` fields, and the legacy corrections add
@@ -148,8 +155,10 @@ whichever supplied it: a project assumption is `{ value, basis: 'assumption', so
 The keys a project can override are the fields of `AssumptionValues` (`src/domain/assumptions.ts`;
 `project.assumptions` is `Partial<AssumptionValues>`, ARCHITECTURE §8.2). The table below uses
 this spec's parameter names and gives the `AssumptionValues` field in its own column; a parameter
-with no field there is ruleset-only in schema version 1 (adding a field is a schema change,
-allowed without migration until the end of Milestone 6). `maxLevel` in particular is overridable
+with no field there is ruleset-only in schema version 1. Adding a field is a schema change: it
+bumps `schemaVersion` and adds a migration (**erratum, Milestone 6:** this sentence said such a
+change was allowed without migration until the end of Milestone 6, which D-035 superseded by
+freezing schema version 1 from the Milestone 4 commit). `maxLevel` in particular is overridable
 so that the beta caps (20, then 30 [B1]) can be simulated. The UI marks every number that depends
 on an effective value with basis `era-assumed` or `assumption` (section 8 gives the combination
 rule).
@@ -182,10 +191,11 @@ column means ruleset-only):
 | `difficultyYellowLowerBound` | -2 (`era-assumed`; the Forever Lua fallback uses -4) | -2 (`client-data`) | COL-1, COL-4 | — |
 | `questLogCapacity` | 40 (`client-data`: the Forever client constant at 70009, VAL-20; the `REPORTED` beta observation of 40, R9, supports it; `note`: server enforcement at launch is unknown, U13) | 20 (`client-data`) | VAL-20 | `questLogCapacity` |
 | `runSpeed` | 7.0 yd/s (`era-assumed`) | 7.0 yd/s (`reported`) | TIME-1 | `runSpeedYps` |
-| `groundDetourFactor` | 1.25 (`assumption`) | both | TIME-2 | `travelDetourFactor` |
+| `swimSpeed` | 4.722 yd/s (`era-assumed`; section 6.1's emulator swim speed; navigation legs only; added in Milestone 6 for `TravelSpeeds.swimYps`) | 4.722 yd/s (`reported`) | TIME-1, TIME-2 | — |
+| `groundDetourFactor` | 1.25 (`assumption`; the straight-line `TravelModel` and the navigation model's labelled fallback) | both | TIME-2 | `travelDetourFactor` |
 | `mountLevels` | 40, 60 (`client-data`, ItemSparse 69977 `RequiredLevel`) | 40, 60 (`client-data`, ItemSparse 69722) | TIME-3 | — |
 | `mountSpeedBonus` | 0.6, 1.0 (`client-data`, spells 86457/86458) | 0.6, 1.0 (`client-data`, aura 32 on mount spells) | TIME-3 | — |
-| `ridingSpellIds` | 33388 Apprentice Riding = tier 1, 33391 Journeyman Riding = tier 2 (`client-data`, SpellName and SkillLineAbility rows cited as C4 in forever-game-rules.md section 6.1; the tier-to-speed mapping is `INFERRED`) | none (`client-data`: neither spell exists in Era 69722; Era riding is recognised by `skill: 'riding'` only) | TIME-3 | — |
+| `ridingSpells` | 33388 Apprentice Riding = tier 1, 33391 Journeyman Riding = tier 2, as `{ spellId, tier, name }` entries (`client-data`, SpellName and SkillLineAbility rows cited as C4 in forever-game-rules.md section 6.1; the tier-to-speed mapping is `INFERRED`) | none (`client-data`: neither spell exists in Era 69722; Era riding is recognised by `skill: 'riding'` only) | TIME-3 | — |
 | `hearthCastSeconds` | 10 (`client-data`) | 10 (`client-data`) | TIME-4 | — |
 | `hearthCooldownSeconds` | 3600 (`client-data`; a server override is UNKNOWN) | 3600 (`client-data`) | TIME-4 | — |
 | `taxiModel` | `'auto'` (`assumption`: TIME-6 legs where a local `taxi.local.json` covers them, else TIME-5); `'straight-line'` forces TIME-5 | both | TIME-5, TIME-6 | — |
@@ -199,8 +209,8 @@ column means ruleset-only):
 | `vendorSeconds`, `repairSeconds`, `trainerSeconds` | 10, 5, 10 (`assumption`) | both | TIME-8 | — |
 | `bindSeconds`, `flightMasterSeconds` | 5, 3 (`assumption`) | both | TIME-4, TIME-5 | — |
 | `lootSeconds` | 2 (`assumption`) | both | TIME-8, TIME-9 | `lootSeconds` |
-| `objectUseSeconds` | 5 (`client-data`, Forever spell 3365) | 5 (`assumption`; not checked in Era) | TIME-8, TIME-9 | — |
-| `skinSeconds` | 2 (`client-data`, Forever spell 8613) | 2 (`assumption`) | TIME-8 | — |
+| `objectUseSeconds` | 5 (`client-data`, spell 3365 `SpellMisc.CastingTimeIndex` 6, `SpellCastTimes` 6 = 5,000 ms, 1.60.1.69977) | 5 (`client-data`, the same rows in 1.15.9.69722) | TIME-8, TIME-9 | — |
+| `skinSeconds` | 2 (`client-data`, spell 8613 `SpellMisc.CastingTimeIndex` 5, `SpellCastTimes` 5 = 2,000 ms, 1.60.1.69977) | 2 (`client-data`, the same rows in 1.15.9.69722) | TIME-8 | — |
 | `killSeconds` | 30 (`assumption`; calibrate per class) | both | TIME-9, TIME-12 | `secondsPerKill` |
 | `objectiveKillCount` | 8 (`assumption`) | both | TIME-9 | `killsPerObjective` |
 | `objectiveItemCount`, `itemDropChance` | 5, 0.5 (`assumption`) | both | TIME-9 | — |
@@ -257,6 +267,51 @@ and `src/domain/*.ts` were patched. This file now follows those rulings:
 | Domain types: `AcceptStep.anyOf` and `TurnInStep.anyOf`, `Location.radius`, `TaxiNodeRef { npcId, taxiNodeId, name }`, `UnmappedAreaPoint`, `CharacterState.xpBasis`/`xpEraFallback`, `AssumptionValues` field names | 1.2, TIME-2, TIME-5, 7.2, 7.5, 8 |
 | A `travel` step with a null location, and a preserved `.deathskip` note, make the position unknown (ARCHITECTURE §8.1) | TIME-2 |
 | No absolute user paths; local files are written `<repo>/...` | throughout |
+
+### 1.5 Milestone 6 edits and errata
+
+Applied when `src/rules` and `src/sim` were implemented (2026-09-26). Errata are marked; the other
+rows are additions or clarifications for the architect to confirm.
+
+| Change | Where | Driver |
+|---|---|---|
+| Ground legs come from the `TravelModel` (`src/domain/travel.ts`); the straight-line model reproduces revision 2's formula; the nearest-spawn choice stays straight-line; a leg's warnings pass through as structured data | TIME-2 | terrain-navigation.md §18, D-028, D-037 |
+| An arrival radius shortens a navigation leg in proportion, `(d − r) / d` of its seconds (ASSUMPTION); with the straight-line model this equals revision 2's formula | TIME-2 | Milestone 6 |
+| New ruleset parameter `swimSpeed` (4.722 yd/s, the emulator value already cited in section 6.1) for `TravelSpeeds.swimYps` | 1.2, TIME-1 | `src/domain/travel.ts` |
+| Travel-warning codes SIM-17..21 (`no-walking-path`, `off-navmesh`, `unverified-passage`, `ambiguous-floor`, `long-swim`), one issue per step and kind with a leg count; a pending leg is not an issue of its own step (see SIM-22) | 7.7, 7.8 | terrain-navigation.md §9.3, §18 |
+| **Erratum:** pending legs are counted into one route-level info, `SIM022-legs-pending` (legs and steps pending; their times are the straight-line fallback until computed). This row said pending legs are not issues | 7.7, 7.8 | `src/validate` (Milestone 6) |
+| **Erratum:** open question 15 said `VAL030-not-in-log`, `VAL032-not-in-log` and SIM-16 stay errors with `priorHistory: 'unknown'`. ARCHITECTURE §9.4 (which governs) makes quest-state preconditions on quests the route never accepted `-unverifiable` warnings, so the registry has `VAL030-not-in-log-unverifiable`, `VAL032-not-in-log-unverifiable` and `SIM016-complete-not-in-log-unverifiable`; question 15 is closed | 7.8, 10.15 | ARCHITECTURE §9.4 |
+| **Erratum:** section 9 called quests 2, 23 and 24 an "exclusive triple"; the data links them with `inGroupWith` (their `exclusiveTo` lists are empty) | 9 | `public/data/quests.json` |
+| The walks to and from the dock in a `'transport'` step travel as `'auto'` (mounted once riding is trained) | TIME-2 | Milestone 6 clarification |
+| An NPC with no level range (or no record) counts as a same-level mob, as TIME-12 does for grind steps, and the simulation records that the level was assumed | KXP-4, TIME-9 | Milestone 6 |
+| A `maxLevel` above the XP table (for example 70) caps at 60: XP past the table is unknown, so it is not granted | XP-3 | Milestone 6 |
+| An unbound `hearth use` charges no cast and leaves `hearthReadyAt` unchanged | TIME-4 | Milestone 6 |
+| TIME-6 flights also charge `flightMasterSeconds` | TIME-6 | Milestone 6 clarification |
+| **Erratum:** KXP-8 step 5 said the gray-group share is `trunc(xp*rate/2) + 1` with `rate` read as the group rate; the table's last row (levels 10 and 30, 14 XP) needs the member's level share inside it, `trunc(xp × groupRate × level(i) / sumLevels / 2 + 1)` | KXP-8 | the KXP-8 table |
+| **Erratum:** schema version 1 is frozen from the Milestone 4 commit (D-035); a new `AssumptionValues` field needs a migration | 1.2, 10.14 | D-035 |
+
+**Milestone 6 review (2026-09-26).** The review of `src/rules`, `src/sim`, `src/engine` and
+`src/validate` found places where this file contradicted itself or was silent; these rows record the
+rulings the fixes follow. Every row is for the architect to confirm.
+
+| Change | Where | Driver |
+|---|---|---|
+| **Erratum:** QXP-3 checks the cap first: at `P >= maxLevel` quest XP is a known 0 even without an XP record or with an unknown quest level, because XP-2's `GiveXP` returns at the cap. The pseudocode checked the record first, so a missing record at the cap raised SIM-1 and made the level a lower bound for good | QXP-3, XP-4 | review SIM-01 |
+| A known-XP lower bound at the effective cap is exact (XP-2), so reaching the cap resets `unknownXpEvents` as a grind to a level does | XP-4, §8 | review SIM-01 |
+| `floor(reduce(B) × m)` is exact arithmetic on the decimal multiplier, not a floor of the double product (45 × 1.4 is 63, not 62) | QXP-3 | review SIM-03 |
+| The level after an XP grant reads `xpToNextLevel` (always) and `maxLevel` (when the cap bounded the grant): both enter `levelAfter`'s basis and `assumptionsUsed` | §8 | review SIM-02 |
+| A grind to a level at `xpPerHour` 0 is unreachable (SIM-15); only a null rate runs the kill loop | TIME-12 | review SIM-04 |
+| A `durationOverride` also drops the facts about the work it replaces (SIM-15; for grind steps SIM-11 and SIM-2) | TIME-8, TIME-9, TIME-12 | review SIM-05, ENG-04 |
+| A `complete` target the dataset lacks, or whose objective index the record lacks, is an unknown `s_i`: `S` is unknown and kill XP is taken with `f = 1`. New `DATA003-unknown-objective` (warning) for the index | TIME-10, 7.4, 7.8 | review SIM-06, ENG-05, ENG-06 |
+| The cooldown wait takes the basis of the step durations since the last cast; after a step with unknown time since the cast it is unknown time with `SIM005-hearth-cooldown-uncertain` | TIME-4, §8, 7.7, 7.8 | review SIM-07, ENG-09 |
+| A transport dock without a position is an unresolved place (SIM-3). A dock-only transport without a step location arrives somewhere unknown without SIM-4 (**erratum**: TIME-7 said SIM-4, which is for map changes without a transport) | TIME-7 | review SIM-08, ENG-07, ENG-08 |
+| Raid kills: elites take `eliteKillXpMultiplier`; `dungeonMobXpMultiplier` applies on any instance map, raids included; a grind on an instance map kills dungeon mobs | KXP-5, TIME-12 | review SIM-09 |
+| TIME-6 maps a dataset flight master to the local TaxiNodes row nearest it within 50 yd (`INFERRED`), and a row is usable when a known node of the character's faction maps to it | TIME-6 | review SIM-10 |
+| `objectUseSeconds` and `skinSeconds` are `client-data` in both rulesets, with their build (**erratum**: "not checked in Era") | 1.2, 6.5 | review SIM-11 |
+| Group-XP shares are float32, as vmangos and the reference | KXP-8 | review SIM-12 |
+| **Erratum:** the riding parameter is `ridingSpells` (entries with a tier), as the ruleset names it | 1.2, TIME-3, TIME-T 23, SIM-10, §8 | review SIM-13 |
+| From an unknown position the nearest spawn is undefined: an entity with spawns at more than one point leaves the position unknown. A move from an unknown position records `position-unknown` with its cause (not an issue) | TIME-2, 7.1 | review ENG-02, ENG-03, UI-16 |
+| A start XP at or beyond the start level's span is carried over by XP-2, with the route-level warning `SIM023-start-xp-beyond-level` | 7.1, 7.7, 7.8 | review ENG-11 |
 
 ---
 
@@ -329,7 +384,8 @@ unchanged (forever-game-rules.md section 3, R6), so it is `UNKNOWN` from data (U
 
 `maxLevel` is a ruleset key with a project-assumption override (section 1.2), so beta caps can be
 simulated: `assumptions.maxLevel = 20` gives an effective value `{ 20, basis: 'assumption',
-source: 'project' }`.
+source: 'project' }`. A value above the XP table (for example 70) caps at 60, the last level the
+table reaches: XP beyond it is unknown, so it is not granted (Milestone 6).
 
 ### XP-4 Unknown XP and lower-bound levels (ARCHITECTURE §9.2-9.3; DSO-05, F12)
 
@@ -353,6 +409,11 @@ source: 'project' }`.
   duration, computed from the lower-bound deficit, is an upper bound (`SIM002-grind-upper-bound`,
   TIME-12). A grind whose target is already at or below the lower bound does nothing and resets
   nothing. Grind steps with a duration target (`{ kind: 'duration', seconds }`) never reset.
+- **At the cap (Milestone 6 review).** XP-2's `GiveXP` returns at the cap, so the level cannot
+  change there: a quest without an XP record turned in at `P >= maxLevel` gives a known 0 (QXP-3
+  checks the cap first) and adds nothing to `unknownXpEvents`, and a lower bound that reaches the
+  effective cap (`min(maxLevel, xpToNextLevel.length + 1)`) is the true level. The walker then
+  sets `unknownXpEvents = 0`, as a grind to a level does (`StepDelta.unknownXpReset`).
 - Kill XP is never unknown: it is always computable from the assumed mob level (KXP-4).
 - The optimiser counts known XP only and keeps unknown-XP quests as obligations
   (ARCHITECTURE §11.2 rule 6).
@@ -413,9 +474,9 @@ Let `P` be the player level at turn-in (the lower bound `P_lb` when `unknownXpEv
 `Q` the quest level, `B` the full XP (`QuestRecord.xp.baseXp`) and `basis` its XP basis.
 
 ```
+if P >= maxLevel: xp = 0                       (money instead, QXP-6; checked first, XP-2)
 if xp record is null, or Q is null, or Q == 0, or Q < -1:  xp = unknown   (XP-4, QXP-7)
 if Q == -1: Q = max(requiredLevel ?? 1, P)                             (QXP-7, scaling quests)
-if P >= maxLevel: xp = 0                       (money instead, QXP-6)
 if B == 0: xp = 0                              (difficulty column 0; a real zero)
 mult = clamp(2*(Q - P) + 20, 1, 10)            // tenths
 reduce(B) = questXpRounding == 'trinity-steps'
@@ -423,7 +484,7 @@ reduce(B) = questXpRounding == 'trinity-steps'
           : ceil(float32(B) * float32(mult / 10))   // 'vmangos-ceil', QXP-4
 if basis == 'era-seed':
   m   = dungeonQuest ? dungeonQuestXpMultiplier : questXpMultiplier
-  xp  = floor(reduce(B) * m)                   // Questie: floor(xp * multiplier), QuestieXP.lua:85
+  xp  = floor(reduce(B) * m)                   // Questie: floor(xp * multiplier), QuestieXP.lua:85; exact, see below
 else:                                          // 'user' or 'forever-observed'
   xp  = mult == 10 ? B : reduce(B)             // no multiplier; value used as entered at 100%
 ```
@@ -435,6 +496,15 @@ else:                                          // 'user' or 'forever-observed'
   the product as Questie does.
 - A user-entered or Forever-observed value is taken as the full (100%) XP the game showed, which is
   already rounded; it is reduced and rounded only when the level difference reduces it.
+- **Order (erratum, Milestone 6 review).** The cap comes first: at the cap no XP is granted (XP-2),
+  so a missing record or an unknown quest level there changes nothing and is not unknown XP. The
+  first revision checked the record first.
+- **Exact floor (Milestone 6 review).** `floor(reduce(B) × m)` is exact arithmetic: `reduce(B)` is an
+  integer and `m` a decimal the user enters, so the product is floored with an epsilon that absorbs
+  float noise (`floor(x × m + 1e-9)`, as TIME-12's fraction offset does). A double product of a
+  decimal multiplier can fall just below an integer (45 × 1.4 is 62.99999999999999 in doubles), so
+  flooring it directly, as Questie's Lua does, loses 1 XP for common multipliers such as 1.15, 1.4
+  and 2.3. Vectors: 45 × 1.4 = 63, 100 × 1.15 = 115, 50 × 2.3 = 115, 90 × 0.7 = 63.
 
 | `P - Q` | <= 5 | 6 | 7 | 8 | 9 | >= 10 |
 |---|---|---|---|---|---|---|
@@ -592,6 +662,8 @@ Era. Red mobs cap at +4 levels (+20%).
 - The simulator therefore needs: a mob level choice (`mobLevelChoice`, default the midpoint rounded
   down, configurable; `ASSUMPTION`); a user-editable "no XP" list; and XP multiplier 1 for
   everything else.
+- An NPC with no level range, or no record, counts as a same-level mob (`M = P`, ASSUMPTION, as
+  TIME-12 does for grind steps); the simulation records that the level was assumed (Milestone 6).
 - Objective kills (TIME-9) and grind kills (TIME-12) are the only kill-XP sources in v1. Objective
   kill XP uses the same assumed kill count as objective time (DSO-05), so an objective with no known
   count never yields time without XP.
@@ -606,6 +678,15 @@ Era. Red mobs cap at +4 levels (+20%).
 | Forever dungeon mobs | `dungeonMobXpMultiplier`, default 1, basis `assumption` (first draft: `assumedFrom: era`, superseded by section 1.2) | `REPORTED` greatly reduced |
 
 A mob counts as a dungeon mob when the step's location is on an instance map.
+
+- **Raids (Milestone 6 review).** An instance map is a raid or a five-player dungeon by the instance
+  type `zones.json` gives with its instance world map (`DungeonEntrances.raid`; while the dataset
+  gives no type, an instance counts as a dungeon, an assumption). Raid elites take
+  `eliteKillXpMultiplier` (the emulators' `IsNonRaidDungeon`); `dungeonMobXpMultiplier` applies
+  on every instance map, raids included, since Forever's reported reduction does not say it
+  spares raids (`INFERRED`).
+- **Grind kills** (TIME-12) are dungeon or raid kills when the grind step's location is on an
+  instance map, like objective kills.
 
 ### KXP-6 Rounding
 
@@ -656,10 +737,16 @@ vmangos `Group::RewardGroupAtKill` (Group.cpp:1277-1316, 2295-2409 [E1]):
    comment says "this formula is completely guesswork" (vmangos Formulas.h:160).
 5. Each member `i` with `level(i) <= level(ng)` gets `trunc(xp * groupRate * level(i) / sumLevels)`.
    If the group's highest-level member is gray to the mob (that is, not `ng`), each gets
-   `trunc(xp*rate/2) + 1` instead. Members above `ng` get 0.
+   `trunc(xp * groupRate * level(i) / sumLevels / 2 + 1)` instead (**erratum, Milestone 6:** this
+   read `trunc(xp*rate/2) + 1`, where `rate` includes the level share; the table's last row needs
+   it). Members above `ng` get 0.
 6. Each member's own rested bonus then applies (KXP-9).
 7. cmangos rounds with `std::round` instead of truncating (Group.cpp:1508-1510 [E3]). That is a +/-1
    difference.
+8. The arithmetic is float32, as in vmangos: `rate = f32(f32(groupRate × level(i)) / sumLevels)`,
+   then `trunc(f32(xp × rate))`, or `trunc(f32(f32(f32(xp × rate) / 2) + 1))` in the gray case
+   (Milestone 6 review; doubles differed by 1 in 61 of 12,462 cases, for example levels 7 and 39
+   against a level-10 mob give 7 and 0, not 8 and 0).
 
 | Levels | Mob | Shares |
 |---|---|---|
@@ -873,42 +960,76 @@ checked within 1% (ARCHITECTURE §11.7 fixture 11).
 | Epic mount (`mountSpeedBonus[1]`, `mountLevels[1]`) | +100% (14.0 yd/s) from level 60 | SOURCE DATA | Era: aura 32 base 99, e.g. 23229/23250; item 18776 `RequiredLevel` 60. Forever: 86458 +100%, 18776 still 60 |
 | When the character has the mount | **Superseded by TIME-3 (DSO-16):** the first draft used "the first route step at `level >= 40` after an explicit train riding / buy mount step", which free-text `train.what` could not express | ASSUMPTION | Era gold costs are not verified here. Forever training level and cost are `UNKNOWN` (U6 in forever-game-rules.md) |
 | Other speed effects | Sprint, Aspect of the Cheetah, Ghost Wolf, Travel Form, Skysight, and the +5% "Mount Speed" spells | SOURCE DATA (Forever) | forever-game-rules.md sections 6.1-6.2. Stacking rules `UNKNOWN`. Default: ignored |
-| Path length vs straight line (`groundDetourFactor`) | x1.25 detour factor on straight-line distance, until a navmesh or road graph exists | ASSUMPTION | none |
+| Path length vs straight line (`groundDetourFactor`) | x1.25 detour factor on straight-line distance: the straight-line `TravelModel` and the navigation model's labelled fallback (TIME-2) | ASSUMPTION | none |
+| Swim speed (`swimSpeed`) | 4.722 yd/s; navigation legs only (`TravelSpeeds.swimYps`), mounted or not | ERA RULE | the run-speed row's sources (Milestone 6) |
 
 #### TIME-1 Speeds
 
 On foot the character moves at `runSpeed`; mounted at `runSpeed x (1 + riding.speedBonus)`
 (`CharacterState.riding`, TIME-3). The step mode `'walk'` means on foot at run speed, not the
-2.5 yd/s walk speed. Mount-up time and indoor restrictions are not modelled (0 s, ASSUMPTION).
+2.5 yd/s walk speed. Swimming is at `swimSpeed`, mounted or not; only navigation legs use it
+(Milestone 6). Mount-up time and indoor restrictions are not modelled (0 s, ASSUMPTION).
 
-#### TIME-2 Ground travel between steps (ARCHITECTURE §6, §9.3)
+#### TIME-2 Ground travel between steps (ARCHITECTURE §6, §9.1, §9.3; terrain-navigation.md §9.3-§9.4)
+
+> **Milestone 6 edit (terrain-navigation.md §18; D-028, D-037):** ground legs come from the
+> `TravelModel` (`src/domain/travel.ts`), which the engine, the simulation and the optimiser share,
+> so they agree about every leg. The choice of the nearest spawn stays straight-line.
+> **Superseded:** revision 2's `seconds = d x groundDetourFactor / speed`, which is now the
+> straight-line model's leg.
 
 - Every step with a location starts with a move from `state.location` to that location, charged
   to `breakdown.travel` (hearth, flight and transport steps follow TIME-4, TIME-5 and TIME-7):
 
   ```
-  d       = distanceYards(state.location, resolve(step.location))   // src/geo; null across world maps
-  d       = max(0, d - (step.location.radius ?? 0))                // arrival radius, yards
-  speed   = mounted ? runSpeed * (1 + riding.speedBonus) : runSpeed
-  seconds = d * groundDetourFactor / speed
+  from    = { point: state.location, zoneHint }                    // zoneHint: top-level zone AreaTable id, 0 = none
+  to      = { point: resolve(step.location), zoneHint }
+  d       = distanceYards(from.point, to.point)                    // src/geo; null across world maps
+  r       = step.location.radius ?? 0                              // arrival radius, yards
+  speeds  = { groundYps: mounted ? runSpeed * (1 + riding.speedBonus) : runSpeed, swimYps: swimSpeed }
+  seconds = d <= r ? 0 : travelModel.leg(from, to, speeds).seconds * (d - r) / d
   ```
 
+- **The two models** (ARCHITECTURE §9.1):
+  - `straight-line` (clean deploys, tests, and maps without navigation data): the leg is
+    `d x groundDetourFactor / groundYps`, basis `assumption`, method `straight-line`, never pending,
+    no warnings. With it the formula above is revision 2's
+    `max(0, d - r) x groundDetourFactor / speed`.
+  - `navigation` (the committed navigation data): the navmesh leg, basis `derived`, or the labelled
+    straight-line fallback with a warning (terrain-navigation.md §9.3).
+  - The move's basis combines the leg's with the speeds' (`runSpeed` is `era-assumed` in
+    `forever-beta`, so `eraFallback` is set). `assumptionsUsed` gains `groundDetourFactor` when the
+    leg's method is `straight-line`, and `swimSpeed` with the navigation model.
 - **Arrival radius:** `Location.radius` (an author's `.goto ...,radius`, ARCHITECTURE §6) and
   `Waypoint.radius` shorten the move by that many yards (ASSUMPTION: the step starts on reaching
-  the radius); `state.location` still becomes the resolved point. A world-form point's `uiMapId`
-  hint is display metadata and does not change resolution.
+  the radius). A navigation leg is shortened in proportion, `(d - r) / d` of its seconds
+  (ASSUMPTION, Milestone 6), and no leg is requested when `d <= r`. `state.location` still becomes
+  the resolved point. A world-form point's `uiMapId` hint is display metadata and does not change
+  resolution.
+- **Warnings** (terrain-navigation.md §9.3): a leg's warnings pass through unchanged as structured
+  data, and the validator turns each into a warning: `no-walking-path` (SIM-17), `off-navmesh`
+  (SIM-18), `unverified-passage` (SIM-19), `ambiguous-floor` (SIM-20) and `long-swim` (SIM-21).
+  None changes the leg's seconds or basis.
+- **Pending legs:** a navigation leg not computed yet carries the straight-line fallback with
+  `pending: true`. It is shown as pending and is not an issue. Tests, exports and optimiser input
+  never have pending legs.
 - **Mounted** means travel mode `'mount'`, or `'auto'` with `riding.trained > 0`. Quest, vendor,
-  train and grind steps travel as `'auto'`. `'mount'` before riding is trained travels on foot and
-  emits `SIM009-mount-untrained`.
+  train and grind steps travel as `'auto'`, and so do the walks to and from the dock in a
+  `'transport'` step (Milestone 6 clarification). `'mount'` before riding is trained travels on
+  foot and emits `SIM009-mount-untrained`.
 - **Group waypoints** (ARCHITECTURE §8.1): `leg` waypoints are visited in order before the first
-  located step of the group, each segment by the formula above. `pin` and `closest` waypoints are
-  display-only in v1.
+  located step of the group, each segment one leg by the formula above. `pin` and `closest`
+  waypoints are display-only in v1.
 - **Step without a location (not `travel`):** when it names one entity (`via`, or a quest's only
-  starter or finisher), the walker uses that entity's spawn nearest to `state.location`, ties by
-  spawn order (ASSUMPTION). Instance presence counts at its dungeon entrance from `zones.json`;
+  starter or finisher), the walker uses that entity's spawn nearest to `state.location` by
+  straight-line distance, ties by spawn order (ASSUMPTION; unchanged by the navigation model,
+  terrain-navigation.md §9.4). Instance presence counts at its dungeon entrance from `zones.json`;
   spawns that are `UnmappedAreaPoint`s are skipped (ARCHITECTURE §5.2). If no spawn resolves, the
   step emits SIM-3 as below. When the step names no entity there is no travel and the location is
-  unchanged.
+  unchanged. **From an unknown position** (Milestone 6 review) "nearest" is undefined: an entity
+  whose resolved spawns lie at one point is reached there, but with spawns at more than one point
+  the step's move is unknown and the position stays unknown, since picking the first spawn would
+  price every later leg from a guessed place.
 - **Position made unknown (ARCHITECTURE §8.1):** a `travel` step with a null location (RXP
   `.zone`, `.subzone`, `.explore`) and a `note` whose `preserved` RXP source is a `.deathskip`
   line move the character somewhere unknown. The step's travel time is unknown (TIME-13) and
@@ -918,7 +1039,13 @@ On foot the character moves at `runSpeed`; mounted at `runSpeed x (1 + riding.sp
   the move is unknown (TIME-13) and `state.location` becomes null. Travel from a null location is
   unknown without a further issue, until a step with a resolvable location is reached. A null
   resolution is never treated as zero distance (ARCHITECTURE §6).
-- Different world maps: TIME-7.
+- **Why the position is unknown (Milestone 6 review).** A move from a null location records the
+  fact `position-unknown` with its cause, which is not an issue but lets the UI say why the time is
+  unknown: `start-unset` or `start-unresolved` (7.1), `zone-travel`, `death-skip`, `unresolved`
+  (an earlier SIM-3), `several-spawns` (above), `hearth-unbound` (TIME-4), `flight-unresolved`
+  (TIME-5) or `transport-arrival` (TIME-7).
+- Different world maps: a leg exists only on one world map; the move goes through the
+  TravelGraph (TIME-7).
 
 #### TIME-3 Riding state and training (ARCHITECTURE §8.1-9.2; DSO-16, F11)
 
@@ -928,12 +1055,12 @@ On foot the character moves at `runSpeed`; mounted at `runSpeed x (1 + riding.sp
   **Superseded (architect ruling):** the first revision 2 text started every route at `{ 0, 0 }`,
   so a route starting at level 40 or higher was on foot until its first riding step.
 - **Recognising riding:** during the route only `train` steps change `riding`. A `train` step is a
-  riding step when `skill === 'riding'` **or** its `spellId` is in the ruleset's `ridingSpellIds`
+  riding step when `skill === 'riding'` **or** its `spellId` is in the ruleset's `ridingSpells`
   table (section 1.2: Apprentice Riding 33388 = tier 1, Journeyman Riding 33391 = tier 2 in
   Forever; cited client values, forever-game-rules.md section 6.1). An imported `.train 33388`
   therefore enables mounted travel. **Superseded (architect ruling):** revision 2 recognised
   riding from `skill: 'riding'` only.
-- Tier: `rank` when given; else the tier of `spellId` in `ridingSpellIds`; else `trained + 1`.
+- Tier: `rank` when given; else the tier of `spellId` in `ridingSpells`; else `trained + 1`.
   Capped at 2. Which riding tier grants which speed spell is server-side, so the tier-to-speed
   mapping is `INFERRED`.
 - If the level is below `mountLevels[tier - 1]`: with `unknownXpEvents == 0`, the step does not
@@ -969,11 +1096,22 @@ On foot the character moves at `runSpeed`; mounted at `runSpeed x (1 + riding.sp
 - **`hearth bind`:** travel to the step's location (TIME-2), then `bindSeconds`; `state.hearth`
   becomes that resolved point. If it does not resolve, `state.hearth = null` and SIM-3 applies.
 - **`hearth use`:** the destination is `state.hearth`; the step's own `location` is display-only.
-  - `state.hearth == null`: `SIM006-hearth-unbound` (warning); travel unknown; location null.
+  - `state.hearth == null`: `SIM006-hearth-unbound` (warning); travel unknown; location null. No
+    cast is charged and `hearthReadyAt` is unchanged (Milestone 6).
   - `timeSec < hearthReadyAt`: the walker waits `hearthReadyAt - timeSec` (`breakdown.waiting`)
-    and emits `SIM005-hearth-cooldown` (warning). It never errors.
+    and emits `SIM005-hearth-cooldown` (warning). It never errors. The wait is the cooldown less
+    the time since the cast ended, so its basis combines the cooldown's with the durations of the
+    steps since the cast (SIMULATION §8; `derived` only when no assumed time passed).
+  - **After unknown time (Milestone 6 review).** When a step since the last cast has unknown time,
+    `timeSec` is a lower bound (TIME-13) and the true wait lies anywhere from 0 to the computed
+    one. The wait is then unknown time (0 s to `timeSec`, the step's duration unknown) and the step
+    emits `SIM005-hearth-cooldown-uncertain` (warning) with the computed value as an upper bound.
+    The unknown offset cancels at the cast (both the clock and `hearthReadyAt` carry it), so the
+    wait at the next use is exact again unless more unknown time passes.
   - Cast `hearthCastSeconds` (`breakdown.travel`); `state.location = state.hearth`;
-    `hearthReadyAt = timeSec + hearthCooldownSeconds`, where `timeSec` is the time the cast ends.
+    `hearthReadyAt = timeSec + hearthCooldownSeconds`, where `timeSec` is the time the cast ends
+    (the known parts only, TIME-13).
+  - A declared `hearthLocation` that does not resolve counts as no bind point (SIM-6).
 - Moving a bind step changes every later hearth destination automatically; nothing is stored on the
   `use` step (DSO-09).
 
@@ -1076,6 +1214,9 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
   legSeconds = L3D(path) / (taxiSpeed * (1 + taxiSpeedBonusPct / 100))
   ```
 
+  The flight step still charges `flightMasterSeconds` to `breakdown.interaction`, as in TIME-5
+  (Milestone 6 clarification).
+
 - `L3D` is the sum of 3D segment lengths along the path's nodes in `NodeIndex` order; the emulators
   fly a spline through them, which is slightly longer (Model A).
 - **Multi-hop:** the minimum-time path through nodes in `knownFlightPaths` that the character's
@@ -1084,7 +1225,12 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
   server's routing is unknown).
 - A `TaxiNodeRef` with a `taxiNodeId` matches the file's legs directly. A ref with only an
   `npcId` maps to the TaxiNodes row nearest its flight master's position on the same map
-  (`INFERRED`, local). Transport paths (cost 0, `Delay > 0`) are excluded.
+  (`INFERRED`, local), within 50 yd (Milestone 6 review: a row further away is taken to be another
+  node, and the flight falls back to TIME-5); the file lists each row's id and world position
+  beside its legs for this. Transport paths (cost 0, `Delay > 0`) are excluded.
+- A row is usable as an intermediate node when a node the character knows maps to it, whichever
+  key form it was learned under (`npc:` or `taxi:`), and that node serves the character's faction
+  (its `factions` include it or are unknown).
 - Basis: `L3D` is client data, `taxiSpeed` is `era-assumed`, the routing is an assumption, so the
   result is `assumption` with `eraFallback`.
 - Tests use synthetic node lists, or individual cited `TaxiPathNode` rows (D-022), never a bulk
@@ -1159,7 +1305,13 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
   - A `transport` with `id: null` and a `dock` but no matching record: the walker walks to the
     dock, waits and rides the default times, and arrives at the step's location (for a `travel`
     step the location is the destination, ARCHITECTURE §8.1). Without a step location the arrival
-    is unknown with SIM-4.
+    is unknown: the position becomes unknown, as after a `.zone` step, and the next located step's
+    move records `position-unknown` (TIME-2). **Erratum (Milestone 6 review):** this said "with
+    SIM-4", but SIM-4 is for a map change without a transport, and the step's own time is known.
+  - A seeded transport whose departure or arrival dock has no position (TIME-7 seeds none until a
+    dock NPC or the user gives one) makes the walk to or from it unknown with SIM-3, the
+    unresolved place (Milestone 6 review). The quickest-edge choice still ties by transport id
+    when every total is unknown; while the docks are unpositioned the candidates price the same.
   - A transport whose `factions` excludes the character's faction emits `SIM014-transport-faction`
     (warning). Faction restrictions are `UNKNOWN` in the client data (forever-game-rules.md 6.5).
   - Transports do not use the taxi model.
@@ -1183,8 +1335,8 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
 | Turn in quest (`turninSeconds`, `rewardChoiceSeconds`) | 3 s; +2 s if a reward choice | |
 | Vendor / repair / trainer visit (`vendorSeconds`, `repairSeconds`, `trainerSeconds`) | 10 s / 5 s / 10 s | |
 | Loot a corpse (`lootSeconds`) | 2 s | Walking to each corpse is part of the kill-loop time |
-| Click a quest object (`objectUseSeconds`) | 5 s | SOURCE DATA for the generic "Opening" spell 3365: 5,000 ms (Forever `SpellMisc` castIdx 6); some objects are instant |
-| Skinning (`skinSeconds`) | 2 s | SOURCE DATA: spell 8613, 2,000 ms (Forever) |
+| Click a quest object (`objectUseSeconds`) | 5 s | SOURCE DATA for the generic "Opening" spell 3365: `SpellMisc.CastingTimeIndex` 6, `SpellCastTimes` 6 = 5,000 ms, identical in 1.15.9.69722 and 1.60.1.69977 (research exports in `<repo>/.cache/experiments/simulation/`); some objects are instant |
+| Skinning (`skinSeconds`) | 2 s | SOURCE DATA: spell 8613, `SpellMisc.CastingTimeIndex` 5, `SpellCastTimes` 5 = 2,000 ms, identical in 1.15.9.69722 and 1.60.1.69977 |
 | Kill a same-level normal mob, including rest/drink (`killSeconds`) | 30 s per kill | Class, gear and zone dependent. Must be a user parameter, calibrated per class |
 | Talk to a flight master (`flightMasterSeconds`) | 3 s | Revision 2 |
 | Death / corpse run | not modelled | |
@@ -1199,7 +1351,9 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
   turn-in.
 - `vendor` costs `vendorSeconds`; `train` costs `trainerSeconds`; `note` and `abandon` cost 0 s.
 - `durationOverride` on any step replaces the step's computed interaction and objective time
-  (travel is still computed); its basis is `assumption`.
+  (travel is still computed); its basis is `assumption`. It also replaces what the simulation said
+  about that work (Milestone 6 review): an unknown objective or grind time (SIM-15), and for a grind
+  step a long grind (SIM-11) and its upper-bound time (SIM-2), are not raised.
 - All interaction time goes to `breakdown.interaction`.
 
 ### 6.6 Objective work
@@ -1246,7 +1400,8 @@ killXp = floor(f * sum_i(x_i))
   other targets are done entirely while doing the largest; 1 means no overlap.
 - Kill XP is scaled by the same factor `f` as time, so time and XP stay consistent.
 - If any `s_i` is unknown, `S` is unknown (TIME-13) and kill XP is taken over the known targets with
-  `f = 1`.
+  `f = 1`. A target whose quest the dataset does not know (DATA002), or whose objective index the
+  record does not have (`DATA003-unknown-objective`), is such an unknown `s_i` (Milestone 6 review).
 - **Progress `finish`:** each target objective is marked done in `questLog`. A target already done
   contributes nothing and emits `SIM012-objective-already-done` (info), not an error.
 - A target whose quest is not in the log emits `SIM016-complete-not-in-log` (warning); the work and
@@ -1288,7 +1443,8 @@ killXp = floor(f * sum_i(x_i))
   - `T > cumulative(maxLevel)` (XP stays 0 at the cap, XP-2): unreachable; unknown (TIME-13) with
     SIM-15.
   - With `xpPerHour`: `seconds = (T - cumulative(state)) * 3600 / xpPerHour`, and exactly
-    that deficit is granted.
+    that deficit is granted. At `xpPerHour` 0 the target is never reached: unknown with SIM-15
+    (reason `zero-rate`; Milestone 6 review). Only a null rate uses the kill loop.
   - Otherwise, level by level: `M = mobLevel ?? P` (a same-level mob at each level),
     `x = killXp(P, M, normal)` (KXP-3); `kills = ceil(need / x)` where `need` is the XP to the next
     level (or to `T` within its level); `kills * x` is granted, overshoot carries over (XP-2), and
@@ -1303,6 +1459,7 @@ killXp = floor(f * sum_i(x_i))
 - **Duration target** (`until: { kind: 'duration', seconds: S }`): XP is
   `floor(S * xpPerHour / 3600)` with `xpPerHour`, else the level-by-level loop with
   `floor(S / killSeconds)` kills. It never resets `unknownXpEvents`.
+- Kills on an instance map are dungeon or raid kills (KXP-5).
 - Grind time goes to `breakdown.combat`. Basis `assumption` (`killSeconds`, the mob level or the
   user's `xpPerHour`). Rested XP is off (KXP-9).
 
@@ -1344,7 +1501,7 @@ killXp = floor(f * sum_i(x_i))
 | 20 | Then accept a quest with `requiredLevel` 6 | `VAL004-min-level-uncertain` (warning), not an error |
 | 21 | Then grind `until: { kind: 'level', level: 6, offset: null }`, `mobLevel` null | need 1,950; 70 XP per kill; 28 kills; 840 s; level 6 with 10 XP; `unknownXpEvents` 0; `SIM002-grind-upper-bound`; `SIM011-target-level-late-uncertain` (840 s > 600 s, an upper bound) |
 | 22 | `assumptions.maxLevel = 20` on `forever-beta` | effective `{ value: 20, basis: 'assumption', source: 'project' }`; turn-ins at level 20 give 0 XP |
-| 23 | `train { spellId: 33388, skill: null, rank: null }` at level 40, riding 0 | recognised by `ridingSpellIds`; riding `{ trained: 1, speedBonus: 0.6 }`; 10 s |
+| 23 | `train { spellId: 33388, skill: null, rank: null }` at level 40, riding 0 | recognised by `ridingSpells`; riding `{ trained: 1, speedBonus: 0.6 }`; 10 s |
 | 24 | `train { spellId: 33391, skill: null, rank: null }` at level 45, riding 1 | tier 2 needs level 60: `SIM010-riding-too-low`; riding unchanged; 10 s |
 | 25 | `character.riding = 1`, start level 45; first step 700 yd away, mode `'auto'` | riding starts `{ 1, 0.6 }`; 78.125 s; no train step needed |
 | 26 | Level 9, 0 XP; grind `until: { kind: 'level', level: 10, offset: { kind: 'xpShort', xp: 300 } }`, `xpPerHour` 40,000 | T = 27,600 - 300 = 27,300; deficit 6,200; 558 s; level 9 with 6,200 XP |
@@ -1380,9 +1537,14 @@ The state is (with its `CharacterState` field, ARCHITECTURE §9.2):
 **Initial state (ARCHITECTURE §9.2).** The walker starts from `ProjectV1.character`:
 
 - `level = startLevel`, `xp = startXp`, `unknownXpEvents = 0`; `xpBasis` is `source` (declared)
-  and `xpEraFallback` false; `timeSec = 0`;
+  and `xpEraFallback` false; `timeSec = 0`. `startXp` is the XP into the start level; a value at or
+  beyond `xpToNext(startLevel)` is carried over by XP-2 from 0 XP into the start level (so the walk
+  starts at the level it reaches, `xpBasis` `derived` with the table's Era fallback), and at or
+  above the cap it is 0. The validator then raises `SIM023-start-xp-beyond-level` (Milestone 6
+  review);
 - `location = resolve(startLocation)` (null when unset or unresolvable; TIME-2's unknown rules
-  then apply to the first move); `hearth` and `hearthReadyAt` as in TIME-4;
+  then apply to the first move, which records `position-unknown` with cause `start-unset` or
+  `start-unresolved`); `hearth` and `hearthReadyAt` as in TIME-4;
 - `knownFlightPaths` from `character.knownFlightPaths`; `riding` from `character.riding`
   (TIME-3); `skills` from `character.professions`; `knownSpells`, `reputationDelta` and
   `abandoned` empty;
@@ -1500,6 +1662,9 @@ Informational fields (no gate):
   new Forever quests (forever-game-rules.md section 7, L4; `<repo>/.cache/questiedb/docs/forever-data.md:48, 70-76`).
 - The validator must accept unknown quest IDs as `unknown`: a warning (`DATA002-unknown-quest`),
   not an error (ARCHITECTURE §9.4).
+- Likewise a `complete` target whose objective index the quest's record does not have is a warning,
+  `DATA003-unknown-objective` (the RXP import reports it as RXP031; RXP.md), and its work has an
+  unknown time (TIME-10) (Milestone 6 review).
 
 ### 7.5 Turn-in, abandon and lint rules
 
@@ -1568,13 +1733,16 @@ Informational fields (no gate):
 - **Quest-log capacity** is the effective `questLogCapacity` of the ruleset (VAL-20).
 - **Unknown quest IDs** are warnings (`DATA002-unknown-quest`), never errors.
 
-### 7.7 Simulation checks (SIM-1..16)
+### 7.7 Simulation checks (SIM-1..22)
 
 The walker emits these while simulating (ARCHITECTURE §9.2-9.4). ARCHITECTURE §9.4 names this
 table as the authoritative SIM list and names five of its checks in words (flight to an unknown
 path, hearth on cooldown, cross-world travel without a transport, unresolved location, target
 level reached too late). Rules marked "defined here" have no ARCHITECTURE wording of their own;
-they are defined by this table. There are no SIM codes beyond SIM-16.
+they are defined by this table. There are no SIM codes beyond SIM-23. SIM-17..21 were added in
+Milestone 6 for the travel warnings of TIME-2 (terrain-navigation.md §9.3, §18); the simulation
+passes each leg's warning through as data and the validator emits the code. SIM-22 and SIM-23 are
+the route-level SIM issues (`stepId` null).
 
 | ID | Code | Severity | Trigger | ARCHITECTURE |
 |---|---|---|---|---|
@@ -1582,18 +1750,25 @@ they are defined by this table. There are no SIM codes beyond SIM-16.
 | SIM-2 | `SIM002-grind-upper-bound` | info | A grind step with a level target (any offset) after unknown XP; the level is known again and the duration is an upper bound (TIME-12) | §9.3 |
 | SIM-3 | `SIM003-unresolved-location` | info | A location, or every spawn of a step's entity, resolves to null (TIME-2). Not raised when a `travel` step with a null location or a death skip makes the position unknown | §6, §9.4 "unresolved location" |
 | SIM-4 | `SIM004-cross-world-no-transport` | warning | A move between world maps without a transport step, a hearth use or an instance entrance edge (TIME-7) | §9.3, §9.4 "cross-world travel without a transport" |
-| SIM-5 | `SIM005-hearth-cooldown` | warning | `hearth use` before `hearthReadyAt`; the walker waits (TIME-4) | §9.2, §9.4 "hearth on cooldown" |
+| SIM-5 | `SIM005-hearth-cooldown` | warning | `hearth use` before `hearthReadyAt`; the walker waits (TIME-4). `-uncertain` variant when a step since the last cast has unknown time: the wait is unknown, at most the computed one | §9.2, §9.4 "hearth on cooldown" |
 | SIM-6 | `SIM006-hearth-unbound` | warning | `hearth use` with no bind point (TIME-4) | defined here |
 | SIM-7 | `SIM007-flight-unknown-path` | warning | A flight from or to a node not in `knownFlightPaths` (TIME-5) | §9.4 "flight to an unknown path" |
 | SIM-8 | `SIM008-flight-unresolved` | warning | A `TaxiNodeRef` or `nodeQuery` that resolves to no node, several nodes, or a node without a position (TIME-5) | defined here |
 | SIM-9 | `SIM009-mount-untrained` | warning | Travel mode `'mount'` before riding is trained (TIME-2) | defined here |
-| SIM-10 | `SIM010-riding-too-low` | warning | A riding `train` step (by `skill` or `ridingSpellIds`) below `mountLevels`; `-uncertain` variant (TIME-3) | defined here (DSO-16) |
+| SIM-10 | `SIM010-riding-too-low` | warning | A riding `train` step (by `skill` or `ridingSpells`) below `mountLevels`; `-uncertain` variant (TIME-3) | defined here (DSO-16) |
 | SIM-11 | `SIM011-target-level-late` | warning | A grind step with a level target needing more than `grindWarnSeconds`; `-uncertain` variant (TIME-12) | §9.4 "target level reached too late" |
 | SIM-12 | `SIM012-objective-already-done` | info | A `finish` target that is already done (TIME-10) | defined here (DSO-07) |
 | SIM-13 | `SIM013-condition-unknown` | warning | A step or group condition evaluates to `unknown`; the step stays active (`active: 'unknown'`) | §9.2 |
 | SIM-14 | `SIM014-transport-faction` | warning | A transport whose `factions` excludes the character (TIME-7) | defined here |
-| SIM-15 | `SIM015-time-unknown` | info | Objective or grind time that cannot be estimated (TIME-9, TIME-12) | defined here |
+| SIM-15 | `SIM015-time-unknown` | info | Objective or grind time that cannot be estimated (TIME-9, TIME-12), unless a `durationOverride` prices it | defined here |
 | SIM-16 | `SIM016-complete-not-in-log` | warning | A `complete` target whose quest is not in the log (TIME-10) | defined here |
+| SIM-17 | `SIM017-no-walking-path` | warning | Same world map, but the navigation data has no walking path and no transport joins the two places; the leg is the labelled straight-line fallback (TIME-2) | defined here (terrain-navigation.md §9.3) |
+| SIM-18 | `SIM018-off-navmesh` | warning | A leg endpoint has no walkable polygon within 6 yd; the leg is the labelled fallback (TIME-2) | defined here (terrain-navigation.md §9.3) |
+| SIM-19 | `SIM019-unverified-passage` | warning | The leg crosses a passage nobody has walked in game yet (D-034 item 5); the leg keeps its basis (TIME-2) | defined here (terrain-navigation.md §9.3) |
+| SIM-20 | `SIM020-ambiguous-floor` | warning | A leg endpoint's floor is ambiguous; the leg uses the chosen floor (TIME-2) | defined here (terrain-navigation.md §8.3) |
+| SIM-21 | `SIM021-long-swim` | warning | The leg's longest contiguous swim is over 200 yd; fatigue is unverified (TIME-2) | defined here (terrain-navigation.md §10) |
+| SIM-22 | `SIM022-legs-pending` | info | Route level: navigation legs are still being computed; their times are the straight-line fallback until then (TIME-2). Absent from a final state | defined here (terrain-navigation.md §9.3) |
+| SIM-23 | `SIM023-start-xp-beyond-level` | warning | Route level: `character.startXp` is at or beyond what the start level holds; the walk starts at the level it reaches (7.1; Milestone 6 review) | defined here |
 
 ### 7.8 Issue codes (F24)
 
@@ -1628,9 +1803,9 @@ here so the list is complete.
 | VAL-20 | `VAL020-quest-log-full` | error | |
 | VAL-21 | `VAL021-previous-chain-active` | warning | |
 | VAL-22 | `VAL022-needs-event` | info | |
-| VAL-30 | `VAL030-not-in-log` | error | `VAL030-failed` (error), `VAL030-objectives-incidental` (warning), `VAL030-finisher-mismatch` (warning, `via` not among the finishers) |
+| VAL-30 | `VAL030-not-in-log` | error | `VAL030-not-in-log-unverifiable` (warning; `priorHistory: 'unknown'` and the route never accepted the quest, 7.6), `VAL030-failed` (error), `VAL030-objectives-incidental` (warning), `VAL030-finisher-mismatch` (warning, `via` not among the finishers) |
 | VAL-31 | (definition only) | | |
-| VAL-32 | `VAL032-not-in-log` | error | |
+| VAL-32 | `VAL032-not-in-log` | error | `VAL032-not-in-log-unverifiable` (warning; as VAL-30's) |
 | VAL-33 | (engine order, no issue) | | |
 | LINT-1 | `LINT001-prequest-both` | warning | |
 | LINT-2 | `LINT002-link-mismatch` | warning | |
@@ -1638,7 +1813,8 @@ here so the list is complete.
 | LINT-4 | `LINT004-xp-reduced` | warning | |
 | (ARCHITECTURE §5.5) | `DATA001-custom-shadowed` | info | |
 | (7.4) | `DATA002-unknown-quest` | warning | |
-| SIM-1..16 | see 7.7 | see 7.7 | `SIM010-riding-too-low-uncertain`, `SIM011-target-level-late-uncertain` (warnings) |
+| (7.4) | `DATA003-unknown-objective` | warning | |
+| SIM-1..23 | see 7.7 | see 7.7 | `SIM005-hearth-cooldown-uncertain`, `SIM010-riding-too-low-uncertain`, `SIM011-target-level-late-uncertain`, `SIM016-complete-not-in-log-unverifiable` (warnings) |
 
 ---
 
@@ -1655,13 +1831,21 @@ value with basis `assumption`, user-entered XP, a user override, an assumed coun
 basis `client-data`, `official` or `reported`, dataset values and the route's own authored points
 count as source inputs. `eraFallback` is true when the ruleset is `forever-beta` and any input has
 basis `era-assumed` or is `era-seed` XP; in `era-1.15` it is always false. `assumptionsUsed` lists
-every key whose effective basis is `assumption` or `era-assumed` that the step read.
+every key whose effective basis is `assumption` or `era-assumed` that the step read, by its
+section 1.2 parameter name (`RuleKey` in `src/rules`; Milestone 6). A travel leg's seconds are an
+input with the leg's own basis (`assumption` for the straight-line model, `derived` for a
+navigation leg).
 
 `levelAfter` and `xpAfter` depend on every XP grant since the route start, so the walker keeps the
 combined basis and `eraFallback` of those grants beside `xp`: ARCHITECTURE §9.2's
 `CharacterState` holds them as `xpBasis` and `xpEraFallback`. Each grant combines into them by
 the rule above; the start values are `source` and false (7.1). **Superseded:** revision 2 kept
 this as walker-internal state because the `CharacterState` sketch had no field for it.
+
+A grant also reads the XP table, so `xpToNextLevel`'s provenance joins `levelAfter`'s (its Era
+fallback in `forever-beta`) and the step's `assumptionsUsed` gains it; when the cap bounded the
+grant, `maxLevel` joins them too (an `assumption` when the project sets it). This holds for quest,
+objective-kill and grind XP alike (Milestone 6 review).
 
 | Rules | Reads | `CharacterState` written | `StepEstimate` / `Estimated` |
 |---|---|---|---|
@@ -1672,8 +1856,8 @@ this as walker-internal state because the `CharacterState` sketch had no field f
 | KXP-1..7 | NPC levels and rank, `mobLevelChoice`, kill multipliers | `xp`, `level` | kill part of `xpGained`, `assumption` |
 | KXP-8, KXP-9 | `groupXpEnabled`, `restedEnabled` | none (off in v1) | none |
 | COL-1..5 | `level`, `greenRange`, `difficultyYellowLowerBound` | none | display only; feeds LINT-3 |
-| TIME-1..3 | `runSpeed`, `groundDetourFactor`, `mountSpeedBonus`, `mountLevels`, `ridingSpellIds`, `Location.radius` | `location`, `timeSec`, `riding`, `skills` (profession training), `knownSpells` | `duration`, `breakdown.travel`, `breakdown.interaction`; `assumption`; `eraFallback` via `runSpeed` |
-| TIME-4 | `hearthCastSeconds`, `hearthCooldownSeconds`, `bindSeconds` | `hearth`, `hearthReadyAt`, `location`, `timeSec` | `breakdown.waiting` (cooldown), `breakdown.travel` (cast); cast and cooldown alone are `derived` |
+| TIME-1..3 | `runSpeed`, `swimSpeed`, `groundDetourFactor`, `mountSpeedBonus`, `mountLevels`, `ridingSpells`, `Location.radius`, the `TravelModel`'s legs (seconds, method, pending, warnings) | `location`, `timeSec`, `riding`, `skills` (profession training), `knownSpells` | `duration`, `breakdown.travel`, `breakdown.interaction`; `assumption` (straight line) or `derived` (navigation); `eraFallback` via `runSpeed`; SIM-17..21 from the leg's warnings |
+| TIME-4 | `hearthCastSeconds`, `hearthCooldownSeconds`, `bindSeconds`, the durations since the last cast | `hearth`, `hearthReadyAt`, `location`, `timeSec` | `breakdown.waiting` (cooldown), `breakdown.travel` (cast); the cast is `source` and a wait with no step since the cast `derived`; otherwise the wait takes the combined basis of the durations since the cast, and is unknown after unknown time (TIME-4) |
 | TIME-5, TIME-6 | `taxiModel`, `taxiSpeed`, `taxiDetourFactor`, `taxiSpeedBonusPct`, `flightMasterSeconds`, TravelGraph taxi nodes, local `taxi.local.json` legs (dev/preview only) | `knownFlightPaths` (discover), `location`, `timeSec` | `breakdown.travel`, `breakdown.interaction`; `assumption`; `eraFallback` via `taxiSpeed` |
 | TIME-7 | TravelGraph transports and instance entrance edges, `TransportRef`, `transportWaitSeconds`, `transportRideSeconds` | `location`, `timeSec` | `breakdown.waiting` (wait), `breakdown.travel` (walk and ride); `assumption` |
 | TIME-8 | interaction keys, `durationOverride` | `timeSec` | `breakdown.interaction`; `assumption` |
@@ -1683,7 +1867,7 @@ this as walker-internal state because the `CharacterState` sketch had no field f
 | VAL-1..22 | quest record, `questLogCapacity`, profile, `priorHistory`, `AcceptStep.anyOf` | `questLog`, `completed`, `abandoned` via accept, turn-in and abandon; reads `skills`, `reputationDelta`, `knownSpells` | `ValidationIssue` only |
 | VAL-30..33 | finishers, objectives, `reputationReward`, `TurnInStep.anyOf` | `questLog`, `completed`, `abandoned`, `reputationDelta` | `xpGained` through QXP; issues |
 | LINT-1..4 | dataset, `level` | none | issues |
-| SIM-1..16 | as listed in 7.7 | none | issues; SIM-13 sets `active: 'unknown'` |
+| SIM-1..22 | as listed in 7.7 | none | issues (SIM-22 at route level); SIM-13 sets `active: 'unknown'` |
 
 ---
 
@@ -1700,14 +1884,14 @@ this as walker-internal state because the `CharacterState` sketch had no field f
 | `rested` | P=10 (xpToNext 7,600): R max = 5,700; a 95 XP kill with R = 5,700 gives 190 XP and R = 5,605; quest XP unaffected; R = 0 at 60 |
 | `colour` | Every row of COL-3; a ruleset switch to `difficultyYellowLowerBound = -4` flips `Q-P = -3, -4` to yellow |
 | `ruleset` | Both ids; every key has a basis; `questLogCapacity` in `forever-beta` is 40, `client-data`, with a launch-enforcement `note`; precedence (project assumption wins and carries `basis: 'assumption'`, `source: 'project'`); only `AssumptionValues` fields are overridable, with the names of section 1.2; `maxLevel` 20 override (TIME-T 22); `eraFallback` false in `era-1.15` |
-| `travel` | TIME-T rows 1-4, 10-11 and 30; `'mount'` without training gives SIM-9; unresolved location gives SIM-3 and unknown time; `Location.radius` shortens the move; a `travel` step with a null location and a `.deathskip` note make the position unknown without SIM-3; a transport with a user-entered `dock` and no TravelGraph record |
-| `riding` | TIME-T rows 3-4 and 23-25: recognised by `skill: 'riding'` or by `ridingSpellIds`; starting tier from `character.riding`; `era-1.15` has no riding spell ids |
+| `travel` | TIME-T rows 1-4, 10-11 and 30; `'mount'` without training gives SIM-9; unresolved location gives SIM-3 and unknown time; `Location.radius` shortens the move; a `travel` step with a null location and a `.deathskip` note make the position unknown without SIM-3; a transport with a user-entered `dock` and no TravelGraph record; a navigation leg's warnings and pending flag pass through (SIM-17..21), and its radius shortening is proportional |
+| `riding` | TIME-T rows 3-4 and 23-25: recognised by `skill: 'riding'` or by `ridingSpells`; starting tier from `character.riding`; `era-1.15` has no riding spell ids |
 | `training` | A profession `train` step with a `skillId` adds the skill line at 1; a later VAL-15 check on it gives `-unverifiable`; `skillId: null` changes only `knownSpells` |
 | `grindTarget` | TIME-T rows 21 and 26-29: every offset kind, carry-over past a level, unreachable targets above `maxLevel` |
 | `hearth` | TIME-T rows 8-9; unbound hearth gives SIM-6; moving a bind step changes the later destination |
 | `taxi` | TIME-T rows 5-7 (straight-line default); `TaxiNodeRef` resolution by `npcId`, `taxiNodeId` and `name`, and SIM-8 for no match or several; leg length from a synthetic `taxi.local.json`-shaped fixture (never a real extraction); multi-hop sum over known nodes; transports excluded (`Delay > 0`); `taxiModel: 'auto'` falls back to TIME-5 without the local file or for an uncovered leg; `'straight-line'` ignores the file. **Superseded:** the first draft's "model B on three legs" test (research note R-1) |
 | `objectives` | TIME-T rows 12-17; unknown reputation objective gives SIM-15; already-done target gives SIM-12 |
-| `validator` | One fixture per VAL-1..22, built from real Forever quest IDs after corrections (e.g. the 5-quest "Sweet Amber" chain 48-53, the 2/23/24 exclusive triple); Skyborne masks 77, 178, 1; `-unverifiable` variants of VAL-15..19; VAL-22 is info only and never blocks; a repeatable quest accepted twice raises no VAL-2 |
+| `validator` | One fixture per VAL-1..22, built from real Forever quest IDs after corrections (e.g. the 5-quest "Sweet Amber" chain 48-53, the 2/23/24 `inGroupWith` triple); Skyborne masks 77, 178, 1; `-unverifiable` variants of VAL-15..19; VAL-22 is info only and never blocks; a repeatable quest accepted twice raises no VAL-2. The data has no record with `requiredSpell` or `availableStartingWith`, so VAL-17 and that part of VAL-18 stay synthetic |
 | `priorHistory` | TIME-T row 31; `priorCompletedQuests` satisfies VAL-8/9; `priorQuestLog` satisfies VAL-10 and lets a turn-in pass VAL-30 (with `VAL030-objectives-incidental`); the four `-unverifiable` warnings with `'unknown'`; errors with `'listed'`; VAL-2 and VAL-12 still fire on listed quests |
 | `anyOf` | TIME-T row 32; an any-of accept where every candidate fails reports `questId`'s errors; an any-of turn-in picks the first candidate in the log |
 | `codes` | Every emitted code exists in `src/validate/codes.ts` and matches the grammar of 7.8 |
@@ -1761,8 +1945,12 @@ this as walker-internal state because the `CharacterState` sketch had no field f
     1.2 have no override field (for example `eventObjectiveSeconds`, `taxiSpeedBonusPct`,
     `hearthCooldownSeconds`). The architect should either define rules for the three fields (for
     example `killXpMultiplier` on all kill XP in KXP-5) or remove them, and decide which ruleset
-    parameters become overridable, before Milestone 7 freezes schema version 1.
-15. **Turn-ins of unlisted quests with unknown history.** With `priorHistory: 'unknown'`, a quest
+    parameters become overridable. **Erratum (Milestone 6):** this said "before Milestone 7
+    freezes schema version 1"; D-035 froze it from the Milestone 4 commit, so either change now
+    needs a schema version bump and a migration.
+15. **Closed (Milestone 6; see section 1.5):** ARCHITECTURE §9.4 governs, and the registry has
+    the three `-unverifiable` variants. The original question follows.
+    **Turn-ins of unlisted quests with unknown history.** With `priorHistory: 'unknown'`, a quest
     accepted before the route but missing from `priorQuestLog` still gives `VAL030-not-in-log` or
     `VAL032-not-in-log` (errors) and SIM-16 (warning) when the route turns it in, abandons it or
     works on it. ARCHITECTURE §9.4 relaxes only prerequisite checks, so this file does not add

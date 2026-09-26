@@ -19,12 +19,12 @@ import {
 } from '../domain';
 import { zoneFramesContaining } from '../geo';
 import { CROSSROADS_NODE } from '../geo/test-fixtures';
-import type { LocalArt, LocalArtEntry, LocalArtLoad } from '../infra/maps';
-import { LAYER_IDS, refsOf, type LayerId, type MapContainer, type MapDescriptor, type MapHit, type MapRef, type MapViewState } from '../map/adapter';
-import { DEFAULT_LOD } from '../map/layers';
+import type { ArtImage, ArtManifestLoad, LocalArt, LocalArtEntry, LocalArtLoad, MapResources, TerrainArcKind, TerrainArcsLoad, TerrainManifestLoad } from '../infra/maps';
+import { LAYER_IDS, refsOf, type LayerId, type MapContainer, type MapDescriptor, type MapHit, type MapRef, type MapViewState, type RoutePathsInput } from '../map/adapter';
+import { DEFAULT_LOD, RELIEF_OPACITY } from '../map/layers';
 import { fixedClock } from './clock';
 import { insertNote, moveSelected } from './commands';
-import { BADGE_TEXT, createMapController, FIT_ROUTE_MAX_ZOOM, MAX_SYNC_MEASURES, stagePixelOf, type MapControllerOptions, type MapTiming } from './map-controller';
+import { BADGE_TEXT, createMapController, FIT_ROUTE_MAX_ZOOM, MAP_ART_OWNER_NOTE, MAX_SYNC_MEASURES, stagePixelOf, type MapControllerOptions, type MapTiming } from './map-controller';
 import {
   fakeAdapterFactory,
   MAP_TEST_DATASET,
@@ -36,7 +36,7 @@ import {
   type FakeAdapter,
   type FakeAdapterSettings,
 } from './map-test-helpers';
-import { setMapLayerVisible, shownOpenedQuests } from './map-view';
+import { setMapLayerVisible, setMapWalkingPaths, shownOpenedQuests } from './map-view';
 import { editNoteText } from './shell-support';
 import { createEditorStore, type EditorStore } from './store';
 
@@ -245,8 +245,10 @@ describe('store changes', () => {
   it('shows and hides layers from the store', () => {
     const s = setup();
     s.controller.attach(s.factory.factory, EL);
+    // The coastline is hidden by default (UI.md §12).
+    expect(s.adapter().callsOf('toggleLayer')).toEqual([{ kind: 'toggleLayer', layer: 'coastline', visible: false }]);
     setMapLayerVisible(s.store, 'available-quests', false);
-    expect(s.adapter().callsOf('toggleLayer')).toEqual([{ kind: 'toggleLayer', layer: 'available-quests', visible: false }]);
+    expect(s.adapter().callsOf('toggleLayer').slice(1)).toEqual([{ kind: 'toggleLayer', layer: 'available-quests', visible: false }]);
     expect(s.controller.getStatus().layers.find((layer) => layer.layer === 'available-quests')?.visible).toBe(false);
     setMapLayerVisible(s.store, 'available-quests', true);
     expect(s.adapter().callsOf('toggleLayer').at(-1)).toEqual({ kind: 'toggleLayer', layer: 'available-quests', visible: true });
@@ -898,5 +900,306 @@ describe('pick on map', () => {
     s.controller.detach();
     expect(s.controller.getStatus().pick).toBeNull();
     expect(first).toHaveLength(0);
+  });
+});
+
+// =============================================================================================
+// Committed art and terrain (D-032, D-033) and walking paths (MAPS §7.4)
+
+const rect = (mapId: WorldMapId, xMin: number, xMax: number, yMin: number, yMax: number) => ({ mapId, xMin, xMax, yMin, yMax });
+
+function artImage(uiMapId: UiMapId, name: string, uiMapType: number, bounds: ArtImage['bounds'], width = 1002, height = 668): ArtImage {
+  return {
+    uiMapId,
+    name,
+    uiMapType,
+    styleId: 1,
+    bounds,
+    url: `./maps/art/${String(uiMapId)}.webp`,
+    contentType: 'image/webp',
+    width,
+    height,
+    sha256: 'b'.repeat(64),
+  };
+}
+
+const ZEPHRAS = worldMapId(2991);
+const ART: ArtManifestLoad = {
+  kind: 'loaded',
+  manifest: {
+    owner: 'Blizzard Entertainment',
+    build: '1.60.1.70009',
+    images: [
+      artImage(DUROTAR, 'Durotar', 3, rect(KALIMDOR, -1716.6666259765625, 1808.333251953125, -7249.99951171875, -1962.4998779296875)),
+      artImage(MULGORE, 'Mulgore', 3, rect(KALIMDOR, -3835.416015625, 266.666015625, -3675, 2479.1669921875)),
+      artImage(KALIMDOR_CONTINENT, 'Kalimdor', 2, rect(KALIMDOR, -11733.2998046875, 12799.900390625, -19733.2109375, 17066.599609375)),
+      // The alternative continent: never drawn in place of the surface's continent.
+      artImage(uiMapId(1464), 'Kalimdor', 2, rect(KALIMDOR, -11870, 12470, -13370, 10970), 512, 512),
+      // Two images of one rectangle: the one with more pixels is drawn.
+      artImage(uiMapId(2521), 'Zephras Isle', 3, rect(ZEPHRAS, 1247.9, 4956.25, -1331.25, 4231.25)),
+      artImage(uiMapId(2665), 'Zephras Isle', 3, rect(ZEPHRAS, 1247.9, 4956.25, -1331.25, 4231.25), 512, 512),
+    ],
+    unplaced: [{ uiMapId: uiMapId(947), name: 'Azeroth' }],
+  },
+};
+
+const arcFile = (mapId: WorldMapId, kind: TerrainArcKind) => ({
+  kind,
+  mapId,
+  path: `maps/terrain/${String(mapId)}/${kind}.json`,
+  url: `./maps/terrain/${String(mapId)}/${kind}.json`,
+  sha256: 'c'.repeat(64),
+  arcs: 1,
+});
+
+const TERRAIN: TerrainManifestLoad = {
+  kind: 'loaded',
+  manifest: {
+    build: '1.60.1.70009',
+    maps: [
+      {
+        mapId: KALIMDOR,
+        name: 'Kalimdor',
+        relief: { mapId: KALIMDOR, url: './maps/terrain/1/relief.png', bounds: rect(KALIMDOR, -12800, 17066.7, -9066.7, 17066.7), width: 1568, height: 1792, pixelYd: 16.7 },
+        zones: arcFile(KALIMDOR, 'zones'),
+        coast: arcFile(KALIMDOR, 'coast'),
+      },
+    ],
+  },
+};
+
+const arcsOf = (mapId: WorldMapId, kind: TerrainArcKind): TerrainArcsLoad => ({
+  kind: 'loaded',
+  arcs: {
+    kind,
+    mapId,
+    lines: [
+      [
+        { mapId, x: 0, y: -4000 },
+        { mapId, x: 100, y: -4100 },
+      ],
+    ],
+    sides: kind === 'zones' ? [[14, 17]] : [],
+  },
+});
+
+interface FakeResources extends MapResources {
+  readonly calls: string[];
+}
+
+function fakeResources(answers: { readonly art?: ArtManifestLoad; readonly terrain?: TerrainManifestLoad; readonly arcs?: typeof arcsOf } = {}): FakeResources {
+  const calls: string[] = [];
+  return {
+    calls,
+    art: () => {
+      calls.push('art');
+      return Promise.resolve(answers.art ?? ART);
+    },
+    terrain: () => {
+      calls.push('terrain');
+      return Promise.resolve(answers.terrain ?? TERRAIN);
+    },
+    arcs: (mapId, kind) => {
+      calls.push(`arcs ${String(mapId)} ${kind}`);
+      return Promise.resolve((answers.arcs ?? arcsOf)(mapId, kind));
+    },
+  };
+}
+
+const layerStatus = (s: Setup, layer: LayerId) => s.controller.getStatus().layers.find((entry) => entry.layer === layer);
+
+describe('committed art and terrain', () => {
+  it('loads them when the map first mounts, then draws the zone art in view zoomed in and the continent zoomed out, over a faint relief', async () => {
+    const resources = fakeResources();
+    const s = setup({ options: { resources } });
+    // Nothing is loaded before the map mounts.
+    expect(resources.calls).toEqual([]);
+    s.controller.attach(s.factory.factory, EL);
+    expect(resources.calls).toEqual(['art', 'terrain']);
+    await vi.waitFor(() => {
+      expect(itemsOf(s.adapter(), 'art').map((item) => item.id)).toEqual(['art:1411']);
+    });
+    // Placed by the manifest's rectangle, drawn from its deployed URL.
+    expect(itemsOf(s.adapter(), 'art')[0]).toMatchObject({ url: './maps/art/1411.webp', bounds: ART.kind === 'loaded' ? ART.manifest.images[0]?.bounds : null });
+    expect(itemsOf(s.adapter(), 'relief')[0]).toMatchObject({ id: 'relief:1', url: './maps/terrain/1/relief.png', opacity: RELIEF_OPACITY.underArt });
+    // Over the art the zone frames lose their fill.
+    expect(itemsOf(s.adapter(), 'zone-frames').filter((item) => item.type === 'frame' && item.kind === 'zone').every((item) => item.type === 'frame' && !item.filled)).toBe(true);
+    const status = s.controller.getStatus();
+    expect(status.backdrop).toBe('art');
+    expect(status.problems).toEqual([]);
+    expect(layerStatus(s, 'art')?.notes).toContain(MAP_ART_OWNER_NOTE);
+    expect(layerStatus(s, 'art')?.notes).toContain('1 image spans several world maps and is not drawn (Azeroth).');
+    expect(layerStatus(s, 'relief')?.notes.some((note) => note.startsWith('Faint under the painted art'))).toBe(true);
+    // Zoomed out: the surface's continent image, not the alternative continent.
+    s.adapter().pan({ zoom: -5 });
+    expect(itemsOf(s.adapter(), 'art').map((item) => item.id)).toEqual(['art:1414']);
+    // Hiding the art brings the relief back as the backdrop and the frames' fill with it.
+    setMapLayerVisible(s.store, 'art', false);
+    expect(itemsOf(s.adapter(), 'relief')[0]).toMatchObject({ opacity: RELIEF_OPACITY.backdrop });
+    expect(s.controller.getStatus().backdrop).toBe('relief');
+    expect(resources.calls.filter((call) => call === 'art' || call === 'terrain')).toEqual(['art', 'terrain']);
+  });
+
+  it('draws one zone image at a time, the zone being viewed, and none zoomed in outside every zone image', async () => {
+    const s = setup({ options: { resources: fakeResources() } });
+    s.controller.attach(s.factory.factory, EL);
+    await vi.waitFor(() => {
+      expect(itemsOf(s.adapter(), 'art').map((item) => item.id)).toEqual(['art:1411']);
+    });
+    // Mulgore's rectangle meets the view once it is panned there; only the zone at the centre is drawn.
+    s.adapter().pan({ x: -1000, y: -3000 });
+    expect(itemsOf(s.adapter(), 'art').map((item) => item.id)).toEqual(['art:1411']);
+    s.adapter().pan({ x: -1800, y: 0 });
+    expect(itemsOf(s.adapter(), 'art').map((item) => item.id)).toEqual(['art:1412']);
+    // Out at sea at zone zoom: no zone image and not the coarse continent image; the relief is the backdrop.
+    s.adapter().pan({ x: 0, y: -9000 });
+    expect(itemsOf(s.adapter(), 'art')).toEqual([]);
+    expect(itemsOf(s.adapter(), 'relief')[0]).toMatchObject({ opacity: RELIEF_OPACITY.backdrop });
+    expect(s.controller.getStatus().backdrop).toBe('relief');
+  });
+
+  it('draws one image per rectangle where there is no continent: the one with more pixels', async () => {
+    const s = setup({ options: { resources: fakeResources() } });
+    s.controller.attach(s.factory.factory, EL);
+    s.controller.showSurface('world:2991');
+    await vi.waitFor(() => {
+      expect(itemsOf(s.adapter(), 'art').map((item) => item.id)).toEqual(['art:2521']);
+    });
+    expect(layerStatus(s, 'relief')?.unavailable).toBe('No terrain data for this world map (it covers Kalimdor)');
+    expect(layerStatus(s, 'art')?.unavailable).toBeNull();
+  });
+
+  it('fetches the zone outlines of the shown world map, and the coastline only once it is shown', async () => {
+    const resources = fakeResources();
+    const s = setup({ options: { resources } });
+    s.controller.attach(s.factory.factory, EL);
+    await vi.waitFor(() => {
+      expect(itemsOf(s.adapter(), 'zone-outlines').map((item) => item.id)).toEqual(['outline:zones:1']);
+    });
+    expect(resources.calls).toEqual(['art', 'terrain', 'arcs 1 zones']);
+    expect(itemsOf(s.adapter(), 'coastline')).toEqual([]);
+    expect(s.adapter().isLayerVisible('coastline')).toBe(false);
+    setMapLayerVisible(s.store, 'coastline', true);
+    await vi.waitFor(() => {
+      expect(itemsOf(s.adapter(), 'coastline').map((item) => item.id)).toEqual(['outline:coast:1']);
+    });
+    expect(resources.calls.at(-1)).toBe('arcs 1 coast');
+    expect(layerStatus(s, 'zone-outlines')?.notes[0]).toMatch(/^Zone borders from the client’s terrain areas/);
+  });
+
+  it('never breaks the map: a failed art manifest leaves the relief as the backdrop, and the status line says so', async () => {
+    const failed: ArtManifestLoad = { kind: 'failed', reason: 'unavailable', detail: 'maps/art/manifest.json: HTTP 503' };
+    const resources = fakeResources({ art: failed });
+    const s = setup({ options: { resources } });
+    s.controller.attach(s.factory.factory, EL);
+    await vi.waitFor(() => {
+      expect(s.controller.getStatus().problems).toEqual(['Painted map art could not be loaded: the map shows the terrain relief instead']);
+    });
+    expect(layerStatus(s, 'art')?.unavailable).toBe('Painted map art could not be loaded (maps/art/manifest.json: HTTP 503)');
+    expect(itemsOf(s.adapter(), 'relief')[0]).toMatchObject({ opacity: RELIEF_OPACITY.backdrop });
+    expect(itemsOf(s.adapter(), 'zone-frames').some((item) => item.type === 'frame' && item.filled)).toBe(true);
+    expect(s.controller.getStatus().backdrop).toBe('relief');
+    // The route is drawn as ever.
+    expect(itemsOf(s.adapter(), 'route-steps').length).toBeGreaterThan(0);
+    // A request that failed is tried again at the next mount.
+    s.controller.detach();
+    s.controller.attach(s.factory.factory, EL);
+    expect(resources.calls.filter((call) => call === 'art')).toHaveLength(2);
+  });
+
+  it('falls back to the schematic frames when the terrain fails too, and says why per layer', async () => {
+    const resources = fakeResources({
+      art: { kind: 'failed', reason: 'invalid', detail: 'maps/art/manifest.json is not JSON' },
+      terrain: { kind: 'failed', reason: 'invalid', detail: 'maps/terrain/manifest.json: schema is not 1' },
+    });
+    const s = setup({ options: { resources } });
+    s.controller.attach(s.factory.factory, EL);
+    await vi.waitFor(() => {
+      expect(s.controller.getStatus().problems).toHaveLength(2);
+    });
+    expect(s.controller.getStatus().problems).toEqual([
+      'Painted map art could not be loaded: the map shows zone frames instead',
+      'Terrain data could not be loaded: no relief, zone outlines or coastline',
+    ]);
+    expect(s.controller.getStatus().backdrop).toBe('schematic');
+    expect(layerStatus(s, 'relief')?.unavailable).toBe('Terrain data could not be loaded (maps/terrain/manifest.json: schema is not 1)');
+    // An invalid manifest is not asked for again.
+    s.controller.detach();
+    s.controller.attach(s.factory.factory, EL);
+    expect(resources.calls).toEqual(['art', 'terrain']);
+  });
+
+  it('says when an outline file could not be loaded', async () => {
+    const resources = fakeResources({ arcs: () => ({ kind: 'failed', reason: 'invalid', detail: 'maps/terrain/1/zones.json failed its integrity check' }) });
+    const s = setup({ options: { resources } });
+    s.controller.attach(s.factory.factory, EL);
+    await vi.waitFor(() => {
+      expect(s.controller.getStatus().problems).toEqual(['Zone outlines could not be loaded']);
+    });
+    expect(layerStatus(s, 'zone-outlines')?.unavailable).toBe('Zone outlines could not be loaded (maps/terrain/1/zones.json failed its integrity check)');
+    expect(itemsOf(s.adapter(), 'zone-outlines')).toEqual([]);
+  });
+});
+
+describe('walking paths', () => {
+  /** Paths with one bent point per leg. */
+  const bentPaths = (pending = false): RoutePathsInput => ({
+    pending,
+    pathOf: (leg) => [leg.from, { mapId: leg.from.mapId, x: (leg.from.x + leg.to.x) / 2 + 5, y: (leg.from.y + leg.to.y) / 2 }, leg.to],
+  });
+  const routeLine = (s: Setup) => itemsOf(s.adapter(), 'route-line').filter((item) => item.type === 'polyline');
+
+  it('are unavailable until the navigation model gives some, and every leg is straight', () => {
+    const s = setup();
+    s.controller.attach(s.factory.factory, EL);
+    expect(s.controller.getStatus().walkingPaths).toEqual({
+      visible: true,
+      unavailable: 'No walking paths are available yet: every leg is drawn as a straight line',
+      notes: [],
+    });
+    expect(routeLine(s)[0]).toMatchObject({ points: [{ x: 0 }, { x: 10 }, { x: 200 }, { x: 50 }] });
+  });
+
+  it('are followed by the route line once given, counted in the status, and turned off by the toggle', () => {
+    const s = setup();
+    s.controller.attach(s.factory.factory, EL);
+    s.controller.setRoutePaths(bentPaths());
+    expect(routeLine(s)[0]?.type === 'polyline' ? routeLine(s)[0]?.points : []).toHaveLength(7);
+    const status = s.controller.getStatus().walkingPaths;
+    expect(status.unavailable).toBeNull();
+    expect(status.notes).toContain('3 walked legs follow their paths on this map.');
+    // The toggle draws every leg straight again, without forgetting the paths.
+    setMapWalkingPaths(s.store, false);
+    expect(routeLine(s)[0]?.type === 'polyline' ? routeLine(s)[0]?.points : []).toHaveLength(4);
+    expect(s.controller.getStatus().walkingPaths.visible).toBe(false);
+    setMapWalkingPaths(s.store, true);
+    expect(routeLine(s)[0]?.type === 'polyline' ? routeLine(s)[0]?.points : []).toHaveLength(7);
+  });
+
+  it('say which legs are straight while their paths are computed, or have none', () => {
+    const s = setup();
+    s.controller.attach(s.factory.factory, EL);
+    s.controller.setRoutePaths({ pending: true, pathOf: () => null });
+    expect(routeLine(s).map((item) => (item.type === 'polyline' ? item.style : null))).toEqual(['route-pending']);
+    expect(s.controller.getStatus().walkingPaths.notes).toContain('3 legs are straight, in short dashes, while their paths are computed.');
+    s.controller.setRoutePaths({ pending: false, pathOf: () => null });
+    expect(routeLine(s).map((item) => (item.type === 'polyline' ? item.style : null))).toEqual(['route-fallback']);
+    expect(s.controller.getStatus().walkingPaths.notes).toContain('3 legs have no walking path: drawn straight, dash-dot-dot.');
+    // Hover text names the style without step numbers lost.
+    const run = routeLine(s)[0];
+    if (run === undefined) throw new Error('no run');
+    expect(s.controller.labelFor(run.ref)).toBe('Route (straight line: no walking path): steps 2–5');
+  });
+
+  it('rebuild the route layers only for a new paths object', () => {
+    const s = setup();
+    s.controller.attach(s.factory.factory, EL);
+    const paths = bentPaths();
+    s.controller.setRoutePaths(paths);
+    const sets = setLayerCount(s.adapter(), 'route-line');
+    s.controller.setRoutePaths(paths);
+    expect(setLayerCount(s.adapter(), 'route-line')).toBe(sets);
+    s.controller.setRoutePaths(null);
+    expect(setLayerCount(s.adapter(), 'route-line')).toBe(sets + 1);
   });
 });

@@ -100,8 +100,8 @@ export function settingsPatchOf(draft: SettingsDraft, maxLevel: number): { reado
   if (xp.kind !== 'number' || xp.value < 0) add('startXp', 'The start XP must be a whole number of at least 0 (the XP into the start level).');
   const completed = parseIdList(draft.priorCompleted);
   const log = parseIdList(draft.priorLog);
-  if (draft.priorHistory === 'listed' && completed === null) add('priorCompleted', 'Completed quests must be quest ids separated by commas or spaces.');
-  if (draft.priorHistory === 'listed' && log === null) add('priorLog', 'Quests in the log must be quest ids separated by commas or spaces.');
+  if (completed === null) add('priorCompleted', 'Completed quests must be quest ids separated by commas or spaces.');
+  if (log === null) add('priorLog', 'Quests in the log must be quest ids separated by commas or spaces.');
   const rate = parseNumber(draft.xpRate);
   if (rate.kind !== 'number' || rate.value <= 0) add('xpRate', 'The XP rate must be a number above 0 (1 is the normal rate).');
   const season = parseWhole(draft.season);
@@ -110,7 +110,6 @@ export function settingsPatchOf(draft: SettingsDraft, maxLevel: number): { reado
   if (phase.kind === 'invalid') add('phase', 'The phase must be a whole number, or left empty (unknown).');
   if (draft.locale.trim() === '') add('locale', 'The locale must not be empty (enUS, for example).');
   if (problems.length > 0 || level.kind !== 'number' || xp.kind !== 'number' || rate.kind !== 'number') return { patch: null, problems };
-  const listed = draft.priorHistory === 'listed';
   const character: Partial<CharacterProfile> = {
     faction: draft.faction,
     race: draft.race,
@@ -119,9 +118,11 @@ export function settingsPatchOf(draft: SettingsDraft, maxLevel: number): { reado
     startLevel: level.value,
     startXp: xp.value,
     priorHistory: draft.priorHistory,
-    // The lists mean something only for `listed`; the other histories keep none.
-    priorCompletedQuests: listed ? ((completed ?? []) as readonly QuestId[]) : [],
-    priorQuestLog: listed ? ((log ?? []) as readonly QuestId[]) : [],
+    // Kept for every history (SIMULATION §7.1): exactly what happened for `listed`, a partial record
+    // for `unknown`, and used as given for `fresh`. Choosing `fresh` in the dialog empties the fields
+    // (`historyPatch`), so the lists are dropped only where the user sees it happen.
+    priorCompletedQuests: (completed ?? []) as readonly QuestId[],
+    priorQuestLog: (log ?? []) as readonly QuestId[],
     riding: Number(draft.riding) as CharacterProfile['riding'],
   };
   const routeProfile: Partial<RouteProfile> = {
@@ -152,8 +153,49 @@ const SEX_OPTIONS = [
 const HISTORY_OPTIONS = [
   { value: 'fresh', label: 'A new character: nothing before the route' },
   { value: 'listed', label: 'Exactly the quests listed below' },
-  { value: 'unknown', label: 'Unknown (prerequisites cannot be checked)' },
+  { value: 'unknown', label: 'Partly known: the quests listed below, and maybe others' },
 ] as const;
+
+/**
+ * The draft change for a new "Before the route" choice. A new character has done nothing, so
+ * choosing `fresh` empties both lists in the open dialog (Cancel brings them back); the other two
+ * keep them: `listed` as exactly what happened, `unknown` as a partial record (SIMULATION §7.1).
+ */
+export function historyPatch(history: CharacterProfile['priorHistory']): Partial<SettingsDraft> {
+  return history === 'fresh' ? { priorHistory: history, priorCompleted: '', priorLog: '' } : { priorHistory: history };
+}
+
+/**
+ * Whether the dialog shows the two lists: always for `listed` and `unknown`, and for `fresh` only
+ * while they hold something (a project imported that way), so nothing is kept or dropped unseen.
+ */
+export function showsPriorLists(draft: Pick<SettingsDraft, 'priorHistory' | 'priorCompleted' | 'priorLog'>): boolean {
+  return draft.priorHistory !== 'fresh' || draft.priorCompleted.trim() !== '' || draft.priorLog.trim() !== '';
+}
+
+/** The list fields' labels and hint, by history. */
+function priorListWords(history: CharacterProfile['priorHistory']): { readonly completed: string; readonly log: string; readonly hint: string } {
+  switch (history) {
+    case 'listed':
+      return {
+        completed: 'Quests completed before the route (ids)',
+        log: 'Quests in the log at the start (ids)',
+        hint: 'Exactly what happened before the route: every rule is checked against these lists as written.',
+      };
+    case 'unknown':
+      return {
+        completed: 'Quests known to be completed before the route (ids, a partial record)',
+        log: 'Quests known to be in the log at the start (ids, a partial record)',
+        hint: 'A partial record: the listed quests count, and a prerequisite or turn-in that fails only because a quest is missing from these lists is a warning that it cannot be checked, not an error.',
+      };
+    case 'fresh':
+      return {
+        completed: 'Quests completed before the route (ids)',
+        log: 'Quests in the log at the start (ids)',
+        hint: 'A new character is expected to have none; these are used as given. Choose another answer above, or empty them.',
+      };
+  }
+}
 
 const RIDING_OPTIONS = [
   { value: '0', label: 'None' },
@@ -198,6 +240,7 @@ function SettingsForm({ store, onClose, announce, formId }: SettingsFormProps) {
     patch({ race, class: isPlayablePair(race, draft.class) ? draft.class : (classesOf(race)[0] ?? draft.class) });
   };
 
+  const priorWords = priorListWords(draft.priorHistory);
   const raceOptions = raceOptionsOf(draft.faction, draft.race);
   const playable = isPlayablePair(draft.race, draft.class);
   const classOptions = [
@@ -296,28 +339,31 @@ function SettingsForm({ store, onClose, announce, formId }: SettingsFormProps) {
           value={draft.priorHistory}
           options={HISTORY_OPTIONS}
           onChange={(value) => {
-            if (value === 'fresh' || value === 'listed' || value === 'unknown') patch({ priorHistory: value });
+            if (value === 'fresh' || value === 'listed' || value === 'unknown') patch(historyPatch(value));
           }}
         />
-        {draft.priorHistory === 'listed' && (
-          <div className="frl-app-fields__row">
-            <TextInput
-              label="Quests completed before the route (ids)"
-              value={draft.priorCompleted}
-              onChange={(priorCompleted) => {
-                patch({ priorCompleted });
-              }}
-              {...field('priorCompleted')}
-            />
-            <TextInput
-              label="Quests in the log at the start (ids)"
-              value={draft.priorLog}
-              onChange={(priorLog) => {
-                patch({ priorLog });
-              }}
-              {...field('priorLog')}
-            />
-          </div>
+        {showsPriorLists(draft) && (
+          <>
+            <div className="frl-app-fields__row">
+              <TextInput
+                label={priorWords.completed}
+                value={draft.priorCompleted}
+                onChange={(priorCompleted) => {
+                  patch({ priorCompleted });
+                }}
+                {...field('priorCompleted')}
+              />
+              <TextInput
+                label={priorWords.log}
+                value={draft.priorLog}
+                onChange={(priorLog) => {
+                  patch({ priorLog });
+                }}
+                {...field('priorLog')}
+              />
+            </div>
+            <p className="frl-app-hint">{priorWords.hint}</p>
+          </>
         )}
       </fieldset>
       <fieldset className="frl-settings__group" disabled={locked}>

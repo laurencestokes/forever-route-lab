@@ -51,11 +51,15 @@ export function worstSeverity(counts: IssueCounts): IssueSeverity | null {
   return null;
 }
 
-/** `'2 errors, 1 warning'`; `'No issues'` when empty. Info is listed last. */
+/**
+ * `'2 errors, 1 warning, 3 info issues'`; `'No issues'` when empty. Info is listed last, with the
+ * word the list, its filter and their messages use ("Info", "info issue"): never "note", which is a
+ * step kind.
+ */
 export function describeIssueCounts(counts: IssueCounts): string {
   const parts: string[] = [];
   if (counts.error > 0) parts.push(plural(counts.error, 'error'));
   if (counts.warning > 0) parts.push(plural(counts.warning, 'warning'));
-  if (counts.info > 0) parts.push(plural(counts.info, 'note'));
+  if (counts.info > 0) parts.push(plural(counts.info, 'info issue'));
   return parts.length === 0 ? 'No issues' : parts.join(', ');
 }

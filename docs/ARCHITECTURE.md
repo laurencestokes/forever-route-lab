@@ -5,6 +5,9 @@ Status: **Milestone 0, revision 2 (2026-09-25)**, after independent critique
 Milestone 0 research: [DATA_PROVENANCE.md](DATA_PROVENANCE.md), [MAPS.md](MAPS.md),
 [RXP.md](RXP.md), [SIMULATION.md](SIMULATION.md) and `docs/research/`. `D-nnn` references are
 entries in [DECISIONS.md](DECISIONS.md); where two entries conflict, the later one wins.
+Sections 4, 7.2, 9, 11.3, 12.1 and 14 carry "as built" notes for the Milestone 3b part 2 and
+Milestone 6 build (2026-09-26), and sections 9, 12.1, 12.4 and 14 notes on the Milestone 6 review
+fixes (2026-09-26); where a note and the original text differ, the note describes the code.
 
 forever-route-lab is a static web application (React, TypeScript, Vite; no backend, no accounts,
 no runtime AI) for planning, simulating, validating, editing and optimising World of Warcraft:
@@ -80,29 +83,40 @@ Forever levelling routes.
 ```
 src/
   domain/        hand-written types: ids, dataset records, route, project, conditions AST,
-                 proposal; pure route operations; condition evaluation (domain/conditions)
+                 proposal, the travel contract (travel.ts, D-037); pure route operations
   geo/           SourcedPoint/WorldPoint/MapPoint, transforms, distances, zone attribution
-  rules/         Ruleset profiles with per-value provenance; TravelGraph seed
-  engine/        route walker (one mutable working state, checkpoints, visitors)
-  sim/           XP, level, time model (pure functions shared with the optimiser)
-  validate/      validation rules; src/validate/codes.ts is the issue-code registry
+  rules/         Ruleset profiles with per-value provenance (ruleset.ts, tables.ts), precedence
+                 (effective rules), difficulty, riding, the straight-line TravelModel,
+                 TravelGraph seed (travel-graph.ts, travel-seeds.ts)
+  engine/        route walker (one mutable working state, checkpoints, visitors), condition
+                 evaluation (engine/conditions.ts), places, movement, leg enumeration
+  sim/           XP, level, time model and simulation facts (pure functions shared with the
+                 optimiser); records facts, never issue codes (D-037)
+  validate/      validation rules run as walker visitors; src/validate/codes.ts is the issue-code
+                 registry
   rxp/           unwrap, CST parser, filter parser, command registry, lowering, serializer
   diff/          route diff (LIS based), change-sets, apply-selected
   nav/           pure navmesh runtime (D-028): block decode, snap, resumable search, funnel,
-                 legsFrom/navPath; nav/worker/ (not pure) fetches, verifies and caches blocks
+                 legsFrom/navPath; nav/worker/ (not pure): protocol.ts, core.ts (fetch, verify,
+                 pin, LRU, resumable search with snap loads), host.ts, client.ts, nav.worker.ts
   project/       zod schemas typed against domain types, migrations, import/export
   optimizer/
     types.ts     Optimizer interface and request/options/progress/result types
     core/        problem.ts (compile), state.ts, transitions.ts, heuristic.ts, search.ts
     worker/      protocol.ts, optimizer.worker.ts, client.ts
     index.ts     createTypeScriptBeamSearchOptimizer
-  infra/         data/ (dataset loader), maps/ (geometry + local-map probe),
-                 persistence/ (IndexedDB), nav/ (nav manifest loader)
+  infra/         data/ (dataset loader), maps/ (geometry, local-map probe, art manifest,
+                 terrain files, map-resources.ts), persistence/ (IndexedDB), nav/ (nav manifest
+                 loader)
   map/
     adapter.ts   MapAdapter interface, descriptors, view-model input types
-    layers.ts    pure: view models → descriptors (memoised per layer)
+    layers.ts    pure: view models → descriptors (memoised per layer), relief, outlines,
+                 coastline, walking-path route lines
     leaflet/     LeafletMapAdapter (the only Leaflet importer)
-  app/           store, revisions, history, commands, derived-result pipeline, proposals
+  app/           store, revisions, history, commands, derived results (derived.ts, in the entry;
+                 derived-pipeline.ts and derived-context.ts, lazy), navigation (leg table, travel
+                 model, scheduler, runtime, zone hints: navigation-*.ts), walking-path feed
+                 (route-paths.ts), proposals
   ui/            React components, styles, design tokens
 tools/
   questiedb/     README.md, upstream.json (the single pin), fetch.ts, extract.ts, validate.ts,
@@ -350,6 +364,24 @@ thousands of paths.
   transport, flight and hearth legs styled distinctly.
 - Layers: available quests, route line, step markers, objectives, turn-ins, flight masters,
   zone frames, map art, proposal overlay.
+- **As built (Milestone 3b part 2; full detail in [MAPS.md](MAPS.md) §7):**
+  - Layer order, bottom to top: `relief`, `art` (image overlays in their own panes, z-index 240
+    and 250), `coastline`, `zone-outlines`, `zone-frames`, then the data layers, the route line,
+    steps, proposal and selection on one canvas. Descriptors added: relief, outline
+    (`zones` | `coast`), `FrameDescriptor.filled`, line styles `route-pending` and
+    `route-fallback`.
+  - Painted art (D-033) is drawn one image at a time: the continent zoomed out; zoomed in, the
+    zone jumped to or the zone the view centre sits in. The relief is the backdrop elsewhere
+    (opacity 0.85 alone, 0.4 under art); zone frames lose their fill over art.
+  - Art and terrain files load on demand through `createMapResources` (`infra/maps`): JSON files
+    are checked against their manifest's SHA-256, images are drawn from their deployed URLs
+    (checked at build time only). A failure is shown in the map's status line; the map draws
+    what it has.
+  - Walking paths: with the "Walking paths" toggle on, a walked leg follows
+    `TravelModel.path()`; a leg still pending is drawn straight in short dashes, one with no path
+    in dash-dot-dot. Pieces keep at most 256 vertices. The app's path feed
+    (`app/route-paths.ts`) asks for at most 64 legs in the padded view per paths object and
+    issues a new object at most every 250 ms.
 - A combined "overview" surface (both continents on one canvas) is deferred until after the MVP;
   the surface abstraction keeps it possible.
 
@@ -525,15 +557,27 @@ Without committed taxi data a leg's time is straight-line distance × `taxiDetou
 speed; the detour default is a cited aggregate client statistic (D-022, D-024). A local
 `taxi.local.json` (§7.3) replaces it with per-leg times on that machine.
 
-**Travel model (D-028).** Walking and riding legs go through one seam:
+**Travel model (D-028).** Walking and riding legs go through one seam, typed in
+`src/domain/travel.ts` (the full contract, with doc comments, is there):
 
 ```ts
+interface TravelEndpoint { point: WorldPoint; zoneHint: number }   // top-level zone AreaTable id, 0 = none
+interface TravelSpeeds { groundYps: number; swimYps: number }
+interface TravelLeg { seconds: Estimated<number>; method: 'navigation' | 'same-map-transport' | 'straight-line';
+                      pending: boolean; warnings: readonly TravelWarning[] }  // no-walking-path, off-navmesh,
+                                                                              // unverified-passage, ambiguous-floor, long-swim
 interface TravelModel {
   readonly id: 'straight-line' | 'navigation';
-  legSeconds(from: WorldPoint, to: WorldPoint, speedYps: number): Estimated<number>;
-  path(from: WorldPoint, to: WorldPoint): readonly WorldPoint[] | null;   // for drawing; null if unknown
+  readonly revision: string;                   // navRevision, or 'straight-line'
+  leg(from: TravelEndpoint, to: TravelEndpoint, speeds: TravelSpeeds): TravelLeg;   // same world map only
+  path(from: TravelEndpoint, to: TravelEndpoint): readonly WorldPoint[] | null;     // for drawing; null if unknown
 }
 ```
+
+The fallback rules (a same-map `TravelGraph` transport between components, then the labelled
+straight line with a warning; pending legs; maps without navigation data) are in
+[research/terrain-navigation.md](research/terrain-navigation.md) §9.3. The app owns the leg table
+(§9.2 there), keyed by the navigation revision.
 
 `straight-line` (distance × `travelDetourFactor` / speed, basis `assumption`) is the fallback.
 `navigation` uses the committed derived navigation data built in Milestone 3b from the client's
@@ -542,6 +586,84 @@ elevators, which come from client geometry or cited data only. Its results have 
 `derived`. The engine, simulation and the optimiser's travel matrix all call the same model, so
 they agree. How queries stay fast (a precomputed region graph, caching, a worker) is decided in
 the Milestone 3b design step, within the §14 budgets.
+
+**As built (Milestone 3b part 2 and Milestone 6):**
+
+- **Ruleset** (`src/rules/ruleset.ts`): `RULE_KEYS` uses SIMULATION §1.2's names. The detour key
+  is `groundDetourFactor` (the project assumption `travelDetourFactor` overrides it); `swimSpeed`
+  (4.722 yd/s, `era-assumed`) is new, for `TravelSpeeds.swimYps`. `effectiveRules(ruleset,
+  assumptions)` gives every value with `from: 'project' | 'ruleset'`; a project value has basis
+  `assumption`.
+- **TravelGraph** (`seedTravelGraph`): 7 cited transports, one edge per ordered pair of stops,
+  assumed wait and ride, factions unknown. None has a dock position yet (the dataset ships no dock
+  NPCs), so transports apply only where the user enters a dock. 5 new Forever taxi nodes from
+  cited `TaxiNodes` rows; no taxi edges (OD-6). **No entrance edges:** `zones.json` has no
+  instance world map ids yet, so no step inside an instance is reachable and no kill counts as a
+  dungeon kill until it does.
+- **Straight-line model:** `createStraightLineTravelModel(detour)` (`src/rules/straight-line.ts`):
+  basis `assumption`, never pending, `unknown` across world maps.
+- **Navigation model:** `createNavigationTravelModel` (`src/app/navigation-model.ts`) reads the
+  app's leg table synchronously:
+  - the leg table (`NavigationLegTable`) is keyed as terrain-navigation.md §9.2; an entry is
+    `{ g, s, c, flags, passages, swimRun }`, the flags being cross-component, ambiguous floor, long
+    swim, unsnapped start, unsnapped end and unverified passage;
+  - a present leg is `g/10/groundYps + s/10/swimYps + c/10` seconds, method `navigation`, basis
+    `derived`, `eraFallback` false (the simulation combines the speeds' provenance);
+  - a leg not yet computed is the fallback's seconds with `pending: true`, recorded for the
+    scheduler;
+  - an endpoint with no polygon within 6 yd: the fallback with `off-navmesh`, naming the end;
+  - endpoints in different components: the cheapest same-map transport (walk, `TravelGraph` edge,
+    walk; method `same-map-transport`, basis combined by SIMULATION §8, pending until every dock
+    walk is known), else the fallback with `no-walking-path`;
+  - a map without navigation data, or whose files failed closed: the fallback, final, with no
+    warning;
+  - flags become the warnings `unverified-passage` (naming the passages), `ambiguous-floor` and
+    `long-swim` (with the run's length);
+  - `path()` answers from a 256-entry path LRU and is null for fallbacks and transport
+    compositions.
+- **Scheduler** (`app/navigation-scheduler.ts`): drains the recorded missing legs (up to 2,048 per
+  request) and applies results in batches at most every 100 ms. It marks a map unavailable on an
+  `integrity`, `format`, `http` or `no-map` failure, and every map on `unsupported` or `not-ready`;
+  `network` failures are retried after 5 s. `computeLegs(model, pairs)` is the "computing paths"
+  phase (progress, cancel).
+- **Worker** (`src/nav/worker`, a module worker; D-028, terrain-navigation.md §9.6): files are
+  fetched relative to the app base plus `nav/` and checked against the manifest's SHA-256 (one
+  refetch past the HTTP cache), `map.bin` first; integrity and format failures are permanent per
+  file. Snaps load every block within 6 yd; the search resumes after each load. While a search
+  runs, every loaded block of its map is kept; the LRU evicts over a 100 MB typed-array budget
+  (heap target 128 MB). The worker yields through a `MessageChannel`.
+- **Manifest** (`infra/nav`): `loadNavManifest` resolves `available` or `unavailable` with a
+  reason (unsupported, not found, unreachable, not JSON, invalid, integrity); without a manifest
+  the app uses the straight-line model for good.
+
+**Milestone 6 review fixes (2026-09-26):**
+
+- **Starting the worker:** `startNavigation` waits up to 20 s for the worker's `ready` (and its
+  navRevision). A script that does not load, a worker that stops on an uncaught error, or no
+  answer in time resolves `unavailable` with the reason, and the worker is stopped (NAV-01).
+- **Failure classes:** the new `worker-failed` joins `unsupported` and `not-ready` and marks every
+  map. `network` now also covers a file that does not arrive within 30 s (response and body) and
+  HTTP 408, 425, 429 and 5xx, so those are retried after 5 s; `http` is left for statuses that do
+  not pass (404, 403, 410 and the like) and still marks the map (NAV-04, NAV-10). An `internal`
+  failure is asked again at most 3 times per map, then that map is marked unavailable; a failing
+  group fails only its own legs (NAV-01).
+- **Scheduler:** the background drain runs beside a bulk "computing paths" run, so an edit's legs
+  go out at once as `interactive`; a leg or path already waiting or in flight is not recorded or
+  asked again (NAV-03, NAV-09).
+- **Worker memory:** blocks are pinned per search (one group), not per request, and evicted after
+  each group; a request runs one map's groups together. On the 2,000-step stress harness the
+  typed-array peak is 99.98 MB at the 100 MB budget (118.9 MB before), and 54.6 MB at a 40 MB
+  budget, at the cost of refetching (NAV-02). Cancel fails a request at once and releases its
+  pins; a fetch that only cancelled requests wait for is aborted (NAV-04). The yield budget
+  carries across searches, so many small searches in a row still yield.
+- **TravelGraph:** a dungeon entrance may say `raid`, and `instanceKindOf` gives the kill place
+  `dungeon` or `raid` (KXP-5). User-entered docks on the project's transport steps position a
+  seeded transport's dock when the transport has exactly one stop on that world map, and are part
+  of the context key; on the real navmesh, with both docks positioned, Auberdine to Rut'theran
+  comes back as `same-map-transport`. Two stops on one map (Rut'theran and Auberdine, Menethil
+  and Southshore) cannot be matched yet, because `TRANSPORT_SEEDS` records no UiMap per stop
+  (NAV-08, partly fixed). There are still **no entrance edges** (ENG-01): a guard test fails once
+  `zones.json` gains instance map ids while the app still seeds none.
 
 ### 9.2 Engine walker (`src/engine`)
 
@@ -578,6 +700,57 @@ interface CharacterState {
   `completed` and `questLog`, and `riding` seeds riding state. With `priorHistory: 'unknown'`,
   unmet prerequisites are `-unverifiable` warnings, not errors.
 
+**As built (Milestone 6):**
+
+- **API** (`src/engine`): `createRouteWalker(context: EngineContext): RouteWalker` with
+  `walk(project, visitors?)`, `invalidate(fromIndex?)`, `stateBefore(index)`, `legs()` and
+  `checkpointIndices()`; `walkRoute(project, context, visitors?)`, `walkMetrics(walk)`,
+  `CHECKPOINT_INTERVAL` = 256. `EngineContext` is `{ dataset, geometry, rules, travel, graph,
+  zoneHints?, localTaxi?, acceptPolicy? }`; `WalkProject` is the project's `route`, `character`,
+  `routeProfile` and `customQuests`. One walker serves one context: a change of dataset view,
+  rules, graph or travel model needs a new walker, and new navigation legs behind the same model
+  need `invalidate()`.
+- **Conditions are evaluated in `engine/conditions.ts`**, not `domain/conditions`: `domain` holds
+  the AST types only (it imports nothing, §4).
+- **State additions:** `locationHint`, `hearthHint` (zone hints for travel endpoints),
+  `acceptedInRoute` (the "never accepted in the route" test of §9.4) and `trainedSkills`.
+  Checkpoints keep the collections that only grow by size and rebuild them as prefixes; tests
+  show a re-walk equals a full walk.
+- **Records and visitors:** each step gives a `StepRecord` (`estimate`, `delta`, the legs walked
+  and every leg asked, for enumeration). A `WalkVisitor` has `begin`, `enter` (the state before the
+  step), `leave` (after, with the record) and `end`.
+- **Accept policy:** the walker asks an injected `AcceptPolicy` to pick an any-of accept's quest
+  and to evaluate `questState: 'available'`; the validator supplies its full rules, and
+  `createBasicAcceptPolicy` (VAL-1, 2, 4 and 5 only) is the default.
+- **Leg enumeration** (terrain-navigation.md §9.4): `walker.legs()` lists every distinct pair the
+  last walk asked the travel model for, compared transport walks included; the straight-line and
+  navigation walks ask for the same pairs, except where a transport is chosen by leg cost: when
+  navigation legs make another transport the cheapest, its arrival dock, and so the next leg,
+  change (Milestone 6 review ENG-10, not changed). The pipeline still converges: the navigation
+  model records the new pending leg and the scheduler's drain asks for it.
+- **Milestone 6 review fixes (2026-09-26):**
+  - **State additions:** `sinceCastBasis` and `sinceCastEraFallback`, the route clock's basis
+    since the last hearth cast, which the cooldown wait takes (TIME-4; SIM-07, ENG-09).
+  - **The cap:** quest XP at the cap is a known 0 even without an XP record, and a known-XP lower
+    bound that reaches the effective cap is exact, so `unknownXpEvents` resets (XP-2, XP-4;
+    SIM-01).
+  - **Unknown positions:** a move from an unknown position records the non-issue fact
+    `position-unknown` with its cause (`start-unset`, `start-unresolved`, `zone-travel`,
+    `death-skip`, `unresolved`, `several-spawns`, `hearth-unbound`, `flight-unresolved`,
+    `transport-arrival`). From an unknown position, an entity with spawns at more than one point
+    leaves the position unknown instead of taking its first spawn (ENG-02, ENG-03).
+  - **Start XP** beyond what the start level holds is carried over by XP-2, with the route-level
+    warning `SIM023-start-xp-beyond-level` (ENG-11).
+  - **Shared pure caches:** the simulation cache and the validator's availability caches are kept
+    per (rules, dataset view) object pair (`sharedSimCache`), with walker-keyed entries held
+    weakly. "A context change walks cold" now means a new walker with warm pure caches whenever
+    the rules and dataset view objects are kept (PERF-06).
+  - **Metrics:** `walkMetrics` continues from prefix sums stored every 256 steps, so an edit near
+    the end re-sums at most one interval (PERF-07). A restored checkpoint has the initial state's
+    property order (PERF-08).
+- **Zone hints** come from `app/navigation-hints.ts` through `ZoneHintResolver`; `NO_ZONE_HINTS`
+  (all 0) serves the straight-line model and tests.
+
 ### 9.3 Simulation (`src/sim`)
 
 Implements [SIMULATION.md](SIMULATION.md): XP table and level-ups, quest XP reduction and
@@ -609,6 +782,41 @@ interface Estimated<T> { value: T | null; basis: 'source' | 'assumption' | 'deri
 - Route metrics: duration, XP, level reached, XP/hour, travel vs combat/objective vs
   interaction shares, each with its basis.
 
+**As built (Milestone 6):**
+
+- `StepEstimate.assumptionsUsed` is `RuleKey[]`, not `AssumptionKey[]`: it lists every rule key
+  with basis `assumption` or `era-assumed` the step read (SIMULATION §8), ruleset keys included.
+- `StepEstimate` gains `facts: SimFact[]` (`src/sim/facts.ts`): what happened that the validator
+  turns into issues (SIM-1..21, `VAL030-objectives-incidental`), plus `pending-leg` (counted into
+  the route-level SIM-22) and `mob-level-assumed` (not an issue). The simulation and the engine record facts; only `src/validate` owns issue
+  codes (D-037).
+- A leg's warnings pass through as `travel-warning` facts; a pending leg adds `pending-leg`. An
+  arrival radius shortens a navigation leg in proportion, `(d − r) / d` (an assumption,
+  SIMULATION TIME-2).
+- `RouteMetrics` (`aggregateRouteMetrics`) adds `durationIsLowerBound`,
+  `stepsWithUnknownTime`, `unknownXpSteps`, `pendingLegs` and `eraFallback`; each share and number
+  carries its basis.
+- Not applied yet: `groupSize`, `secondsPerObjective` and `killXpMultiplier` (SIMULATION open
+  question 10.14), and the QXP-6 money estimate (off by default).
+- **Milestone 6 review fixes (2026-09-26)**, with their rulings in SIMULATION §1.5:
+  - quest XP checks the cap before the record; `floor(reduce(B) × m)` is `floorProduct`, which
+    absorbs the float noise of a decimal multiplier (45 × 1.4 is 63; SIM-01, SIM-03);
+  - `levelAfter` folds in the XP table's basis on every grant, and `maxLevel`'s when the cap cut
+    the grant; their marked keys join `assumptionsUsed` (SIM-02);
+  - new facts `grind-zero-rate` (a grind to a level at 0 XP per hour, SIM-15) and
+    `position-unknown` (not an issue); `hearth-cooldown` gains `upperBound` (SIM-04, SIM-07);
+  - a `durationOverride` drops the facts about the work it replaces (SIM-15, SIM-11, SIM-2;
+    SIM-05, ENG-04);
+  - a `complete` target the dataset lacks, or whose objective index its record lacks, is an
+    unknown-time target, so kill XP is taken with `f = 1` (SIM-06, ENG-05);
+  - kill places are `open-world`, `dungeon` and `raid`: raid elites take the elite multiplier
+    only, and a grind on an instance map kills instance mobs (SIM-09; latent until entrance edges
+    exist);
+  - TIME-6 maps a dataset flight master to the local `TaxiNodes` row nearest it within 50 yd, and
+    a row is usable when a known node of the character's faction maps to it (SIM-10; latent until
+    a local taxi file with `nodes` exists);
+  - group-XP shares are float32, as in vmangos (SIM-12).
+
 ### 9.4 Validation (`src/validate`)
 
 ```ts
@@ -622,8 +830,8 @@ interface ValidationIssue {
 
 Codes use one grammar: a family prefix and number, then a slug (`VAL004-min-level`,
 `RXP001-unknown-command`, `DATA001-custom-shadowed`, `SIM001-unknown-xp`). SIMULATION §7 is
-the authoritative rule and code list (VAL-1..22, VAL-30..33, LINT-1..4, SIM-1..16, DATA001-002),
-with these adjustments:
+the authoritative rule and code list (VAL-1..22, VAL-30..33, LINT-1..4, SIM-1..23, DATA001-003;
+SIM-17..23 and DATA003 were added in Milestone 6), with these adjustments:
 
 - level-dependent checks that fail only on the lower bound while `unknownXpEvents > 0` emit a
   `-uncertain` warning variant instead of an error;
@@ -640,6 +848,36 @@ with these adjustments:
   transport, unresolved location, target level reached too late.
 
 Clicking an issue selects its step and focuses the map.
+
+**As built (Milestone 6):**
+
+- **Registry** (`src/validate/codes.ts`, `ISSUE_CODES`): every code with its rule, severity,
+  `variantOf`, fixed data keys, message template and explanation; `isRegisteredCode`,
+  `issueCodeSpec`, `parseIssueCode`, `formatIssueMessage`. The `RXP` codes stay in `src/rxp`
+  (`validate` may not import `rxp`, §4); a cross-module test checks them against the same grammar.
+  The UI loads the registry lazily (`app/issue-codes.ts`, from the validation panel's chunk).
+- **Codes added:** `SIM017-no-walking-path`, `SIM018-off-navmesh`, `SIM019-unverified-passage`,
+  `SIM020-ambiguous-floor`, `SIM021-long-swim` (warnings, one issue per step and kind with a leg
+  count) and `SIM022-legs-pending` (a route-level info while navigation legs are pending). The
+  quest-state rule above gives `VAL030-not-in-log-unverifiable`, `VAL032-not-in-log-unverifiable`
+  and `SIM016-complete-not-in-log-unverifiable` (warnings).
+- **Codes added by the Milestone 6 review fixes:** `DATA003-unknown-objective` (warning: a
+  target names an objective index its quest's record does not have; ENG-06),
+  `SIM005-hearth-cooldown-uncertain` (warning: after a step with unknown time the wait is only an
+  upper bound; SIM-07, ENG-09) and a second route-level SIM code, `SIM023-start-xp-beyond-level`
+  (warning; ENG-11). A registry test rejects Markdown in messages and explanations (UI-19).
+- **Entry points:** `validateRoute(project, context, { baseDataset?, visitors? }) → { walk,
+  issues }`, and `createRouteValidator({ dataset, rules, baseDataset?, graph? })`, which returns
+  `{ acceptPolicy, visitor, issues(), stepIssues(i), routeIssues() }`. The rules run as a walker
+  visitor: `enter` checks an accept against the state before the step, `leave` reads the step's
+  record and facts. Issues are kept per step, so a re-walk from a checkpoint re-validates only the
+  steps it visits.
+- **Wiring:** the walker takes `acceptPolicy: validator.acceptPolicy` and every walk passes
+  `validator.visitor`. The policy maps an error to `false`; the `-uncertain` and
+  `-unverifiable` variants, `DATA002`, `VAL021` and the VAL-13 vmangos warning to `unknown`.
+- **Order and shape:** route-level issues first, then by step, code, quest id and message; every
+  issue has all six keys with explicit nulls, and numbers in `data` carry their basis
+  (`levelBasis`, `xpBasis`, `eraFallback`, `assumed`, `capacityBasis`).
 
 ## 10. RXP (`src/rxp`)
 
@@ -770,6 +1008,14 @@ answer.
   time with the shared `sim` functions;
 - a location-by-location travel-time matrix in **integer milliseconds**, computed with `sqrt`
   only; cross-world pairs only via `TravelGraph` edges, otherwise infeasible (never zero);
+- **(Milestone 3b, terrain-navigation.md §9.4; built in Milestone 7):** the matrix comes from
+  the app's navigation leg table, in integer **tenth-yards** (ground and swim separately) plus
+  connector tenth-seconds, as typed arrays; `transitions.ts` turns them into integer milliseconds
+  with the state's speeds, so riding state stays exact. Before compile the app makes the
+  section's legs complete (`computeLegs`, the "computing paths" phase with progress and cancel).
+  Fallback entries come from the same `TravelModel`; pairs across world maps, and same-map pairs
+  in different components that a transport joins, use the `TravelGraph`. Matrices are directed and
+  cached per (navRevision, sorted endpoint keys);
 - every action carries `sourceStepId | null`.
 
 The compiled problem (tens of KB) is posted to the worker by structured clone; the main thread
@@ -864,6 +1110,62 @@ interface EditorState {
 - Lazy boundaries (dynamic `import()`): the map engine (Leaflet adapter), RXP import/export, diff
   and proposal review, optimiser client and worker, navigation worker, migrations. zod stays in the entry chunk to validate restored projects.
 
+**As built (Milestone 6):**
+
+- **A derived store beside the editor store** (`app/derived.ts`, in the entry chunk), not a field
+  of `EditorState`, so re-walk batches wake neither the map controller nor autosave.
+  `DerivedState` is `{ status: 'loading' | 'ready' | 'failed', failure, results, selected, travel,
+  paths }`; `DerivedResults` carries the revision walked, records, estimates, metrics, issues (flat
+  and per step), the effective rules, the travel model, pending legs and steps, `final` and
+  timings. React reads it with `useDerived` / `useDerivedSelector` (`app/react.ts`). Results may
+  lag the editor revision for a moment; the UI shows "updating" when they do (`isCurrent`).
+- **The pipeline** (`app/derived-pipeline.ts`, a dynamic `import()` from the composition root,
+  with the engine, simulation and validator): one walker and one validator per context (dataset
+  view, rules, graph, travel model). Edits coalesce on a zero-delay timer, and a walk always
+  reads the store's current project, so a superseded revision is never walked. A context change
+  (assumptions, character, navigation becoming available) walks cold.
+- **Navigation:** the manifest loads once beside the data. Until it is known the straight-line
+  model is used and results are not `final`. After a walk with pending legs the pipeline calls
+  `computeLegs(model, walker.legs())`; each batch of results triggers one re-walk from the first
+  pending step, at most every 100 ms. `cancelPaths()` pauses computing (the background drain
+  included) until `resumePaths()` or `computePaths()`; a caller's abort of `computePaths` stops
+  only that caller's wait, and the run carries on (Milestone 6 review NAV-05). `final` is false
+  while the manifest is being checked or any step used or compared a pending leg, and
+  `provisionalNote(state)` is the sentence the UI puts beside route metrics.
+- **Selection:** the state before and after the focused step comes from `stateBefore`.
+- **Exports never wait** for any of this: they contain no times.
+- **Chunks:** the navigation worker is a module worker emitted as its own script (not an
+  `import()`); the issue-code registry is a lazy chunk of the validation panel.
+
+**Milestone 6 review fixes (2026-09-26):**
+
+- **The run's task:** "computing paths" starts in a task of its own after the results are
+  published, so the walk that finds pending legs paints first (PERF-03). While a run is in flight,
+  an edit's new legs go out at once through the scheduler's background drain; the newer revision
+  gets a run of its own when this one ends (NAV-03).
+- **Failures during a run:** a failure that may pass is retried after 5 s, and the run publishes
+  the failure it waits on (`paths.state` `running` with a `failure`). An unexpected failure turns
+  navigation off for every map, so the times become final straight-line estimates, and
+  `resumePaths` tries again (NAV-05).
+- **One pending reason:** progress counts pending legs, so `total − done` is the results'
+  `pendingLegs` and the status bar and the pending note agree (UI-09). `pendingTravelReason`
+  (`checking`, `computing`, `retrying`, `paused`, `failed`) gives the route rows, their names,
+  Details and the status item's detail the same words (UI-04).
+- **Views:** the pipeline keeps four dataset views, the project's and the one without its custom
+  quests for two characters, so switching back to the previous character or class reuses its
+  views and the pure caches keyed by them (PERF-06; a class toggle publishes in about 27-30 ms
+  against 43-52 ms for a class not seen lately, §14).
+- **Re-renders:** the panels' selectors ignore the paths' progress, and route rows are memoised
+  with stable models, so a progress tick re-renders only the simulation item (PERF-11). The
+  pipeline does not yet throttle progress publishes.
+- **Walking-path feed** (`app/route-paths.ts`): one record per walked leg holds its request and its
+  answer, so the 256-path LRU evicting a path never makes the feed ask for it again (NAV-06). A
+  paths object is pending only while a leg in the padded view, or one already requested, has no
+  answer; legs out of view that were never asked are drawn as fallbacks and counted apart in the
+  map's note (NAV-07, partly fixed: the adapter's pending flag is per object, not per leg). Each
+  leg's key is built once (PERF-09). The records hold every answered path of the shown world map,
+  so their memory is bounded by the route, not by the LRU.
+
 ### 12.2 Undo and redo
 
 Every mutation is a command (`label`, `apply(project) → project`). History keeps immutable
@@ -905,6 +1207,16 @@ Dense desktop layout with an original visual system (no copied branding, icons o
   log / route context, Details, Validation.
 - **Bottom:** level and XP bar (lower-bound marker when uncertain), current step, duration,
   XP/hour, optimiser state and progress, data and ruleset badges.
+
+  **As built (Milestone 6 review, UI-01..UI-03, UI-06, UI-07; to be confirmed):** the simulation
+  item never shrinks (its words are capped at 160 px) and the current step is an item of its own
+  that gives way first. At 1440 px and below the unavailable optimiser leaves the view but is still
+  spoken; at 1280 px and below the gaps are 8 px and the badges drop "Data" and "Ruleset"; at
+  1100 px and below the step title hides and the XP track narrows; at 1024 px and below the bar may
+  wrap to two lines (the shell's bottom row is `minmax(32px, auto)`). The bar clips horizontally
+  without being a scroll container, so a focused Cancel or Resume keeps its whole ring. Focus that
+  sat on Cancel or Resume stays on the item when the state changes. The route summary closes when
+  focus leaves it, and at 720 px and below it opens in the flow under its button.
 - **About / licences:** project licence, no-warranty line, the data notice (including the
   upstream licence finding), non-affiliation with Blizzard, Questie and RestedXP, and a link to
   the exact source commit (injected at build).
@@ -940,7 +1252,7 @@ Machine-independent CI gates (fail the build):
 
 | Gate | Budget |
 |---|---|
-| Entry chunk + static imports (gzip, from Vite's build manifest; chunks loaded by `import()` are reported, not gated) | ≤ 250 KB |
+| Entry chunk + static imports (gzip, from Vite's build manifest; chunks loaded by `import()` and worker scripts are reported, not gated) | ≤ 250 KB |
 | Each `public/data` file (gzip) | recorded baseline + 10%; total ≤ 1.2 MB |
 | Optimiser evaluations on fixed fixtures | recorded baseline, exact |
 | `public/nav` (navmesh blocks, `map.bin`, connectors) | ≤ 7 MB total (target 5-6 MB; measured 5.44 MB); ≤ 300 kB per file; per-map baselines + 10% (D-030) |
@@ -962,7 +1274,32 @@ Time budgets, as Node benchmarks against stored baselines in `docs/measurements/
 | RXP import of a typical guide (≤ 300 steps), main thread | ≤ 250 ms (measured about 100 ms for 150 steps); whole addon files (thousands of steps, about 1.3 s) move to a worker when a measured need arises |
 | Autosave IndexedDB put of a 10,000-step project | measured 35 ms median unthrottled; the Milestone 9 throttled run decides whether steps are stored in chunks (D-036) |
 | Optimiser, pool 100 quests (~300 actions), beam 256 | first improvement < 2 s; worker heap < 64 MB |
-| Navigation legs for a route section, in the nav worker (RC-07) | ceiling 16 s, with progress and cancel; measured 3.03 s for a realistic 116-point section, heap 60.9 MB; the main thread never waits on it (straight-line fallback until legs arrive) |
+| Navigation legs for a route section, in the nav worker (RC-07) | ceiling 16 s, with progress and cancel; measured 3.03 s for a realistic 116-point section, heap 60.9 MB; with the worker's fetch and SHA-256 (3b.6) 3.7-4.1 s, heap growth 64.7 MB after gc (peak 91-99 MB); the main thread never waits on it (straight-line fallback until legs arrive) |
+
+**Measured at the final verification after the Milestone 6 review fixes (2026-09-26).** Node
+22.13.1 on the reference Windows machine. Two stale background processes kept about two to three
+of the 16 logical processors busy (Windows load 24-33%), so each figure is the median of several
+process medians, with their spread in brackets. The CPU probe of the `--check` runs read 40.4-41.2
+ms against the calm 40 ms.
+
+| Area | Measured | Script, stored baseline |
+|---|---|---|
+| Entry chunk + static imports | 236.96 kB gzip of 250 kB (232.93 kB at the build, 206.1 kB at the Milestones 4/5 commit); navigation worker script 48.9 kB (17.2 kB gzip), reported, not gated | `pnpm build` (dist audit) |
+| Walk only, 10,000 steps, realistic route (the §14 budget case, review PERF-01) | cold 13.4 ms [13.3-13.5], warm 9.3 [8.8-9.6], edit at step 5,000 4.7 [4.6-4.7] | `tests/bench/engine.bench.ts --check`, 3 runs of 3 processes, probe-normalised; `route10000` in `docs/measurements/engine-m6.json` |
+| Walk only, stress route (a regression guard) | cold 28.0 ms [26.5-28.2], warm 11.5 [11.4-11.8], edit 5.8 [5.7-5.9] | the same |
+| Walk + simulate + validate, realistic route (387 issues) | cold 16.3 ms [15.9-16.4], warm 12.2 [12.0-12.7], edit 6.0 [5.8-6.1]: within 20 ms | `tests/bench/validate.bench.ts --check`, as above; `validate10000` |
+| Walk + simulate + validate, stress route (10,423 issues) | cold 40.0 ms [39.9-40.3], warm 23.3 [21.2-23.4] against its 40 ms ceiling, edit 10.5 [10.4-10.9] | the same |
+| Edit to derived results published, stress route (10,423 issues) | edit at the start 26.5 ms [24.3-27.0], middle 13.4 [12.2-13.9], end 0.5; nav edits 27.0 / 14.3; a class not seen lately 51.5 [49.3-53.7], **over 50 ms under tsx** and 43.2 [41.2-44.0] bundled; a class toggle 29.9 (27.3 bundled); first walk 54.5 (44.2 bundled); navigation arriving 30.0 ms, then the run's own task 2.7 ms | `tests/bench/derived.bench.ts --budget`, 5 runs under tsx and 3 bundled with esbuild; `derived10000` in `docs/measurements/engine-m6.json` (new) |
+| Map route edit with walking paths | move 8.0 ms [8.0-8.2], at the 8 ms budget in Node before the browser's `setLayer` and redraw; a new paths object 4.2 ms (15.4 ms at the build); pan 0.23 ms | `tests/bench/map-paths.bench.ts --budget`, 3 runs; `paths10000` in `docs/measurements/map-m3.json` (new) |
+| Map route edit without paths (PERF-2) | move 5.0 ms [5.0-5.3], selection 1.9 ms | `tests/bench/map-edit.bench.ts --check`, 3 runs; `milestone4Perf2` in `docs/measurements/map-m3.json`, within 25% |
+| Navigation worker memory (NAV-02) | 2,000-step stress harness: typed-array peak 99.98 MB at the 100 MB budget (118.9 MB before); 10,000 steps 99.99 MB | the nav owner's harness (Node), not stored |
+
+`engine-m6.json`'s `route10000` and `validate10000` were measured after the review fixes by the
+simulation owner, and the verification's figures are within 5% of them, so they were not
+re-recorded. `derived10000` and `paths10000` are new: the fixes changed the pipeline and the path
+feed, and the benches gained `--check`. The derived bench runs under tsx, whose keepNames wrapper
+slows it by about 15-20% against a production bundle (review PERF-04), so its `--budget` fails for
+a cold class change although a bundle is within the budget.
 
 ## 15. Testing
 
@@ -1055,7 +1392,7 @@ entries.
 | 3b | Terrain navigation (D-028) | research and design step with critique; read-only TypeScript CASC reader over the local client's `Data/`; ADT terrain, liquids and holes plus WMO/M2 collision; derived walkability or navmesh plus connectors, committed with notices; `TravelModel` implementation and pathfinding within the §14 budgets; route lines follow paths; navigation review |
 | 4 | Route editor and storage | route operations, virtualised list, drag and keyboard reorder, lock, undo/redo, IndexedDB autosave, JSON import/export |
 | 5 | RXP | unwrap, CST, diagnostics, lowering, serializer, fixtures, round trips, import/export UI, rxp-overlap tool, parser review |
-| 6 | Rules, simulation, validation | ruleset, walker, XP/time model, validator, route warnings, validation panel; schema v1 frozen at the end |
+| 6 | Rules, simulation, validation | ruleset, walker, XP/time model, validator, route warnings, validation panel (schema v1 was frozen earlier, at the Milestone 4 commit, D-035) |
 | 7 | Optimiser | core, stepper, worker, anchors and section contract, pure `diff`, fixtures, optimiser and performance reviews |
 | 8 | Proposal UX | proposal building, metrics, overlay, accept/reject/apply change-sets |
 | 9 | Gauntlet | independent reviews, fixes, Playwright smoke, docs, final commit |

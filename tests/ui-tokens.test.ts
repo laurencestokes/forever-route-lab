@@ -26,6 +26,7 @@ import { AppShell } from '../src/ui/shell/AppShell';
 import { StatusBar, type StatusBarProps } from '../src/ui/shell/StatusBar';
 import { Tabs } from '../src/ui/shell/Tabs';
 import { XpBar } from '../src/ui/shell/XpBar';
+import { SimulationStatus } from '../src/ui/shell/SimulationStatus';
 
 const UI_DIR = join(import.meta.dirname, '..', 'src', 'ui');
 const readCss = (path: string): string => readFileSync(join(UI_DIR, path), 'utf8').replace(/\r\n/g, '\n');
@@ -575,9 +576,15 @@ describe('forced colours (Windows high contrast) keep every state visible (F-12)
     ['shell/StatusBar.css', '.frl-xpbar__fill', 'background', 'Highlight'],
     ['primitives/primitives.css', '.frl-icon-button.is-pressed', 'border-color', 'Highlight'],
     ['markers/markers.css', '.frl-severity-icon__mark', 'stroke', 'Canvas'],
+    ['shell/StatusBar.css', '.frl-statusbar__progress', 'border', '1px solid CanvasText'],
   ] as const)('%s: %s gets %s %s', (path, selector, property, value) => {
     const rules = rulesContaining(rulesOf(path), selector, FORCED);
     expect(rules.map((rule) => rule.declarations.get(property))).toContain(value);
+  });
+
+  it('draws unknown progress as a dashed empty track under forced colours with reduced motion (M6 review UI-15)', () => {
+    const rules = rulesContaining(rulesOf('shell/StatusBar.css'), '.frl-statusbar__progress.is-indeterminate', ['@media (forced-colors: active) and (prefers-reduced-motion: reduce)']);
+    expect(rules.map((rule) => rule.declarations.get('border-style'))).toContain('dashed');
   });
 
   it('draws the selected-row strip as a real box (a pseudo-element with content)', () => {
@@ -585,6 +592,25 @@ describe('forced colours (Windows high contrast) keep every state visible (F-12)
     expect(strip.get('content')).toBe("''");
     expect(strip.get('position')).toBe('absolute');
     expect(strip.get('width')).toBe('4px');
+  });
+});
+
+describe('the status bar keeps the simulation item whole (M6 review UI-01, UI-02, UI-07)', () => {
+  it('never shrinks or clips the simulation item, and the bar is no scroll container', () => {
+    const { container } = mount(createElement(SimulationStatus, { status: { state: 'computing', done: 3, total: 8, detail: 'x' }, onCancel: () => undefined }));
+    const item = computed(container.querySelector('.frl-statusbar__simulation'));
+    expect(item.flexShrink).toBe('0');
+    // Nothing clips the item or its focus ring (happy-dom reports an unset overflow as '').
+    expect(['', 'visible']).toContain(item.overflow);
+    for (const selector of ['.frl-statusbar__item', '.frl-statusbar__simulation']) expect(declarationsOf(rulesOf('shell/StatusBar.css'), selector).get('overflow')).toBeUndefined();
+    const bar = declarationsOf(rulesOf('shell/StatusBar.css'), '.frl-statusbar');
+    expect(bar.get('overflow-x')).toBe('clip');
+    expect(bar.get('overflow-y')).toBe('visible');
+  });
+
+  it('lays the open summary out in the flow at 720px and below (UI-07)', () => {
+    const panel = declarationsOf(rulesOf('shell/StatusBar.css'), '.frl-summary__panel', ['@media (max-width: 720px)']);
+    expect(panel.get('position')).toBe('static');
   });
 });
 

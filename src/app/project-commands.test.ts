@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CLASS_TOKENS, createEmptyProject, type ProjectV1, questId, RACE_FACTION, RACE_TOKENS, sequentialIdSource, uiMapId, zoneSourcedPoint } from '../domain';
 import { makeAcceptStep, makeCompleteStep, makeNoteStep } from '../domain/step-factory';
+import { isRegisteredCode } from '../validate/codes';
 import { fixedClock } from './clock';
 import type { CommandContext } from './commands';
 import { stubDataset, stubQuest } from './map-test-helpers';
@@ -175,6 +176,8 @@ describe('custom quests', () => {
   it('finds the dataset quest a custom quest with a real id replaces (DATA001-custom-shadowed)', () => {
     const base = stubDataset({ quests: [stubQuest({ id: questId(10), name: 'Dataset quest' })] });
     expect(CUSTOM_SHADOWED_CODE).toBe('DATA001-custom-shadowed');
+    // The validator's registry knows it (the constant stays here so the registry stays out of the entry chunk).
+    expect(isRegisteredCode(CUSTOM_SHADOWED_CODE)).toBe(true);
     expect(shadowedQuest(base, questId(10))?.name).toBe('Dataset quest');
     expect(shadowedQuest(base, questId(11))).toBeNull();
     expect(shadowedQuest(base, questId(-10))).toBeNull();

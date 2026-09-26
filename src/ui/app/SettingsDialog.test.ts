@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPlaceholderWorkspace } from '../../app/placeholder-project';
-import { raceOptionsOf, settingsDraftOf, settingsPatchOf } from './SettingsDialog';
+import type { QuestId } from '../../domain/ids';
+import { historyPatch, raceOptionsOf, settingsDraftOf, settingsPatchOf, showsPriorLists } from './SettingsDialog';
 
 // A level-1 character with the default route profile (ui tests take projects from app, ARCHITECTURE §4).
 const { project } = createPlaceholderWorkspace({ nowIso: '2026-09-26T00:00:00.000Z' });
@@ -14,12 +15,34 @@ describe('settingsPatchOf', () => {
     expect(patch?.routeProfile).toMatchObject({ season: null, phase: 3, dungeons: ['RFC', 'WC'], locale: 'enUS', xpRate: 1 });
   });
 
-  it('keeps prior quest lists only for a listed history', () => {
-    expect(settingsPatchOf({ ...draft, priorHistory: 'unknown', priorCompleted: '1, 2' }, 60).patch?.character?.priorCompletedQuests).toEqual([]);
+  it('keeps the prior quest lists for a listed history, and as a partial record for an unknown one (ENG-12)', () => {
     expect(settingsPatchOf({ ...draft, priorHistory: 'listed', priorCompleted: '1, 2', priorLog: '3' }, 60).patch?.character).toMatchObject({
       priorCompletedQuests: [1, 2],
       priorQuestLog: [3],
     });
+    // SIMULATION §7.1: for `unknown` the lists are a partial record, seeded into the walk like the others.
+    expect(settingsPatchOf({ ...draft, priorHistory: 'unknown', priorCompleted: '48', priorLog: '49' }, 60).patch?.character).toMatchObject({
+      priorHistory: 'unknown',
+      priorCompletedQuests: [48],
+      priorQuestLog: [49],
+    });
+    expect(settingsPatchOf({ ...draft, priorHistory: 'unknown', priorCompleted: 'x' }, 60).problems.map((p) => p.field)).toEqual(['priorCompleted']);
+  });
+
+  it('keeps imported lists through an unrelated save, and empties them only when “A new character” is chosen', () => {
+    const imported = settingsDraftOf({ ...project.character, priorHistory: 'unknown', priorCompletedQuests: [48 as QuestId], priorQuestLog: [49 as QuestId] }, project.routeProfile);
+    expect(imported).toMatchObject({ priorCompleted: '48', priorLog: '49' });
+    expect(showsPriorLists(imported)).toBe(true);
+    expect(settingsPatchOf({ ...imported, locale: 'deDE' }, 60).patch?.character).toMatchObject({ priorCompletedQuests: [48], priorQuestLog: [49] });
+    const fresh = { ...imported, ...historyPatch('fresh') };
+    expect(fresh).toMatchObject({ priorHistory: 'fresh', priorCompleted: '', priorLog: '' });
+    expect(showsPriorLists(fresh)).toBe(false);
+    expect(settingsPatchOf(fresh, 60).patch?.character).toMatchObject({ priorCompletedQuests: [], priorQuestLog: [] });
+    expect({ ...imported, ...historyPatch('listed') }).toMatchObject({ priorCompleted: '48', priorLog: '49' });
+    // A fresh project that holds lists (an imported file) shows them, so they are never dropped unseen.
+    const freshWithLists = settingsDraftOf({ ...project.character, priorHistory: 'fresh', priorCompletedQuests: [7 as QuestId], priorQuestLog: [] }, project.routeProfile);
+    expect(showsPriorLists(freshWithLists)).toBe(true);
+    expect(settingsPatchOf(freshWithLists, 60).patch?.character).toMatchObject({ priorHistory: 'fresh', priorCompletedQuests: [7] });
   });
 
   it('says every problem, in words', () => {

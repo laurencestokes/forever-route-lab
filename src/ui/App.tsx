@@ -20,9 +20,12 @@ import { AboutDialog, AppShell } from './kit';
 import './App.css';
 
 /**
- * The composition of the shell: the UI kit (src/ui/kit.ts) wired to the editor store (src/app)
- * and the loaded dataset. Everything derived (levels, durations, XP, validation) waits for
- * simulation in Milestone 6 and is shown as unknown with that reason, never as a made-up number.
+ * The composition of the shell: the UI kit (src/ui/kit.ts) wired to the editor store (src/app),
+ * the derived-results store (the engine walk per revision: estimates, metrics, issues; read with
+ * `useDerivedSelector` from the `DerivedStoreProvider` the composition root puts around the app)
+ * and the loaded dataset. What the walk has not worked out is shown as unknown with the reason,
+ * never as a made-up number; without a derived store (component tests) every estimate says it is
+ * not simulated.
  *
  * The dataset view follows the project: its faction and class pick the overlay records, and its
  * custom quests and overrides lie on top (ARCHITECTURE §5.5). The source memoises the view, so it
@@ -93,12 +96,28 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
   useEffect(() => preloadLazyParts(), []);
   // One controller for the app's lifetime: the top bar's jump-to-zone and the map panel share it.
   const [mapController] = useState(() =>
-    map === null ? null : createMapController({ store, data: source, geometry: map.geometry, art: map.art, describeStep: mapStepLabel }),
+    map === null
+      ? null
+      : createMapController({
+          store,
+          data: source,
+          geometry: map.geometry,
+          art: map.art,
+          resources: map.resources ?? null,
+          paths: map.paths ?? null,
+          describeStep: mapStepLabel,
+        }),
   );
   const mapWiring = useMemo(() => (map === null || mapController === null ? null : { setup: map, controller: mapController }), [map, mapController]);
+  // World map names for the status bar's travel sentences ("Kalimdor", not "world map 1"): the
+  // map panel's surfaces, one per world map.
+  const mapName = useMemo(() => {
+    const names = new Map((mapController?.surfaces ?? []).map((surface) => [surface.mapId as number, surface.name]));
+    return (mapId: number): string | null => names.get(mapId) ?? null;
+  }, [mapController]);
   const geometry = map?.geometry ?? null;
   const actions = useMemo(() => createRouteActions(store, announcer.announce, { geometry }), [store, announcer, geometry]);
-  useSelectionAnnouncements(store, announcer.announce);
+  useSelectionAnnouncements(store, announcer);
 
   const importNames = useMemo(() => new Map(imports.map((i) => [i.id, i.name])), [imports]);
   const view = useMemo(() => buildRouteView(route, dataset, startLevel, importNames), [route, dataset, startLevel, importNames]);
@@ -172,6 +191,7 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
           <RoutePanel
             store={store}
             view={view}
+            dataset={dataset}
             routeName={route.name}
             placeholder={placeholder}
             notice={routeNotice}
@@ -199,7 +219,7 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
             onFocusList={focusList}
           />
         }
-        bottom={<AppStatusBar store={store} view={view} dataset={dataset} activeRow={activeRow} />}
+        bottom={<AppStatusBar store={store} view={view} dataset={dataset} activeRow={activeRow} announce={announcer.announce} mapName={mapName} />}
         leftWidth={leftWidth}
         onLeftWidthChange={setLeftWidth}
       />

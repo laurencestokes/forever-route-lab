@@ -167,7 +167,22 @@ button.frl-issues__body:focus-visible {
 }
 
 .frl-issues__meta code {
+  min-width: 0;
   font-family: var(--frl-font-mono);
+  overflow-wrap: anywhere;
+}
+
+/* What the code means (the registry's explanation), under the issue, aligned with its message. */
+.frl-issues__explanation {
+  padding: 0 var(--frl-space-3) 5px calc(var(--frl-space-3) + 76px + var(--frl-space-2));
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-issues:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: calc(-1 * var(--frl-focus-width));
 }
 
 .frl-issues__empty {

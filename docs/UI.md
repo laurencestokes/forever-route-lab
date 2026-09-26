@@ -20,8 +20,9 @@ store. Related: [ARCHITECTURE.md](ARCHITECTURE.md) §12.4 (layout and visual rul
 4. **Reserved hues mean one thing each.** The five difficulty colours mean quest difficulty and
    nothing else. Cyan means Forever provenance and nothing else.
 5. **Unknown stays unknown.** An unknown number renders as `?` with its reason (tooltip and
-   screen-reader text), never as `0` or an empty bar. Lower bounds read `≥`. Numbers that depend
-   on assumptions carry the assumed marker.
+   screen-reader text), never as `0` or an empty bar. Lower bounds read `≥`, upper bounds `≤`; a
+   number bounded in no known direction is unknown. Numbers that depend on assumptions carry the
+   assumed marker.
 6. **Presentational.** Components take typed props and callbacks. They never read the store,
    the dataset or IndexedDB, and they import only *types* from pure modules (`domain`, `rules`).
    The few pure values the kit needs (the difficulty labels) come re-exported through `app`
@@ -147,6 +148,7 @@ is the same object, kept for the kit's export list).
 | `--frl-focus-width` | 2px | Focus ring width |
 | `--frl-duration-fast` / `--frl-duration` / `--frl-ease` | 90 / 140ms, ease-out | Transitions; 0 under reduced motion |
 | `--frl-z-sticky` / `--frl-z-drag` | 10 / 20 | Splitter / drop line |
+| `--frl-z-popover` | 1200 | The route summary's panel (§16): above the map's own layers and overlays (`MapFrame.css` uses 1100), below modal dialogs (the top layer) |
 
 `ROUTE_ROW_HEIGHT` in `src/ui/route/virtual.ts` must equal `--frl-row-height`;
 `tests/ui-tokens.test.ts` checks it.
@@ -164,8 +166,10 @@ is the same object, kept for the kit's export list).
 | Assumption-dependent number | neutral | `≈` with dotted underline | "Depends on assumptions: …" |
 | Era value standing in for Forever | neutral | boxed `E` | "Uses Era values where Forever values are unknown" |
 | Lower bound | neutral | `≥` prefix; XP bar notch and hatching beyond it | "at least …", "(lower bound: …)" |
+| Upper bound | neutral | `≤` prefix (XP per hour when some steps' time is unknown, §16) | "at most …", "Upper bound: the true value is at most this" |
 | Unknown number | neutral | `?` (for XP, "XP ?" at every width); XP bar hatched at 3:1 with a dashed edge; indeterminate progress never drawn as a partial fill | "Unknown: <reason>" |
-| Error / warning / info | magenta / violet / blue | octagon × / triangle ! / circle i | "Error", "Warning", "Info"; counts in words |
+| Pending (provisional) number | neutral (`--frl-assumed`) | hourglass after the number, the number in italics; in a route row, the hourglass in the step-time column's left gutter only (the level and XP never wait for walking paths, so they never carry it) | "Pending: …" (the walking path is still being computed, or the navigation data is still being checked, so the travel time is a straight-line estimate for now) |
+| Error / warning / info | magenta / violet / blue | octagon × / triangle ! / circle i | "Error", "Warning", "Info"; counts in words ("2 errors, 1 warning, 3 info issues": never "notes", a step kind) |
 | Selection | accent tint | 3px left bar (a 4px `Highlight` strip under forced colours) | `aria-selected` |
 | Keyboard focus | accent | 2px ring (active row: inset ring) | — |
 | Placeholder content | none | dashed, hatched "PLACEHOLDER" label | "Placeholder <what>" |
@@ -178,6 +182,10 @@ Rules:
   the severity, accent and XP hues at least 25° away from the provenance cyan; `tests/ui-tokens.test.ts`
   checks both in each theme.
 - Validation never borrows difficulty red or orange, and difficulty never uses the severity icons.
+- *Milestone 6:* the issue indicators, the Validation tab's counts and its issues use the three
+  severity tokens above (§3.1, unchanged since Milestone 1, already checked for hue distance and
+  contrast); the pending hourglass, the simulation's status and the route summary use neutral
+  tokens only. No new colour token was needed, so none reuses a difficulty or provenance hue.
 
 ## 5. Typography, spacing and density
 
@@ -203,12 +211,27 @@ Rules:
 
 | Width | Behaviour |
 |---|---|
-| > 1200px | Everything visible; action buttons show icon and word |
+| > 1440px | Everything visible; action buttons show icon and word |
+| ≤ 1440px | The status bar's route XP total hides (the route summary keeps it, §16); the optimiser item, while it is unavailable, leaves the view (still in the page, so still spoken) |
+| ≤ 1280px | Status bar gaps tighten to 8px; the identity badges drop their key words from view ("65c377bc", "forever-beta"; "Data" and "Ruleset" are still spoken and in the tooltips) |
 | ≤ 1200px | Top-bar action words become visually hidden (icon buttons with names and tooltips) |
 | ≤ 1180px | XP numbers in the status bar hide (the bar and its spoken value stay, and an unknown value keeps its visible "XP ?") |
-| ≤ 1024px | Two columns: the route panel keeps the full height (36%, min 280px); the side panel moves under the map; the splitter hides (the map's layer panel stays a toggle, §12) |
+| ≤ 1100px | The status bar's step title hides (the active row and the Step item's tooltip name it) and the XP track narrows to 64px |
+| ≤ 1024px | Two columns: the route panel keeps the full height (36%, min 280px); the side panel moves under the map; the splitter hides (the map's layer panel stays a toggle, §12); the status bar may take a second line rather than cut anything, and its grid row follows it |
 | ≤ 900px | The product name hides (the mark stays) |
-| ≤ 720px | One column; the page scrolls; top and status bars wrap |
+| ≤ 720px | One column; the page scrolls; top and status bars wrap; the open route summary is laid out in the flow under its button |
+
+**Status bar priorities** (Milestone 6 review UI-01, UI-02). Items never shrink except the step
+title, which is its own flex item and gives way first. The Step item keeps its label and number;
+the simulation item (§16) keeps its label, progress bar, count and Cancel or Resume whole, its
+words capped at 160px (the longest state, "Some straight-line estimates", is 151px). The bar clips
+sideways only (`overflow-x: clip`): it is never a scroll container, so focusing an item cannot
+scroll it, and nothing in it clips a focus ring (the 22px buttons sit in the 32px bar with room
+for the 2px ring and its 1px offset). Checked in the built app with walking paths held computing,
+paused, the navigation data held checking, a map's navigation files failing and none available:
+at 721, 800, 900, 1024, 1100, 1200, 1280, 1366, 1440 and 1600px, in both themes, the bar's
+content ends inside it, no item's content is cut, every state's words are whole, and Cancel and
+Resume, focused by keyboard, lie inside the bar with a complete ring (and under forced colours).
 
 The route panel is resizable-ready: pass `leftWidth` and `onLeftWidthChange` and `AppShell`
 renders a `separator` on its right edge (pointer drag; ←/→ by 4px, Shift for 20px, Home/End for
@@ -252,18 +275,21 @@ All exported from `src/ui/kit.ts`.
 |---|---|---|
 | `AppShell` | `shell/AppShell.tsx` | Grid frame: `top`, `left`, `centre`, `right`, `bottom`; `leftWidth`, `onLeftWidthChange` |
 | `TopBar` | `shell/TopBar.tsx` | Product, project › route (with `placeholder` label; `placeholderLabel` "Sample" for the generated sample route), quest search (`search`), jump to zone (`zones`), Import, Export, Settings, theme toggle, About |
-| `RouteList` | `route/RouteList.tsx` | Virtualised listbox of `RouteRowModel`s; controlled `activeIndex` and `selectedKeys`; selection, editing and drag callbacks by index (§8) |
-| `StepRow`, `GroupRow` | `route/StepRow.tsx` | One 28px row: number, step glyph, title and detail, provenance, difficulty, issue marker, projected level, lock toggle; duplicate and delete on hover or when active (pointer-only affordances, §8); `groupLabel` for the spoken "in group …" |
+| `RouteList` | `route/RouteList.tsx` | Virtualised listbox of `RouteRowModel`s; controlled `activeIndex` and `selectedKeys`; selection, editing and drag callbacks by index (§8); `deriveRow(row, index)` fills a step row's derived values as it renders (only mounted rows ask) and `estimateColumn` picks the estimate the rows show (§8, §16) |
+| `StepRow`, `GroupRow` | `route/StepRow.tsx` | One 28px row: number, step glyph, title and detail, provenance, difficulty, issue marker (worst severity's shape and the total), one estimate (`estimateColumn`: level after, XP gained or step time, with its markers) and the pending hourglass, lock toggle; duplicate and delete on hover or when active (pointer-only affordances, §8); `groupLabel` for the spoken "in group …". `describeStepRow` says every estimate, pending travel and the issues by severity; `formatXpGained` (`+450`) |
 | `StepTypeGlyph` | `markers/StepTypeGlyph.tsx` | Original glyphs for accept, complete, turnin, abandon, travel, grind, hearth, flight, train, vendor, note |
 | `DifficultyLabel` | `markers/DifficultyLabel.tsx` | Quest level chip with difficulty colour, pips and text; `uncertain` for lower-bound levels |
 | `ProvenanceBadge` | `markers/ProvenanceBadge.tsx` | ◆ / ◇ in cyan, user-declared variant; `compact` or `full`. `foreverProvenanceOf(record.provenance)` derives its input |
 | `AssumedMarker` | `markers/AssumedMarker.tsx` | `≈` (assumption) or `E` (Era fallback) with text |
-| `ReadoutValue` | `markers/ReadoutValue.tsx` | Renders a `Readout<T>`: `≥`, markers, `?` with reason |
+| `PendingMarker` | `markers/PendingMarker.tsx` | The neutral hourglass of a provisional number, with its words (`detail`, default `PENDING_TRAVEL_TEXT`; `PENDING_TRAVEL_TEXTS` by `PendingTravel`: `path`, `retrying`, `paused`, `failed` or `checking`, from the route-wide `pendingTravelReason`, Milestone 6 review UI-04); `silent` inside a route row, whose name says it |
+| `ReadoutValue` | `markers/ReadoutValue.tsx` | Renders a `Readout<T>`: `≥` (lower bound, "at least"), `≤` (upper bound, "at most"), markers, `?` with reason; `pending` (a sentence) draws the value in italics with the pending marker |
 | `SeverityIcon` | `markers/SeverityIcon.tsx` | Error, warning, info shapes |
 | `SidePanel` | `shell/SidePanel.tsx` | Tabs Available, Quest log, Details, Validation with counts; one content node per tab |
 | `Tabs` | `shell/Tabs.tsx` | Accessible tablist, controlled, automatic activation; one tabpanel that every tab controls |
-| `PanelSection`, `EmptyState`, `DetailList`, `IssueList`, `QuestListItem` | `shell/PanelContent.tsx` | Side-panel building blocks; `QuestListItem` takes `onOpen` ("Show in Details: <quest>", the info icon) and `onAdd` |
-| `StatusBar` | `shell/StatusBar.tsx` | XP bar, current step, duration, XP/hour, optimiser state and progress, data and ruleset badges |
+| `PanelSection`, `EmptyState`, `DetailList`, `IssueList`, `QuestListItem` | `shell/PanelContent.tsx` | Side-panel building blocks; `QuestListItem` takes `onOpen` ("Show in Details: <quest>", the info icon) and `onAdd`. `IssueList`: severity shape and word, message, where (step or "Route"), code and the code's `explanation`; with `onSelect` the issues about a step are buttons named in words (`describeIssue`: "Error, step 12: … (VAL004-min-level)", described by the explanation) forming one composite: one tab stop, ↑ ↓ Home End between them (§16) |
+| `StatusBar` | `shell/StatusBar.tsx` | XP bar, current step, the route's duration, XP (`xpGained`) and XP/hour with the pending marker while `provisional`, the `summary` and `simulation` slots, optimiser state and progress, data and ruleset badges |
+| `RouteSummary` | `shell/RouteSummary.tsx` | The "Summary" disclosure in the status bar: a table of the route metrics (`rows`: term, value, basis in words), `notes` and every parameter the route reads (`parameters`, each with its origin), opened above the status bar (in the flow at 720px and below); Escape, the button, a press outside or focus leaving it closes it (§16) |
+| `SimulationStatus` | `shell/SimulationStatus.tsx` | The simulation's item in the status bar (`SimulationStatusModel`): loading, failed, checking navigation data, computing walking paths (progress bar, or counting while the total is unknown; `onCancel`), paused (`onResume`), straight-line travel with the reason; nothing when there is nothing to say, unless it holds keyboard focus (§16) |
 | `XpBar` | `shell/XpBar.tsx` | Level and XP progressbar with lower-bound, unknown and cap states |
 | `MapFrame`, `LayerPanel`, `MapHoverText` | `shell/MapFrame.tsx` | The map panel's frame (§12), memoised: surface `Select`, a `Toolbar` of `MapCommand`s (unavailable ones `aria-disabled` with their reason) and the Layers toggle, the always-visible map-kind `notice` (with `noticeShort` for narrow panels), the `stageRef` host the engine mounts into, the visually hidden instructions (`instructionsId`), the layer panel (`MapLayerRow`s: checkbox, the layer's `glyph`, count, notes, disabled with a reason) with the map key under it, the `status` line and the `hover` text (a string, or an element that renders `MapHoverText` so only it re-renders), and `choice`: the items at a clicked point where several share it (a `dialog` beside the point, `mapChoicePosition`; focus on the first item, arrows, Home and End between items, Escape or a press outside closes, focus back to the map); `engine` shows loading, failed (with "Try again") or unavailable over the stage |
 | `MapGlyph`, `MapLegend` | `shell/MapLegend.tsx` | The map key (§12): `MapGlyph` draws one canvas glyph, line style or badge as a 20 × 16 inline SVG (`aria-hidden`, kit colours, the canvas geometry and dash patterns); `MapLegend` lists `MAP_KEY` (markers, route lines, badges, each with its meaning) and `MAP_GRID_NOTE` (the grid's axes) |
@@ -305,12 +331,24 @@ The route editor's store-bound components (§14) live in `src/ui/app/` for the s
 | `SettingsDialog` | `app/SettingsDialog.tsx` | The Settings dialog (`ModalDialog`, not closed by a backdrop press): character and route profile as a draft; Cancel and "Save settings" (one command) in the footer. Loaded on first use (§11) |
 | `QuestDetails` | `app/QuestDetails.tsx` | One quest in Details; with `actions` it adds the quest's steps and opens the custom quest editor, with `baseDataset` it says when a custom quest replaces a dataset quest |
 
-View-model types: `StepRowModel`, `GroupRowModel`, `RouteRowModel` (`route/rows.ts`, with
-`routeRowContext` for step positions and group membership),
+The simulation's store-bound parts (§16), in `src/ui/app/` for the same reason:
+
+| Component or module | File | Purpose and key props |
+|---|---|---|
+| `ValidationPanel` | `app/ValidationPanel.tsx` | The Validation tab: counts by severity, the "Show" filter, the issues (`IssueList` with explanations from the registry) in pages of 100; choosing an issue selects its step and focuses it in the route list. Loaded on first use (§11) |
+| `AppStatusBar` | `app/AppStatusBar.tsx` | The status bar over the derived store: the XP bar at the active step, the route metrics with their markers, `RouteSummary`, `SimulationStatus` with Cancel and Resume (announced) |
+| derived view | `app/derived-view.ts` | Pure: `createRowDeriver` (the rows' `deriveRow`), `stepDerivedAt`, `stepNumbersOf` and `sameStepNumbers` (Details), `routeMetricsView`, `xpBarAt`, `simulationStatusOf`, `validationCounts`, the reasons for unknown numbers (`NOT_SIMULATED`, `SIMULATION_LOADING`, `STEP_NOT_WALKED`, `unknownTimeReason`, `unknownXpReason`) |
+| test helpers | `app/derived-test-helpers.ts` | Hand-built derived results for the ui's tests (`derivedResults`, `readyState`, `derivedStoreWith`, `issue`) |
+
+View-model types: `StepRowModel`, `GroupRowModel`, `RouteRowModel`, `EstimateColumn`
+(`route/rows.ts`, with `routeRowContext` for step positions and group membership, and
+`ESTIMATE_COLUMNS`, `ESTIMATE_COLUMN_LABELS`),
 `Readout<T>` (`lib/readout.ts`, with `knownReadout`, `unknownReadout`, `readoutFromEstimate`),
 `IssueCounts` (`lib/issues.ts`, with `countIssues`), `ForeverProvenance`, `OptimizerStatus`,
-`SidePanelTabId`, `ThemePreference`. Formatting helpers (`lib/format.ts`) are locale-independent
-and truncate rather than round up (level 12.99 reads 12.9).
+`SimulationStatusModel`, `RouteSummaryRow`, `SidePanelTabId`, `ThemePreference`. Formatting
+helpers (`lib/format.ts`) are locale-independent and truncate rather than round up (level 12.99
+reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_LABELS`,
+`assumptionWords`) for the tooltips of assumed numbers.
 
 ## 8. Route list
 
@@ -318,6 +356,34 @@ and truncate rather than round up (level 12.99 reads 12.9).
   `computeVirtualWindow` renders the visible rows plus 8 rows of overscan each side; the canvas
   is `rows × 28px` tall and rows are absolutely positioned at `index × 28px`. The active row is
   always mounted, even when scrolled away, so `aria-activedescendant` never dangles.
+- **Derived values** (Milestone 6, §16). The row models are built once per route change from the
+  route and the dataset (`buildRouteView`), with every estimate unknown. The walk's numbers are
+  filled in as a row renders, through `deriveRow` (`createRowDeriver` in `app/derived-view.ts`),
+  so only the mounted rows (the window, about 40) do any work when new results arrive; a walk
+  never rebuilds the row models. The deriver reads memoised results only: an index lookup, three
+  readouts, the step's issue counts and the quest chip at the level the step starts at.
+- **Estimates.** A row has room for one estimate: the level after the step (default), the XP it
+  gains (`+450`) or the time it takes (`2m 05s`), chosen with "Rows show" beside the key in the
+  banner (not persisted). The row's name and the cell's tooltip always give all three. Each
+  carries its basis: `≈` when it depends on assumptions (the tooltip names the ruleset parameters
+  the step read and whether each is the user's, the ruleset's or an Era value), `E` for Era values
+  standing in for Forever ones (dense rows fold both into one `≈` whose words say both), `≥` for a
+  lower bound, `≤` for an upper bound, and `?` with its reason when unknown (never 0). A travel
+  time that waits for its walking path, or for the navigation data to be checked, shows the
+  hourglass in the step-time column's left gutter and the value in italics; the level and XP
+  columns carry neither, because they do not wait for walking paths (Milestone 6 review UI-12).
+  The name adds "pending: its walking path is still being computed, so the travel time is a
+  straight-line estimate for now" (or "pending: the navigation data is still being checked, …").
+  While computing is paused, waits to retry after a failure, or has failed, the row's name,
+  the tooltip and Details say that instead ("computing walking paths is paused, …"; UI-04).
+- **Narrow lists** (a container query on the list, below 320px of width; UI-18). The issue marker
+  keeps its shape and drops its count (the tooltip and the row's name say the counts), the
+  estimate cell takes only the room its number needs, and the row's gaps tighten from 6px to 4px.
+  At the route panel's 288px (800×700), titles on rows with an issue marker keep at least 90px
+  (98px with the level column), where they kept 40px.
+- **Issue indicator.** The worst severity's shape (in its severity colour) and the step's issue
+  count; its tooltip and the row's name say the counts by severity ("Issues: 1 error, 2
+  warnings"). Option children are presentational, so the name carries it for assistive technology.
 - **Semantics.** `role="listbox"`, `aria-multiselectable`, one tab stop, focus stays on the
   list and `aria-activedescendant` names the active row. Every row is an `option` with
   `aria-selected` and an `aria-label` that states the whole row in words.
@@ -408,7 +474,9 @@ and truncate rather than round up (level 12.99 reads 12.9).
    saved.", "Imported …") is said again in the region below, the shell's once no dialog is open;
    older messages are not repeated. The regions say only the result of what the user just did:
    the selection count once it settles ("12 steps selected", "Selection cleared"; arrowing,
-   which keeps one step selected, says nothing), and brief results of row commands, inserts,
+   which keeps one step selected, says nothing; a command that says its own result before the
+   count settles, such as choosing an issue, is the only thing said), and brief results of row
+   commands, inserts,
    undo and redo ("3 steps deleted. Undo with Ctrl+Z.", "2 steps cut. Paste with Ctrl+V; undo
    with Ctrl+Z.", "Cull: accept quest, complete objectives, turn in quest added as steps 4 to 6."),
    of the editors ("Duration of step 3 set to 2 minutes 30 seconds.", "Click the map to place the
@@ -417,7 +485,10 @@ and truncate rather than round up (level 12.99 reads 12.9).
    ("Opened “Durotar run”.", "Imported “x” as a new project and opened it."), and of the RXP
    dialogs ("Imported “Guide”: 40 steps added as steps 13 to 52. Undo with Ctrl+Z.", "Copied the
    guide text to the clipboard." with a visible "Copied" beside Copy for a few seconds,
-   "Exported “Guide.lua”."; §15). A save that fails
+   "Exported “Guide.lua”."; §15), and of the simulation's controls (§16: Cancel and Resume of
+   computing walking paths, the Validation tab's filter "Showing 2 errors.", "Show more", and
+   choosing an issue "Showing step 12 in the route: error VAL004-min-level."). Background work
+   is never announced: walking paths being computed, a walk finishing, issues appearing. A save that fails
    is announced once, when it fails ("Not saved: …"), because the edit just made is not kept; the
    save status itself is not a live region. Unavailable actions are not
    announced: they render `aria-disabled` (focusable, and in toolbars in the arrow-key order),
@@ -441,6 +512,9 @@ and truncate rather than round up (level 12.99 reads 12.9).
    `@media (forced-colors: active)`: selected rows get a 4px `Highlight` strip (a pseudo-element,
    so rows do not shift); the selected tab's bar, the XP and progress fills, the drop line and
    the splitter's hover and focus line are `Highlight`; the lower-bound notch is `CanvasText`;
+   the progress tracks (the walking paths' and the optimiser's) get a 1px `CanvasText` edge, as
+   the XP track has, and an unknown count with reduced motion is that edge dashed around an empty
+   track (the hatching would otherwise fall back to a full `Highlight` bar that reads as done);
    issue severity bars become `CanvasText` borders (the icon shape and word still say which);
    pressed toggles get a `Highlight` edge; severity marks are cut out of their shapes in
    `Canvas`; disabled controls are `GrayText`. The difficulty chip opts out
@@ -492,8 +566,9 @@ and truncate rather than round up (level 12.99 reads 12.9).
   and again from `TopBar`'s `onThemeChange`; persist it in the settings store.
 - Map each route step to a `StepRowModel` (and each RXP group to a `GroupRowModel` header row):
   `number` is the 1-based step number, `title` one line, `projectedLevel` a `Readout<number>`
-  (`unknownReadout(reason)` until the simulator exists; never 0), `quest` only for quest steps,
-  `issues` from `countIssues`, `provenance` from `foreverProvenanceOf`.
+  (`unknownReadout(reason)` until the walk fills it in through `deriveRow`; never 0), `duration`
+  and `xpGained` likewise, `pending` and `assumptions`, `quest` only for quest steps, `issues` from
+  `countIssues`, `provenance` from `foreverProvenanceOf` (§8, §16).
 - `RouteList` is controlled: keep `activeIndex` and the selection (with its anchor) in the store,
   apply `onSelect(index, mode)` there (`replace`, `toggle`, `range` from the anchor), and turn
   `onDrop(from, to)` into one move command. Pass `readOnly` while an optimiser run or a proposal
@@ -587,6 +662,25 @@ and truncate rather than round up (level 12.99 reads 12.9).
   gives it to `MapPanel` (`src/ui/app/MapPanel.tsx`, which mounts it) and to `AppTopBar` (jump to
   zone). Without `map` the centre says there is no map and jump-to-zone is unavailable ("No map is
   loaded").
+- *Milestone 6 (simulation and validation, §16):* `src/main.tsx` wraps `App` in
+  `DerivedStoreProvider` (`src/app/react.ts`) with the derived-results store, and adds `resources`
+  and `paths` to the map setup; `App` passes both to `createMapController`. Panels read the
+  derived state with `useDerivedSelector` and module-level selectors (`src/ui/app/selectors.ts`:
+  `selectDerived`, `selectIssueCounts` with `sameCounts`, and Details' narrow `stepNumbersOf`
+  selector with `sameStepNumbers`), so the side panel's tabs re-render only when the counts
+  change and Details only when its step's numbers do. `RoutePanel` takes `dataset` (the quest chip
+  is taken at the level each step starts at) and `AppStatusBar` takes `announce` (Cancel and
+  Resume). Outside a provider (component tests) the selector gets null and every estimate says
+  "Not simulated: no route simulation is connected"; the Validation tab says "Not checked yet"
+  and claims no absence of issues.
+- *Milestone 6:* the Validation tab's panel is a lazy part (`loadValidationPanel`, the same chunk
+  as the dialogs, §11 CR-19), so the issue-code registry (`src/app/issue-codes.ts` over
+  `src/validate/codes.ts`) stays out of the entry chunk; until it loads the tab says "Loading the
+  validation panel…", and a failed load says why with "Try again". Measured by `pnpm build`'s dist
+  audit on 2026-09-26: the entry and its static imports 232.91 kB gzip of the 250 kB budget (225.00
+  kB after the integrator's derived store; the rest is this milestone's rows, status bar, summary
+  and simulation status); the lazy parts 13.66 kB gzip plus 1.62 kB of CSS; the registry 5.55 kB
+  gzip in its own chunk (shared with the derived pipeline).
 
 ## 12. Map panel
 
@@ -595,12 +689,13 @@ The centre panel (ARCHITECTURE §7, §12.4; MAPS.md §7). By the §4 import rule
 
 | Where | What |
 |---|---|
-| `src/app/map-view.ts` | The map's view state in the store (`ViewState.map`): `surface`, `zoomBand` (`zone`/`continent`), `layers` (visibility) and `zone` (the zone last jumped to, cleared once it is panned out of view or the surface changes). Hover is not in the store (below). `patchMapUi` keeps the object when nothing changes, so a no-op write notifies nobody. `ViewState.openedQuests` holds quests opened in Details with the selection they were opened under (`shownOpenedQuests`). `openQuestsInDetails`, `closeOpenedQuests`, `setMapUi` and `setMapLayerVisible` write them |
+| `src/app/map-view.ts` | The map's view state in the store (`ViewState.map`): `surface`, `zoomBand` (`zone`/`continent`), `layers` (visibility: every layer on by default but the coastline), `walkingPaths` (on by default) and `zone` (the zone last jumped to, cleared once it is panned out of view or the surface changes). Not persisted. Hover is not in the store (below). `patchMapUi` keeps the object when nothing changes, so a no-op write notifies nobody. `ViewState.openedQuests` holds quests opened in Details with the selection they were opened under (`shownOpenedQuests`). `openQuestsInDetails`, `closeOpenedQuests`, `setMapUi`, `setMapLayerVisible` and `setMapWalkingPaths` write them |
 | `src/app/map-model.ts` | Pure view models: `questGiverModel` (the Available tab's rule: quests open by race and class), `objectiveModel` and `turnInModel` (the focused quests), `flightMasterModel` (the faction's, unknown-faction ones labelled so, each with the open quests it starts), `createRouteInputBuilder` (cached by step id) and `mapRouteInput`, `createDrawnRouteFilter` and `focusWithin` (what the route layers draw from), `routeMapSummary`, `stepsWithoutSurface`, `legUnknownAt`, `routeBoundsOn`, `routeStepIndex`, `zoneBounds`, `zoneGroups`, `focusQuestIds`, `stepFocusOf`. What has no map position (item starters, reputation objectives) or no spawn in the dataset is counted, never placed |
-| `src/app/map-controller.ts` | `createMapController`. Store to layers: memoised inputs, `createMapLayers`, `setLayer` only for a changed `LayerContent`, visibility from the store. The adapter's label provider (`labelFor`). Adapter events to the store; hover kept here (`getHover`, `subscribeHover`); a merged marker's choice (`getStatus().choice`, `choose`, `chooseAll`, `dismissChoice`). The commands `focusStep`, `fitRoute`, `jumpToZone`, `showSurface` and `hoverSteps`. Local art: only the images drawn at this level of detail, verified, drawn through object URLs, revoked on detach. `getStatus` (per-layer stats and notes, the route summary, the active step's placement, the choice) and the `frl:map:sync` User Timing measure (at most `MAX_SYNC_MEASURES` kept) |
-| `src/app/map-exports.ts` | Re-exports for the ui: the controller and its types, `BADGE_TEXT`, `layerStatsNotes`, `DEFAULT_LOD`, `lodLevelAt` and the local-art types |
-| `src/ui/shell/MapFrame.tsx`, `MapLegend.tsx` | The kit's frame, `LayerPanel`, the choice list and the map key (§7) |
-| `src/ui/app/MapPanel.tsx` | Loads the engine (loading, or failed with a retry), attaches and detaches the controller, names the engine's surface, reports the active step to it, maps its status to the frame's props, and renders the pointer line from the controller's hover alone |
+| `src/app/map-controller.ts` | `createMapController`. Store to layers: memoised inputs, `createMapLayers`, `setLayer` only for a changed `LayerContent`, visibility from the store. The adapter's label provider (`labelFor`). Adapter events to the store; hover kept here (`getHover`, `subscribeHover`); a merged marker's choice (`getStatus().choice`, `choose`, `chooseAll`, `dismissChoice`). The commands `focusStep`, `fitRoute`, `jumpToZone`, `showSurface` and `hoverSteps`. The committed art and terrain (`MapControllerOptions.resources`, a `MapResources`): the manifests loaded at the first mount, the image of the map being viewed, the relief, and the zone outlines and coastline of the shown world map once their layer is visible. Local art: only the images drawn at this level of detail, verified, drawn through object URLs, revoked on detach. Walking paths: `setRoutePaths`. `getStatus` (per-layer stats and notes, the route summary, the active step's placement, the choice, the `backdrop` for the notice, the `walkingPaths` row, and `problems` for the status line) and the `frl:map:sync` User Timing measure (at most `MAX_SYNC_MEASURES` kept) |
+| `src/app/map-exports.ts` | Re-exports for the ui: the controller and its types, `BADGE_TEXT`, `MAP_ART_OWNER_NOTE`, `layerStatsNotes`, `DEFAULT_LOD`, `lodLevelAt`, `RELIEF_OPACITY`, `routeLegsOf`, the local-art types, and for the composition root `createMapResources` with the deployed notice paths |
+| `src/ui/shell/MapFrame.tsx`, `MapLegend.tsx` | The kit's frame, `LayerPanel`, the choice list and the map key (§7): markers, the map (painted art, relief, zone outline, coastline), route lines (with the pending and fallback walked legs) and badges |
+| `src/ui/app/MapPanel.tsx` | Loads the engine (loading, or failed with a retry), attaches and detaches the controller, names the engine's surface, reports the active step to it, maps its status to the frame's props (the notice from `backdrop`, the "Walking paths" row under the route line, `problems` in the status line), and renders the pointer line from the controller's hover alone |
+| `src/ui/shell/AboutDialog.tsx` | Its "Map art" section (D-033): Blizzard Entertainment owns the painted art, non-affiliation, non-commercial, removal on request, and the terrain line (D-032), with links to the deployed `maps/art/NOTICE.md` and `maps/terrain/NOTICE.md` |
 
 **Behaviour.**
 
@@ -652,13 +747,44 @@ The centre panel (ARCHITECTURE §7, §12.4; MAPS.md §7). By the §4 import rule
   any zoom.
 - **Initial view.** The route's first surface, fitted to the route there (never closer than zoom
   −1.5). A remount keeps the adapter and its views.
+- **Painted art and terrain** (Milestone 3b; D-032, D-033; MAPS §7.5). The map shows Blizzard
+  Entertainment's painted art for the map being viewed: the continent zoomed out, the zone being
+  viewed zoomed in (the zone jumped to, else the one the view centre is most central in; one image
+  at a time, because zone images have painted borders). The shaded relief is the backdrop, faint
+  while art is drawn over it; zone outlines are drawn from the terrain, and the coastline is
+  optional. Over art the zone frames lose their fill. The notice beside the toolbar says what is
+  under the markers: "Painted map art © Blizzard Entertainment" (short: "Art © Blizzard") while
+  the art is drawn, "Terrain relief computed from game data, not painted art" (short: "Relief")
+  when only the relief is, the local-art notice for a local set, else the schematic notice. The
+  instructions of the engine's surface start with the same words (rule 12 of §9). The art
+  layer's note names the owner and says About has the notice.
+- **Failures never block.** The art and terrain load when the map first mounts, not at startup.
+  A manifest or file that cannot be loaded leaves the map drawing what it has (the relief without
+  the art, the zone frames without either, the route as ever): the layer's checkbox is disabled
+  with the reason ("Painted map art could not be loaded (…)"), and the status line says what the
+  map shows instead ("Painted map art could not be loaded: the map shows the terrain relief
+  instead"). A world map without terrain data (the islands, battlegrounds) says so on its terrain
+  layers.
+- **Walking paths.** A row "Walking paths" sits under "Route line" in the layer panel: a toggle
+  of how the route line draws walked legs, not a layer (`MapUiState.walkingPaths`). It is
+  unavailable ("No walking paths are available yet: every leg is drawn as a straight line") until
+  the navigation model gives paths (`setRoutePaths`). With it on, walked legs follow their paths;
+  a leg whose path is still being computed is straight in short dashes, and one with no path is
+  straight, dash-dot-dot; the row's notes count each ("3 walked legs follow their paths on this
+  map.", "2 legs are straight, in short dashes, while their paths are computed."). Hover text on
+  those lines says "Route (walking path pending)" or "Route (straight line: no walking path)".
+  Flights, transport and hearthstone legs stay straight.
+- **Layer defaults.** Painted art, relief, zone outlines and walking paths on; the coastline off
+  (it is fetched only once shown). Visibility is view state: it is not persisted, as no map view
+  state is.
 - **Honest counts.** The layer panel lists every layer, topmost first, with its glyph, what is
   drawn and notes that always name their unit (MAP-HONEST-5): points folded into zone counts,
   markers over the cap, points not placed and why, points or steps on other world maps, quests that
   start from an item, quest givers, objectives, turn-ins and flight masters with no spawn in the
   dataset (MAP-HONEST-4), flight masters of the other faction. Under the layers, the key names every
-  glyph, line style and badge and says how to read the grid (MAP-A11Y-10). Art is unavailable
-  without a compatible local set, and the proposal until proposals exist. The status line gives
+  glyph, line style and badge and says how to read the grid (MAP-A11Y-10). The art and terrain
+  layers are unavailable, with the reason, where they cannot be drawn (not loaded, none for this
+  world map), and the proposal until proposals exist. The status line gives
   the route on this surface ("Route: 54 of 55 steps on Kalimdor · 1 without a location"; steps on
   maps no surface shows are counted apart, "1 on maps with no surface") and, zoomed out, "Zoomed
   out: quest points shown as zone counts".
@@ -672,7 +798,10 @@ The centre panel (ARCHITECTURE §7, §12.4; MAPS.md §7). By the §4 import rule
   built from caches (a candidate per step input, points interned for finding stacks, merged stacks
   by their members), so a move rebuilds only what it touched; the same descriptor objects in a
   new order diff to nothing in the adapter. Hover writes nothing to the store, so no panel but the pointer line re-renders for it
-  (PERF-14). `docs/measurements/map-m3.json` has the numbers and how they were taken.
+  (PERF-14). With walking paths, each leg's path is asked for once per paths object, and a route
+  edit rebuilds only the route-line pieces it touched (MAPS §7.4); the map-edit bench with eight
+  path points per leg measured a 10,000-step move at 5.5-5.8 ms median against 5.0-5.5 ms without
+  paths (Node, the fake adapter). `docs/measurements/map-m3.json` has the numbers and how they were taken.
 
 ## 13. Project storage
 
@@ -858,8 +987,15 @@ button, so focus moves to the "Replace with a custom quest" that takes its place
 **Settings** (`SettingsDialog`, from the top bar). The character: faction, race and class (the
 Forever client's 56 playable pairs; a project holding another pair keeps it, marked as not
 playable), sex, start level (1 to the assumed level cap, 60 unless the project sets another), start
-XP (into the start level), what happened before the route (a new character, exactly the listed
-quests with their ids, or unknown) and riding trained before it. The route profile: XP rate,
+XP (into the start level), what happened before the route and riding trained before it. "Before
+the route" is a new character, exactly the listed quests, or partly known: the quests listed and
+maybe others (SIMULATION §7.1 `unknown`). The quest lists (completed, and in the log at the start,
+by id) show for the last two, labelled for the third as a partial record with what that means (a
+prerequisite or turn-in that fails only because a quest is missing from them is a warning that it
+cannot be checked, not an error), and are saved for both; an unrelated save never drops them.
+Choosing "A new character" empties them in the open dialog, where it can be seen (Cancel brings
+them back). A project that is new-character yet holds lists (an imported file) shows them, with a
+note that they are used as given (Milestone 6 review ENG-12). The route profile: XP rate,
 season and phase (empty: unknown), locale, dungeons, and hardcore, self-found, group quests and XP
 step skipping. The fields are a draft: "Save settings" applies them as one command ("Edit
 settings"), Cancel or Escape drops them; a press on the backdrop does not (UI-F10). The actions
@@ -914,7 +1050,7 @@ only, and the step keeps the text as written for export (§11, `plainGuideText`,
   is offered.
 - *Check guide* runs unwrap, CST, diagnostics and lowering with throwaway ids and shows the result
   in a region that takes focus: the guide's name and size ("One guide, “…”: 18 RXP steps, 40 route
-  steps; 2 warnings, 5 notes"), or for a Lua file each guide as a checkbox (all chosen). Changing an
+  steps; 2 warnings, 5 info issues"), or for a Lua file each guide as a checkbox (all chosen). Changing an
   option checks the same text again without moving focus; editing the text marks the result stale,
   and Import waits for a new check. A problem ("Paste guide text or open a file first.") takes
   focus on every attempt, the same one again included (UI-F12). A press on the backdrop keeps the
@@ -924,7 +1060,7 @@ only, and the step keeps the text as written for export (§11, `plainGuideText`,
   "Line 12, column 5", the message, the code and, where it applies, "RestedXP itself drops or
   changes this". An item with a line is a button; pressing it shows the line right after it
   (`SourceExcerpt`: two lines either side, the line marked with ▶ and a tint, its column outlined),
-  and pressing it again hides it. Counts by severity ("2 errors, 14 warnings, 30 notes"), a Show
+  and pressing it again hides it. Counts by severity ("2 errors, 14 warnings, 30 info issues"), a Show
   filter (all, errors and warnings, errors) and pages of 100.
 - *Refused.* A RestedXP protected import string (docs/RXP.md §3.3) is refused with `RXP019`'s
   sentence and why: those strings are licensed to one account; nothing is decoded, decrypted or
@@ -966,3 +1102,152 @@ only, and the step keeps the text as written for export (§11, `plainGuideText`,
 and announcements (happy-dom has no layout). The dialogs are at most 880 px wide
 (`min(880px, 100vw - 32px)`) and scroll inside; the layout at 1366×768, 1024×768 and 720px and the
 dark theme are still to check in a browser.
+
+## 16. Simulation and validation
+
+What the engine walk works out, shown in the shell (ARCHITECTURE §9.3, §9.4, §12.1; SIMULATION
+§7.7-§7.8; Milestone 6). The logic is `src/app`: the derived-results store (`derived.ts`: one walk
+per revision with simulation and validation, published as revisioned values; `provisionalNote`,
+`isCurrent`), its pipeline in a lazy chunk (`derived-pipeline.ts`), and `issue-codes.ts` over the
+registry. The ui only renders it: `src/ui/app/derived-view.ts` turns the derived state into row
+values, readouts and sentences (pure, tested alone), and the panels read it through memoised
+selectors (§11).
+
+**Principles.** Unknown stays unknown: a number the walk could not work out is `?` with the reason
+it recorded, said after "Unknown:" ("An item objective has no drop source in the data", "The
+quest’s XP is not in the data"), never 0; before the first walk the reason is "Not simulated
+yet: the route simulation is loading", or the failure. Every number carries its basis from its
+estimate: `≈` for an assumption, `E` for Era values standing in for Forever ones, `≥` for a lower
+bound, `≤` for an upper bound (§4). An assumed number that reads no parameter names the rule it
+rests on: a note's or an abandon's 0 s reads "the rule that a note takes no time (SIMULATION
+TIME-8)". Numbers that depend on travel time while walking paths are computed, or while the
+navigation data is still being checked, carry the pending hourglass with `provisionalNote`'s
+sentence ("Pending: 3 walking legs are still being computed; their times use the straight-line
+estimate."). No new colour: severity keeps its three tokens, everything else here is neutral.
+
+**Route rows** (§8). The estimate column (level after, XP gained or step time, "Rows show"), its
+markers, the pending hourglass (step-time column only) and the issue indicator are filled in from
+the walk as the row renders. A step is pending when one of its walking legs is still being
+computed, and, while the navigation data is being checked, every step that travels is (its time
+is the straight-line estimate until the check ends; Milestone 6 review UI-05); rows, row names and
+Details say which. The quest chip's difficulty is taken at the level the step starts at (the level
+after the previous step, or the start level), dashed while that level is a lower bound; the
+colours are the reserved difficulty colours, unchanged. After an edit the walk follows within a
+timer tick: until it does, rows are matched to the published walk by step id, and a step the walk
+has not seen yet says "Not simulated yet: the route is being simulated again after the last edit".
+
+**Status bar: where the route metrics go.** ARCHITECTURE §12.4 puts the level and XP bar, the
+duration and XP per hour in the status bar; it says nothing about the route's XP total and the
+time shares, so they go where they take least room:
+
+- *Always visible:* the XP bar at the active step ("Level after step 12"), else at the end of the
+  route; "Time" (the route's duration), "XP" (the route's XP total, hidden at 1440px and below)
+  and "XP/h", each a `ReadoutValue` with its markers; Time and XP/h carry the pending marker while
+  the walk is provisional.
+- *XP per hour's bound* (UI-10). It is the known XP over the known time. When some steps' time is
+  unknown (the duration is `≥`) and all XP is known, the true rate is at most this: `≤`, said "at
+  most". When some XP is unknown and all time is known, it is at least this: `≥`. When both are
+  missing it is bounded in no direction, so it is `?`, and the reason gives the rate over the known
+  steps. The shares are of the known time only: bounded in no direction, their basis says "of the
+  known time only (2 steps with unknown time not counted)".
+- *Summary* (a disclosure button after XP/h, `RouteSummary`): a table of every route metric with
+  its basis in words: duration, XP gained, level reached, XP per hour, and the shares of travel,
+  combat and objectives, interaction and waiting (the time-based ones pending while provisional),
+  then notes: the pending sentence, "Updating: …" while the walk lags an edit, what is not counted
+  ("2 steps with unknown time are not counted: the route takes at least this long."), that XP per
+  hour and the shares are over the known time and XP, and the travel model in a sentence; then
+  every parameter the route reads that is an assumption or an Era value, as a list, each with its
+  origin ("run speed (Era value)", "seconds per kill (your assumption)"): all of them, never "and 3
+  more", which only tooltips use (UI-13). The travel sentence names the world maps whose
+  navigation files failed ("except on Kalimdor (world map 1)", the id kept for diagnosis; a map
+  without a name is "world map 36"), from the map panel's surfaces (UI-14). The panel opens above
+  the status bar, at its right end, over the side panel (`position: absolute` in the status bar,
+  its containing block, so it clears a bar of two lines at 1024px and below; `--frl-z-popover`),
+  and closes with its button, Escape (focus back on the button), a press outside, or keyboard focus
+  leaving it: a Tab or Shift+Tab past it closes it, so it never hides the focused control behind
+  it (WCAG 2.4.11, UI-06). It holds no controls; when its content scrolls, the browser makes the
+  panel itself a tab stop for keyboard scrolling. At 720px and below the page scrolls, so the open
+  panel is laid out in the flow, on its own line under its button: it scrolls with the button and
+  never covers it (UI-07).
+
+**Simulation status** (`SimulationStatus`, before the optimiser in the status bar). One item that
+says what the simulation is doing, never as a dialog and never announced by itself. It has
+priority in the bar (§6): it never shrinks or clips.
+
+| State | Shows |
+|---|---|
+| loading / failed | "Simulation: Loading" / "Simulation: Failed" with the reason |
+| checking | "Travel: Checking navigation data" (times are straight-line estimates meanwhile; the rows that travel are pending) |
+| computing | "Paths", a progress bar (legs answered of those asked, `aria-valuetext` "3 of 8 legs"), "3/8", and "Cancel" (named "Cancel computing walking paths"). While the run has not said how many legs it computes (a total of 0), and between two runs while legs are still pending (after Resume, until the walk that asks for them again), it is "Paths: Counting legs…" with the indeterminate bar (the unknown hatching under reduced motion), `aria-valuetext` "Counting legs", no numbers and never "0/0" (UI-08) |
+| paused | "Paths: Paused, 42 legs pending" and "Resume" |
+| straight-line | "Travel: Straight-line estimates" (or "Some straight-line estimates" for some maps, or after a worker failure) with the reason in words: "Navigation data is unavailable (…): every travel time is a straight-line estimate." |
+| ready | nothing; while the item still holds keyboard focus (computing ended under the focused Cancel), "Paths: None pending", until focus leaves it |
+
+Cancel calls the derived store's `cancelPaths` (legs computed so far are kept; pending legs keep
+their straight-line estimates, labelled pending, until Resume, `resumePaths`) and announces
+"Computing walking paths paused: pending legs keep their straight-line estimates. Resume from the
+status bar."; Resume announces "Computing walking paths resumed.". Keyboard focus is never
+dropped to the page (UI-03): each button replaces the other, and focus moves to the one that takes
+its place, or to the item when none does; the item never disappears between two states while
+legs are pending; and when computing ends in the background under the focused Cancel, the item
+stays, focused and showing its ring, as "Paths: None pending" until focus leaves it. Background
+work never moves focus anywhere else: the item takes focus back only when the focused control
+inside it went.
+
+**Validation tab** (`ValidationPanel`, loaded on first use). The tab's badge is the worst
+severity's shape and the total, named in words ("2 errors, 14 warnings, 30 info issues"; one word,
+"info", in the counts, the filter and its messages, UI-20); it is empty, never "no issues", until
+the route has been checked. The panel:
+
+- says "Not checked yet" with the reason while there are no results, and that no issues are
+  claimed to be absent;
+- heads the list with the counts in words, the pending sentence when travel checks may still
+  change, and the last walk's failure when a later one failed;
+- lists the issues in the validator's order (route-level first, then by step), each with its
+  severity's shape and word, message, where it is ("Step 12", "Route", or "A step no longer in the
+  route" while the walk lags an edit), its code and, from the registry, what the code means;
+- filters with "Show": all, errors and warnings, errors, warnings, info (each with its count),
+  announcing the count shown; pages of 100 with "Show 100 more";
+- makes each issue about a step a button, all of them one composite: one tab stop (the issue last
+  used), ↑ ↓ Home End between issues, Enter or Space (or a click) to choose. Choosing selects the
+  step, puts keyboard focus on the route list with that step active (the map follows the active
+  step) and announces "Showing step 12 in the route: error VAL004-min-level.", and only that: the
+  new selection's count is not said after it (§9 rule 6, UI-11); the tab stays on Validation, so
+  the next issue is a Tab away. Route-level issues are text, not buttons.
+
+**Details.** For the active step: Duration (with the pending marker and its reason, and the
+override when one replaces the step's own work), XP gained and Level after, each with its
+markers, and "Issues at this step" (the kit's `IssueList` without buttons, and a pointer to the
+Validation tab for the explanations).
+
+**Performance** (Milestone 6 review PERF-11). No per-row heavy work: rows are built once per route
+change; the walk's numbers are read as the ~40 mounted rows render. The pipeline publishes the
+paths' progress once per worker message; only the simulation item draws it, so it subscribes on
+its own (`simulationStatusOf` with `sameSimulationStatus`), and the status bar's metrics, the
+validation panel (`sameResultsView`) and the route rows (`sameRowSource`) compare the derived
+state without the progress counts, so a progress tick re-renders the simulation item alone. The
+rows are memoised: `deriveRow` hands back the same model for a row whose numbers a new walk left as
+they were, and the list's row callbacks are one stable object, so a re-walk re-renders only the
+rows whose numbers changed. The side panel's tab counts and Details use narrow selectors with
+equality. Issue counts are cached per issue list. Measured on a 10,000-step route with 10,877
+issues (happy-dom and React's development build, so relative; `act` around one publish; median of
+the three runs' medians of 40, on a loaded machine): a progress tick 7.0 → 0.41 ms with Details
+open and 11.0 → 0.37 ms with the Validation tab open; a re-walk publish with unchanged numbers
+6.6 → 3.8 ms and 11.0 → 5.5 ms; an edit 73 → 70 ms and 117 → 108 ms (the route view is rebuilt,
+so it is unchanged within the noise). Throttling the progress publishes is the pipeline's
+(ARCHITECTURE §12.1); the browser commit times are for the Milestone 9 run.
+
+**Checked by hand** (Milestone 6 review fixes, in the built app in headless Edge through the
+DevTools protocol, walking paths held by holding the navigation files): the status bar at 721-1600px
+in both themes and under forced colours (§6); Cancel then Resume by keyboard keeps focus on a
+button (Resume, then Cancel at once), and computing ending under the focused Cancel leaves focus on
+the item with its ring (Shift+Tab then reaches Summary, and the item goes); with the summary open,
+thirty Shift+Tab stops from it leave no focused control under the panel (it closes on the first
+step out); at 375×812 the open panel sits in the flow under its button and scrolls with it;
+choosing an issue says only "Showing step …"; with the navigation manifest held, the rows that
+travel say the checking sentence (14 of 27 on the sample route) and so does Details; a map whose
+navigation files fail is named "Kalimdor (world map 1)"; at 800×700 (a 288px route panel) titles on
+rows with an issue marker keep at least 90px. The component and shell tests (happy-dom and Testing
+Library) cover rendering with issues, the keyboard path from an issue to its step, basis, bound and
+pending markers, Cancel and Resume with focus, names and announcements, what a progress tick
+re-renders, and the shell over the real pipeline (`App.pipeline.test.tsx`).

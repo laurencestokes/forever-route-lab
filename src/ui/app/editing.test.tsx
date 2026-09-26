@@ -169,7 +169,7 @@ describe('Details editors', () => {
     // The editor is not remounted by its own commit: focus stays in the field (UI-F4).
     expect(document.activeElement).toBe(minutes);
     expect(sidePanel().getByLabelText('Duration override (minutes)')).toBe(minutes);
-    expect(sidePanel().getByText('2m 30s (override)')).toBeTruthy();
+    expect(sidePanel().getByText("(override 2m 30s for the step's own work)")).toBeTruthy();
     const location = sidePanel().getByRole('group', { name: 'Location' });
     fireEvent.change(within(location).getByLabelText('Zone'), { target: { value: String(steps()[1]?.location?.source.space === 'zone' ? steps()[1]?.location?.source.uiMapId : '') } });
     fireEvent.change(within(location).getByLabelText('X %'), { target: { value: '12.5' } });
@@ -321,6 +321,27 @@ describe('Settings', () => {
     const race = dialog.getByLabelText<HTMLSelectElement>('Race');
     expect(race.value).toBe('Orc');
     expect(race.selectedOptions[0]?.textContent).toBe('Orc (not a race of the Alliance)');
+  });
+
+  it('shows and keeps a partly known history’s quest lists as a partial record (ENG-12)', async () => {
+    const { store } = setup();
+    act(() => {
+      store.dispatch(updateSettings({ character: { priorHistory: 'unknown', priorCompletedQuests: [900_001 as QuestId], priorQuestLog: [900_004 as QuestId] } }));
+    });
+    const dialog = await openSettings();
+    expect(dialog.getByLabelText<HTMLInputElement>('Quests known to be completed before the route (ids, a partial record)').value).toBe('900001');
+    expect(dialog.getByLabelText<HTMLInputElement>('Quests known to be in the log at the start (ids, a partial record)').value).toBe('900004');
+    expect(dialog.getByText(/^A partial record:/)).toBeTruthy();
+    // An unrelated change keeps the lists.
+    fireEvent.change(dialog.getByLabelText('Start level (1 to 60)'), { target: { value: '8' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Save settings' }));
+    expect(store.getState().project.character).toMatchObject({ startLevel: 8, priorHistory: 'unknown', priorCompletedQuests: [900_001], priorQuestLog: [900_004] });
+    // Choosing "A new character" empties them where the user sees it.
+    const again = await openSettings();
+    fireEvent.change(again.getByLabelText('Before the route'), { target: { value: 'fresh' } });
+    expect(again.queryByLabelText(/Quests .*completed before the route/)).toBeNull();
+    fireEvent.click(again.getByRole('button', { name: 'Save settings' }));
+    expect(store.getState().project.character).toMatchObject({ priorHistory: 'fresh', priorCompletedQuests: [], priorQuestLog: [] });
   });
 
   it('drops the draft on Cancel', async () => {

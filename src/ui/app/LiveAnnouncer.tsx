@@ -46,6 +46,11 @@ export interface AnnounceChannel {
 export interface Announcer extends LiveText {
   /** Says a message in the top-most open dialog's region, else in the shell's (`subscribe`, `getMessage`). */
   readonly announce: Announce;
+  /**
+   * How many messages have been said so far, in any region. A pending message that a newer one
+   * supersedes (the settled selection count after a command said its own result) compares it.
+   */
+  readonly said: () => number;
   /** Routes announcements to a modal dialog's region until the channel closes; the newest open channel wins. */
   readonly openChannel: (region: DialogRegion) => AnnounceChannel;
 }
@@ -98,9 +103,11 @@ interface Channel {
 export function createAnnouncer(): Announcer {
   const shell = createDialogRegion();
   const channels: Channel[] = [];
+  let count = 0;
   const announce: Announce = (text) => {
     const next = text.trim();
     if (next === '') return;
+    count += 1;
     const top = channels.at(-1);
     if (top === undefined) {
       shell.say(next);
@@ -111,6 +118,7 @@ export function createAnnouncer(): Announcer {
   };
   return {
     announce,
+    said: () => count,
     subscribe: shell.subscribe,
     getMessage: shell.getMessage,
     openChannel(region) {
@@ -167,9 +175,14 @@ export const SELECTION_ANNOUNCE_DELAY_MS = 500;
  * Announces the number of selected steps once it settles ("12 steps selected", "Selection
  * cleared"), so Shift+arrow runs say the final count only. Arrowing keeps one step selected and is
  * not announced: the list already reads the new active option. Selection changes that come with a
- * project change (a command, undo, redo, a load) are left to that change's own message.
+ * project change (a command, undo, redo, a load) are left to that change's own message, and so are
+ * those whose command says its own result before the count settles (choosing an issue: "Showing
+ * step 12 in the route: …", UI-11): with an `Announcer`, a message said after the selection changed
+ * cancels the count.
  */
-export function useSelectionAnnouncements(store: EditorStore, announce: Announce, delayMs = SELECTION_ANNOUNCE_DELAY_MS): void {
+export function useSelectionAnnouncements(store: EditorStore, announcer: Announce | Pick<Announcer, 'announce' | 'said'>, delayMs = SELECTION_ANNOUNCE_DELAY_MS): void {
+  const announce = typeof announcer === 'function' ? announcer : announcer.announce;
+  const said = typeof announcer === 'function' ? null : announcer.said;
   useEffect(() => {
     let { revision } = store.getState();
     let size = store.getState().selection.stepIds.size;
@@ -190,8 +203,10 @@ export function useSelectionAnnouncements(store: EditorStore, announce: Announce
       if (nextSize === size) return;
       size = nextSize;
       cancel();
+      const mark = said?.() ?? 0;
       timer = setTimeout(() => {
         timer = null;
+        if (said !== null && said() !== mark) return;
         announce(selectionMessage(size));
       }, delayMs);
     });
@@ -199,5 +214,5 @@ export function useSelectionAnnouncements(store: EditorStore, announce: Announce
       cancel();
       unsubscribe();
     };
-  }, [store, announce, delayMs]);
+  }, [store, announce, said, delayMs]);
 }

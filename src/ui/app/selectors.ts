@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
-import type { EditorState, EditorStore } from '../../app';
+import type { DerivedState, EditorState, EditorStore } from '../../app';
 import { useEditor } from '../../app/react';
 import type { QuestId } from '../../domain/ids';
 import type { RouteStep } from '../../domain/route';
 import { type ActiveRow, type ActiveTarget, resolveActiveTarget, routeQuestIds, type RouteView } from '../app-model';
+import type { IssueCounts } from '../lib/issues';
+import { validationCounts } from './derived-view';
 
 /**
  * Store slices for the shell's panels (F13). Each panel subscribes to the slices it draws, so a
@@ -33,6 +35,40 @@ export const selectClipboardCount = (s: EditorState) => s.clipboard.steps.length
 export const selectRouteProfile = (s: EditorState) => s.project.routeProfile;
 export const selectAssumptions = (s: EditorState) => s.project.assumptions;
 export const selectTheme = (s: EditorState) => s.view.theme;
+export const selectRevision = (s: EditorState) => s.revision;
+
+// Derived results (src/app/derived.ts), for `useDerivedSelector`: the state is null outside a
+// DerivedStoreProvider (component tests), and every panel then says "not simulated".
+
+/** The whole derived state; pair it with an equality below, so a panel re-renders only for what it draws. */
+export const selectDerived = (s: DerivedState | null): DerivedState | null => s;
+
+/**
+ * Whether two derived states show the same results (PERF-11): everything but the paths' progress
+ * counts and the selected step. The pipeline publishes the progress once per worker message while
+ * walking paths are computed; the status bar's metrics, the validation panel and the route rows do
+ * not draw it, so with this equality those ticks re-render only the simulation item (which selects
+ * `simulationStatusOf` itself).
+ */
+export function sameResultsView(a: DerivedState | null, b: DerivedState | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return (
+    a.results === b.results &&
+    a.status === b.status &&
+    a.failure === b.failure &&
+    a.travel === b.travel &&
+    a.paths.state === b.paths.state &&
+    a.paths.failure === b.paths.failure
+  );
+}
+
+/** The latest results' issue counts, or null while nothing is checked; compare with `sameCounts`. */
+export const selectIssueCounts = (s: DerivedState | null): IssueCounts | null => validationCounts(s);
+
+export function sameCounts(a: IssueCounts | null, b: IssueCounts | null): boolean {
+  return a === b || (a !== null && b !== null && a.error === b.error && a.warning === b.warning && a.info === b.info);
+}
 
 /** routeQuestIds, cached on the step array: typing in a note keeps the array's content, not its identity. */
 function lastByIdentity<A extends object, R>(compute: (arg: A) => R): (arg: A) => R {

@@ -1,37 +1,47 @@
-import { memo, useMemo, type RefObject } from 'react';
+import { memo, useMemo, useState, type RefObject } from 'react';
 import { type EditorStore, selectionRuns } from '../../app';
-import { useEditor } from '../../app/react';
+import { useDerivedSelector, useEditor } from '../../app/react';
+import type { DatasetView } from '../../domain/dataset';
 import type { StepId } from '../../domain/ids';
 import {
   type ActiveRow,
   dropToIndex,
+  ESTIMATE_LEGEND,
+  ESTIMATE_LEGEND_SPOKEN,
   PLACEHOLDER_DATA_NOTICE,
   type RouteView,
   selectedRowKeys,
-  UNKNOWN_LEGEND,
-  UNKNOWN_LEGEND_SPOKEN,
 } from '../app-model';
 import {
+  AssumedMarker,
   Button,
   EmptyState,
+  ESTIMATE_COLUMN_LABELS,
+  ESTIMATE_COLUMNS,
   IconButton,
   PanelHeader,
+  PendingMarker,
   PlaceholderTag,
   RouteList,
+  Select,
   Toolbar,
   ToolbarSeparator,
   VisuallyHidden,
   formatInteger,
   plural,
+  type EstimateColumn,
   type SelectionMode,
 } from '../kit';
+import { createRowDeriver, sameRowSource } from './derived-view';
 import { INSERT_GRIND_TITLE, type RouteActions } from './route-actions';
-import { selectClipboardCount, selectEditingLocked, selectHistory, selectSelection, useActiveTarget } from './selectors';
+import { selectClipboardCount, selectDerived, selectEditingLocked, selectHistory, selectSelection, useActiveTarget } from './selectors';
 import { routeEditorKeyHandler } from './useShortcuts';
 
 export interface RoutePanelProps {
   readonly store: EditorStore;
   readonly view: RouteView;
+  /** The project's data: the rows take quest difficulty at the level each step starts at. */
+  readonly dataset: DatasetView;
   readonly routeName: string;
   /** Placeholder data is loaded: show its line in the banner. */
   readonly placeholder: boolean;
@@ -51,15 +61,21 @@ export interface RoutePanelProps {
 /** `aria-disabled` for an unavailable toolbar item: it stays focusable (docs/UI.md §9, F-03). */
 const unavailable = (flag: boolean): true | undefined => (flag ? true : undefined);
 
+const isEstimateColumn = (value: string): value is EstimateColumn => (ESTIMATE_COLUMNS as readonly string[]).includes(value);
+
+const COLUMN_OPTIONS = ESTIMATE_COLUMNS.map((column) => ({ value: column, label: ESTIMATE_COLUMN_LABELS[column] }));
+
 /**
  * The route editor (left panel): header with history, the banner (placeholder data, a sample
- * route's notice) and its legend, the
- * route actions and the virtualised list. It reads the selection, the lock and the history; the
- * rows come from the caller, built once per route revision.
+ * route's notice) with the key to the marks on numbers and the choice of the rows' estimate
+ * column, the route actions and the virtualised list. It reads the selection, the lock and the
+ * history; the rows come from the caller, built once per route revision, and the walk's numbers
+ * (derived results) fill in only the rows in view (`deriveRow`), so a new walk never rebuilds them.
  */
 export const RoutePanel = memo(function RoutePanel({
   store,
   view,
+  dataset,
   routeName,
   placeholder,
   notice = null,
@@ -77,6 +93,10 @@ export const RoutePanel = memo(function RoutePanel({
   const { index: activeIndex } = useActiveTarget(store, view, activeRow);
   const selectedKeys = useMemo(() => selectedRowKeys(view, selection.stepIds), [view, selection.stepIds]);
   const onKeyDown = useMemo(() => routeEditorKeyHandler(store, actions), [store, actions]);
+  // The rows read the results, not the paths' progress: a progress tick does not re-render them (PERF-11).
+  const derived = useDerivedSelector(selectDerived, sameRowSource);
+  const deriveRow = useMemo(() => createRowDeriver(view, dataset, derived), [view, dataset, derived]);
+  const [column, setColumn] = useState<EstimateColumn>('level');
 
   const rowIds = (index: number): readonly StepId[] => view.rowSteps[index] ?? [];
   const rowIsSelected = (index: number): boolean => {
@@ -184,10 +204,31 @@ export const RoutePanel = memo(function RoutePanel({
             <span>{notice}</span>
           </p>
         )}
-        <p className="frl-app-banner__legend">
-          <span aria-hidden="true">{UNKNOWN_LEGEND}</span>
-          <VisuallyHidden>{UNKNOWN_LEGEND_SPOKEN}</VisuallyHidden>
-        </p>
+        <div className="frl-app-banner__legend">
+          <p className="frl-app-banner__key">
+            <span aria-hidden="true" className="frl-app-banner__marks">
+              <span>{ESTIMATE_LEGEND[0]}</span>
+              <span>{ESTIMATE_LEGEND[1]}</span>
+              <span>
+                <AssumedMarker reason="era-fallback" className="frl-app-banner__mark" /> Era value
+              </span>
+              <span>
+                <PendingMarker silent className="frl-app-banner__mark" /> {ESTIMATE_LEGEND[3]}
+              </span>
+            </span>
+            <VisuallyHidden>{ESTIMATE_LEGEND_SPOKEN}</VisuallyHidden>
+          </p>
+          <Select
+            label="Rows show"
+            size="sm"
+            className="frl-app-banner__column"
+            value={column}
+            options={COLUMN_OPTIONS}
+            onChange={(value) => {
+              if (isEstimateColumn(value)) setColumn(value);
+            }}
+          />
+        </div>
       </div>
       <div className="frl-app-route__toolbar">
         <Toolbar label="Route actions">
@@ -303,6 +344,8 @@ export const RoutePanel = memo(function RoutePanel({
       <div className="frl-app-route__list">
         <RouteList
           rows={view.rows}
+          deriveRow={deriveRow}
+          estimateColumn={column}
           label={routeName}
           activeIndex={activeIndex}
           selectedKeys={selectedKeys}

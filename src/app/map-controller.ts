@@ -1,6 +1,6 @@
 import type { DatasetView, PublishedPoint, QuestId, RouteStep, SourcedPoint, StepId, UiMapId, WorldMapId, WorldPoint } from '../domain';
 import { attributeZone, zoneFramesContaining, type MapGeometry } from '../geo';
-import type { LocalArt, LocalArtEntry, LocalArtLoad } from '../infra/maps';
+import type { ArtImage, ArtManifestLoad, LocalArt, LocalArtEntry, LocalArtLoad, MapResources, TerrainArcKind, TerrainArcsLoad, TerrainManifestLoad } from '../infra/maps';
 import {
   EMPTY_LAYER_STATS,
   LAYER_IDS,
@@ -26,15 +26,19 @@ import {
   type MapView,
   type MapViewState,
   type MarkerBadge,
+  type OutlineInput,
+  type ReliefInput,
   type RouteInput,
+  type RoutePathsInput,
   type StepPlacement,
   type SurfaceId,
   type SurfaceInfo,
   type UnplacedReason,
   type WorldBounds,
 } from '../map/adapter';
-import { createMapLayers, groupDigits, layerStatsNotes, plainEqual, type LodOverrides, type MapLayers } from '../map/layers';
+import { createMapLayers, groupDigits, layerStatsNotes, plainEqual, RELIEF_OPACITY, type LodOverrides, type MapLayers } from '../map/layers';
 import { type DatasetSource, datasetViewInputOf } from './dataset-source';
+import type { RoutePathFeed } from './route-paths';
 import {
   createDrawnRouteFilter,
   createRouteInputBuilder,
@@ -90,10 +94,19 @@ import { plainGuideText } from './ui-text';
  *   the active step: when it changes, the map brings it into view (`focus`, which pans only when the
  *   point is not comfortably visible). The zone jumped to stays emphasised until it is panned out
  *   of view or the surface changes.
- * - **Local art** (dev/preview only, D-018): only the images the art layer draws at this level of
- *   detail are loaded and verified (`LocalArt.load`): the continent image zoomed out, the zone
- *   images in view zoomed in. They are drawn from object URLs of the verified bytes, revoked on
- *   detach.
+ * - **Art and terrain** (D-032, D-033): when the map first mounts it loads the committed art and
+ *   terrain manifests (`MapResources`), never during startup. The art layer draws the map being
+ *   viewed: the continent image zoomed out, the image of the zone being viewed zoomed in (one at a
+ *   time: zone images have painted borders). The relief is the backdrop, faint under drawn art;
+ *   the zone frames lose their fill over art. Zone outlines and the coastline are fetched and
+ *   verified per world map when their layer is first shown there. A failed load never breaks the map: the layer says why,
+ *   the status line says what the map shows instead, and the rest draws as before.
+ * - **Local art** (dev/preview only, D-018): a compatible local set's art replaces the committed
+ *   art. Only the images drawn at this level of detail are loaded and verified (`LocalArt.load`),
+ *   and drawn from object URLs of the verified bytes, revoked on detach.
+ * - **Walking paths** (MAPS §7.4): `setRoutePaths` takes the navigation model's paths; with the
+ *   walking-paths toggle on, walked legs follow them, and legs without one are drawn straight as
+ *   pending or fallback.
  * - **Timing:** `frl:map:sync` (User Timing) measures a store change or view change to the last
  *   `setLayer`, with the trigger and the layers set as its detail (ARCHITECTURE §14: one route
  *   edit applied ≤ 8 ms); at most `MAX_SYNC_MEASURES` are kept. The adapter measures its own diff,
@@ -122,8 +135,20 @@ export interface MapControllerOptions {
   readonly data: DatasetSource;
   /** The geometry resolution uses: the placeholder, or it merged with a compatible local set. */
   readonly geometry: MapGeometry;
-  /** The local set's art; null or omitted for none. */
+  /** The local set's art; null or omitted for none. While it lists images it replaces the committed art. */
   readonly art?: LocalArt | null | undefined;
+  /**
+   * The committed painted art and terrain byproducts (`createMapResources` in infra/maps), loaded
+   * when the map first mounts; null or omitted for none: the map then draws zone frames only.
+   */
+  readonly resources?: MapResources | null | undefined;
+  /**
+   * The walking paths of the navigation model (`createRoutePathFeed`, src/app/route-paths.ts):
+   * while the map is mounted the controller follows the feed's current paths (as `setRoutePaths`
+   * would) and tells it the view, so only legs being drawn ask for a path. Null or omitted: none,
+   * or the caller uses `setRoutePaths` itself.
+   */
+  readonly paths?: RoutePathFeed | null | undefined;
   /**
    * A step's hover text from its current position, for example `12 · Accept: Your Place in the World`.
    * The label provider shows it as plain text: guide colour tokens and escapes are removed
@@ -188,8 +213,17 @@ export interface MapStatus {
     /** Whether "fit route" has anything to fit (a placed step on a surface). */
     readonly canFit: boolean;
   };
-  /** Local art drawn on the shown surface (verified images). */
+  /** Art images drawn on the shown surface (committed, or a local set's verified images). */
   readonly artDrawn: number;
+  /**
+   * What the map shows under its markers, for the notice: the committed painted art, a local set's
+   * art, the shaded relief without art, or only the schematic zone frames.
+   */
+  readonly backdrop: MapBackdrop;
+  /** The walking-paths toggle (not a layer of its own: it changes how the route line draws walked legs). */
+  readonly walkingPaths: WalkingPathsStatus;
+  /** Short, non-blocking sentences for the status line: map resources that could not be loaded, and what the map shows instead. */
+  readonly problems: readonly string[];
   /** Where the active step is (for "focus step"), or null when no step is active. */
   readonly activeStep: { readonly stepId: StepId; readonly number: number; readonly placement: ActivePlacement } | null;
   /** A merged marker's items waiting for the user's choice, or null. */
@@ -217,6 +251,16 @@ export interface MapPickStatus {
   readonly label: string;
 }
 
+export type MapBackdrop = 'art' | 'local-art' | 'relief' | 'schematic';
+
+export interface WalkingPathsStatus {
+  readonly visible: boolean;
+  /** Why walking paths cannot be drawn (none are given); null when they can. */
+  readonly unavailable: string | null;
+  /** How the route line draws the walked legs on this surface. */
+  readonly notes: readonly string[];
+}
+
 /** An active step's placement, without its point. */
 export type ActivePlacement =
   | { readonly kind: 'point'; readonly surface: SurfaceId }
@@ -231,6 +275,10 @@ export interface MapEngineSetup {
   readonly geometry: MapGeometry;
   /** The compatible local set's art (`LoadedGeometry.art`), or null. */
   readonly art: LocalArt | null;
+  /** The committed painted art and terrain (`createMapResources` in infra/maps), for the controller; null or omitted for none. */
+  readonly resources?: MapResources | null | undefined;
+  /** The walking paths for the route line (`createRoutePathFeed`), for the controller's `paths` option; null or omitted for none. */
+  readonly paths?: RoutePathFeed | null | undefined;
   /** Loads the map engine (Leaflet, in its own chunk) and resolves to its adapter factory. */
   readonly loadAdapter: () => Promise<MapAdapterFactory>;
 }
@@ -273,6 +321,11 @@ export interface MapController {
   readonly jumpToZone: (id: UiMapId) => boolean;
   /** Highlights the step markers of the route rows under the pointer; null or empty clears it. */
   readonly hoverSteps: (ids: readonly StepId[] | null) => void;
+  /**
+   * The walking paths the route line follows (the navigation model's; MAPS §7.4), or null for
+   * none. Give a new object whenever an answer changes: the route layers are rebuilt only then.
+   */
+  readonly setRoutePaths: (paths: RoutePathsInput | null) => void;
   /** Runs one option of the pending choice (`getStatus().choice`) and closes it. */
   readonly choose: (index: number) => void;
   /** Runs the pending choice's "all" action and closes it. */
@@ -315,13 +368,18 @@ const LINE_WORDS: Readonly<Record<LineStyle, string>> = {
   transport: 'Transport',
   flight: 'Flight',
   hearth: 'Hearthstone',
+  'route-pending': 'Route (walking path pending)',
+  'route-fallback': 'Route (straight line: no walking path)',
   highlight: 'Selected leg',
   proposal: 'Proposed route',
 };
 
 /** How the items of a merged marker are called in its choice. */
 const CHOICE_NOUNS: Readonly<Record<LayerId, readonly [string, string]>> = {
+  relief: ['image', 'images'],
   art: ['image', 'images'],
+  coastline: ['outline', 'outlines'],
+  'zone-outlines': ['outline', 'outlines'],
   'zone-frames': ['frame', 'frames'],
   'available-quests': ['quest giver', 'quest givers'],
   objectives: ['objective target', 'objective targets'],
@@ -334,6 +392,24 @@ const CHOICE_NOUNS: Readonly<Record<LayerId, readonly [string, string]>> = {
 };
 
 const NO_ART: readonly ArtInput[] = [];
+const NO_RELIEF: readonly ReliefInput[] = [];
+const NO_OUTLINES: readonly OutlineInput[] = [];
+
+/** The art layer's note on whose artwork it is (D-033 rule 2); the About dialog has the full notice. */
+export const MAP_ART_OWNER_NOTE =
+  'Blizzard Entertainment’s artwork (© Blizzard Entertainment, Inc.), extracted from the World of Warcraft: Forever client. This project is not affiliated with or endorsed by Blizzard Entertainment; About has the notice.';
+
+/** What each terrain layer is (D-032). */
+const TERRAIN_NOTES: Readonly<Record<'relief' | 'zone-outlines' | 'coastline', string>> = {
+  relief: 'Shaded relief computed by this project from the client’s terrain heights (about 17 yd per pixel; D-032), not the painted art.',
+  'zone-outlines': 'Zone borders from the client’s terrain areas (D-032). A picture: points are still attributed by their published zone.',
+  coastline: 'Shores of the sea, lakes and rivers from the client’s terrain liquids (D-032).',
+};
+
+const TERRAIN_WHAT: Readonly<Record<TerrainArcKind, string>> = { zones: 'Zone outlines', coast: 'The coastline' };
+
+/** The terrain arc file each outline layer draws. */
+const OUTLINE_KIND: Readonly<Record<'zone-outlines' | 'coastline', TerrainArcKind>> = { 'zone-outlines': 'zones', coastline: 'coast' };
 
 const UNAVAILABLE: Partial<Readonly<Record<LayerId, string>>> = {
   proposal: 'No proposal is open (proposals arrive with the optimiser, Milestones 7 and 8)',
@@ -433,6 +509,10 @@ interface OpenChoice {
 export function createMapController(options: MapControllerOptions): MapController {
   const { store, data, geometry } = options;
   const art = options.art ?? null;
+  const resources = options.resources ?? null;
+  const pathFeed = options.paths ?? null;
+  /** A compatible local set's art replaces the committed art (D-018; dev and preview only). */
+  const localArt = art !== null && art.status.kind === 'listed';
   const layers: MapLayers = createMapLayers(options.lod === undefined ? { geometry } : { geometry, lod: options.lod });
   const surfaces = layers.surfaces;
   const zones = zoneGroups(geometry, surfaces);
@@ -444,6 +524,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
   let failure: string | null = null;
   let everMounted = false;
   let unsubscribeStore: (() => void) | null = null;
+  let unsubscribeFeed: (() => void) | null = null;
   let view: MapView | null = null;
   let activeStep: StepId | null = null;
   let followed: StepId | null = null;
@@ -477,6 +558,21 @@ export function createMapController(options: MapControllerOptions): MapControlle
   let artInputsKey = '';
   let artGeneration = 0;
 
+  // Committed art and terrain (D-032, D-033): the manifests once (null while loading), the arc
+  // files per world map and kind, each decoded once into an input that keeps its identity.
+  let artManifest: ArtManifestLoad | null = null;
+  let terrainManifest: TerrainManifestLoad | null = null;
+  let artLoading = false;
+  let terrainLoading = false;
+  const arcLoads = new Map<string, TerrainArcsLoad | 'loading'>();
+  const arcInputs = new Map<string, OutlineInput>();
+  let arcVersion = 0;
+  /** Committed images per world map, for the loaded manifest. */
+  const imagesByMap = new Map<WorldMapId, readonly ArtImage[]>();
+
+  // Walking paths (MAPS §7.4): null until the navigation model gives some.
+  let routePaths: RoutePathsInput | null = null;
+
   // Memoised view models ---------------------------------------------------------------------
 
   const datasetOf = (state: EditorState): DatasetView => data.view(datasetViewInputOf(state.project));
@@ -507,6 +603,15 @@ export function createMapController(options: MapControllerOptions): MapControlle
       flightMasterModel(dataset, data.flightMasterIds, { faction, race, class: cls }),
   );
   const summaryOf = lastOf((route: RouteInput) => routeMapSummary(route));
+  const reliefOf = lastOf((manifest: TerrainManifestLoad | null): readonly ReliefInput[] =>
+    manifest?.kind !== 'loaded'
+      ? NO_RELIEF
+      : manifest.manifest.maps.flatMap((map) => (map.relief === null ? [] : [{ mapId: map.mapId, url: map.relief.url, bounds: map.relief.bounds }])),
+  );
+  const outlinesOf = {
+    zones: lastOf((_version: number): readonly OutlineInput[] => outlineList('zones')),
+    coast: lastOf((_version: number): readonly OutlineInput[] => outlineList('coast')),
+  };
 
   const findStep = lastOf((steps: readonly RouteStep[], id: StepId | null): RouteStep | null => (id === null ? null : (steps.find((step) => step.id === id) ?? null)));
   const activeStepOf = (state: EditorState): RouteStep | null => findStep(state.project.route.steps, activeStep);
@@ -599,6 +704,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
       case 'zone':
       case 'surface':
       case 'art':
+      case 'terrain':
         return null;
     }
   }
@@ -656,11 +762,35 @@ export function createMapController(options: MapControllerOptions): MapControlle
         if (art !== null && art.status.kind === 'listed') {
           notes.push(`${groupDigits(art.status.count)} images in the local set; only those drawn at this level of detail are loaded and verified; never deployed.`);
           for (const [uiMapId, reason] of artRefused) notes.push(`UiMap ${String(uiMapId)} art ${reason}.`);
+        } else if (artManifest?.kind === 'loaded') {
+          notes.push(MAP_ART_OWNER_NOTE);
+          notes.push('Zoomed out, the continent map; zoomed in, the map of the zone being viewed, one at a time.');
+          const unplaced = artManifest.manifest.unplaced;
+          if (unplaced.length > 0) {
+            const names = unplaced.map((entry) => entry.name).join(', ');
+            notes.push(`${plural(unplaced.length, 'image spans', 'images span')} several world maps and ${unplaced.length === 1 ? 'is' : 'are'} not drawn (${names}).`);
+          }
+        } else if (resources !== null && artManifest === null) notes.push('Loading the painted map art…');
+        break;
+      }
+      case 'relief':
+      case 'zone-outlines':
+      case 'coastline': {
+        notes.push(TERRAIN_NOTES[layer]);
+        const mapId = currentMapId();
+        if (layer === 'relief' && state.view.map.layers.art && (contents.get('art')?.stats.drawn ?? 0) > 0) {
+          notes.push(`Faint under the painted art (${String(Math.round(RELIEF_OPACITY.underArt * 100))}% opacity).`);
         }
+        if (resources !== null && terrainManifest === null) notes.push('Loading the terrain data…');
+        if (layer !== 'relief' && mapId !== null && arcLoads.get(`${String(mapId)}/${OUTLINE_KIND[layer]}`) === 'loading') notes.push('Loading…');
         break;
       }
       case 'zone-frames':
-        notes.push('Schematic: zone rectangles from the committed geometry, not zone borders or terrain.');
+        notes.push(
+          state.view.map.layers.art && (contents.get('art')?.stats.drawn ?? 0) > 0
+            ? 'Zone rectangles from the committed geometry, not zone borders; unfilled over the painted art.'
+            : 'Schematic: zone rectangles from the committed geometry, not zone borders or terrain.',
+        );
         break;
       case 'route-line':
       case 'route-steps':
@@ -673,6 +803,14 @@ export function createMapController(options: MapControllerOptions): MapControlle
   }
 
   function artUnavailable(): string | null {
+    if (localArt) return null;
+    if (resources !== null) {
+      // Loading: nothing to say yet (the notes say it is loading).
+      if (artManifest === null) return null;
+      if (artManifest.kind === 'failed') return `Painted map art could not be loaded (${artManifest.detail})`;
+      const mapId = currentMapId();
+      return mapId !== null && committedImagesOn(mapId).length === 0 ? 'No painted art for this world map' : null;
+    }
     if (art === null) return 'No local map set: the map shows zone frames, not terrain';
     switch (art.status.kind) {
       case 'none':
@@ -682,6 +820,67 @@ export function createMapController(options: MapControllerOptions): MapControlle
       case 'listed':
         return null;
     }
+  }
+
+  /** Why a terrain layer cannot be shown on the current world map; null when it can (or is still loading). */
+  function terrainUnavailable(layer: 'relief' | 'zone-outlines' | 'coastline'): string | null {
+    if (resources === null) return 'No terrain data in this build';
+    if (terrainManifest === null) return null;
+    if (terrainManifest.kind === 'failed') return `Terrain data could not be loaded (${terrainManifest.detail})`;
+    const mapId = currentMapId();
+    if (mapId === null) return null;
+    const maps = terrainManifest.manifest.maps;
+    const map = maps.find((entry) => entry.mapId === mapId);
+    const has = map !== undefined && (layer === 'relief' ? map.relief !== null : map[OUTLINE_KIND[layer]] !== null);
+    if (!has) return `No terrain data for this world map (it covers ${maps.map((entry) => entry.name).join(' and ')})`;
+    if (layer === 'relief') return null;
+    const kind = OUTLINE_KIND[layer];
+    const load = arcLoads.get(`${String(mapId)}/${kind}`);
+    return load !== undefined && load !== 'loading' && load.kind === 'failed' ? `${TERRAIN_WHAT[kind]} could not be loaded (${load.detail})` : null;
+  }
+
+  function unavailableOf(layer: LayerId): string | null {
+    if (layer === 'art') return artUnavailable();
+    if (layer === 'relief' || layer === 'zone-outlines' || layer === 'coastline') return terrainUnavailable(layer);
+    return UNAVAILABLE[layer] ?? null;
+  }
+
+  /** What the route line does with walking paths on this surface (`LayerStats.paths`). */
+  function walkingPathsStatus(state: EditorState): WalkingPathsStatus {
+    const visible = state.view.map.walkingPaths;
+    if (routePaths === null) return { visible, unavailable: 'No walking paths are available yet: every leg is drawn as a straight line', notes: [] };
+    const notes: string[] = ['Walked legs follow their walking paths; flight, transport and hearthstone legs stay straight.'];
+    const counts = contents.get('route-line')?.stats.paths;
+    if (visible && counts !== undefined) {
+      // Legs outside the view that were never asked for are drawn like the rest of the object's
+      // unanswered legs, but are neither being computed nor known to have no path: say so apart.
+      const outside = pathFeed !== null && routePaths === pathFeed.current() ? pathFeed.outOfView() : 0;
+      const pending = routePaths.pending ? Math.max(0, counts.pending - outside) : counts.pending;
+      const fallback = routePaths.pending ? counts.fallback : Math.max(0, counts.fallback - outside);
+      notes.push(`${plural(counts.along, 'walked leg follows its path', 'walked legs follow their paths')} on this map.`);
+      if (pending > 0) notes.push(`${plural(pending, 'leg is', 'legs are')} straight, in short dashes, while ${pending === 1 ? 'its path is' : 'their paths are'} computed.`);
+      if (fallback > 0) notes.push(`${plural(fallback, 'leg has', 'legs have')} no walking path: drawn straight, dash-dot-dot.`);
+      if (outside > 0) notes.push(`${plural(outside, 'leg outside the view waits', 'legs outside the view wait')} to be computed until ${outside === 1 ? 'it comes' : 'they come'} into view.`);
+    }
+    return { visible, unavailable: null, notes };
+  }
+
+  /** Map resources that could not be loaded, and what the map shows instead (the status line). */
+  function problemsOf(state: EditorState): readonly string[] {
+    const problems: string[] = [];
+    if (resources === null) return problems;
+    const reliefShown = state.view.map.layers.relief && (contents.get('relief')?.stats.drawn ?? 0) > 0;
+    if (!localArt && artManifest?.kind === 'failed') {
+      problems.push(`Painted map art could not be loaded: the map shows ${reliefShown ? 'the terrain relief' : 'zone frames'} instead`);
+    }
+    if (terrainManifest?.kind === 'failed') problems.push('Terrain data could not be loaded: no relief, zone outlines or coastline');
+    const mapId = currentMapId();
+    for (const layer of ['zone-outlines', 'coastline'] as const) {
+      const kind = OUTLINE_KIND[layer];
+      const load = mapId === null ? undefined : arcLoads.get(`${String(mapId)}/${kind}`);
+      if (state.view.map.layers[layer] && load !== undefined && load !== 'loading' && load.kind === 'failed') problems.push(`${TERRAIN_WHAT[kind]} could not be loaded`);
+    }
+    return problems;
   }
 
   function activePlacementOf(placement: StepPlacement): ActivePlacement {
@@ -708,12 +907,15 @@ export function createMapController(options: MapControllerOptions): MapControlle
       return {
         layer,
         visible: state.view.map.layers[layer],
-        unavailable: layer === 'art' ? artUnavailable() : (UNAVAILABLE[layer] ?? null),
+        unavailable: unavailableOf(layer),
         stats,
         notes: layerNotes(layer, state, stats),
       };
     });
     const artDrawn = contents.get('art')?.stats.drawn ?? 0;
+    const reliefDrawn = contents.get('relief')?.stats.drawn ?? 0;
+    const shown = state.view.map.layers;
+    const backdrop: MapBackdrop = shown.art && artDrawn > 0 ? (localArt ? 'local-art' : 'art') : shown.relief && reliefDrawn > 0 ? 'relief' : 'schematic';
     const index = activeStep === null ? null : routeStepIndex(route, activeStep);
     const active = index === null ? undefined : route.steps[index];
     return {
@@ -723,6 +925,9 @@ export function createMapController(options: MapControllerOptions): MapControlle
       layers: layerStatus,
       route: { ...summary, onSurface, noSurface, canFit: summary.placed - noSurface > 0 },
       artDrawn,
+      backdrop,
+      walkingPaths: walkingPathsStatus(state),
+      problems: problemsOf(state),
       activeStep: index === null || active === undefined ? null : { stepId: active.stepId, number: index + 1, placement: activePlacementOf(active.placement) },
       choice: choice?.choice ?? null,
       pick: pick === null ? null : { label: pick.label },
@@ -774,33 +979,73 @@ export function createMapController(options: MapControllerOptions): MapControlle
   // Art --------------------------------------------------------------------------------------
 
   /**
-   * The local images the art layer draws in this view (M3 review PERF-9): zoomed out, the
-   * continent image (else the zone images in view); zoomed in, the zone images in view, nearest the
-   * centre first up to the art budget (else the continent image).
+   * The committed images a world map can draw: its continent image and its zone images. Other
+   * continent-type images (the alternative continents 1463 and 1464) are left out, and of two
+   * images of one rectangle (Zephras Isle 2521 and 2665) the one with more pixels is kept.
    */
-  function wantedArt(at: MapView): readonly LocalArtEntry[] {
-    if (art === null || art.status.kind !== 'listed') return [];
+  function committedImagesOn(mapId: WorldMapId): readonly ArtImage[] {
+    if (artManifest?.kind !== 'loaded') return [];
+    const cached = imagesByMap.get(mapId);
+    if (cached !== undefined) return cached;
+    const extentUiMapId = surfaces.find((surface) => surface.mapId === mapId)?.extentUiMapId ?? null;
+    const byRect = new Map<string, ArtImage>();
+    for (const image of artManifest.manifest.images) {
+      if (image.bounds.mapId !== mapId || (image.uiMapType === 2 && image.uiMapId !== extentUiMapId)) continue;
+      const b = image.bounds;
+      const key = `${String(b.xMin)},${String(b.xMax)},${String(b.yMin)},${String(b.yMax)}`;
+      const other = byRect.get(key);
+      if (other === undefined || image.width * image.height > other.width * other.height) byRect.set(key, image);
+    }
+    const images = [...byRect.values()].sort((a, b) => a.uiMapId - b.uiMapId);
+    imagesByMap.set(mapId, images);
+    return images;
+  }
+
+  /**
+   * The images the art layer draws in this view (M3 review PERF-9), from `onMap` (one world map's):
+   * the map being viewed, one image at a time as the game's world map shows it. Zone images carry
+   * painted borders, so neighbours drawn together would cover each other.
+   * - Zoomed out: the continent image.
+   * - Zoomed in, or on a world map without a continent image: the image of the zone being viewed,
+   *   the zone jumped to while the view centre is in its rectangle, else the zone frame the centre
+   *   is most central in that has an image (`zoneFramesContaining`, coordinates.md §15).
+   * - Zoomed in outside every zone image, none: the continent image is too coarse there, and the
+   *   relief is the backdrop (terrain-navigation.md §13.2).
+   */
+  function chooseArt<T extends { readonly uiMapId: UiMapId; readonly bounds: Rect }>(onMap: readonly T[], at: MapView, jumped: UiMapId | null): readonly T[] {
     const extentUiMapId = surfaces.find((surface) => surface.mapId === at.mapId)?.extentUiMapId ?? null;
-    const onMap = art.entries.filter((entry) => entry.mapId === at.mapId);
     const continent = onMap.find((entry) => entry.uiMapId === extentUiMapId) ?? null;
-    const bounds = at.bounds ?? null;
+    if (continent !== null && layers.lodLevel(at.zoom) === 'continent') return [continent];
     const center = at.center;
-    const zoneArt = onMap
-      .filter((entry) => entry !== continent && (bounds === null || rectsMeet(entry.bounds, bounds)))
-      .map((entry) => ({ entry, distance: center === null ? 0 : distanceSqTo(entry.bounds, center.x, center.y) }))
-      .sort((a, b) => a.distance - b.distance || a.entry.uiMapId - b.entry.uiMapId)
-      .slice(0, layers.lod.budgets.art)
-      .map(({ entry }) => entry);
-    if (layers.lodLevel(at.zoom) === 'continent') return continent !== null ? [continent] : zoneArt;
-    return zoneArt.length > 0 ? zoneArt : continent !== null ? [continent] : [];
+    if (center === null) return [];
+    const byId = new Map(onMap.filter((entry) => entry !== continent).map((entry) => [entry.uiMapId, entry]));
+    const viewed = jumped === null ? undefined : byId.get(jumped);
+    if (viewed !== undefined && distanceSqTo(viewed.bounds, center.x, center.y) === 0) return [viewed];
+    for (const id of zoneFramesContaining({ mapId: at.mapId, x: center.x, y: center.y }, geometry)) {
+      const entry = byId.get(id);
+      if (entry !== undefined) return [entry];
+    }
+    return [];
+  }
+
+  /** The local set's images to load and draw in this view. */
+  function wantedArt(at: MapView, state: EditorState): readonly LocalArtEntry[] {
+    if (art === null || art.status.kind !== 'listed') return [];
+    return chooseArt(
+      art.entries.filter((entry) => entry.mapId === at.mapId),
+      at,
+      state.view.map.zone,
+    );
   }
 
   function artFor(at: MapView, state: EditorState): readonly ArtInput[] {
     if (!state.view.map.layers.art) return artInputs;
-    const drawable = wantedArt(at).flatMap((entry) => {
-      const url = artUrls.get(entry.uiMapId);
-      return url === undefined ? [] : [{ uiMapId: entry.uiMapId, url, opacity: 1 }];
-    });
+    const drawable: readonly ArtInput[] = localArt
+      ? wantedArt(at, state).flatMap((entry) => {
+          const url = artUrls.get(entry.uiMapId);
+          return url === undefined ? [] : [{ uiMapId: entry.uiMapId, url, opacity: 1 }];
+        })
+      : chooseArt(committedImagesOn(at.mapId), at, state.view.map.zone).map((image) => ({ uiMapId: image.uiMapId, url: image.url, opacity: 1, bounds: image.bounds }));
     const key = drawable.map((input) => `${String(input.uiMapId)}=${input.url}`).join(' ');
     if (key !== artInputsKey) {
       artInputsKey = key;
@@ -812,7 +1057,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
   function requestArt(at: MapView, state: EditorState): void {
     if (art === null || art.status.kind !== 'listed' || objectUrls === null || !state.view.map.layers.art) return;
     const generation = artGeneration;
-    for (const entry of wantedArt(at)) {
+    for (const entry of wantedArt(at, state)) {
       if (artRequested.has(entry.uiMapId)) continue;
       artRequested.add(entry.uiMapId);
       void art.load(entry.uiMapId).then((result) => {
@@ -826,6 +1071,64 @@ export function createMapController(options: MapControllerOptions): MapControlle
           if (result.reason === 'unavailable') artRequested.delete(entry.uiMapId);
         }
         sync('art');
+      });
+    }
+  }
+
+  // Committed resources ----------------------------------------------------------------------
+
+  /** The loaded outlines of one kind, each world map's input object kept from its load. */
+  function outlineList(kind: TerrainArcKind): readonly OutlineInput[] {
+    const list: OutlineInput[] = [];
+    for (const [key, input] of arcInputs) if (key.endsWith(`/${kind}`)) list.push(input);
+    return list.length === 0 ? NO_OUTLINES : list.sort((a, b) => a.mapId - b.mapId);
+  }
+
+  /**
+   * Loads the art and terrain manifests (once; again at the next attach after a failed request).
+   * Each result syncs the map; a failure is kept and said, never thrown.
+   */
+  function requestResources(): void {
+    if (resources === null) return;
+    if (!artLoading && (artManifest === null || (artManifest.kind === 'failed' && artManifest.reason === 'unavailable'))) {
+      artLoading = true;
+      void resources.art().then((result) => {
+        artLoading = false;
+        artManifest = result;
+        imagesByMap.clear();
+        sync('art-manifest');
+      });
+    }
+    if (!terrainLoading && (terrainManifest === null || (terrainManifest.kind === 'failed' && terrainManifest.reason === 'unavailable'))) {
+      terrainLoading = true;
+      void resources.terrain().then((result) => {
+        terrainLoading = false;
+        terrainManifest = result;
+        sync('terrain-manifest');
+      });
+    }
+    // Arc files that could not be fetched are tried again.
+    for (const [key, load] of arcLoads) if (load !== 'loading' && load.kind === 'failed' && load.reason === 'unavailable') arcLoads.delete(key);
+  }
+
+  /** Loads the zone outlines and coastline of the shown world map, for the layers that are visible (the coastline is off by default). */
+  function requestArcs(at: MapView, state: EditorState): void {
+    const source = resources;
+    if (source === null || terrainManifest?.kind !== 'loaded') return;
+    const map = terrainManifest.manifest.maps.find((entry) => entry.mapId === at.mapId);
+    if (map === undefined) return;
+    for (const layer of ['zone-outlines', 'coastline'] as const) {
+      const kind = OUTLINE_KIND[layer];
+      const key = `${String(at.mapId)}/${kind}`;
+      if (!state.view.map.layers[layer] || map[kind] === null || arcLoads.has(key)) continue;
+      arcLoads.set(key, 'loading');
+      void source.arcs(at.mapId, kind).then((result) => {
+        arcLoads.set(key, result);
+        if (result.kind === 'loaded') {
+          arcInputs.set(key, { mapId: result.arcs.mapId, lines: result.arcs.lines });
+          arcVersion += 1;
+        }
+        sync('terrain');
       });
     }
   }
@@ -849,17 +1152,25 @@ export function createMapController(options: MapControllerOptions): MapControlle
     const focusQuests = questIdsOfKey(focusKey);
     const stepFocus = focusWithin(stepFocusOf(state.selection, activeStep), drawnStep);
     const zone = state.view.map.zone;
+    const shown = state.view.map.layers;
+    const artInput = artFor(at, state);
+    // Art drawn on this world map: the relief goes faint under it, and the zone frames lose their fill.
+    const overArt = shown.art && artInput.some((input) => input.bounds === undefined || input.bounds.mapId === at.mapId);
+    const paths = state.view.map.walkingPaths ? routePaths : null;
     const out = new Map<LayerId, LayerContent>();
-    out.set('art', layers.art(artFor(at, state), at));
-    out.set('zone-frames', layers.zoneFrames(at, zone));
+    out.set('relief', layers.relief(reliefOf(terrainManifest), at, overArt));
+    out.set('art', layers.art(artInput, at));
+    out.set('coastline', layers.coastline(outlinesOf.coast(arcVersion), at));
+    out.set('zone-outlines', layers.zoneOutlines(outlinesOf.zones(arcVersion), at));
+    out.set('zone-frames', layers.zoneFrames(at, zone, !overArt));
     out.set('available-quests', layers.spawns('available-quests', giversOf(dataset, character.race, character.class).input, at, focusQuests, zone));
     out.set('objectives', layers.spawns('objectives', objectivesOf(dataset, focusKey).input, at, focusQuests, zone));
     out.set('turn-ins', layers.spawns('turn-ins', turnInsOf(dataset, focusKey).input, at, focusQuests, zone));
     out.set('flight-masters', layers.spawns('flight-masters', flightMastersOf(dataset, character.faction, character.race, character.class).input, at, [], zone));
-    out.set('route-line', layers.routeLine(route, at));
+    out.set('route-line', layers.routeLine(route, at, paths));
     out.set('route-steps', layers.routeSteps(route, at));
     out.set('proposal', layers.proposal(null, at));
-    out.set('selection', layers.selection(route, at, stepFocus));
+    out.set('selection', layers.selection(route, at, stepFocus, paths));
     return out;
   }
 
@@ -905,6 +1216,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
         timing?.clearMarks(end);
       });
       requestArt(view, state);
+      requestArcs(view, state);
       if (set.includes('route-steps')) applyRowHighlight();
     }
     publish(state);
@@ -968,6 +1280,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
       case 'zone':
       case 'surface':
       case 'art':
+      case 'terrain':
         return null;
     }
   }
@@ -1105,6 +1418,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
       case 'move':
       case 'surface': {
         view = mapViewOf(event.view);
+        pathFeed?.setView(view);
         const zone = store.getState().view.map.zone;
         // The zone jumped to stops being "the zone" once it is panned out of view or left behind.
         const leftZone = zone !== null && zone !== zoneFit && !zoneShown(zone, event.view, event.type === 'move');
@@ -1268,6 +1582,16 @@ export function createMapController(options: MapControllerOptions): MapControlle
       failure = null;
       mounted = true;
       unsubscribeStore = store.subscribe(onStoreChange);
+      if (pathFeed !== null) {
+        routePaths = pathFeed.current();
+        unsubscribeFeed = pathFeed.subscribe(() => {
+          const next = pathFeed.current();
+          if (next === routePaths) return;
+          routePaths = next;
+          sync('paths');
+        });
+      }
+      requestResources();
       lastFocus = state.selection.focus;
       const first = !everMounted;
       everMounted = true;
@@ -1285,6 +1609,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
         view = mapViewOf(current);
         patchUi(viewPatch(current));
       }
+      pathFeed?.setView(view);
       sync('attach');
       return true;
     },
@@ -1293,6 +1618,9 @@ export function createMapController(options: MapControllerOptions): MapControlle
       if (!mounted) return;
       unsubscribeStore?.();
       unsubscribeStore = null;
+      unsubscribeFeed?.();
+      unsubscribeFeed = null;
+      pathFeed?.setView(null);
       adapter?.destroy();
       mounted = false;
       mapHovering = false;
@@ -1329,6 +1657,12 @@ export function createMapController(options: MapControllerOptions): MapControlle
       if (next === null && rowSteps === null) return;
       rowSteps = next;
       applyRowHighlight();
+    },
+
+    setRoutePaths(paths) {
+      if (paths === routePaths) return;
+      routePaths = paths;
+      sync('paths');
     },
 
     choose(index) {

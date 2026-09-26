@@ -194,6 +194,7 @@ describe('hit helpers', () => {
       type: 'frame',
       id: `frame:${String(id)}`,
       bounds: { mapId: ONE, ...b },
+      filled: true,
       kind,
       label: null,
       emphasis: 'normal',

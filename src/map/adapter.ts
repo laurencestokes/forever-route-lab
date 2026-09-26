@@ -106,11 +106,15 @@ export interface SurfaceInfo {
 // Layers
 
 /**
- * Every layer, in draw order from bottom to top (ARCHITECTURE §7.2; MAPS §7.3). `art` is image
- * overlays under everything; the rest share one canvas and are stacked in this order.
+ * Every layer, in draw order from bottom to top (ARCHITECTURE §7.2; MAPS §7.3). `relief` and `art`
+ * are image overlays under everything (`IMAGE_LAYER_IDS`); the rest share one canvas and are
+ * stacked in this order.
  */
 export const LAYER_IDS = [
+  'relief',
   'art',
+  'coastline',
+  'zone-outlines',
   'zone-frames',
   'available-quests',
   'objectives',
@@ -124,6 +128,16 @@ export const LAYER_IDS = [
 
 export type LayerId = (typeof LAYER_IDS)[number];
 
+/** The layers drawn as image overlays below the canvas: their budgets count images, not canvas paths. */
+export type ImageLayerId = 'relief' | 'art';
+
+export const IMAGE_LAYER_IDS: readonly ImageLayerId[] = ['relief', 'art'];
+
+export const isImageLayer = (layer: LayerId): layer is ImageLayerId => layer === 'relief' || layer === 'art';
+
+/** The terrain-derived layers (D-032; terrain-navigation.md §13.2). */
+export type TerrainLayerId = 'relief' | 'coastline' | 'zone-outlines';
+
 /** The four layers built from dataset spawns. They never depend on the route (ARCHITECTURE §7.1). */
 export type SpawnLayerId = 'available-quests' | 'objectives' | 'turn-ins' | 'flight-masters';
 
@@ -131,7 +145,10 @@ export const SPAWN_LAYER_IDS: readonly SpawnLayerId[] = ['available-quests', 'ob
 
 /** Labels for a layer panel. */
 export const LAYER_LABELS: Readonly<Record<LayerId, string>> = {
-  art: 'Map art (local set)',
+  relief: 'Relief',
+  art: 'Painted map art',
+  coastline: 'Coastline',
+  'zone-outlines': 'Zone outlines',
   'zone-frames': 'Zone frames',
   'available-quests': 'Available quests',
   objectives: 'Objectives',
@@ -175,8 +192,13 @@ export const MARKER_BADGES: readonly MarkerBadge[] = ['instance', 'off-frame', '
 /** How the character moves along a leg. */
 export type LegStyle = 'route' | 'transport' | 'flight' | 'hearth';
 
-/** Polyline styles: the four leg styles plus the selected-leg highlight and the proposal overlay. */
-export type LineStyle = LegStyle | 'highlight' | 'proposal';
+/**
+ * Polyline styles: the four leg styles, the selected-leg highlight and the proposal overlay, and,
+ * while walking paths are drawn (`RoutePathsInput`), the two kinds of walked leg drawn as a
+ * straight line: `route-pending` (its path is still being computed) and `route-fallback` (it has
+ * no path, so the straight line stands in for one). A walked leg drawn along its path is `route`.
+ */
+export type LineStyle = LegStyle | 'route-pending' | 'route-fallback' | 'highlight' | 'proposal';
 
 /** Something a dataset point belongs to. */
 export type PointSubject =
@@ -213,7 +235,9 @@ export type MapRef =
   | { readonly kind: 'aggregate'; readonly layer: LayerId; readonly mapId: WorldMapId; readonly uiMapId: UiMapId | null; readonly count: number }
   | { readonly kind: 'zone'; readonly uiMapId: UiMapId }
   | { readonly kind: 'surface'; readonly mapId: WorldMapId }
-  | { readonly kind: 'art'; readonly uiMapId: UiMapId };
+  | { readonly kind: 'art'; readonly uiMapId: UiMapId }
+  /** A terrain-derived layer's one item on a world map: the relief image, the zone outlines or the coastline. */
+  | { readonly kind: 'terrain'; readonly layer: TerrainLayerId; readonly mapId: WorldMapId };
 
 /**
  * A glyph at one world point. Items of one layer at the identical point are merged into one
@@ -275,17 +299,46 @@ export interface FrameDescriptor {
   /** Drawn inside the frame when it is large enough on screen; null for none. */
   readonly label: string | null;
   readonly emphasis: Emphasis;
+  /**
+   * Whether a zone frame gets its faint fill. False over painted map art, which the fill would wash
+   * out (every frame a city lies in adds another veil). The extent is never filled.
+   */
+  readonly filled: boolean;
   readonly ref: MapRef;
 }
 
-/** A local map-art image over a world rectangle (local sets only, never committed or deployed; D-018). */
+/**
+ * An image over a world rectangle: painted map art (the `art` layer) or a world map's shaded
+ * relief (the `relief` layer). Drawn as an image overlay below the canvas; not interactive.
+ */
 export interface ArtDescriptor {
   readonly type: 'art';
   readonly id: string;
   readonly bounds: WorldBounds;
-  /** The image to draw: an object URL of the verified bytes (`infra/maps` local art), never an unverified file URL. */
+  /**
+   * The image to draw. Committed art and relief (`public/maps/art/`, `public/maps/terrain/`; D-032,
+   * D-033): the deployed file's URL, which ships with the app as its code does. A local set's art
+   * (D-018): an object URL of the verified bytes (`infra/maps` local art), never the file's URL.
+   */
   readonly url: string;
   readonly opacity: number;
+  readonly label: string | null;
+  readonly ref: MapRef;
+}
+
+/**
+ * Terrain-derived lines on one world map, drawn as one non-interactive canvas path
+ * (terrain-navigation.md §13.2): the zone outlines (`zones`: borders between zones, from the
+ * client's per-chunk areas) or the coastline (`coast`). They are a picture, not zone membership:
+ * points are still attributed by their published UiMap and the zone frames.
+ */
+export interface OutlineDescriptor {
+  readonly type: 'outline';
+  readonly id: string;
+  readonly mapId: WorldMapId;
+  readonly kind: 'zones' | 'coast';
+  /** Every line has at least two points, all on `mapId`. */
+  readonly lines: readonly (readonly WorldPoint[])[];
   readonly label: string | null;
   readonly ref: MapRef;
 }
@@ -305,7 +358,7 @@ export interface AggregateDescriptor {
   readonly ref: MapRef;
 }
 
-export type MapDescriptor = MarkerDescriptor | PolylineDescriptor | FrameDescriptor | ArtDescriptor | AggregateDescriptor;
+export type MapDescriptor = MarkerDescriptor | PolylineDescriptor | FrameDescriptor | ArtDescriptor | OutlineDescriptor | AggregateDescriptor;
 
 /** Every item a descriptor stands for: a marker's `refs`, otherwise its one `ref`. */
 export function refsOf(descriptor: MapDescriptor): readonly MapRef[] {
@@ -355,6 +408,7 @@ export function descriptorMapId(descriptor: MapDescriptor): WorldMapId {
     case 'aggregate':
       return descriptor.point.mapId;
     case 'polyline':
+    case 'outline':
       return descriptor.mapId;
     case 'frame':
     case 'art':
@@ -390,6 +444,21 @@ export interface LayerStats {
   readonly unresolvedBy: Readonly<Partial<Record<UnplacedReason, number>>>;
   /** Points, steps or lines on other world maps (drawn on their own surfaces). */
   readonly otherSurfaces: number;
+  /**
+   * The route line only, while walking paths are drawn (`RoutePathsInput`): its walked legs on this
+   * world map, by how they are drawn. Absent otherwise.
+   */
+  readonly paths?: LegPathCounts;
+}
+
+/** Walked legs by how the route line draws them (`LayerStats.paths`). */
+export interface LegPathCounts {
+  /** Along their walking path. */
+  readonly along: number;
+  /** As a straight line while their path is still being computed. */
+  readonly pending: number;
+  /** As a straight line because they have no path. */
+  readonly fallback: number;
 }
 
 export const EMPTY_LAYER_STATS: LayerStats = {
@@ -502,16 +571,70 @@ export interface StepFocus {
 export const NO_STEP_FOCUS: StepFocus = { selected: [], hovered: null, active: null };
 
 /**
- * One local map-art image (a local set's art entry, MAPS §5.3). Its world rectangle is taken from
- * the geometry `map/layers` was built with, so build the layers over the merged geometry when a
- * local set adds UiMaps.
+ * One map-art image: a committed one (`public/maps/art/`, D-033) or a local set's (MAPS §5.3).
+ * Without `bounds`, its world rectangle is its UiMap's single full-rectangle row in the geometry
+ * `map/layers` was built with (so build the layers over the merged geometry when a local set adds
+ * UiMaps).
  */
 export interface ArtInput {
   readonly uiMapId: UiMapId;
-  /** An object URL of the verified image bytes (`LocalArt.load` in infra/maps), not the plain file URL. */
+  /** The committed image's URL, or an object URL of a local image's verified bytes (`LocalArt.load` in infra/maps). */
   readonly url: string;
   /** 0..1. */
   readonly opacity: number;
+  /** The image's world rectangle as its manifest records it (committed art); omitted to take the UiMap's row from the geometry. */
+  readonly bounds?: WorldBounds | undefined;
+}
+
+/** One world map's shaded relief (terrain-navigation.md §13.1): the image and the world rectangle it covers. */
+export interface ReliefInput {
+  readonly mapId: WorldMapId;
+  /** The deployed PNG's URL. */
+  readonly url: string;
+  readonly bounds: WorldBounds;
+}
+
+/** One world map's terrain lines (zone outline arcs or coastline arcs), decoded to world points. */
+export interface OutlineInput {
+  readonly mapId: WorldMapId;
+  readonly lines: readonly (readonly WorldPoint[])[];
+}
+
+/**
+ * A walked leg the route line can draw along a walking path (MAPS §7.4): from one placed step to
+ * the next placed step on the same world map, reached on foot or mounted (`route` style: not a
+ * flight, transport or hearth). Proposal lines never take paths.
+ */
+export interface RouteLeg {
+  readonly fromStepId: StepId;
+  readonly toStepId: StepId;
+  /** The two steps' placed points, on one world map. */
+  readonly from: WorldPoint;
+  readonly to: WorldPoint;
+}
+
+/**
+ * Walking paths for the route line, fed from the navigation model's `path(from, to)` (MAPS §7.4).
+ * Give a new object whenever an answer changes (a batch of paths arrived, computing finished): the
+ * route layers are rebuilt only when this object changes, and ask `pathOf` at most once per leg
+ * while it stays the same.
+ */
+export interface RoutePathsInput {
+  /**
+   * The walking path of `leg`: its points in order, every one finite and on the leg's world map.
+   * The line runs from `leg.from` through them to `leg.to`, so a path whose ends were snapped to
+   * the walkable surface stays joined to the step markers. Null when the leg has no path: drawn as
+   * a straight `route-pending` line while `pending`, as a `route-fallback` line otherwise. A path
+   * that breaks those rules is drawn as a fallback too.
+   */
+  readonly pathOf: (leg: RouteLeg) => readonly WorldPoint[] | null;
+  /** Paths are still being computed: a leg without one is pending, not a straight-line fallback. */
+  readonly pending: boolean;
+}
+
+/** A leg's key for a caller's path cache: its world map and both end points, exactly (`1:-618.2,-4251.7>-601,-4225`). */
+export function routeLegKey(leg: Pick<RouteLeg, 'from' | 'to'>): string {
+  return `${String(leg.from.mapId)}:${String(leg.from.x)},${String(leg.from.y)}>${String(leg.to.x)},${String(leg.to.y)}`;
 }
 
 // =============================================================================================
@@ -630,7 +753,7 @@ export interface LayerRenderStats {
 
 export interface MapRenderStats {
   readonly surface: SurfaceId | null;
-  /** Canvas paths drawn on the current surface (art images excluded). */
+  /** Canvas paths drawn on the current surface (images of the relief and art layers excluded). */
   readonly paths: number;
   readonly layers: Readonly<Record<LayerId, LayerRenderStats>>;
 }

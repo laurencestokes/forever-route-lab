@@ -1,10 +1,16 @@
+import { createHash } from 'node:crypto';
 import { recomputeComponents } from '../../src/nav/components';
 import { ATTRIBUTE_MODE, BLOCK_MAGIC, BLOCK_VERSION } from '../../src/nav/format';
-import { blockSpan, blockTileOrigin, TILE_YD, type NavParams } from '../../src/nav/grid';
+import { blockSpan, blockTileOrigin, quantise, TILE_YD, type NavParams } from '../../src/nav/grid';
+import { legsFrom, type LegEndpoint, type SearchScratch } from '../../src/nav/legs';
 import { parseNavManifest, type NavManifest } from '../../src/nav/manifest';
 import { MAP_MAGIC, MAP_VERSION, type ConnectorLink, type MapFacts, type PassageTag } from '../../src/nav/mapfile';
 import { NavMesh } from '../../src/nav/mesh';
 import { loadBlock, openMap } from '../../src/nav/open';
+import { snap } from '../../src/nav/snap';
+import type { NavWorkerPort } from '../../src/nav/worker/client';
+import { createNavWorkerHost, type NavWorkerHost, type NavWorkerHostDeps } from '../../src/nav/worker/host';
+import type { NavLegQuery, NavLegResult, NavRequest, NavResponse } from '../../src/nav/worker/protocol';
 
 /**
  * Synthetic navigation data for the `src/nav` tests (kept out of `src/nav`, like the seeded
@@ -313,4 +319,198 @@ export function shuffled<T>(items: readonly T[], next: () => number): T[] {
     out[j] = t;
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Worker fixtures (step 3b.6): a multi-block world and a deployable, signed site of test maps.
+
+/** The four blocks of `gridWorld`: 2 × 2, so block 0 and block 3 meet only at a corner. */
+export const GRID_BLOCKS: readonly { readonly row0: number; readonly col0: number }[] = [
+  { row0: 28, col0: 36 },
+  { row0: 28, col0: 40 },
+  { row0: 32, col0: 36 },
+  { row0: 32, col0: 40 },
+];
+
+export interface GridWorld {
+  readonly blocks: readonly TestBlock[];
+  /** Global id of each block's first polygon. */
+  readonly polygonsBefore: readonly number[];
+}
+
+/**
+ * 2 × 2 blocks of 16 × 16 tiles (the world of `src/nav/load-order.test.ts`): each tile four
+ * squares at one of three heights (steps of at most 2 yd link), with holes, 15-yd cliffs (no
+ * link), swim tiles, a small second floor 20 yd up in some tiles, and zones 14, 17 and 215.
+ */
+export function gridWorld(P: NavParams): GridWorld {
+  const blocks: TestBlock[] = [];
+  const polygonsBefore: number[] = [];
+  let total = 0;
+  for (const b of GRID_BLOCKS) {
+    const { tx0, tz0 } = blockTileOrigin(P, b.row0, b.col0);
+    const tiles: TestTile[] = [];
+    const zones: number[] = [];
+    for (let dtx = 0; dtx < 16; dtx += 1) {
+      for (let dtz = 0; dtz < 16; dtz += 1) {
+        const tx = tx0 + dtx;
+        const tz = tz0 + dtz;
+        const h = (tx * 73 + tz * 151) % 97;
+        if (h % 11 === 0) continue;
+        const y = 40 + 4 * (h % 3) + (h % 13 === 0 ? 60 : 0);
+        const polys: Voxel[][] = [square(0, 0, 128, 128, y), square(128, 0, 256, 128, y), square(0, 128, 128, 256, y), square(128, 128, 256, 256, y)];
+        const swimTile = h % 7 === 0;
+        const swim = [swimTile, swimTile, swimTile, swimTile];
+        if (h % 17 === 0) {
+          polys.push(square(32, 32, 96, 96, y + 80));
+          swim.push(false);
+        }
+        tiles.push(tileOf(tx, tz, polys, swim));
+        const zone = h % 19 === 0 ? 215 : b.row0 === 28 ? 14 : 17;
+        for (let i = 0; i < polys.length; i += 1) zones.push(zone);
+      }
+    }
+    blocks.push({ ...b, tiles, zones });
+    polygonsBefore.push(total);
+    total += zones.length;
+  }
+  return { blocks, polygonsBefore };
+}
+
+/** File bytes as a `Response` body needs them. */
+export type SiteBytes = Uint8Array<ArrayBuffer>;
+
+export interface SignedNavSite {
+  /** The manifest JSON with real sizes, SHA-256s and navRevision. */
+  readonly manifestJson: Record<string, unknown>;
+  readonly manifest: NavManifest;
+  /** Every file under the base URL: `nav/manifest.json`, `nav/<mapId>/map.bin` and the blocks. */
+  readonly files: Map<string, SiteBytes>;
+}
+
+const sha256Of = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
+
+/**
+ * A deployable navigation site of test maps (one map each, distinct map ids): the committed
+ * layout under `nav/`, a manifest whose file sizes and SHA-256s are real and whose navRevision is
+ * the build's (SHA-256 over the sorted `path sha256` lines).
+ */
+export function signedNavSite(maps: readonly TestMap[], ids: { readonly connectors?: readonly string[]; readonly passages?: readonly string[] } = {}): SignedNavSite {
+  const files = new Map<string, SiteBytes>();
+  const entries: Record<string, unknown>[] = [];
+  const lines: string[] = [];
+  for (const map of maps) {
+    const entry = map.manifest.maps.find((m) => m.mapId === map.mapId);
+    if (entry === undefined) throw new RangeError(`signedNavSite: map ${String(map.mapId)} is not in its own manifest`);
+    const file = (path: string, bytes: Uint8Array): { path: string; bytes: number; sha256: string } => {
+      files.set(`nav/${path}`, Uint8Array.from(bytes));
+      const sha256 = sha256Of(bytes);
+      lines.push(`${path} ${sha256}\n`);
+      return { path, bytes: bytes.byteLength, sha256 };
+    };
+    entries.push({
+      mapId: map.mapId,
+      name: entry.name,
+      polygons: entry.polygons,
+      components: map.facts.sizes.length,
+      mapFile: file(entry.mapFile.path, map.mapBin),
+      blocks: entry.blocks.map((b, i) => ({ ...file(b.path, map.blockBytes[i] ?? new Uint8Array()), row0: b.row0, col0: b.col0, polygons: b.polygons })),
+      hintRollup: {},
+    });
+  }
+  const base = testManifestJson(maps[0]?.mapId ?? 1, [], ids) as Record<string, unknown>;
+  const manifestJson = { ...base, navRevision: sha256Of(lines.sort().join('')), maps: entries };
+  files.set('nav/manifest.json', Uint8Array.from(new TextEncoder().encode(JSON.stringify(manifestJson))));
+  return { manifestJson, manifest: parseNavManifest(manifestJson), files };
+}
+
+/**
+ * The worker's answer for one query, computed directly on a fully loaded mesh: both endpoints
+ * quantised and snapped (rules A and B), one single-target `legsFrom`. The worker runs one search
+ * per source over all its targets; a settled polygon's parent never changes, so the legs agree.
+ */
+export function referenceLegResult(full: NavMesh, scratch: SearchScratch, q: NavLegQuery, withPath = false): NavLegResult & { readonly path?: readonly number[] } {
+  const end = (p: NavLegQuery['from']): { readonly e: LegEndpoint; readonly ambiguous: boolean } => {
+    const x = quantise(p.x);
+    const y = quantise(p.y);
+    const s = snap(full, x, y, p.hint);
+    return { e: { x, y, poly: s.poly }, ambiguous: s.flags.ambiguous };
+  };
+  const a = end(q.from);
+  const b = end(q.to);
+  const [leg] = legsFrom(full, scratch, a.e, [b.e], withPath ? { withPath: true } : {});
+  if (leg === undefined) throw new Error('referenceLegResult: no leg');
+  return {
+    reachable: leg.reachable,
+    reason: leg.reason,
+    groundTenths: leg.groundTenths,
+    swimTenths: leg.swimTenths,
+    connectorTenthsSeconds: leg.connectorTenthsSeconds,
+    longestSwimYd: leg.longestSwimYd,
+    flags: leg.flags,
+    passages: leg.passages.map((i) => full.passageIds[i] ?? ''),
+    from: { snapped: a.e.poly >= 0, ambiguous: a.ambiguous },
+    to: { snapped: b.e.poly >= 0, ambiguous: b.ambiguous },
+    ...(withPath && leg.path !== undefined ? { path: leg.path } : {}),
+  };
+}
+
+/** A seeded endpoint in the grid world: in block `block` (0-3), or anywhere (−1), a third of them near the row seam. */
+export function gridEndpoint(P: NavParams, next: () => number, block = -1): { readonly x: number; readonly y: number; readonly hint: number } {
+  const { tx0, tz0 } = blockTileOrigin(P, 32, 36);
+  const hints = [0, 14, 17, 215];
+  let vx: number;
+  let vz: number;
+  if (block >= 0) {
+    vx = (block < 2 ? 16 : 0) * 256 + next() * 16 * 256;
+    vz = (block % 2 === 1 ? 16 : 0) * 256 + next() * 16 * 256;
+  } else {
+    vx = next() < 0.33 ? 16 * 256 + (next() - 0.5) * 30 : next() * 32 * 256;
+    vz = next() * 32 * 256;
+  }
+  const p = worldOf(P, tx0, tz0, vx, vz);
+  // not quantised: the worker must quantise
+  return { x: p.x, y: p.y, hint: hints[Math.floor(next() * 4)] ?? 0 };
+}
+
+/** A navigation worker host behind a `NavWorkerPort`, in-process: messages are structured-cloned and delivered on later tasks, as between threads. */
+export interface InProcessNavWorker {
+  readonly port: NavWorkerPort;
+  readonly host: NavWorkerHost;
+  /** Every request the client sent. */
+  readonly sent: NavRequest[];
+  readonly terminated: () => boolean;
+  /** Simulates the worker script failing. */
+  crash(message: string): void;
+}
+
+export function inProcessNavWorker(deps: Omit<NavWorkerHostDeps, 'post'>): InProcessNavWorker {
+  let onMessage: ((message: NavResponse) => void) | null = null;
+  let onError: ((message: string) => void) | null = null;
+  let terminated = false;
+  const sent: NavRequest[] = [];
+  const host = createNavWorkerHost({
+    ...deps,
+    post: (message) => {
+      const copy = structuredClone(message);
+      setTimeout(() => onMessage?.(copy), 0);
+    },
+  });
+  const port: NavWorkerPort = {
+    postMessage(message) {
+      sent.push(message);
+      const copy = structuredClone(message);
+      setTimeout(() => {
+        host.handle(copy);
+      }, 0);
+    },
+    listen(message, error) {
+      onMessage = message;
+      onError = error;
+    },
+    terminate() {
+      terminated = true;
+    },
+  };
+  return { port, host, sent, terminated: () => terminated, crash: (m) => onError?.(m) };
 }

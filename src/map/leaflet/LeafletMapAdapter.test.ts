@@ -12,6 +12,7 @@ import type {
   MapEvent,
   MapRef,
   MarkerDescriptor,
+  OutlineDescriptor,
   PolylineDescriptor,
   SurfaceInfo,
   WorldBounds,
@@ -120,6 +121,7 @@ const durotarFrame: FrameDescriptor = {
   type: 'frame',
   id: 'frame:1411',
   bounds: DUROTAR,
+  filled: true,
   kind: 'zone',
   label: 'Durotar',
   emphasis: 'normal',
@@ -785,5 +787,93 @@ describe('LeafletMapAdapter canvas padding (M3 review PERF-3)', () => {
     const { adapter, host } = setup({ rendererPadding: 0.25 });
     adapter.setLayer('route-steps', content('route-steps', [stepMarker('a', GORNEK)]));
     expect([pathCanvas(host).width, pathCanvas(host).height]).toEqual([1200, 900]);
+  });
+});
+
+describe('LeafletMapAdapter art, relief and terrain outlines (D-032, D-033)', () => {
+  const relief: MapDescriptor = {
+    type: 'art',
+    id: 'relief:1',
+    bounds: { mapId: KALIMDOR, xMin: -12800, xMax: 17066.7, yMin: -9066.7, yMax: 17066.7 },
+    url: 'maps/terrain/1/relief.png',
+    opacity: 0.85,
+    label: 'Shaded relief',
+    ref: { kind: 'terrain', layer: 'relief', mapId: KALIMDOR },
+  };
+  const durotarArt: MapDescriptor = {
+    type: 'art',
+    id: 'art:1411',
+    bounds: DUROTAR,
+    url: 'maps/art/1411.webp',
+    opacity: 1,
+    label: 'Durotar',
+    ref: { kind: 'art', uiMapId: uiMapId(1411) },
+  };
+  const zones: OutlineDescriptor = {
+    type: 'outline',
+    id: 'outline:zones:1',
+    mapId: KALIMDOR,
+    kind: 'zones',
+    lines: [
+      [at(0, -3000), at(100, -3100), at(200, -3000)],
+      [at(-500, -4000), at(-400, -4200)],
+    ],
+    label: 'Zone outlines',
+    ref: { kind: 'terrain', layer: 'zone-outlines', mapId: KALIMDOR },
+  };
+
+  it('puts the relief in a pane below the art’s, both below the grid and the canvas, as images that take no pointer', () => {
+    const { adapter, host } = setup();
+    adapter.setLayer('art', content('art', [durotarArt]));
+    adapter.setLayer('relief', content('relief', [relief]));
+    const reliefImage = host.querySelector<HTMLImageElement>('.leaflet-frl-relief-pane img.frl-map__relief');
+    const artImage = host.querySelector<HTMLImageElement>('.leaflet-frl-art-pane img.frl-map__art');
+    expect(reliefImage?.getAttribute('src')).toBe('maps/terrain/1/relief.png');
+    expect(artImage?.getAttribute('src')).toBe('maps/art/1411.webp');
+    const zIndex = (name: string) => Number(host.querySelector<HTMLElement>(`.leaflet-${name}-pane`)?.style.zIndex);
+    expect(zIndex('frl-relief')).toBeLessThan(zIndex('frl-art'));
+    expect(zIndex('frl-art')).toBeLessThan(zIndex('frl-grid'));
+    expect(host.querySelector<HTMLElement>('.leaflet-frl-relief-pane')?.style.pointerEvents).toBe('none');
+    // Images are not canvas paths: they neither count toward the path cap nor sit in the draw list.
+    expect(adapter.renderStats().paths).toBe(0);
+    expect(adapter.renderStats().layers.relief.drawn).toBe(1);
+    expect(adapter.drawOrder()).toEqual([]);
+  });
+
+  it('changes a relief’s opacity in place when art appears over it', () => {
+    const { adapter, host } = setup();
+    adapter.setLayer('relief', content('relief', [relief]));
+    const image = host.querySelector<HTMLImageElement>('img.frl-map__relief');
+    adapter.setLayer('relief', content('relief', [{ ...relief, opacity: 0.4 }]));
+    expect(host.querySelector('img.frl-map__relief')).toBe(image);
+    expect(image?.style.opacity).toBe('0.4');
+  });
+
+  it('draws zone outlines as one non-interactive multi-line path, under the zone frames', () => {
+    const { adapter, host, events } = setup();
+    adapter.setLayer('zone-frames', content('zone-frames', [durotarFrame]));
+    adapter.setLayer('zone-outlines', content('zone-outlines', [zones]));
+    adapter.setLayer('coastline', content('coastline', [{ ...zones, id: 'outline:coast:1', kind: 'coast', ref: { kind: 'terrain', layer: 'coastline', mapId: KALIMDOR } }]));
+    expect(adapter.drawOrder()).toEqual(['coastline/outline:coast:1', 'zone-outlines/outline:zones:1', 'zone-frames/frame:1411']);
+    expect(adapter.renderStats().paths).toBe(3);
+    // A click on the line is a click on the map: outlines are pictures, not items.
+    adapter.setViewport({ center: at(100, -3100), zoom: 0 });
+    pointer(host, 'click', screenOf(adapter, at(100, -3100)));
+    expect(events.filter((event) => event.type === 'click').at(-1)).toMatchObject({ hit: null });
+  });
+
+  it('strokes a frame without its fill over the art', () => {
+    const { adapter } = setup();
+    const painted = (frame: FrameDescriptor, zoom: number) => {
+      adapter.setLayer('zone-frames', content('zone-frames', [frame]));
+      calls.length = 0;
+      // A view reset redraws the whole canvas synchronously.
+      adapter.setViewport({ center: at(0, -4600), zoom });
+      return { fills: calls.filter((call) => call.name === 'fill').length, strokes: calls.filter((call) => call.name === 'stroke').length };
+    };
+    expect(painted(durotarFrame, -3).fills).toBe(1);
+    const bare = painted({ ...durotarFrame, id: 'frame:1411:bare', filled: false }, -2.5);
+    expect(bare.fills).toBe(0);
+    expect(bare.strokes).toBeGreaterThan(0);
   });
 });

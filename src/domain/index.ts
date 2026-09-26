@@ -12,3 +12,4 @@ export * from './project-factory';
 export * from './route';
 export * from './route-ops';
 export * from './step-factory';
+export * from './travel';

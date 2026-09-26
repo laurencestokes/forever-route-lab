@@ -1,13 +1,17 @@
 /* Bottom status bar and the XP bar. */
 
+/* The bar clips sideways only (never a scroll container, so focusing an item cannot scroll it) and
+   is the containing block of the summary panel, which opens above it (UI-02, UI-07). */
 .frl-statusbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--frl-space-3);
   height: var(--frl-statusbar-height);
   min-width: 0;
   padding: 0 var(--frl-space-3);
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: visible;
   border-top: 1px solid var(--frl-border);
   background: var(--frl-surface-raised);
   color: var(--frl-fg);
@@ -50,15 +54,14 @@
   min-width: 0;
 }
 
-.frl-statusbar__step {
-  flex: 0 1 auto;
-  max-width: 320px;
-  overflow: hidden;
-}
-
+/* The active step: its label and number never shrink (UI-01); the title after it is its own flex
+   item, and the first thing in the bar to give way. */
 .frl-statusbar__step-title {
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 260px;
   overflow: hidden;
+  margin-left: calc(-1 * var(--frl-space-3) + 5px);
   text-overflow: ellipsis;
 }
 
@@ -120,6 +123,178 @@
   display: inline-flex;
   flex: none;
   gap: var(--frl-space-1);
+}
+
+/* The simulation's state: computing paths (progress and Cancel), paused (Resume), straight-line
+   travel, checking, loading, failed. A statement in words, never an alarm colour.
+
+   It has priority in the bar (UI-01): it never shrinks, so its label, progress, count and Cancel
+   or Resume stay whole; its words are capped at 160px (every state's words fit: the longest,
+   "Some straight-line estimates", is 151px) and ellipsise beyond. It does not clip (UI-02): the
+   22px button sits in the 32px bar with room for its whole focus ring. */
+.frl-statusbar__simulation {
+  align-items: center;
+  flex: none;
+}
+
+.frl-statusbar__simulation:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 1px;
+}
+
+.frl-statusbar__simulation .frl-statusbar__value {
+  align-items: center;
+}
+
+.frl-statusbar__simulation-text {
+  max-width: 160px;
+  overflow: hidden;
+  color: var(--frl-fg-muted);
+  text-overflow: ellipsis;
+}
+
+.frl-statusbar__simulation-count {
+  flex: none;
+}
+
+.frl-statusbar__simulation.is-failed .frl-statusbar__simulation-text,
+.frl-statusbar__simulation.is-straight-line .frl-statusbar__simulation-text {
+  color: var(--frl-fg);
+}
+
+.frl-statusbar__action {
+  flex: none;
+}
+
+/* Route summary: a disclosure whose panel opens above the status bar (its containing block, however
+   many lines it has), at its right end, over the side panel. */
+.frl-summary {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.frl-summary__panel {
+  position: absolute;
+  right: var(--frl-space-3);
+  bottom: calc(100% + var(--frl-space-1));
+  z-index: var(--frl-z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+  width: min(380px, calc(100vw - 2 * var(--frl-space-3)));
+  max-height: calc(100vh - var(--frl-topbar-height) - var(--frl-statusbar-height) - 2 * var(--frl-space-3));
+  overflow: auto;
+  padding: var(--frl-space-3);
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius-lg);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+  line-height: var(--frl-leading-tight);
+  white-space: normal;
+}
+
+.frl-summary__title {
+  font-size: var(--frl-text);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-summary__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.frl-summary__table th,
+.frl-summary__table td {
+  padding: 3px var(--frl-space-2) 3px 0;
+  border-bottom: 1px solid var(--frl-border);
+  text-align: left;
+  vertical-align: baseline;
+}
+
+.frl-summary__table thead th {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.frl-summary__table tbody th {
+  font-weight: var(--frl-weight-medium);
+}
+
+.frl-summary__basis,
+.frl-summary__note {
+  color: var(--frl-fg-muted);
+}
+
+.frl-summary__parameters {
+  margin: 0;
+  padding-left: var(--frl-space-4);
+}
+
+/* The route's XP total is in the summary too, so it gives way first on narrower screens. The
+   optimiser item gives way while it is unavailable (it arrives in Milestone 7): it leaves the view
+   but stays in the page, so it is still spoken, and its live region is never remounted. */
+@media (max-width: 1440px) {
+  .frl-statusbar__xp-total {
+    display: none;
+  }
+
+  .frl-statusbar__optimizer.is-unavailable {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Narrower still: tighter gaps, and the identity badges drop their key words ("Data", "Ruleset")
+   from view (still spoken, and in the tooltips). */
+@media (max-width: 1280px) {
+  .frl-statusbar {
+    gap: var(--frl-space-2);
+  }
+
+  .frl-statusbar__badge-key {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .frl-statusbar__step-title {
+    max-width: 200px;
+  }
+}
+
+/* A shorter XP track; the step title leaves the bar (the active row and the Step item's tooltip
+   name the step). */
+@media (max-width: 1100px) {
+  .frl-statusbar__step-title {
+    display: none;
+  }
+}
+
+/* Two columns and narrower: the bar may take a second line rather than cut anything (the shell's
+   bottom row follows its height, AppShell.css). */
+@media (max-width: 1024px) {
+  .frl-statusbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--frl-statusbar-height);
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
 }
 
 /* XP bar ----------------------------------------------------------------------------------- */
@@ -204,6 +379,12 @@
   }
 }
 
+@media (max-width: 1100px) {
+  .frl-xpbar__track {
+    width: 64px;
+  }
+}
+
 @media (max-width: 720px) {
   .frl-statusbar {
     flex-wrap: wrap;
@@ -217,16 +398,53 @@
   .frl-statusbar__sep {
     display: none;
   }
+
+  .frl-statusbar__simulation-text {
+    max-width: none;
+    white-space: normal;
+  }
+
+  /* The page scrolls here, so the open summary is laid out in the flow, on its own line under its
+     button: it scrolls with the button and never covers it or the items after it (UI-07). */
+  .frl-summary.is-open {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .frl-summary__panel {
+    position: static;
+    width: 100%;
+    max-height: none;
+    margin-top: var(--frl-space-1);
+    box-shadow: none;
+  }
 }
 
-/* Forced colours drop author backgrounds: draw fills and the notch in system colours. */
+/* Forced colours drop author backgrounds: draw fills and the notch in system colours, and give the
+   progress track an edge, as the XP track has, so its extent shows (UI-15). */
 @media (forced-colors: active) {
   .frl-xpbar__fill,
   .frl-statusbar__progress-fill {
     background: Highlight;
   }
 
+  .frl-statusbar__progress {
+    border: 1px solid CanvasText;
+  }
+
   .frl-xpbar__marker {
     background: CanvasText;
+  }
+}
+
+/* Forced colours with reduced motion: the unknown hatching is an author background and would drop
+   to a full Highlight bar that reads as "done", so unknown progress is a dashed, empty track. */
+@media (forced-colors: active) and (prefers-reduced-motion: reduce) {
+  .frl-statusbar__progress.is-indeterminate {
+    border-style: dashed;
+  }
+
+  .frl-statusbar__progress-fill.is-indeterminate {
+    display: none;
   }
 }

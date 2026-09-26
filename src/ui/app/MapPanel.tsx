@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { type EditorState, type EditorStore, setMapLayerVisible } from '../../app';
-import type { ActivePlacement, MapController, MapEngineSetup, MapLayerStatus, MapStatus } from '../../app/map-exports';
+import { type EditorState, type EditorStore, setMapLayerVisible, setMapWalkingPaths } from '../../app';
+import type { ActivePlacement, MapBackdrop, MapController, MapEngineSetup, MapLayerStatus, MapStatus, WalkingPathsStatus } from '../../app/map-exports';
 import { useEditor } from '../../app/react';
 import { isLayerId, LAYER_IDS, LAYER_LABELS, parseSurfaceId, type LayerId, type MapAdapterFactory, type SurfaceId, type SurfaceInfo, type UnplacedReason } from '../../map/adapter';
 import { type ActiveRow, type RouteView } from '../app-model';
@@ -24,6 +24,12 @@ import { useActiveTarget } from './selectors';
  *
  * What the pointer is over comes from the controller's own hover channel and is rendered by a
  * small component of its own, so crossing markers re-renders only that line (M3 review PERF-14).
+ *
+ * The layer panel lists the painted art, the relief, the zone outlines and the coastline with the
+ * other layers, and a "Walking paths" row after the route line (a toggle of how the route line
+ * draws walked legs, not a layer). The notice says what the map shows under its markers (the
+ * painted art with Blizzard Entertainment's notice, the relief, or schematic frames), and the status
+ * line says when a map resource could not be loaded, without stopping anything else.
  */
 
 export interface MapPanelProps {
@@ -42,7 +48,10 @@ const PANEL_ORDER: readonly LayerId[] = [...LAYER_IDS].reverse();
 
 /** Each layer's glyph in the layer panel, as the map draws it (MapLegend.tsx). */
 export const LAYER_GLYPHS: Readonly<Record<LayerId, MapGlyphKind>> = {
+  relief: 'relief',
   art: 'art',
+  coastline: 'coast',
+  'zone-outlines': 'zone-outline',
   'zone-frames': 'frame',
   'available-quests': 'quest-start',
   objectives: 'objective',
@@ -76,6 +85,22 @@ export const SCHEMATIC_NOTICE = 'Schematic map: zone frames, not terrain';
 export const SCHEMATIC_NOTICE_SHORT = 'Schematic';
 export const LOCAL_ART_NOTICE = 'Local map art (this machine only), over zone frames';
 export const LOCAL_ART_NOTICE_SHORT = 'Local art';
+/** Shown with the painted art (D-033 rule 2: Blizzard's notice accompanies the art); About has the full notice. */
+export const PAINTED_ART_NOTICE = 'Painted map art © Blizzard Entertainment';
+export const PAINTED_ART_NOTICE_SHORT = 'Art © Blizzard';
+export const RELIEF_NOTICE = 'Terrain relief computed from game data, not painted art';
+export const RELIEF_NOTICE_SHORT = 'Relief';
+
+/** The notice and its short form for what the map shows under its markers. */
+export const BACKDROP_NOTICES: Readonly<Record<MapBackdrop, { readonly long: string; readonly short: string }>> = {
+  art: { long: PAINTED_ART_NOTICE, short: PAINTED_ART_NOTICE_SHORT },
+  'local-art': { long: LOCAL_ART_NOTICE, short: LOCAL_ART_NOTICE_SHORT },
+  relief: { long: RELIEF_NOTICE, short: RELIEF_NOTICE_SHORT },
+  schematic: { long: SCHEMATIC_NOTICE, short: SCHEMATIC_NOTICE_SHORT },
+};
+
+/** The layer panel row of the walking-paths toggle (not a layer id). */
+export const WALKING_PATHS_ROW = 'walking-paths';
 
 type Engine = { readonly kind: 'loading' } | { readonly kind: 'ready'; readonly factory: MapAdapterFactory } | { readonly kind: 'failed'; readonly message: string };
 
@@ -160,6 +185,11 @@ function layerRow(status: MapLayerStatus): MapLayerRow {
   };
 }
 
+/** The walking-paths toggle as a layer panel row. */
+function walkingPathsRow(status: WalkingPathsStatus): MapLayerRow {
+  return { id: WALKING_PATHS_ROW, label: 'Walking paths', glyph: 'line-route', visible: status.visible, unavailable: status.unavailable, count: null, notes: status.notes };
+}
+
 /** Names the engine's focusable surface (the element the engine created inside the host) for assistive technology. */
 function labelEngineSurface(host: HTMLElement | null, label: string, describedBy: string): void {
   const surface = host?.firstElementChild;
@@ -203,8 +233,8 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
   const surfaceInfo = surfaces.find((info) => info.id === surfaceId) ?? null;
   const surfaceName = surfaceInfo?.name ?? null;
   const mapLabel = surfaceName === null ? 'Route map' : `Route map: ${surfaceName}`;
-  const localArt = status !== null && status.artDrawn > 0;
-  const notice = localArt ? LOCAL_ART_NOTICE : SCHEMATIC_NOTICE;
+  const backdrop = BACKDROP_NOTICES[status?.backdrop ?? 'schematic'];
+  const notice = backdrop.long;
 
   // The engine creates its surface element on every mount: name it then, and again whenever the
   // shown surface changes. The latest label is kept in a ref so a remount never waits for a render.
@@ -259,7 +289,8 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
 
   const onLayerToggle = useCallback(
     (id: string, visible: boolean) => {
-      if (isLayerId(id)) setMapLayerVisible(store, id, visible);
+      if (id === WALKING_PATHS_ROW) setMapWalkingPaths(store, visible);
+      else if (isLayerId(id)) setMapLayerVisible(store, id, visible);
     },
     [store],
   );
@@ -323,7 +354,9 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
     const byLayer = new Map(status.layers.map((layer) => [layer.layer, layer]));
     return PANEL_ORDER.flatMap((layer) => {
       const entry = byLayer.get(layer);
-      return entry === undefined ? [] : [layerRow(entry)];
+      if (entry === undefined) return [];
+      // Walking paths change how the route line is drawn: their toggle sits just under it.
+      return layer === 'route-line' ? [layerRow(entry), walkingPathsRow(status.walkingPaths)] : [layerRow(entry)];
     });
   }, [status]);
   const footer = useMemo(() => (geometry === null ? NO_LINES : [`Geometry loaded: ${geometry}.`]), [geometry]);
@@ -358,14 +391,16 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
   }, [picking, controller, announce]);
 
   const routeLine = status === null ? null : routeStatusText(status.route, surfaceName);
+  const problems = status?.problems ?? NO_LINES;
   const statusLines = useMemo(() => {
     const lines: string[] = [];
     if (picking !== null) lines.push(pickText(picking));
     if (routeLine !== null) lines.push(routeLine);
     if (zoomBand === 'continent') lines.push('Zoomed out: quest points shown as zone counts');
     if (unreachable !== null) lines.push(unreachable);
+    lines.push(...problems);
     return lines;
-  }, [picking, routeLine, zoomBand, unreachable]);
+  }, [picking, routeLine, zoomBand, unreachable, problems]);
 
   const hover = useMemo(() => (controller === null ? null : <PointerLine controller={controller} />), [controller]);
 
@@ -392,7 +427,7 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
       onLayersOpenChange={onLayersOpenChange}
       layers={layersProp}
       notice={notice}
-      noticeShort={localArt ? LOCAL_ART_NOTICE_SHORT : SCHEMATIC_NOTICE_SHORT}
+      noticeShort={backdrop.short}
       engine={frameEngine}
       stageRef={hostRef}
       instructionsId={instructionsId}

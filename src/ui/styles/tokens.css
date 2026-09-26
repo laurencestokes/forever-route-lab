@@ -65,6 +65,8 @@
   /* Stacking -------------------------------------------------------------------------------- */
   --frl-z-sticky: 10;
   --frl-z-drag: 20;
+  /* Above the map's own layers and overlays (MapFrame.css), below modal dialogs (the top layer). */
+  --frl-z-popover: 1200;
 
   /*
    * RESERVED: quest difficulty. These five values mirror DIFFICULTY_COLORS in

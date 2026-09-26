@@ -7,6 +7,8 @@ import {
   combineLabels,
   descriptorMapId,
   emptyLayerContent,
+  IMAGE_LAYER_IDS,
+  isImageLayer,
   isLayerId,
   LAYER_IDS,
   LAYER_LABELS,
@@ -15,6 +17,7 @@ import {
   MAX_POLYLINE_VERTICES,
   parseSurfaceId,
   refsOf,
+  routeLegKey,
   SPAWN_LAYER_IDS,
   surfaceIdOf,
   surfaceMapId,
@@ -68,9 +71,11 @@ describe('world bounds', () => {
 });
 
 describe('layers', () => {
-  it('lists every layer once, art at the bottom and selection on top', () => {
+  it('lists every layer once, the relief at the bottom, then the art, and selection on top', () => {
     expect(new Set(LAYER_IDS).size).toBe(LAYER_IDS.length);
-    expect(LAYER_IDS[0]).toBe('art');
+    expect(LAYER_IDS.slice(0, 5)).toEqual(['relief', 'art', 'coastline', 'zone-outlines', 'zone-frames']);
+    expect(IMAGE_LAYER_IDS).toEqual(['relief', 'art']);
+    expect(LAYER_IDS.filter(isImageLayer)).toEqual(['relief', 'art']);
     expect(LAYER_IDS[LAYER_IDS.length - 1]).toBe('selection');
     // Spawn layers sit below the route, so route markers win hit-testing.
     for (const spawn of SPAWN_LAYER_IDS) expect(LAYER_IDS.indexOf(spawn)).toBeLessThan(LAYER_IDS.indexOf('route-line'));
@@ -109,7 +114,7 @@ describe('descriptorMapId', () => {
         labels: [null],
       },
       { type: 'polyline', id: 'p', mapId: worldMapId(0), points: [], style: 'route', emphasis: 'normal', label: null, ref },
-      { type: 'frame', id: 'f', bounds, kind: 'zone', label: null, emphasis: 'normal', ref },
+      { type: 'frame', id: 'f', bounds, kind: 'zone', label: null, emphasis: 'normal', filled: true, ref },
       { type: 'art', id: 'a', bounds, url: 'x.webp', opacity: 1, label: null, ref },
       {
         type: 'aggregate',
@@ -122,8 +127,17 @@ describe('descriptorMapId', () => {
         label: null,
         ref,
       },
+      { type: 'outline', id: 'o', mapId: worldMapId(0), kind: 'zones', lines: [], label: null, ref: { kind: 'terrain', layer: 'zone-outlines', mapId: worldMapId(0) } },
     ];
-    expect(descriptors.map(descriptorMapId)).toEqual([1, 0, 2991, 2991, 30]);
+    expect(descriptors.map(descriptorMapId)).toEqual([1, 0, 2991, 2991, 30, 0]);
+  });
+});
+
+describe('walking paths input', () => {
+  it('keys a leg by its world map and both end points, exactly', () => {
+    const from = { mapId: ONE, x: -618.2, y: -4251.7 };
+    expect(routeLegKey({ from, to: { mapId: ONE, x: -601, y: -4225 } })).toBe('1:-618.2,-4251.7>-601,-4225');
+    expect(routeLegKey({ from, to: { mapId: ONE, x: -601, y: -4225.01 } })).not.toBe(routeLegKey({ from, to: { mapId: ONE, x: -601, y: -4225 } }));
   });
 });
 
@@ -182,6 +196,7 @@ describe('labels without step numbers (M3 review PERF-2, MAP-UX-3)', () => {
       id: 'f',
       bounds: { mapId: ONE, xMin: 0, xMax: 1, yMin: 0, yMax: 1 },
       kind: 'zone',
+      filled: true,
       label: 'Durotar',
       emphasis: 'normal',
       ref: { kind: 'zone', uiMapId: uiMapId(1411) },

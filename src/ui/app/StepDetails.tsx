@@ -1,7 +1,7 @@
-import { memo, useId, useMemo } from 'react';
-import { closeOpenedQuests, type EditorState, type EditorStore, shownOpenedQuests, updateStepNote } from '../../app';
+import { memo, useCallback, useId, useMemo } from 'react';
+import { closeOpenedQuests, type DerivedState, type EditorState, type EditorStore, shownOpenedQuests, updateStepNote } from '../../app';
 import type { MapController } from '../../app/map-exports';
-import { useEditor } from '../../app/react';
+import { useDerivedSelector, useEditor } from '../../app/react';
 import { routeGroup } from '../../app/rules-exports';
 import { editNoteText, stepQuestIds } from '../../app/shell-support';
 import { hasGuideEscapes, plainGuideText } from '../../app/ui-text';
@@ -9,29 +9,34 @@ import type { CharacterProfile } from '../../domain/project';
 import type { DatasetView } from '../../domain/dataset';
 import type { QuestId } from '../../domain/ids';
 import type { Route, RouteStep } from '../../domain/route';
-import { type ActiveRow, entityName, grindTargetText, originText, type RouteView, SIMULATION_PENDING, stepTitle } from '../app-model';
+import { type ActiveRow, entityName, grindTargetText, NOT_SIMULATED, originText, type RouteView, stepTitle } from '../app-model';
 import {
   Button,
   DetailList,
   EmptyState,
+  IssueList,
   PanelSection,
+  PENDING_TRAVEL_TEXTS,
   ReadoutValue,
   STEP_KIND_LABELS,
   StepTypeGlyph,
   TextInput,
   formatDuration,
+  formatDurationLong,
   formatInteger,
+  formatLevel,
   plural,
   unknownReadout,
   type DetailItem,
 } from '../kit';
+import { sameStepNumbers, type StepNumbers, stepNumbersOf } from './derived-view';
 import type { Announce } from './LiveAnnouncer';
 import { QuestDetails, type QuestActions } from './QuestDetails';
 import type { RouteActions } from './route-actions';
 import { selectCharacter, selectEditingLocked, selectSelectionCount, useActiveTarget } from './selectors';
 import { DurationEditor, LocationEditor } from './StepEditors';
 
-const SIMULATION_READOUT = unknownReadout<number>(SIMULATION_PENDING);
+const xpWords = (value: number): string => `${formatInteger(value)} XP`;
 
 /** Why the Details editors are unavailable while editing is locked. */
 export const DETAILS_LOCKED = 'Unavailable while the optimiser runs or a proposal is open';
@@ -98,6 +103,8 @@ interface StepDetailsProps {
   readonly headerSelected: boolean;
   readonly editable: boolean;
   readonly store: EditorStore;
+  /** The walk's numbers and issues at this step. */
+  readonly numbers: StepNumbers;
   readonly actions: RouteActions;
   readonly questActions: QuestActions | undefined;
   readonly mapController: MapController | null;
@@ -118,6 +125,7 @@ function StepDetails({
   headerSelected,
   editable,
   store,
+  numbers,
   actions,
   questActions,
   mapController,
@@ -144,17 +152,9 @@ function StepDetails({
     },
     { term: 'Locked', value: step.locked ? 'Yes: an anchor the optimiser keeps in place' : 'No' },
     { term: 'Origin', value: originText(step.origin) },
-    {
-      term: 'Duration',
-      value:
-        step.durationOverride === null ? (
-          <ReadoutValue readout={SIMULATION_READOUT} format={formatDuration} />
-        ) : (
-          `${formatDuration(step.durationOverride)} (override)`
-        ),
-    },
-    { term: 'Level after', value: <ReadoutValue readout={SIMULATION_READOUT} format={String} /> },
+    ...numberItems(numbers, step.durationOverride),
   ];
+  const issues = numbers.kind === 'known' ? numbers.value.issues : [];
   const only: ReadonlySet<RouteStep['id']> = new Set([step.id]);
   const plainHintId = useId();
   // Imported guide text keeps its colour and icon codes for export; say how it reads (UI-F7).
@@ -256,11 +256,53 @@ function StepDetails({
           </Button>
         </div>
       </PanelSection>
+      {issues.length > 0 && (
+        <PanelSection title="Issues at this step" aside={<span className="frl-num">{plural(issues.length, 'issue')}</span>}>
+          <p className="frl-app-hint">The Validation tab lists every issue in the route, with what each code means.</p>
+          <div className="frl-app-quests">
+            <IssueList
+              label={`Issues at step ${formatInteger(number)}`}
+              items={issues.map((issue, index) => ({
+                key: String(index),
+                severity: issue.severity,
+                code: issue.code,
+                message: issue.message,
+                stepNumber: number,
+              }))}
+            />
+          </div>
+        </PanelSection>
+      )}
       {stepQuestIds(step).map((id) => (
         <QuestDetails key={id} questId={id} dataset={dataset} character={character} actions={questActions} baseDataset={baseDataset} />
       ))}
     </>
   );
+}
+
+/** The step's time, XP and level after from the walk, each with its markers, or unknown with the reason. */
+function numberItems(numbers: StepNumbers, override: number | null): DetailItem[] {
+  const derived = numbers.kind === 'known' ? numbers.value : null;
+  const unknown = numbers.kind === 'unknown' ? numbers.readout : null;
+  const detail = derived === null || derived.assumptions === null ? undefined : `this step reads ${derived.assumptions}`;
+  const pending = derived === null || derived.pending === null ? null : PENDING_TRAVEL_TEXTS[derived.pending];
+  const duration = derived?.duration ?? unknown ?? unknownReadout<number>(NOT_SIMULATED);
+  return [
+    {
+      term: 'Duration',
+      value: (
+        <span className="frl-app-inline">
+          <ReadoutValue readout={duration} format={formatDuration} formatLong={formatDurationLong} assumptionDetail={detail} pending={pending} />
+          {override !== null && <span className="frl-app-hint">{`(override ${formatDuration(override)} for the step's own work)`}</span>}
+        </span>
+      ),
+    },
+    {
+      term: 'XP gained',
+      value: <ReadoutValue readout={derived?.xpGained ?? duration} format={formatInteger} formatLong={xpWords} assumptionDetail={detail} />,
+    },
+    { term: 'Level after', value: <ReadoutValue readout={derived?.projectedLevel ?? duration} format={formatLevel} /> },
+  ];
 }
 
 export interface DetailsPanelProps {
@@ -336,6 +378,10 @@ export const DetailsPanel = memo(function DetailsPanel({
   const editingLocked = useEditor(store, selectEditingLocked);
   const character = useEditor(store, selectCharacter);
   const opened = useEditor(store, selectOpenedQuests);
+  const stepId = active.step?.id ?? null;
+  // Only this step's numbers and issues: a walk that leaves them as they were re-renders nothing here.
+  const selectNumbers = useCallback((state: DerivedState | null) => stepNumbersOf(state, view, stepId), [view, stepId]);
+  const numbers = useDerivedSelector(selectNumbers, sameStepNumbers);
   if (opened !== null) {
     return (
       <OpenedQuests
@@ -369,6 +415,7 @@ export const DetailsPanel = memo(function DetailsPanel({
       headerSelected={active.header}
       editable={!editingLocked}
       store={store}
+      numbers={numbers}
       actions={actions}
       questActions={questActions}
       mapController={mapController}

@@ -7,6 +7,8 @@
   height: 100%;
   min-height: 0;
   background: var(--frl-surface);
+  /* The rows fold their marks below 320px of list width (UI-18, below). */
+  container: frl-routelist / inline-size;
 }
 
 .frl-routelist__viewport {
@@ -200,23 +202,46 @@
   color: var(--frl-severity-info);
 }
 
-/* Numbers align on the right edge; markers hang in a fixed 10px gutter after them. */
-.frl-steprow__level {
+/*
+ * The estimate column (level after, XP gained or step time): numbers align on the right edge, the
+ * assumed marker hangs in a fixed 10px gutter after them and, in the step-time column only (level
+ * and XP never wait for walking paths, UI-12), the pending hourglass in a 12px gutter before them,
+ * so every row's number lines up whatever marks it carries.
+ */
+.frl-steprow__estimate {
   position: relative;
+  display: inline-flex;
   flex: none;
   justify-content: flex-end;
-  min-width: 42px;
+  min-width: 46px;
   padding-right: 10px;
   color: var(--frl-fg-muted);
   font-size: var(--frl-text-sm);
 }
 
-.frl-steprow__level .frl-assumed {
+.frl-steprow__estimate[data-column='time'] {
+  min-width: 58px;
+  padding-left: 12px;
+}
+
+.frl-steprow__estimate .frl-assumed {
   position: absolute;
   top: 0;
   right: 0;
   margin: 0;
   line-height: 14px;
+}
+
+.frl-steprow__estimate .frl-steprow__pending {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  margin: -5px 0 0;
+}
+
+/* A step time that waits for its walking path reads as provisional: italic, beside the hourglass. */
+.frl-steprow.is-pending .frl-steprow__estimate[data-column='time'] .frl-readout__value {
+  font-style: italic;
 }
 
 .frl-steprow__lock {
@@ -282,6 +307,27 @@
 .frl-row__action.is-disabled:hover {
   color: var(--frl-fg-disabled);
   cursor: default;
+}
+
+/* A narrow list (the route panel at its 280px minimum, UI-18): the rows keep their title readable.
+   The issue marker keeps its shape and drops its count (the tooltip and the row's name say the
+   counts), the estimate column takes only the room its number needs, and the gaps tighten. */
+@container frl-routelist (width < 320px) {
+  .frl-row {
+    gap: 4px;
+  }
+
+  .frl-steprow__issues .frl-num {
+    display: none;
+  }
+
+  .frl-steprow__estimate {
+    min-width: 0;
+  }
+
+  .frl-steprow__estimate[data-column='time'] {
+    min-width: 0;
+  }
 }
 
 /* Group header row ----------------------------------------------------------------------------- */

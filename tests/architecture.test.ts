@@ -1010,7 +1010,8 @@ describe('architecture scanner (self-test)', () => {
 // The repository
 
 describe('dependency rules (ARCHITECTURE §4)', () => {
-  it('scans the real source tree', () => {
+  // The first call parses every src/ file: about 6 s under full-suite load, over the default 5 s.
+  it('scans the real source tree', { timeout: 60_000 }, () => {
     // Guards every repository test below against passing on an empty scan (a wrong REPO_ROOT or a moved src/).
     const scanned = scanRepository().reports.map((report) => report.info.file);
     expect(scanned.length).toBeGreaterThan(0);

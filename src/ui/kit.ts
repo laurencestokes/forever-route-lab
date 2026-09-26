@@ -24,6 +24,7 @@ export {
   type IssueCounts,
 } from './lib/issues';
 export { knownReadout, readoutFromEstimate, unknownReadout, type Readout, type ReadoutFlags } from './lib/readout';
+export { RULE_LABELS, assumptionList, assumptionWords, type RuleParameter } from './lib/rule-labels';
 export {
   THEME_LABELS,
   THEME_PREFERENCES,
@@ -61,14 +62,22 @@ export {
   foreverProvenanceOf,
   type ForeverProvenance,
 } from './markers/provenance';
+export {
+  PENDING_CHECKING_TEXT,
+  PENDING_TRAVEL_TEXT,
+  PENDING_TRAVEL_TEXTS,
+  PendingMarker,
+  type PendingMarkerProps,
+  type PendingTravel,
+} from './markers/PendingMarker';
 export { ReadoutValue, type ReadoutValueProps } from './markers/ReadoutValue';
 export { SeverityIcon, type SeverityIconProps } from './markers/SeverityIcon';
 export { STEP_KIND_LABELS, StepTypeGlyph, type StepTypeGlyphProps } from './markers/StepTypeGlyph';
 
 // Route list
 export { RouteList, type RouteListProps } from './route/RouteList';
-export { GroupRow, StepRow, describeStepRow, type GroupRowProps, type StepRowProps } from './route/StepRow';
-export type { GroupRowModel, RouteRowModel, StepRowModel } from './route/rows';
+export { GroupRow, StepRow, describeStepRow, formatXpGained, type GroupRowProps, type StepRowProps } from './route/StepRow';
+export { ESTIMATE_COLUMN_LABELS, ESTIMATE_COLUMNS, type EstimateColumn, type GroupRowModel, type RouteRowModel, type StepRowModel } from './route/rows';
 export { DEFAULT_OVERSCAN, ROUTE_ROW_HEIGHT, type SelectionMode } from './route/virtual';
 
 // Shell
@@ -129,6 +138,8 @@ export {
   type SidePanelProps,
   type SidePanelTabId,
 } from './shell/SidePanel';
+export { RouteSummary, type RouteSummaryProps, type RouteSummaryRow } from './shell/RouteSummary';
+export { SimulationStatus, simulationStatusText, type SimulationStatusModel, type SimulationStatusProps } from './shell/SimulationStatus';
 export { StatusBar, optimizerText, type OptimizerStatus, type StatusBarProps } from './shell/StatusBar';
 export { Tabs, nextEnabledTab, type TabDefinition, type TabsProps } from './shell/Tabs';
 export { BrandMark, PRODUCT_NAME, TopBar, type TopBarProps } from './shell/TopBar';

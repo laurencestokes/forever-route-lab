@@ -4,6 +4,7 @@
  */
 export * from './clock';
 export * from './commands';
+export * from './derived';
 export * from './history';
 export * from './ids';
 export * from './map-view';
