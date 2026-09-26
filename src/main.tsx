@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createEditorStore, type EditorStore, randomIdSource, systemClock } from './app';
+import type { MapEngineSetup } from './app/map-exports';
+import type { MapAdapterFactory } from './map/adapter';
 import { browserSha256, loadWorkspace, type Workspace, type WorkspaceProgress } from './app/workspace';
 import { App } from './ui/App';
 import { Boot } from './ui/Boot';
@@ -47,10 +49,31 @@ applyThemePreference(document.documentElement, initialTheme);
 interface Started {
   readonly workspace: Workspace;
   readonly store: EditorStore;
+  readonly map: MapEngineSetup;
 }
+
+/**
+ * The map engine (Leaflet behind `MapAdapter`, ARCHITECTURE §7.2) is a dynamic import, in its own
+ * chunk, so Leaflet and its stylesheet stay out of the entry chunk (§14). The import starts with
+ * the data load, so the chunk arrives while the data does; a failed import is forgotten, so the
+ * map panel's "Try again" imports it afresh.
+ */
+let mapEngine: Promise<MapAdapterFactory> | null = null;
+const loadMapAdapter: MapEngineSetup['loadAdapter'] = () => {
+  mapEngine ??= import('./map/leaflet').then(
+    (module) => module.createLeafletMapAdapter,
+    (error: unknown) => {
+      mapEngine = null;
+      throw error;
+    },
+  );
+  return mapEngine;
+};
 
 /** One start: load and verify everything, then open the workspace's project in a store. */
 async function start(onProgress: (progress: WorkspaceProgress) => void): Promise<Started> {
+  // Fetch the map engine alongside the data; the map panel reports a failure (and retries).
+  loadMapAdapter().catch(() => undefined);
   const workspace = await loadWorkspace({
     fetch: (url, init) => window.fetch(url, init),
     baseUrl: import.meta.env.BASE_URL,
@@ -72,7 +95,8 @@ async function start(onProgress: (progress: WorkspaceProgress) => void): Promise
     applyThemePreference(document.documentElement, theme);
     storeTheme(theme);
   });
-  return { workspace, store };
+  const map: MapEngineSetup = { geometry: workspace.geometry.geometry, art: workspace.geometry.art, loadAdapter: loadMapAdapter };
+  return { workspace, store, map };
 }
 
 const container = document.getElementById('root');
@@ -81,13 +105,14 @@ if (container === null) throw new Error('index.html has no #root element');
 createRoot(container).render(
   <StrictMode>
     <Boot load={start}>
-      {({ workspace, store }) => (
+      {({ workspace, store, map }) => (
         <App
           store={store}
           data={workspace.data}
           projectName={workspace.projectName}
           routeNotice={workspace.routeNotice}
           geometrySummary={workspace.geometrySummary}
+          map={map}
           version={appVersion()}
           sourceCommit={null}
         />

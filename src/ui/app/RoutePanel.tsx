@@ -44,6 +44,8 @@ export interface RoutePanelProps {
   readonly containerRef: RefObject<HTMLDivElement | null>;
   /** Puts keyboard focus on the route list. */
   readonly onFocusList: () => void;
+  /** The steps of the row under the pointer, or null when it leaves the list (the map highlights their markers). */
+  readonly onHoverSteps?: ((ids: readonly StepId[] | null) => void) | undefined;
 }
 
 /** `aria-disabled` for an unavailable toolbar item: it stays focusable (docs/UI.md §9, F-03). */
@@ -66,6 +68,7 @@ export const RoutePanel = memo(function RoutePanel({
   actions,
   containerRef,
   onFocusList,
+  onHoverSteps,
 }: RoutePanelProps) {
   const selection = useEditor(store, selectSelection);
   const editingLocked = useEditor(store, selectEditingLocked);
@@ -279,6 +282,13 @@ export const RoutePanel = memo(function RoutePanel({
             actions.deleteSteps(targetOf(index));
           }}
           onDrop={onDrop}
+          onHoverIndexChange={
+            onHoverSteps === undefined
+              ? undefined
+              : (index) => {
+                  onHoverSteps(index === null ? null : rowIds(index));
+                }
+          }
           emptyState={<EmptyState title="The route is empty">Insert a note, travel or grind step to begin.</EmptyState>}
         />
       </div>

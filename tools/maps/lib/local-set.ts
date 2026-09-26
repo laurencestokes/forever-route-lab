@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { uiMapId, worldMapId } from '../../../src/domain/ids';
 import { distanceYards } from '../../../src/geo/distance';
@@ -9,6 +9,7 @@ import { assignmentPercentToWorld, assignmentWorldToPercent, isFullUiRectangle }
 import type { MapGeometry } from '../../../src/geo/types';
 import { rowContainsWorldPoint } from '../../../src/geo/zones';
 import { findPrivacyLeaks } from '../../build/lib/patterns';
+import { type ArtSection, artSectionDrift, LOCAL_ART_DIR, scanArt } from './art';
 import { isotropyProblems, passed, type CheckResult } from './checks';
 import { parseCsv, recordColumns, requireColumns } from './csv';
 import { decimal } from './db2-rows';
@@ -24,15 +25,17 @@ import { formatJson } from './json';
  * of them pass, writes `maps.manifest.json`, whose presence activates the set. On any failure an
  * existing manifest is removed, so a changed set is never left active.
  *
- * Checks (MAPS.md §5.5): L1 primary rows, L2 isotropy, L3 art (fails closed while art decoding is
- * Milestone 3 work), L4 frame compatibility and shared rows (through `mergeLocalGeometry`), L5 and
- * L6 TaxiNodes (only with a local TaxiNodes CSV; otherwise recorded as not run), L7 round trips.
+ * Checks (MAPS.md §5.5): L1 primary rows, L2 isotropy, L3 art (lib/art.ts: names, PNG/WebP
+ * headers, sizes, placement on the set's rows), L4 frame compatibility and shared rows (through
+ * `mergeLocalGeometry`), L5 and L6 TaxiNodes (only with a local TaxiNodes CSV; otherwise recorded
+ * as not run), L7 round trips, and, for a report on an already active set, L8: the active
+ * manifest still matches the files (hashes, art sizes and bounds).
  */
 
 export const LOCAL_GEOMETRY_FILE = 'geometry.local.json';
 export const LOCAL_MANIFEST_FILE = 'maps.manifest.json';
 export const LOCAL_TAXI_FILE = 'taxi.local.json';
-export const LOCAL_ART_DIR = 'art';
+export { LOCAL_ART_DIR };
 
 /**
  * L6 landmarks (coordinates.md §9): QuestieDB Forever flight masters (`foreverNpcDB.lua` at the
@@ -54,9 +57,10 @@ export const LANDMARK_TOLERANCE_YARDS = 30;
 /**
  * Checks that may be skipped without blocking activation: L5 and L6 need a local TaxiNodes CSV,
  * which a geometry-only set may not have. A skipped check is recorded under
- * `validation.notRun` in the manifest; it never counts as passed.
+ * `validation.notRun` in the manifest; it never counts as passed. L8 is skipped when there is no
+ * active manifest to compare (it never runs during activation, which replaces the manifest).
  */
-export const OPTIONAL_CHECKS: readonly string[] = ['L5', 'L6'];
+export const OPTIONAL_CHECKS: readonly string[] = ['L5', 'L6', 'L8'];
 
 export interface LocalSetOptions {
   readonly dir: string;
@@ -66,6 +70,11 @@ export interface LocalSetOptions {
   readonly committedFrameHash: string;
   /** A local `TaxiNodes` CSV at the set's build, for L5/L6; null to skip them. */
   readonly taxiNodesCsv: string | null;
+  /**
+   * `check` (a report, `validate.ts --local`): also run L8 against an existing `maps.manifest.json`.
+   * `ignore` (the default; `--activate`, which rewrites the manifest): no L8.
+   */
+  readonly activeManifest?: 'check' | 'ignore' | undefined;
 }
 
 export interface LocalSetResult {
@@ -78,6 +87,8 @@ export interface LocalSetResult {
   /** `inputs.tables` of geometry.local.json when it has them, otherwise null (unknown). */
   readonly tables: unknown;
   readonly merge: MergeResult | null;
+  /** The manifest's `art` section (lib/art.ts) when L3 passed; null otherwise. */
+  readonly art: ArtSection | null;
 }
 
 const check = (id: string, title: string, problems: readonly string[]): CheckResult => ({ id, title, problems, skipped: null });
@@ -86,13 +97,8 @@ const skip = (id: string, title: string, reason: string): CheckResult => ({ id, 
 type Json = Readonly<Record<string, unknown>>;
 const isRecord = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-function filesUnder(dir: string): readonly string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((path) => statSync(join(dir, path)).isFile());
-}
-
 export function validateLocalSet(options: LocalSetOptions): LocalSetResult {
-  const empty = { build: null, product: null, geometrySha256: null, frameHash: null, tables: null, merge: null };
+  const empty = { build: null, product: null, geometrySha256: null, frameHash: null, tables: null, merge: null, art: null };
   const path = join(options.dir, LOCAL_GEOMETRY_FILE);
   if (!existsSync(path)) {
     return { ...empty, checks: [check('L0', `${LOCAL_GEOMETRY_FILE} exists and parses`, [`no ${LOCAL_GEOMETRY_FILE} in the local set`])], passed: false };
@@ -132,12 +138,12 @@ export function validateLocalSet(options: LocalSetOptions): LocalSetResult {
 
   checks.push(check('L2', 'isotropy of every local row against the art aspect (within 0.2%)', isotropyProblems(local)));
 
-  const art = filesUnder(join(options.dir, LOCAL_ART_DIR));
+  const art = scanArt(options.dir, local);
   checks.push(
     check(
       'L3',
-      'art images match LayerWidth × LayerHeight and every listed tile decoded',
-      art.length === 0 ? [] : [`${String(art.length)} art file(s) present, but art verification (convert.ts) is Milestone 3: refusing to activate unverified art`],
+      `art: every ${LOCAL_ART_DIR}/<uiMapId>.png|webp is a still PNG or WebP of its UiMap's LayerWidth × LayerHeight, on a single full-rectangle row of ${LOCAL_GEOMETRY_FILE}, with the row's aspect`,
+      art.problems,
     ),
   );
 
@@ -196,8 +202,38 @@ export function validateLocalSet(options: LocalSetOptions): LocalSetResult {
     }
     checks.push(check('L7', 'world ↔ percent round trip below 1e-9 (sample grid on every row, inside and outside 0..100)', worst < 1e-9 ? [] : [`worst round-trip error ${String(worst)}`]));
   }
+  if (options.activeManifest === 'check') checks.push(activeManifestCheck(options.dir, geometrySha256, art.problems.length === 0 ? art.art : null));
   const blocking = checks.filter((c) => c.problems.length > 0 || (c.skipped !== null && !OPTIONAL_CHECKS.includes(c.id)));
-  return { checks, passed: blocking.length === 0, build, product: local.product, geometrySha256, frameHash, tables, merge };
+  return { checks, passed: blocking.length === 0, build, product: local.product, geometrySha256, frameHash, tables, merge, art: art.problems.length === 0 ? art.art : null };
+}
+
+/**
+ * L8: an existing manifest still describes the files (MAPS.md §5.5). `infra/maps` refuses a
+ * changed geometry at load and a changed image when it is drawn; this reports both before then.
+ */
+function activeManifestCheck(dir: string, geometrySha256: string, art: ArtSection | null): CheckResult {
+  const id = 'L8';
+  const title = `the active ${LOCAL_MANIFEST_FILE} still matches the set (geometry, art and taxi SHA-256, art sizes and bounds)`;
+  const path = join(dir, LOCAL_MANIFEST_FILE);
+  if (!existsSync(path)) return skip(id, title, `no ${LOCAL_MANIFEST_FILE} (the set is not active)`);
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+  } catch (error) {
+    return check(id, title, [`${LOCAL_MANIFEST_FILE} is not JSON (${error instanceof Error ? error.message : String(error)})`]);
+  }
+  if (!isRecord(manifest)) return check(id, title, [`${LOCAL_MANIFEST_FILE} is not an object`]);
+  const problems: string[] = [];
+  const geometry = isRecord(manifest['geometry']) ? manifest['geometry'] : {};
+  if (geometry['sha256'] !== geometrySha256) problems.push(`${LOCAL_GEOMETRY_FILE} changed after activation`);
+  if (art === null) problems.push('the art fails L3, so it cannot be compared');
+  else problems.push(...artSectionDrift(manifest['art'], art));
+  const taxiPath = join(dir, LOCAL_TAXI_FILE);
+  const taxi = isRecord(manifest['taxi']) ? manifest['taxi'] : null;
+  const taxiSha = existsSync(taxiPath) ? sha256Hex(lfBytes(readFileSync(taxiPath))) : null;
+  if (taxiSha !== (taxi === null ? null : taxi['sha256'])) problems.push(`${LOCAL_TAXI_FILE} ${taxiSha === null ? 'is listed but missing' : taxi === null ? 'is not listed' : 'changed after activation'}`);
+  if (problems.length > 0) problems.push('run tools/maps validate --activate again');
+  return check(id, title, problems);
 }
 
 // =============================================================================================
@@ -246,7 +282,7 @@ export interface ActivationFacts {
 
 /** The `maps.manifest.json` object for a passing set (MAPS.md §5.3). No timestamps. */
 export function activationManifest(dir: string, result: LocalSetResult, facts: ActivationFacts): Readonly<Record<string, unknown>> {
-  if (!result.passed || result.build === null || result.product === null || result.frameHash === null || result.geometrySha256 === null) {
+  if (!result.passed || result.build === null || result.product === null || result.frameHash === null || result.geometrySha256 === null || result.art === null) {
     throw new Error('refusing to write a manifest for a set that did not pass');
   }
   if (facts.source.product !== result.product || facts.source.build !== result.build) {
@@ -265,7 +301,7 @@ export function activationManifest(dir: string, result: LocalSetResult, facts: A
     tables: result.tables,
     frameHash: result.frameHash,
     geometry: { file: LOCAL_GEOMETRY_FILE, sha256: result.geometrySha256 },
-    images: {},
+    art: result.art,
     ...(existsSync(taxiPath) ? { taxi: { file: LOCAL_TAXI_FILE, sha256: sha256Hex(lfBytes(readFileSync(taxiPath))) } } : {}),
     validation: {
       passed: true,

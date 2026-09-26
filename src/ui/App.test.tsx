@@ -7,7 +7,7 @@ import { createPlaceholderWorkspace, PLACEHOLDER_PROJECT_NAME } from '../app/pla
 import { sequentialIdSource } from '../app/shell-support';
 import { App } from './App';
 import { PLACEHOLDER_DATA_NOTICE, SIMULATION_PENDING, UNKNOWN_LEGEND } from './app-model';
-import { NOT_YET } from './app/AppTopBar';
+import { NO_MAP_FOR_ZONES, NOT_YET } from './app/AppTopBar';
 import { SELECTION_ANNOUNCE_DELAY_MS } from './app/LiveAnnouncer';
 
 afterEach(() => {
@@ -296,9 +296,10 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
       expect(described?.textContent).toBe(reason);
       fireEvent.click(button);
     }
+    // This shell has no map (no geometry was given), so jump-to-zone says so.
     const go = screen.getByRole('button', { name: 'Go to zone' });
     expect(isUnavailable(go)).toBe(true);
-    expect(document.getElementById(go.getAttribute('aria-describedby') ?? '')?.textContent).toBe(NOT_YET.zone);
+    expect(document.getElementById(go.getAttribute('aria-describedby') ?? '')?.textContent).toBe(NO_MAP_FOR_ZONES);
     // No notice appears anywhere: the reasons are descriptions, not messages.
     expect(announced()).toBe('');
   });

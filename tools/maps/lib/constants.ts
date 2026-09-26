@@ -94,3 +94,16 @@ export const DEFAULT_RESEARCH_CSV_DIR = '.cache/experiments/maps';
 export const ART_ASPECT_EXCEPTIONS: Readonly<Record<number, number | null>> = { 1463: 1, 1464: 1, 2665: null };
 export const DEFAULT_ART_ASPECT = 1002 / 668;
 export const ASPECT_TOLERANCE = 0.002;
+
+/**
+ * Art pixel sizes (`UiMapArtStyleLayer` LayerWidth × LayerHeight at 1.60.1.70009; MAPS.md §3,
+ * §5.4; coordinates.md §4.1): 1002 × 668 for style 1, every UiMap except the three style-4 maps,
+ * which are 512 × 512. L3 requires an art image to have its UiMap's size. Like the aspects above,
+ * this is the placeholder's table until `import.ts --build` reads UiMapArtStyleLayer (Milestone 3b).
+ */
+export const DEFAULT_ART_SIZE: { readonly width: number; readonly height: number } = { width: 1002, height: 668 };
+export const ART_SIZE_EXCEPTIONS: Readonly<Record<number, { readonly width: number; readonly height: number }>> = {
+  1463: { width: 512, height: 512 },
+  1464: { width: 512, height: 512 },
+  2665: { width: 512, height: 512 },
+};

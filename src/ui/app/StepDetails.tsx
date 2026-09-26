@@ -1,10 +1,11 @@
 import { memo } from 'react';
-import { type EditorStore, updateStepNote } from '../../app';
+import { closeOpenedQuests, type EditorState, type EditorStore, shownOpenedQuests, updateStepNote } from '../../app';
 import { useEditor } from '../../app/react';
 import { routeGroup } from '../../app/rules-exports';
 import { editNoteText, stepQuestIds } from '../../app/shell-support';
 import type { CharacterProfile } from '../../domain/project';
 import type { DatasetView } from '../../domain/dataset';
+import type { QuestId } from '../../domain/ids';
 import type { Route, RouteStep } from '../../domain/route';
 import { type ActiveRow, entityName, grindTargetText, locationDetail, originText, type RouteView, SIMULATION_PENDING, stepTitle } from '../app-model';
 import {
@@ -223,12 +224,63 @@ export interface DetailsPanelProps {
   readonly onFocusList: () => void;
 }
 
-/** The Details tab: the active step (and its quests), or an empty state. */
+/** The quests opened in Details while the selection they were opened under lasts (null otherwise). */
+const selectOpenedQuests = (s: EditorState): readonly QuestId[] | null => shownOpenedQuests(s.view.openedQuests, s.selection);
+
+interface OpenedQuestsProps {
+  readonly questIds: readonly QuestId[];
+  readonly dataset: DatasetView;
+  readonly character: CharacterProfile;
+  /** The active step's number, for the way back; 0 when there is none. */
+  readonly activeNumber: number;
+  readonly onClose: () => void;
+}
+
+/** Quests opened from a map marker or the Available tab, with the way back to the active step. */
+function OpenedQuests({ questIds, dataset, character, activeNumber, onClose }: OpenedQuestsProps) {
+  return (
+    <>
+      <PanelSection
+        title={questIds.length === 1 ? 'Opened quest' : `${formatInteger(questIds.length)} opened quests`}
+        aside={
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            {activeNumber > 0 ? `Back to step ${formatInteger(activeNumber)}` : 'Close'}
+          </Button>
+        }
+      >
+        <p className="frl-app-hint">
+          Opened from the map or the Available tab. Selecting a step in the route shows the step here again.
+        </p>
+      </PanelSection>
+      {questIds.map((id) => (
+        <QuestDetails key={id} questId={id} dataset={dataset} character={character} />
+      ))}
+    </>
+  );
+}
+
+/** The Details tab: opened quests, else the active step (and its quests), or an empty state. */
 export const DetailsPanel = memo(function DetailsPanel({ store, view, route, dataset, activeRow, actions, onFocusList }: DetailsPanelProps) {
   const active = useActiveTarget(store, view, activeRow);
   const selectionCount = useEditor(store, selectSelectionCount);
   const editingLocked = useEditor(store, selectEditingLocked);
   const character = useEditor(store, selectCharacter);
+  const opened = useEditor(store, selectOpenedQuests);
+  if (opened !== null) {
+    return (
+      <OpenedQuests
+        questIds={opened}
+        dataset={dataset}
+        character={character}
+        activeNumber={active.step === null ? 0 : active.number}
+        onClose={() => {
+          // The button leaves the panel with the quests: continue from the route list.
+          closeOpenedQuests(store);
+          onFocusList();
+        }}
+      />
+    );
+  }
   if (active.step === null) {
     return <EmptyState title="No step selected">Select a step in the route to see its details here.</EmptyState>;
   }

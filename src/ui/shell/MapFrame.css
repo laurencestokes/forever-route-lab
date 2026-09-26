@@ -1,0 +1,343 @@
+/*
+ * The map panel (docs/UI.md §12): a 32px toolbar, the stage the map engine fills, the layer panel
+ * beside it (never over it, except in a panel too narrow for both), and a one-line status. Tokens
+ * only; the canvas colours come from the same tokens through the map engine (docs/MAPS.md §7.5).
+ */
+
+.frl-mapframe {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  container: frl-mapframe / inline-size;
+  background: var(--frl-surface-sunken);
+}
+
+.frl-mapframe__bar {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--frl-space-1);
+  height: var(--frl-panel-header-height);
+  min-width: 0;
+  padding: 0 var(--frl-space-1);
+  border-bottom: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+}
+
+.frl-mapframe__surface {
+  flex: 0 1 220px;
+  min-width: 120px;
+}
+
+.frl-mapframe__surface .frl-select {
+  width: 100%;
+}
+
+.frl-mapframe__commands {
+  flex: none;
+}
+
+.frl-mapframe__spacer {
+  flex: 1 1 0;
+}
+
+.frl-mapframe__notice {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The notice's short form ("Schematic") replaces it in a narrow panel; it is never hidden. */
+.frl-mapframe__notice-short {
+  display: none;
+}
+
+.frl-mapframe__body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.frl-mapframe__stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.frl-mapframe__host {
+  position: absolute;
+  inset: 0;
+}
+
+/* Until the engine is ready the stage shows the kit's neutral grid, never an empty hole. */
+.frl-mapframe__host.is-idle {
+  background-image:
+    linear-gradient(var(--frl-map-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--frl-map-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.frl-mapframe__card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--frl-space-2);
+  width: min(360px, calc(100% - 2 * var(--frl-space-4)));
+  padding: var(--frl-space-4);
+  border: 1px solid var(--frl-border);
+  border-radius: var(--frl-radius-lg);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+  color: var(--frl-fg-muted);
+  transform: translate(-50%, -50%);
+}
+
+.frl-mapframe__card-title {
+  color: var(--frl-fg);
+  font-size: var(--frl-text-lg);
+  font-weight: var(--frl-weight-bold);
+  line-height: 20px;
+}
+
+.frl-mapframe__side {
+  position: relative;
+  flex: 0 0 260px;
+  min-height: 0;
+  overflow: auto;
+  border-left: 1px solid var(--frl-border);
+  background: var(--frl-surface);
+}
+
+/* Too narrow for the map and the panel side by side: the panel lies over the map's right edge. */
+@container frl-mapframe (width < 560px) {
+  .frl-mapframe__side {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1100;
+    width: min(260px, 85%);
+    box-shadow: var(--frl-shadow);
+  }
+
+  .frl-mapframe__notice.has-short .frl-mapframe__notice-long {
+    display: none;
+  }
+
+  .frl-mapframe__notice-short {
+    display: inline;
+  }
+}
+
+.frl-mapframe__status {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--frl-space-3);
+  height: 24px;
+  min-width: 0;
+  padding: 0 var(--frl-space-3);
+  overflow: hidden;
+  border-top: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.frl-mapframe__status-item {
+  flex: none;
+}
+
+.frl-mapframe__hover {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--frl-fg-muted);
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
+/* Layer panel */
+
+.frl-layers {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--frl-space-2) var(--frl-space-3) var(--frl-space-3);
+  border: 0;
+  font-size: var(--frl-text-sm);
+}
+
+.frl-layers__title {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--frl-space-1);
+  padding: 0;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.frl-layers__list {
+  display: flex;
+  clear: both;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+}
+
+.frl-layers__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  color: var(--frl-fg);
+}
+
+.frl-layers__label input {
+  flex: none;
+  margin: 0;
+}
+
+.frl-layers__label input:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 2px;
+}
+
+.frl-layers__glyph {
+  margin: 0 -2px;
+}
+
+.frl-layers__name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.frl-layers__count {
+  flex: none;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+}
+
+.frl-layers__row.is-unavailable .frl-layers__label {
+  color: var(--frl-fg-muted);
+}
+
+.frl-layers__notes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 20px;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-layers__footer {
+  padding-top: var(--frl-space-2);
+  border-top: 1px solid var(--frl-border);
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+  line-height: var(--frl-leading-tight);
+  overflow-wrap: anywhere;
+}
+
+/* Items at a clicked point (a merged marker): a small list beside the point, inside the stage. */
+
+.frl-mapchoice {
+  position: absolute;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-1);
+  width: 260px;
+  max-width: calc(100% - 2 * var(--frl-space-2));
+  max-height: min(320px, calc(100% - 2 * var(--frl-space-2)));
+  padding: var(--frl-space-2);
+  overflow: auto;
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius-lg);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-mapchoice__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-2);
+}
+
+.frl-mapchoice__title {
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-mapchoice__hint {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+}
+
+.frl-mapchoice__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.frl-mapchoice__option {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--frl-fg);
+  font: inherit;
+  line-height: var(--frl-leading-tight);
+  text-align: left;
+  cursor: pointer;
+}
+
+.frl-mapchoice__option:hover {
+  background: var(--frl-surface-hover);
+}
+
+.frl-mapchoice__all {
+  align-self: flex-start;
+}
+
+@media (forced-colors: active) {
+  .frl-mapframe__card {
+    border-color: CanvasText;
+  }
+
+  .frl-mapchoice {
+    border-color: CanvasText;
+  }
+
+  .frl-mapchoice__option {
+    border-color: ButtonText;
+  }
+}

@@ -59,6 +59,8 @@ export interface RouteListProps {
   readonly onDrop?: ((fromIndex: number, toIndex: number) => void) | undefined;
   /** Escape, pointer cancel, or a drop back in place. */
   readonly onDragCancel?: (() => void) | undefined;
+  /** The pointer entered row `index`, or left the list (null): the map highlights the row's steps. */
+  readonly onHoverIndexChange?: ((index: number | null) => void) | undefined;
   /** No editing affordances or commands (optimiser running, proposal open); navigation works. */
   readonly readOnly?: boolean | undefined;
   readonly overscan?: number | undefined;
@@ -117,6 +119,7 @@ export function RouteList({
   onDragStart,
   onDrop,
   onDragCancel,
+  onHoverIndexChange,
   readOnly = false,
   overscan = DEFAULT_OVERSCAN,
   initialViewportHeight = 560,
@@ -302,6 +305,13 @@ export function RouteList({
         tabIndex={0}
         className="frl-routelist__viewport"
         onKeyDown={onKeyDown}
+        onMouseLeave={
+          onHoverIndexChange === undefined
+            ? undefined
+            : () => {
+                onHoverIndexChange(null);
+              }
+        }
         onScroll={(event) => {
           const next = event.currentTarget.scrollTop;
           scrollTopRef.current = next;
@@ -324,6 +334,7 @@ export function RouteList({
               onDoubleClick: () => {
                 onActivate?.(index);
               },
+              onMouseEnter: atIndex(onHoverIndexChange, index),
               onHandlePointerDown: canDrag
                 ? (event: PointerEvent<HTMLElement>) => {
                     beginDrag(index, event);

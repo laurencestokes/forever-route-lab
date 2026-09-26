@@ -13,6 +13,7 @@ import {
   undoHistory,
 } from './history';
 import { collisionFreeIds } from './ids';
+import { DEFAULT_MAP_UI, type MapUiState, type OpenedQuests } from './map-view';
 import { applySelect, EMPTY_SELECTION, pruneSelection, reconcileSelection, type SelectAction, type Selection } from './selection';
 
 /**
@@ -27,9 +28,22 @@ export interface ViewState {
   readonly rightTab: RightTab;
   readonly theme: ThemePreference;
   readonly showLayerPanel: boolean;
+  /** The map's view state (src/app/map-view.ts): surface, zoom band, visible layers, last zone (hover is the map controller's). */
+  readonly map: MapUiState;
+  /** Quests opened in Details from the map or the Available tab, with the selection they belong to. */
+  readonly openedQuests: OpenedQuests | null;
 }
 
-export const DEFAULT_VIEW: ViewState = { rightTab: 'available', theme: 'system', showLayerPanel: false };
+export const DEFAULT_VIEW: ViewState = { rightTab: 'available', theme: 'system', showLayerPanel: false, map: DEFAULT_MAP_UI, openedQuests: null };
+
+/** Every ViewState key (the `satisfies` makes a new key a compile error until it is listed). */
+const VIEW_KEYS = Object.keys({
+  rightTab: true,
+  theme: true,
+  showLayerPanel: true,
+  map: true,
+  openedQuests: true,
+} satisfies Record<keyof ViewState, true>) as readonly (keyof ViewState)[];
 
 /**
  * Why route editing is locked (§12.1): an optimiser run is active, or a proposal is open. Each
@@ -90,6 +104,11 @@ export interface EditorStore {
   readonly canUndo: () => boolean;
   readonly canRedo: () => boolean;
   readonly select: (action: SelectAction) => void;
+  /**
+   * Merges `patch` into the view state. A patch whose every field is the same value (by
+   * `Object.is`) changes nothing and notifies nobody; build nested values such as `map` with
+   * `patchMapUi`, which keeps the current object when nothing in it changes.
+   */
   readonly setView: (patch: Partial<ViewState>) => void;
   /**
    * Swaps in another project (load, import): clears history, selection and clipboard, and keeps
@@ -271,7 +290,7 @@ export function createEditorStore(opts: EditorStoreOptions): EditorStore {
     setView(patch) {
       const view = { ...state.view, ...patch };
       const current = state.view;
-      if (view.rightTab === current.rightTab && view.theme === current.theme && view.showLayerPanel === current.showLayerPanel) return;
+      if (VIEW_KEYS.every((key) => Object.is(view[key], current[key]))) return;
       commit({ view });
     },
 

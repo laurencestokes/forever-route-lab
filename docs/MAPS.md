@@ -157,8 +157,12 @@ The first is ID 5358 at offset (427, 78), a 256 × 256 texture, AreaID 370.
 
 ## 5. Local map pipeline
 
-Milestone 3 builds this pipeline (ARCHITECTURE §18). Milestone 2 builds only
-`import.ts --placeholder` (§8).
+Milestone 2 built `import.ts --placeholder` (§8) and the local-set checks. Milestone 3 built the
+serving side: `vite-local-maps.ts` (§5.7), the art checks and the manifest's `art` section
+(`validate.ts`, `lib/art.ts`; §5.3, §5.5), and art entries in `infra/maps` (§5.6 step 7).
+**Extraction from the client** (`import.ts --build`, `convert.ts`) moved to Milestone 3b, because
+it needs the read-only CASC reader (D-028). Until then a developer can only place art by hand
+(§5.4 (c)); the checks treat it exactly as `convert.ts` output.
 
 ### 5.1 Principles
 
@@ -199,19 +203,20 @@ tools/maps/
   README.md
   inputs/db2-rows-1.60.1.70009.json   # committed: the 12 cited DB2 rows and their UiMap rows (§8.3)
   import.ts              # --placeholder: pinned conversion.json + inputs/db2-rows-…json → public/maps/placeholder/ (M2)
-                         # --build <b>: csv/ → local-maps/geometry.local.json; writes extract-list.txt (M3)
-  convert.ts             # BLP decode → stitch → crop → overlays → local-maps/art/ (WebP/PNG) (M3)
-  validate.ts            # §5.5 checks; --activate writes local-maps/maps.manifest.json after a pass (M2)
+                         # --build <b>: csv/ → local-maps/geometry.local.json; writes extract-list.txt (M3b)
+  convert.ts             # BLP decode → stitch → crop → overlays → local-maps/art/ (WebP/PNG) (M3b)
+  validate.ts            # §5.5 checks; --activate writes local-maps/maps.manifest.json after a pass (M2; art M3)
   vite-local-maps.ts     # dev/preview-only Vite plugin (§5.7) (M3)
   lib/                   # M2: checks, local-set, placeholder, notice, db2-rows, make-db2-rows (rows file), pin,
-                         #     conversion, csv, git, hash, json, args, inputs; tools/maps/README.md lists them
+                         #     conversion, csv, git, hash, json, args, inputs; M3: art (L3, the art section);
+                         #     tools/maps/README.md lists them
 public/maps/placeholder/                        # committed (§8.2)
   geometry.placeholder.json
   NOTICE.md
 local-maps/                                     # gitignored except README.md; outside public/; never built or deployed
   maps.manifest.json     # written only by validate.ts --activate; its presence activates the set (§5.3)
   geometry.local.json    # rows with source "local-db2" (§5.3)
-  art/<uiMapId>.webp
+  art/<uiMapId>.webp     # or .png: one still image per UiMap, directly in art/ (L3, §5.5)
   taxi.local.json        # optional: local taxi-derived leg times (D-022; SIMULATION TIME-6)
 ```
 
@@ -362,7 +367,11 @@ every local-set check passes (§5.5); its presence is what makes the set active 
   "tables": { "UiMapAssignment": { "rows": 61, "sha256": "…" } },   // geometry.local.json inputs.tables, or null (unknown)
   "frameHash": "…",                  // recomputed by validate.ts; infra/maps recomputes it again
   "geometry": { "file": "geometry.local.json", "sha256": "…" },   // LF bytes
-  "images": {},                      // Milestone 2: always empty (any file under art/ fails L3)
+  "art": {                           // Milestone 3: one entry per art file that passed L3; {} without art
+    "1411": { "file": "art/1411.webp", "contentType": "image/webp", "width": 1002, "height": 668,
+              "sha256": "…",           // the file's bytes as they are (images are never LF-normalised)
+              "bounds": { "assignment": 46721, "mapId": 1, "xMin": -1716.6666259766, "xMax": 1808.3332519531,
+                          "yMin": -7249.9995117188, "yMax": -1962.4998779297 } } },   // the UiMap's row in geometry.local.json
   "taxi": { "file": "taxi.local.json", "sha256": "…" },          // only when the file exists
   "validation": { "passed": true, "checks": ["L0", "L1", "L2", "L3", "L4", "L7"],
                   "notRun": { "L5": "no local TaxiNodes CSV given (--taxi-nodes <csv>)", "L6": "…" } } }
@@ -370,11 +379,22 @@ every local-set check passes (§5.5); its presence is what makes the set active 
 
 `redistribution` is always `local-only`, in the manifest, `geometry.local.json` and
 `taxi.local.json` alike, and `audit-dist` fails on any file that carries it (§5.7). Revision 1's
-`generatedAt` field is dropped because it made identical inputs produce different bytes. The
-Milestone 3 art pipeline fills `images` (`{ "<uiMapId>": { "file", "width", "height", "sha256",
-"tileFdids" } }`).
+`generatedAt` field is dropped because it made identical inputs produce different bytes.
 
-### 5.4 Extraction steps (local sets, Milestone 3)
+**The `art` section** (Milestone 3; `tools/maps/lib/art.ts`) replaces revision 2's planned
+`images` block. It is keyed by UiMapID, ascending. `file` is relative to `local-maps/` and is
+always `art/<uiMapId>.png` or `.webp`; `contentType`, `width` and `height` are read from the
+file's own headers (`src/infra/maps/image-header.ts`, shared with the app: no decoding, no new
+dependency); `sha256` covers the file's bytes. `bounds` is the world rectangle the whole image
+covers: the UiMap's only row in `geometry.local.json` (assignment ID, world map and the four
+edges, as the row writes them), so the image is one axis-aligned rectangle on one world surface
+(coordinates §4.1, §14.1). A UiMap with several rows (Azeroth 947, one per continent) or a partial
+UI rectangle has no art entry; its art needs the deferred UiSurface. `tileFdids` (the tiles an
+image was stitched from) is left to `convert.ts` in Milestone 3b, which can add it; hand-placed
+art has none to record. A manifest written before Milestone 3 has `images: {}` and no `art`; the
+app reads that as "no art".
+
+### 5.4 Extraction steps (local sets; extraction is Milestone 3b)
 
 **(a) Metadata (scripted, preferred).** None of these commands has been run yet; they come from
 the tools' READMEs.
@@ -392,7 +412,7 @@ the tools' READMEs.
    `local-maps/geometry.local.json` (rows `source: "local-db2"`) and appends every art and overlay
    tile FDID to `extract-list.txt`.
 
-**(b) Art (scripted).**
+**(b) Art (scripted; Milestone 3b, with the CASC reader).**
 
 1. Run TACTTool again on the list: `blp/<fdid>.blp`.
 2. `convert.ts` performs these steps and writes only under `local-maps/art/`:
@@ -416,7 +436,10 @@ the tools' READMEs.
    disable cache collection (§4.1) before selecting the local folder.
 2. Data tab: select the §1 tables → Export as CSV → copy to `csv/`.
 3. Zones tab (optional): export zone PNGs. They match the `convert.ts` output for zones, but
-   there are no continents and no sidecar.
+   there are no continents and no sidecar. *Until `convert.ts` exists (Milestone 3b)* this is the
+   only way to get art: save each one as `local-maps/art/<uiMapId>.png`. L3 checks it like any
+   other art file (name, headers, `LayerWidth × LayerHeight`, placement), and `--activate` lists
+   it in the manifest.
 4. Textures tab: export the tile FDIDs as "BLP (Raw)" into `blp/`, then run `convert.ts` as in (b).
 5. Record "wow.export-gui" and the version in `source.json`. This path is less reproducible: its
    DBDs are unpinned and it needs a GUI.
@@ -457,11 +480,12 @@ only after the placeholder checks pass. Any failure leaves the set inactive.
 | L0 | `geometry.local.json` exists and parses as a local geometry: `"kind": "local"`, `"redistribution": "local-only"`, a top-level `build`, rows `local-db2`, the placeholder's product. |
 | L1 | Every Type 3/6 UiMap with art has exactly one `OrderIndex 0` assignment with `UiMin (0,0)`, `UiMax (1,1)`, WMO 0 and Z `±1e6`. Anything else is reported. *As built (Milestone 2):* the geometry format has no WMO or Z columns, so L1 checks the OrderIndex 0 row and the UI rectangle of every Type 3/6 UiMap; WMO and Z are for `import.ts --build` to check when it reads the CSVs (Milestone 3), as the placeholder importer already does for the 12 rows. |
 | L2 | Isotropy: `(Ymax−Ymin)/(Xmax−Xmin)` equals `LayerWidth/LayerHeight` to within 0.2%. *As built (Milestone 2):* against the same art-aspect table as P7, since art dimensions are unknown before Milestone 3. |
-| L3 | Image dimensions equal `LayerWidth × LayerHeight`, and every tile listed in `extract-list.txt` decoded. (`validate.ts` then hashes the set files into the manifest; `infra/maps` checks those hashes at runtime, §5.6.) *As built (Milestone 2):* fails closed when any file exists under `art/`, because art cannot be verified until `convert.ts` exists; a geometry-only set passes. |
+| L3 | Image dimensions equal `LayerWidth × LayerHeight`, and every tile listed in `extract-list.txt` decoded. (`validate.ts` then hashes the set files into the manifest; `infra/maps` checks those hashes at runtime, §5.6.) *As built (Milestone 3, `lib/art.ts`):* every file directly in `art/` must be named `<uiMapId>.png` or `<uiMapId>.webp` (no subfolders or links; `Thumbs.db`, `desktop.ini` and `.DS_Store` are skipped), one per UiMap; its PNG or WebP headers must parse and match the extension, and animated images are refused (headers only: chunk structure, IHDR, VP8/VP8L/VP8X; nothing is decoded, and PNG CRCs are not checked, the SHA-256 is the integrity check); the UiMap must be in `geometry.local.json` with exactly one row, OrderIndex 0 with the full UI rectangle; the size must be the UiMap's art size (1002 × 668; 512 × 512 for 1463, 1464, 2665: the P7 table, until `import.ts --build` reads `UiMapArtStyleLayer`); and the image aspect must equal the row's world aspect within 0.2% (2665 exempt). The tile check waits for `convert.ts` (Milestone 3b). A geometry-only set passes. |
 | L4 | **Frame compatibility** (§5.6). The frame hash of the set's rows for the 49 shared UiMaps equals the committed `frameHash`, and every row for a UiMap the placeholder already has is identical to the committed row (§5.6 step 4). On a hash mismatch the build's geometry has changed, so QuestieDB percentages would be read in the wrong frame. On a shared-row mismatch, resolution would differ between machines. Either way the set is not activated. *Superseded by D-018:* revision 1 compared DB2 bounds with `target_bounds` directly; the hash is the same test in a form `infra/maps` can also run. |
 | L5 | Every `TaxiNodes` position on MapID *m* falls inside 0..100 of at least one zone on *m*. *As built:* runs with `--taxi-nodes <TaxiNodes.csv>` (a local CSV at the set's build, read by column name: `ID`, `ContinentID`, `Pos_0`, `Pos_1`) against the merged geometry's zone rows (AreaID > 0). Without the CSV, L5 and L6 are recorded under `validation.notRun` in the manifest and do not block activation. |
 | L6 | Landmarks: each QuestieDB flight master is within 30 yd of a TaxiNode on the same MapID. Six landmarks (`TAXI_LANDMARKS` in `tools/maps/lib/local-set.ts`): nodes 2, 22 and 23 (Stormwind, Thunder Bluff, Orgrimmar) at 11.9, 3.6 and 2.6 yd, and nodes 5 (Lakeshire), 67 and 68 (Light's Hope Chapel) at 7.0, 4.9 and 3.8 yd. Four of them sit on three of the four changed frames (1453, 1433, 1423); reading their Forever percent in the Era frame gives 108.9, 107.2, 450.5 and 445.0 yd ([coordinates §9](research/coordinates.md#9-independent-cross-check-flight-masters-vs-taxinodes)). The TaxiNodes inputs are local. The six landmark rows are cited client values that `src/geo` tests pin (D-022, ARCHITECTURE §6). |
 | L7 | World ↔ percent round-trip error is below 1e-9 for all spawn points. *As built (Milestone 2):* on a 5 × 5 grid of percent points, inside and outside 0..100, on every row of the merged geometry. |
+| L8 | *Milestone 3, reports only (`--local` without `--activate`):* an existing `maps.manifest.json` still describes the files: the geometry's SHA-256, every art file listed with the same hash, type, size and bounds, no unlisted art, and the taxi file's hash. It names each difference and asks for `--activate` again. Without a manifest it is recorded as not run; `--activate` never runs it, because it replaces the manifest. |
 
 ### 5.6 Frame compatibility (D-018, F09)
 
@@ -523,6 +547,23 @@ QuestieDB commit: 1411-1413 and 1416-1461. The dataset's spawn percentages are i
 6. The layer panel always shows both builds: the data frame and placeholder rows ("data frame
    1.60.1.69893; placeholder: 49 frames @ 69893, 12 rows @ 70009") and the local set ("local set
    1.60.1.70009: compatible, N UiMaps added", "…: incompatible, using placeholder", or "none").
+   *As built (Milestone 3):* a compatible set with art adds ", art for N UiMaps (verified when
+   drawn)", or "; local art refused (…)".
+7. *Milestone 3 (`src/infra/maps/local-art.ts`):* for a **compatible** set only, the manifest's
+   `art` section is parsed and checked against the verified `geometry.local.json`: every entry's
+   file name, type and size must be well formed, and its `bounds` must equal its UiMap's single
+   full-rectangle row exactly. One bad entry refuses the whole section (the geometry is still
+   used), because the manifest is written by one tool run. `LoadedGeometry.art` then holds
+   `entries` (`{ uiMapId, mapId, bounds, url, width, height, contentType, sha256 }`, `bounds` in
+   world yards on `mapId`) and `load(uiMapId)`. **Verification is lazy, for every set size:** the
+   first `load` of a UiMap fetches its file (`no-store`), checks the SHA-256 against the manifest
+   and the headers against the recorded type and size, and resolves to the verified bytes as a
+   `Blob`; the map draws that `Blob` through an object URL, so what is drawn is what was verified
+   (the plain `url` is never drawn). Results are memoised per UiMap; a failed request is tried
+   again at the next draw. Hashing all art at load was rejected: megabytes of downloads and hashing
+   would land in the startup budget (ARCHITECTURE §14) for surfaces that may never be shown, and
+   one path for all set sizes is simpler to test than a size threshold. A changed file is refused
+   at its draw (`changed`); a file that matches its hash but not the recorded size is `malformed`.
 
 ### 5.7 Serving local maps; keeping them out of `dist/` (D-018, D-025; F03/LIC-01)
 
@@ -535,6 +576,19 @@ QuestieDB commit: 1411-1413 and 1416-1461. The dataset's spawn percentages are i
 - resolves each request inside `local-maps/` and refuses path traversal. It returns 404 for
   missing files, sets `Cache-Control: no-store`, and sends WebP/JSON content types.
 
+*As built (Milestone 3):* the plugin (`localMaps()`, wired in `vite.config.ts`) has only
+`configResolved`, `configureServer` and `configurePreviewServer`. `configResolved` refuses, in
+every command, a folder that overlaps `publicDir` or the build's `outDir`. A relative base
+(`./`) serves at `/`, as Vite's own servers do. Requests: `GET` and `HEAD` only (405 otherwise);
+`.`/`..` segments, hidden names, backslashes, colons, NUL (403) and undecodable escapes (400) are
+refused, and so is a link that resolves outside the folder; folders and missing files (the whole
+folder included) answer 404 from the plugin, never the SPA's `index.html`. Content types: JSON,
+WebP, PNG, Markdown, text and CSV, otherwise `application/octet-stream`; every answer has
+`Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. Its tests
+(`tools/maps/vite-local-maps.test.ts`) drive a real dev server, `vite build` and `vite preview`
+of a throwaway project, and check that the build output has no local-maps file and that the dist
+audit flags a dist that does.
+
 `vite preview` therefore shows local maps on the developer's machine, while the built `dist/` it
 serves contains none.
 
@@ -543,7 +597,10 @@ serves contains none.
 - contains `local-maps/`;
 - contains any `maps.manifest.json` or JSON file with `"redistribution": "local-only"` (which
   also catches a copied `geometry.local.json` or `taxi.local.json`);
-- contains images outside an allowlist of app assets (so no map WebP or PNG);
+- contains images outside an allowlist of app assets (so no map WebP or PNG), by extension and,
+  since Milestone 3, by content: PNG, JPEG, GIF, WebP and AVIF/HEIF signatures under a name that
+  does not declare them are refused as images, and BLP texture content under any other name as a
+  client file (`checkFileSignature`, `tools/build/lib/audit.ts`);
 - contains local paths, `.cache` references, `.lua`, `.blp` or source maps;
 - contains files over budget;
 - lacks a required notice file;
@@ -611,13 +668,28 @@ Implemented in Milestone 2 by the pure `src/geo` module; its API and tests are l
   is not placed (ARCHITECTURE §5.2). Percent is not a distance: 1% is 52.9 yd on Durotar and
   17.4 yd on Stormwind.
 
-## 7. Rendering plan (Leaflet behind `MapAdapter`)
+## 7. Rendering (Leaflet behind `MapAdapter`)
 
-This follows ARCHITECTURE §7. The React integration is a thin wrapper of our own around `L.map`
-(a ref plus effects). `map/leaflet` is the only Leaflet importer. **react-leaflet is not used:**
-versions 3.x-5.x declare `Hippocratic-2.1` (npm registry; 2.8.0 declared MIT). The owner's
+This follows ARCHITECTURE §7. `map/leaflet` is the only Leaflet importer. **react-leaflet is not
+used:** versions 3.x-5.x declare `Hippocratic-2.1` (npm registry; 2.8.0 declared MIT). The owner's
 posture is not to use it in this GPL-3.0-or-later repository (D-005). This is not a legal
-conclusion.
+conclusion. The React integration is a thin wrapper of our own (a ref plus effects).
+
+**As built (Milestone 3).** Three pieces, with the ARCHITECTURE §4 import rules:
+
+| Module | What | May import |
+|---|---|---|
+| `src/map/adapter.ts` (pure) | The `MapAdapter` interface, the plain-data descriptors, the view-model inputs of `layers.ts`, `LAYER_IDS`, surface-id and bounds helpers | `domain`, `geo` |
+| `src/map/layers.ts` (pure) | View models → descriptors: `createMapLayers` (memoised per layer), the stateless `build*` functions, `surfacesOf`, `placeStep`, `legOf`, `routeStepInputOf`, `routeInputOf`, `routePieces`, `layerStatsNotes` with `LAYER_STATS_UNITS` | `domain`, `geo`; only types from `adapter.ts` |
+| `src/map/leaflet/` | `createLeafletMapAdapter` and its helpers: `transform.ts` (world ⇄ lat/lng, scale and zoom maths, grid labels), `diff.ts`, `style.ts` (palette, path styles, glyph specs and extents), `glyphs.ts` (canvas glyphs), `perf.ts` (User Timing), `leaflet-layers.ts` (the Leaflet subclasses and draw-list placement), `leaflet-core.css` (Leaflet's stylesheet without its images), `map.css` | `adapter.ts`, `leaflet`; only types from the pure modules |
+
+`ui` may import `adapter.ts` but not `layers.ts`, and `map/leaflet` only in the composition root:
+`src/main.tsx` hands the shell a lazy loader (`MapEngineSetup.loadAdapter`) that imports
+`src/map/leaflet` in its own chunk and resolves to `createLeafletMapAdapter` as a
+`MapAdapterFactory`, and the app layer re-exports the `layers.ts` builders the UI calls (as
+`src/app/rules-exports.ts` does for rules).
+There is no `src/map/index.ts`: the architecture test maps only `adapter.ts`, `layers.ts` and
+`leaflet/` under `src/map`, and a barrel would mix a pure module with the Leaflet one.
 
 ### 7.1 Surfaces
 
@@ -631,10 +703,35 @@ conclusion.
   Where those two islands sit on the world map is unknown (§10 M3); per-world surfaces do not
   need to know.
 - Zoom: an art image's native zoom is `log2(1002 / (Ymax − Ymin))`: −5.2 for continents, −2.4
-  for Durotar and −0.8 for Stormwind. Use `minZoom −6`, `maxZoom 1` and `zoomSnap 0.25`.
+  for Durotar and −0.8 for Stormwind.
 - All zones of a continent share one world frame, so lines crossing zone borders need no special
   handling. Zone rectangles overlap and cities sit inside zones: use them for placeholders,
   hit-testing and "zoom to zone", and use real continent art when a local set has it.
+
+*As built:*
+
+- `surfacesOf(geometry)` makes one `SurfaceInfo` per world map with at least one row, ascending.
+  The extent is the frame of the map's one continent UiMap (Type 2 with a parent other than the
+  root, which leaves out the alternative continents 1463 and 1464; with the placeholder: 1414 and
+  1415); otherwise the union of its zone frames (AreaID > 0) plus 5% on every side. The name is
+  the continent's, else the one name all its zone frames share (Zephras Isle 2521), else
+  `World map <id>`. The placeholder gives surfaces 0, 1, 30, 489, 529, 2991 and 2997.
+- The transform is in `src/map/leaflet/transform.ts`: `lat = x`, `lng = 0 − y` and back, exact
+  (negation only; `0 − v` so a world 0 never becomes −0), with tests for round trips and bounds.
+- `maxZoom 2` (Orgrimmar's native zoom is −0.5), `zoomSnap 0.25`, `zoomDelta 0.5`. The least
+  zoom follows the container (`minZoomFor`, M3 review MAP-UX-7): −6 where the stage shows the
+  largest surface extent at −6 (with 24 px padding), otherwise the zoom that fits it, snapped down
+  to a quarter, never below −7.5; it is recomputed on every resize. At −6 Kalimdor (36,800 yd)
+  needs about 623 px of width, so a 336 px stage (1280 px with the layer panel open) gets −7. The
+  view is held inside the extent padded by 50% (`maxBounds`; a view wider than that is centred on
+  it). `focus` zooms in to at least −2.
+- `fitBounds` takes a `minZoom` floor: bounds that need a lower zoom to fit are centred at the
+  floor instead. The controller passes the level-of-detail `zoneZoom` for jump-to-zone and
+  aggregate clicks, so a zone that is wide for its stage still reaches raw points (M3 review
+  PERF-4, MAP-UX-2).
+- Each surface remembers its last view. Content is kept per layer and only descriptors on the
+  current world map are drawn, so a surface switch redraws what the layers already hold. `focus`,
+  `fitBounds` and `setViewport` on another world map switch surface and emit a `surface` event.
 
 ### 7.2 Level of detail (PERF-7)
 
@@ -645,32 +742,128 @@ animation. At `moveend`/`zoomend` it redraws every path, and each hit test walks
 list. Cost therefore shows up as long frames at `moveend` and on layer changes, not as a lower
 pan frame rate.
 
-- Canvas renderer (`L.canvas`), one per surface.
+- Canvas renderer (`L.canvas`), one per map (it draws the current surface).
 - **Raw points** (spawns, objectives, givers) are drawn only at zone zoom, or at any zoom for the
-  selected or hovered quest. Proposed threshold: zoom ≥ −3.5, between continent (−5.2) and zone
-  (about −2.4) native zooms. Milestone 3 tunes it.
-- **At continent zoom**, per-zone aggregate glyphs replace raw points: one glyph per (layer, zone
-  frame) at the centroid of that zone's points, showing a count. A hex-bin density view (revision
-  1's placeholder "terrain hint") is an optional later layer and counts toward the cap.
-- **Hard cap on drawn paths per surface.** Proposed starting value: 5,000, revision 1's marker
-  budget. Milestone 3 sets it from the `moveend` measurement. Above the cap, the paths nearest
-  the viewport centre are drawn, and the layer shows "N more hidden, zoom in".
-- Labels on hover only.
+  selected or hovered quest. Threshold: zoom ≥ −3.5, between continent (−5.2) and zone (about
+  −2.4) native zooms.
+- **At continent zoom**, per-zone aggregate glyphs replace raw points: one glyph per (layer, zone)
+  at the centroid of that zone's points, showing a count. A hex-bin density view (revision 1's
+  placeholder "terrain hint") is an optional later layer and counts toward the cap.
+- **Hard cap on drawn paths per surface**: 2,500 (revision 1's marker budget of 5,000 measured at
+  5.9–15 ms per `moveend` unthrottled in the M3 review, PERF-3, too close to the 16 ms budget for
+  the planned 4× CPU throttle). Above a layer's budget, the paths nearest the viewport centre are
+  drawn, and the layer says how many it left out.
+- Labels on hover only (zone-frame names excepted, §7.5).
 - Budgets (ARCHITECTURE §14): `moveend` redraw ≤ 16 ms at the cap; applying one route edit
-  ≤ 8 ms. Both are measured with `performance.measure` marks in `LeafletMapAdapter` and driven by
-  Playwright.
+  ≤ 8 ms. Both are measured with `performance.measure` marks in `LeafletMapAdapter` (§7.3) and
+  driven by Playwright (Milestone 9). The threshold is unmeasured until then (§10 M10); the cap has
+  an unthrottled harness run (below), and the 4× throttled one stays for Milestone 9.
+
+*As built* (`DEFAULT_LOD` in `layers.ts`, overridable with `createLod`):
+
+| Layer | Budget (paths) | Continent zoom |
+|---|---:|---|
+| `zone-frames` | 100 | frames and the extent |
+| `available-quests` | 600 | per-zone aggregates |
+| `objectives` | 500 | per-zone aggregates |
+| `turn-ins` | 150 | per-zone aggregates |
+| `flight-masters` | 100 | raw (`rawAtAnyZoom`: a few hundred at most, useful at continent zoom) |
+| `route-line` | 150 | as at zone zoom (pieces of at most 256 vertices, §7.4) |
+| `route-steps` | 700 | as at zone zoom |
+| `proposal` | 100 | as at zone zoom |
+| `selection` | 100 | as at zone zoom |
+| `art` | 16 images (not canvas paths) | continent art only |
+
+- The canvas budgets sum to the 2,500 cap, and `createLod` refuses settings where they do not
+  fit, so every layer is capped on its own inputs and the surface stays under the cap.
+- Over budget, focused items (the selected or hovered quest's points; selected, hovered and
+  active steps) are kept first, then the nearest to the viewport centre (squared distance to a
+  point, or to a line's or frame's bounding box), ties by id. Survivors keep their draw order.
+  The cut is found without sorting every candidate (the budget-th smallest distance, then ties by
+  id), which gives the same result as the full sort and saves about 1.5 ms on a 10,000-step route.
+- The memoised builders (`createMapLayers`) rank from the centre snapped to a grid of 256 px at
+  the zoom's whole level (`rankingCenter`, about a quarter of a view), so a pan inside a grid cell
+  re-ranks nothing; and when they do re-rank, items they already draw stay first while they are
+  inside the view grown by 25% on every side (`MapView.bounds`). Markers no longer drop out and
+  reappear while panning over budget (M3 review PERF-7). The stateless `build*` functions rank
+  from the exact centre alone.
+- The zone the user jumped to (`view.map.zone`, passed as `rawZone` to `spawns`) is drawn raw at
+  any zoom, like a focused quest's points (by the points' published UiMap).
+- Aggregates group by the point's published UiMap (`SpawnPoint.uiMapId`, the hint, never
+  rectangle containment; coordinates §5). Points without one group per world map (`No zone`). The
+  glyph shows the point count (`4.3k` style, rounded down); the label also names the number of
+  distinct subjects.
+- Every layer returns `LayerStats`: `drawn`, `notDrawn` (cut by the cap), `aggregated`,
+  `unresolved` by reason, and `otherSurfaces`. `layerStatsNotes(stats, layer)` turns them into
+  panel sentences that always name the unit (M3 review MAP-HONEST-5), from `LAYER_STATS_UNITS`:
+  spawn layers count markers cut by the cap and points unplaced or elsewhere ("22 points not
+  placed: 22 inside an instance with no known entrance", "377 points on other world maps"); step
+  markers count steps; the route line counts logical lines and glyphs on other world maps (not
+  its pieces) and steps not placed; frames, images, halos and legs likewise. A caller may pass one
+  noun for every count instead of the layer.
+- The adapter has its own hard cap too (`maxPathsPerSurface`, default 2,500): if content ever
+  exceeds it, the bottom of a layer's draw order is dropped and counted in `renderStats()`.
+- Measured with a standalone harness (1280×800 stage, DPR 1.5, unthrottled, 2,500 paths, 120
+  pans of 120 px per setting): `frl:map:update-paths` median 3.3–3.5 ms (p90 4.0–4.4) with every
+  path in view, and 1.9 ms with padding 0.1 against 2.2 ms with 0.25 when the content spreads over
+  three views; see "canvas padding" in §7.5.
 
 ### 7.3 Layer updates
 
-- Layers: available quests, route line, step markers, objectives, turn-ins, flight masters, zone
-  frames, map art, proposal overlay.
-- Descriptors are plain data with stable ids, for example `step:<stepId>`,
-  `spawn:<npc|object>:<id>:<i>`, `run:<mapId>:<style>:<firstStepId>`, `agg:<layer>:<uiMapId>`.
-- `map/layers.ts` memoises each layer on its own inputs. Spawn layers do not depend on the route,
-  and unchanged descriptors keep their object identity.
-- The adapter skips a layer whose content array is unchanged by reference. Otherwise it diffs by
-  id: it creates new ids, removes missing ones, and updates in place (`setLatLngs`, `setStyle`)
-  descriptors whose object changed. A route edit never re-creates thousands of paths.
+- Layers, bottom to top (`LAYER_IDS`): `art`, `zone-frames`, `available-quests`, `objectives`,
+  `turn-ins`, `flight-masters`, `route-line`, `route-steps`, `proposal`, `selection`. Spawn layers
+  sit below the route, so route markers win hit-testing.
+- Descriptors are plain data with stable ids, unique within a layer: `extent:<mapId>`,
+  `frame:<uiMapId>`, `art:<uiMapId>`, `spawn:<npc|object>:<id>:<i>`,
+  `spawn:event:<questId>:<objective>:<i>`, `agg:<layer>:<uiMapId>` (or `agg:<layer>:map-<mapId>`),
+  `run:<mapId>:<style>:<first step of the piece>`, `transition:out:<stepId>`,
+  `transition:in:<stepId>`, `departure:<stepId>`, `step:<stepId>`, `halo:<stepId>`,
+  `leg:<stepId>`. A repeated base id gets `~2`, `~3`, ….
+- **No positional numbers** (M3 review PERF-2). Route descriptors name steps by id: a step
+  marker's and a halo's `label` is its step id (a label key), `MapRef` `step` has no index, run
+  labels are the style word ("Route", "Flight"), transition labels name the other surface
+  ("Transport to Eastern Kingdoms") and the selected leg says "Selected leg". `RouteStepInput`
+  holds no position or text either, so the app's route-input cache is keyed by step, not index.
+  The adapter asks a label provider (`MapAdapterOptions.label` or `setLabelProvider`, a
+  `MapLabelProvider = (ref) => string | null`) for the numbered text each time a label is shown,
+  through `labelOf`, which a UI's "pointer on" line uses too. An insert therefore changes only the
+  descriptors next to it: the other step markers keep their object identity.
+- **Stacks** (M3 review MAP-UX-3): markers of one layer, kind and style at the identical world
+  point merge into one marker with `count` > 1, every item's `refs` and `labels` in the layer's
+  order, the union of their badges, the strongest emphasis and the focused tier if any item has
+  it; it takes its first item's id and its last item's place (so it draws where its topmost item
+  would). The glyph gets a count badge (`2`…`9`, `9+`), the hover label reads
+  "6 here: a; b; c and 3 more", and a click reports every ref in `MapHit.refs`, so the UI can
+  offer a choice. Quest givers stacked on one dungeon entrance and steps 4–8 on one NPC are one
+  marker each. Items in different layers do not merge; a flight master that also starts quests
+  carries them in its spawn ref's `questIds` (the app fills them), so its click opens them.
+- `createMapLayers` memoises each layer on its own inputs: inputs by reference, focus by content,
+  the view by world map and level of detail, and the viewport centre only while the cap bites, by
+  grid cell (a pan under the cap changes nothing, §7.2). Spawn layers never see the route. A rebuilt layer keeps the
+  object identity of every descriptor whose content is equal, returns the previous `items` array
+  when nothing changed, and the previous `LayerContent` when its stats match too.
+- The adapter skips a layer whose `items` array is unchanged by reference. Otherwise it diffs by
+  id (`diffById`): it creates new ids, removes missing ones, and updates in place descriptors whose
+  object changed, calling Leaflet only for what changed (`sameData`, structural equality): the
+  position (`setLatLng`, `setLatLngs`, `setBounds`), then the glyph (`setSpec`) or style
+  (`setStyle`, `setUrl`, `setOpacity`). A descriptor whose label or ref alone changed costs no
+  canvas work, and a marker that moves and restyles is redrawn once. A route edit never
+  re-creates thousands of paths.
+- One canvas draws every layer, in the order of the renderer's draw list, which is also the
+  hit-testing order. A created path (Leaflet appends it on top) or one whose place in its layer's
+  order changed is moved to just after its predecessor (`placeAfter`: the previous path of its
+  layer, or the topmost path of the visible layers below); only that path's own area is redrawn.
+  Updates in place and highlights move nothing. The M3 review measured the old whole-stack
+  `bringToFront` restack at 2,000–4,900 calls and a whole-canvas redraw per edit and per hover
+  (PERF-1); the adapter now never calls it.
+- `highlight` (hover emphasis) draws a strong copy of each highlighted marker or aggregate on top
+  of the `selection` layer (hidden with that layer, and with a hidden highlighted layer), and
+  restyles a highlighted line in place; the items themselves keep their place.
+- User Timing measures (`perf.ts`): `frl:map:set-layer` (detail: layer and added, removed,
+  changed and moved counts), `frl:map:update-paths` (the renderer's full update on `moveend`,
+  recorded only when it runs: Leaflet postpones and skips the calls between `viewprereset` and
+  `viewreset`, M3 review PERF-10) and `frl:map:redraw` (every canvas redraw). Marks are cleared
+  after each measure and each name keeps at most 500 measures.
 
 ### 7.4 Route lines
 
@@ -686,6 +879,161 @@ pan frame rate.
   entrance, are not drawn either.
 - Points outside a zone frame (percent outside 0..100) are valid. In a zone view, draw them with an
   off-frame indicator.
+
+*As built:*
+
+- `placeStep(step, geometry)` gives each step a placement until the engine walk provides
+  positions (Milestone 6): a resolvable location is a `point` (with its UiMap and an off-frame
+  flag: zone percent outside 0..100, or a world point outside the frame of the UiMap it names);
+  an unresolvable one is `unknown` with the `geo` reason; a travel step without a location
+  (RXP `.zone`) is `unknown` (`destination-unknown`); any other step without one is `none` and
+  does not move the character. It does not know the hearth bind point or detect death skips.
+- `legOf(step)`: a `transport` travel step arrives by transport; a flight `take` is walked to (its
+  location is where the flight is taken) and departs by flight; a hearth `use` with a location
+  arrives by hearth, and without one departs by hearth, so the leg to the next placed step is the
+  teleport. Everything else is `route`.
+- Runs: consecutive placed steps on one world map with one leg style; a style change starts a new
+  run at the shared point; a lone point draws no line. An `unknown` placement ends the run and
+  forgets the position, and the next placed step's marker gets the `leg-unknown` badge. A run's
+  `ref` lists one step id per vertex, so a clicked segment `i` is the leg into `stepIds[i + 1]`.
+- **Pieces** (M3 review PERF-2): a run is cut into polylines of at most 256 vertices
+  (`MAX_POLYLINE_VERTICES`, `routePieces`) that share their end vertex, each with its own id and
+  ref. Boundaries are content-defined: a piece ends at a step whose id hashes to a boundary (about
+  one in 64) once it has 64 vertices, or at 256, so an insert or delete moves only the boundaries
+  next to it and every other piece keeps its first step, hence its id and object. A 10,000-step
+  route is about 80 pieces; an edit re-sets one or two.
+- **A hearth `use` without a location** (M3 review MAP-HONEST-8) is `unknown`
+  (`destination-unknown`) until the engine knows the bind point (Milestone 6): the line ends at
+  the point it leaves from with a departure glyph (the transition ring, ref `departure`, label
+  "Hearthstone (destination unknown until simulation)"), the next placed step gets the
+  `leg-unknown` badge, and the step counts as unplaced, not as one that stays put. It used to draw
+  a dash-dot teleport straight to the next step. A flight `take` without a location still styles
+  the next leg as a flight.
+- Transition glyphs sit at the last point before and the first point after a world-map change,
+  labelled with the leg style and the other surface's name ("Transport to Eastern Kingdoms"; the
+  label provider adds the step number).
+- The selection layer draws a halo on every selected, hovered and active step and a highlight
+  polyline for the leg into the active step, unless an unknown step or a world-map change comes
+  first. The proposal layer draws the proposed route in one `proposal` style, split only by
+  world map.
+
+### 7.5 Drawing, events and theme
+
+- **Glyphs** (`glyphs.ts`), simple original shapes drawn on the canvas, one per kind, so shape
+  carries the meaning: step, a bead (a circle with a hole); quest start, an upward triangle;
+  turn-in, a square; objective, a small dot; flight master, a plus; transition, a ring with a
+  dot; halo, a wide ring; aggregate, a rounded box with the count. Badges: instance, a small
+  square; off-frame, a dashed ring; leg unknown, a question mark; a stack, a round count badge at
+  the bottom right. `strong` glyphs are 1.35 times larger, `dim` ones fade to 40%. No game icons,
+  no diamond (◆/◇ mean Forever provenance, UI.md §4).
+- **Glyph cost** (M3 review PERF-3): a glyph neither saves nor restores the context; it sets every
+  property it uses (alpha, round joins, colours, fonts) and clears a dash pattern only when the
+  measured renderer saw a dashed path stroked earlier in the pass (Leaflet leaves its dash set),
+  with one shared empty dash list.
+- **Glyph bounds** (M3 review PERF-13): a marker's canvas bounds cover its whole paint, badges and
+  count included (`glyphExtent`), so a dirty-rectangle redraw that clears part of a glyph redraws
+  all of it; its hit radius stays the glyph's size plus 2 px (plus the renderer's 2 px tolerance).
+- **Lines**: route solid, transport dashed, flight dotted, hearth dash-dot, proposal long dashes,
+  highlight a thick solid line; every style differs by more than colour.
+- **Colours** come from the kit's CSS custom properties, read from the map container
+  (`readMapPalette`): an optional `--frl-map-<role>` token first (for example `--frl-map-route`),
+  then any shared map token the role also takes, then the kit token (`--frl-accent` for steps and
+  the route, `--frl-fg` for givers, turn-ins and the proposal, `--frl-fg-muted` for transport and
+  hearth, `--frl-border-strong` for frames, `--frl-map-grid` for the grid), then the light-theme
+  value. Zone frames and the extent are stroked with `--frl-map-frame` (defined in the kit's
+  tokens at 3:1 or more against `--frl-surface-sunken` in both themes, WCAG 1.4.11) at full
+  opacity; the extent reads `--frl-map-extent` first. The 0.7 and 0.8 opacities that took the
+  frame stroke below 3:1 are gone (M3 review MAP-A11Y-6). Never a difficulty colour or the
+  provenance cyan. The adapter re-reads them when the root's `data-theme` or the system colour
+  scheme changes; `refreshTheme()` covers any other theme switch.
+- **Zone frames** are rectangles with a faint fill and their geometry name, centred, drawn only
+  when the frame is wide enough on screen; the surface extent is a dashed outline. Frames are not
+  interactive (their hover would cover the whole map); a click on empty map reports the zone
+  frames under it, smallest first. Jump-to-zone does not take the smallest, because frames
+  overlap heavily (the Crossroads lies in Durotar's frame): the controller opens the frame the
+  point is most central in (`zoneFramesContaining`, coordinates.md §15; M3 review MAP-UX-1).
+- **Grid and scale** (procedural, §8.1): a yard grid on its own canvas in a pane below the paths
+  (spacing 1, 2 or 5 × 10ⁿ yards, at least 96 px apart, clipped to the extent, hidden while
+  zooming) and a yard scale bar bottom left. Leaflet's own scale control would say metres and
+  feet. Labels name the axis, the value with a true minus sign and the direction the axis grows,
+  `X 500 (N)` and `Y −4100 (W)` (`gridLabel`): world X runs north and Y west, and RXP writes
+  pairs as (Y, X), so a bare `X`/`Y` invited swapping them (M3 review MAP-COORD-14). The grid
+  redraws once per settled view (`moveend`, which Leaflet also fires for a view reset and after a
+  debounced resize) and reallocates its backing store only when the size or pixel ratio changes
+  (M3 review PERF-12).
+- **Canvas padding and resizing**: the path canvas extends 10% beyond the view on every side
+  (`rendererPadding`, Leaflet's default; it was 0.25, which redraws 2.25 times the view's area on
+  every `moveend` against 1.44 times). Measured on the harness above, padding made no difference
+  with every path in view (3.4 ms against 3.5 ms median) and saved 0.3 ms when the content spread
+  over three views (2.2 ms against 1.9 ms, p90 3.1 against 2.4). A `ResizeObserver` resize (a
+  splitter drag, at most once a frame) calls `invalidateSize` with a debounced `moveend`, so the
+  renderer redraws, the adapter emits one `move` and the controller syncs once, 200 ms after the
+  resizing stops (M3 review PERF-5); `resize()` settles at once.
+- **Art** (local sets only, D-018): image overlays in a pane below the grid, drawn from object
+  URLs of the verified image bytes (`infra/maps` local art), never from the plain file URL. The
+  image rectangle comes from the geometry `createMapLayers` was given, so it is built over the
+  merged geometry when a local set adds UiMaps. A surface with continent art shows only that;
+  otherwise zone art is drawn largest first.
+- **Events**: `click` (the topmost interactive item, or none, with the world point and the zone
+  frames under it), `hover` (enter and leave), `move` (`moveend`), `zoom` (`zoomend`) and
+  `surface`. Hits come from Leaflet's canvas hit-testing and carry every ref of the hit
+  descriptor (`MapHit.refs`); paths do not bubble to the map, so an item click is never also a map
+  click. Hover labels use one shared tooltip whose text is set as text, never HTML, from
+  `labelOf` and the label provider.
+- **Accessibility**: Leaflet's keyboard panning and zoom buttons stay on and take the kit's focus
+  ring; the route list, not the canvas, is the accessible view of the route. With
+  `prefers-reduced-motion: reduce`, zoom, fade and inertia animations are off.
+- **Leaflet internals** (`leaflet-layers.ts`, Leaflet pinned to exactly 1.9.4): the glyph and
+  frame classes draw from the canvas renderer's draw hook (`_updatePath`, `_renderer._ctx`,
+  `_drawing`, `_point`, `_radius`, `_pxBounds`, `_updateBounds`, `_clickTolerance`); the measured
+  renderer wraps `_redraw`, `_updatePaths` (checking `_postponeUpdatePaths`), `_draw` and
+  `_fillStroke`; `placeAfter` relinks the draw list (`_drawFirst`, `_drawLast`, a path's
+  `_order`) and calls `_requestRedraw`; `destroy` clears the map's `_sizeTimer`. The renderer's
+  `_redraw` also cancels a pending animation frame first: in 1.9.4 a synchronous redraw leaves the
+  frame requested before it scheduled, and a map removed in between (a React StrictMode remount)
+  would then throw on the deleted context. An upgrade must re-check these names.
+- **Stylesheet** (M3 review PERF-11): `leaflet-core.css` is Leaflet 1.9.4's `leaflet.css`
+  (BSD-2-Clause, notice kept in the file) without its three image rules (the layers-control
+  toggle's `layers.png` and `layers-2x.png`, and the default marker icon path), which Vite
+  inlined as data URIs past the dist audit's image rules; the map uses neither. It is re-copied on
+  a Leaflet upgrade. The lazy chunk is 182.07 kB (54.29 kB gzip) of JavaScript and 12.77 kB
+  (3.09 kB gzip) of CSS, against 17.6 kB (7.0 kB gzip) of CSS before. Importing
+  `leaflet/dist/leaflet-src.esm.js` to let Rollup drop unused classes was tried: 179.07 kB
+  (53.07 kB gzip), 1.2 kB gzip less, not worth a deep import and a type shim. The dist audit
+  reports the lazy chunks' sizes after the gated entry total, not gated, so they cannot grow
+  unnoticed.
+
+### 7.6 Tests
+
+- `src/map/adapter.test.ts`: surface ids, bounds helpers, layer order, `descriptorMapId`,
+  `combineLabels`, `labelOf` with and without a label provider, `refsOf`.
+- `src/map/layers.test.ts` (over the `src/geo` cited fixture geometry): surfaces and extents,
+  level-of-detail settings, `placeStep` and `legOf` for every step kind, frames, art, spawn
+  layers at zone and continent zoom (badges, reasons, aggregates and centroids, focus, merging,
+  order independence), the cap (nearest-first, focus-first, no centre, zero budget), route runs,
+  transitions, breaks and repeated ids, pieces (`routePieces`: lengths, shared ends, stable
+  boundaries under an insert), the hearth departure, step markers without positions, stacks,
+  selection, the proposal, the memoisation (identity kept, recomputed only on its own inputs, one
+  changed descriptor per edit, every step marker kept on an insert above it), the raw zone, the
+  snapped ranking centre and hold, units in the stats notes, and determinism.
+- `src/map/leaflet/*.test.ts` (node): the transform and its inverse, scale bar and grid maths,
+  grid labels, zoom-to-fit and the least zoom, hit helpers, diffing, `sameData` and the adapter
+  cap, palette precedence (the frame token) and reserved colours, line and glyph styles, frame
+  opacity, glyph extents and stack badges, glyph drawing with a recording context (no save or
+  restore, dash cleared only when needed), User Timing.
+- `src/map/leaflet/LeafletMapAdapter.test.ts` (happy-dom, with a recording canvas context and a
+  fixed container size): mount, per-surface drawing, skip by reference and diff by id, content
+  kept across remounts, painting, canvas hit-testing with layer order and toggles, polyline
+  segments, text-only tooltips, surface switching and focus, fits, highlights, User Timing and
+  palette refresh, and a destroy with a redraw frame pending; and since the M3 review: the draw
+  list in layer order through creates, reorders and toggles, no `_bringToFront` call for an
+  update in place or a highlight, the highlight overlay, Leaflet calls skipped for a label-only
+  change, merged markers' refs and provider labels, the least zoom on small stages, fits with a
+  zoom floor, a debounced observed resize with one grid redraw, glyph bounds with badges, the
+  stack badge, dash handling in a draw pass, departures, and the canvas padding. happy-dom has no
+  3D transforms, so Leaflet snaps views to whole zooms there.
+- Not covered yet: a real-browser run (visual check, and the §14 budgets at the cap), which
+  lands with the Playwright smoke test (Milestone 9).
 
 ## 8. Placeholder map and committed geometry
 

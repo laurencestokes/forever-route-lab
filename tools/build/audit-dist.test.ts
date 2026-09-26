@@ -8,6 +8,7 @@ import {
   checkDataBudgets,
   checkEntryChunks,
   checkFileContent,
+  checkFileSignature,
   checkForbiddenPaths,
   checkImages,
   checkRequiredFiles,
@@ -147,6 +148,22 @@ describe('path rules', () => {
 describe('content rules', () => {
   const text = (value: string): Uint8Array => new TextEncoder().encode(value);
 
+  it('finds image and BLP content under names that do not declare it (renamed map art)', () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+    const webp = new Uint8Array([...text('RIFF'), 4, 0, 0, 0, ...text('WEBPVP8L')]);
+    const blp = new Uint8Array([...text('BLP2'), 1, 0]);
+    expect(rulesOf(checkFileSignature('assets/tile-abc.bin', png))).toEqual(['image assets/tile-abc.bin']);
+    expect(rulesOf(checkFileSignature('assets/icon-abc.svg', png))).toEqual(['image assets/icon-abc.svg']);
+    expect(rulesOf(checkFileSignature('data/art.json', webp))).toEqual(['image data/art.json']);
+    expect(rulesOf(checkFileSignature('assets/x.dat', blp))).toEqual(['file-type assets/x.dat']);
+    expect(rulesOf(checkFileSignature('assets/y.jpg', new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])))).toEqual(['image assets/y.jpg']);
+    // A declared image is the extension rule's business (checkImages); text is never an image.
+    expect(checkFileSignature('maps/art/1411.png', png)).toEqual([]);
+    expect(checkFileSignature('art/1411.blp', blp)).toEqual([]);
+    expect(checkFileSignature('assets/index.js', text('export const RIFF = "WEBP";'))).toEqual([]);
+    expect(checkFileSignature('favicon.svg', text('<svg xmlns="http://www.w3.org/2000/svg"></svg>'))).toEqual([]);
+  });
+
   it('finds user-profile paths in raw, escaped and Vite (forward-slash) spellings', () => {
     expect(rulesOf(checkFileContent('a.js', text(`const p = "${windowsProfilePath}";`)))).toEqual(['privacy a.js']);
     expect(rulesOf(checkFileContent('a.js', text(JSON.stringify({ p: windowsProfilePath }))))).toEqual(['privacy a.js']);
@@ -227,6 +244,35 @@ describe('size gates', () => {
     expect(report?.css.map((sheet) => sheet.file)).toEqual(['assets/index-abc.css']);
   });
 
+  it('reports what the entry loads lazily, transitively, without gating it or counting shared chunks twice', () => {
+    writeFiles(distDir, {
+      ...cleanDist(),
+      'assets/map-jkl.js': 'export const map = "m".repeat(4000);',
+      'assets/map-jkl.css': '.map{color:blue}',
+      'assets/shared-mno.js': 'export const shared = 2;',
+      'assets/deeper-pqr.js': 'export const deeper = 3;',
+      '.vite/manifest.json': JSON.stringify({
+        ...viteManifest,
+        'index.html': { ...viteManifest['index.html'], dynamicImports: ['src/lazy.ts', 'src/map.ts', 'src/gone.ts'] },
+        // Imports the entry's own vendor chunk (already loaded, not counted) and a chunk shared with another lazy chunk.
+        'src/map.ts': { file: 'assets/map-jkl.js', isDynamicEntry: true, imports: ['_vendor-def.js', '_shared-mno.js'], dynamicImports: ['src/deeper.ts'], css: ['assets/map-jkl.css'] },
+        '_shared-mno.js': { file: 'assets/shared-mno.js' },
+        'src/deeper.ts': { file: 'assets/deeper-pqr.js', isDynamicEntry: true, imports: ['_shared-mno.js', 'index.html'] },
+      }),
+    });
+    // A tiny budget fails the entry gate only: lazy chunks are never gated.
+    expect(rulesOf(checkEntryChunks(distDir, 10).violations)).toEqual(['entry-chunk (build)']);
+    const { reports, violations } = checkEntryChunks(distDir, 250_000);
+    expect(violations).toEqual([]);
+    const report = reports[0];
+    expect(report?.chunks.map((chunk) => chunk.file)).toEqual(['assets/index-abc.js', 'assets/vendor-def.js']);
+    const lazyFiles = ['assets/deeper-pqr.js', 'assets/lazy-ghi.js', 'assets/map-jkl.js', 'assets/shared-mno.js'];
+    expect(report?.lazy.chunks.map((chunk) => chunk.file)).toEqual(lazyFiles);
+    const expected = lazyFiles.map((file) => gzipSize(readFileSync(join(distDir, file)))).reduce((a, b) => a + b, 0);
+    expect(report?.lazy.totalGzipBytes).toBe(expected);
+    expect(report?.lazy.css.map((sheet) => sheet.file)).toEqual(['assets/map-jkl.css']);
+  });
+
   it('fails above the budget, on a missing manifest and on dangling imports', () => {
     writeFiles(distDir, cleanDist());
     expect(rulesOf(checkEntryChunks(distDir, 10).violations)).toEqual(['entry-chunk (build)']);
@@ -295,7 +341,10 @@ describe('whole audit', () => {
     const report = formatAuditReport(result);
     expect(report).toContain('Entry "index.html" + static imports (budget 250.00 kB gzip)');
     expect(report).toContain('assets/vendor-def.js');
-    expect(report).not.toContain('assets/lazy-ghi.js');
+    // The lazy chunk is listed after the gated entry total, in its own section.
+    const lazySection = report.indexOf('Loaded lazily by dynamic import() (not gated):');
+    expect(lazySection).toBeGreaterThan(report.indexOf('assets/vendor-def.js'));
+    expect(report.indexOf('assets/lazy-ghi.js')).toBeGreaterThan(lazySection);
     expect(report).toMatch(/dist audit passed\./);
   });
 

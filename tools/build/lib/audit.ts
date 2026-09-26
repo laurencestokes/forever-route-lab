@@ -160,6 +160,44 @@ export function checkImages(files: readonly string[], allowed: readonly AllowedI
     }));
 }
 
+/**
+ * File signatures of raster images and Blizzard BLP textures, with the extensions each may carry.
+ * The image rule above goes by extension; this catches map art that reaches dist/ under another
+ * name (`assets/tile-abc.bin`, a PNG saved as `.svg`), docs/MAPS.md §5.7, D-018.
+ */
+const SIGNATURES: readonly { readonly name: string; readonly extensions: readonly string[]; readonly matches: (bytes: Uint8Array) => boolean }[] = [
+  { name: 'PNG image', extensions: ['.png', '.apng'], matches: (b) => startsWith(b, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) },
+  { name: 'JPEG image', extensions: ['.jpg', '.jpeg'], matches: (b) => startsWith(b, 0, [0xff, 0xd8, 0xff]) },
+  { name: 'GIF image', extensions: ['.gif'], matches: (b) => ascii(b, 0, 6) === 'GIF87a' || ascii(b, 0, 6) === 'GIF89a' },
+  { name: 'WebP image', extensions: ['.webp'], matches: (b) => ascii(b, 0, 4) === 'RIFF' && ascii(b, 8, 4) === 'WEBP' },
+  { name: 'AVIF/HEIF image', extensions: ['.avif', '.heic', '.heif'], matches: (b) => ascii(b, 4, 4) === 'ftyp' && ['avif', 'avis', 'heic', 'heix', 'mif1', 'msf1'].includes(ascii(b, 8, 4)) },
+  { name: 'BLP texture', extensions: ['.blp'], matches: (b) => ascii(b, 0, 4) === 'BLP1' || ascii(b, 0, 4) === 'BLP2' },
+];
+
+function startsWith(bytes: Uint8Array, at: number, prefix: readonly number[]): boolean {
+  return bytes.length >= at + prefix.length && prefix.every((byte, i) => bytes[at + i] === byte);
+}
+
+function ascii(bytes: Uint8Array, at: number, length: number): string {
+  return bytes.length < at + length ? '' : String.fromCharCode(...bytes.subarray(at, at + length));
+}
+
+/** Image or BLP content under a name whose extension does not declare it. */
+export function checkFileSignature(path: string, bytes: Uint8Array): readonly AuditViolation[] {
+  const signature = SIGNATURES.find((candidate) => candidate.matches(bytes));
+  if (signature === undefined || signature.extensions.includes(extensionOf(path))) return [];
+  const blp = signature.name === 'BLP texture';
+  return [
+    {
+      rule: blp ? 'file-type' : 'image',
+      path,
+      message: blp
+        ? 'Blizzard client files (BLP texture content) must not ship, whatever the name'
+        : `${signature.name} content under a name that is not an allowlisted image (no map art, D-018)`,
+    },
+  ];
+}
+
 // ---------------------------------------------------------------------------------------------
 // Content rules
 
@@ -257,6 +295,16 @@ export interface EntryChunkReport {
   readonly totalGzipBytes: number;
   /** CSS the entry loads statically; reported, not gated. */
   readonly css: readonly SizedFile[];
+  /** What the entry loads with dynamic `import()` (the map engine, M3 review PERF-11); reported, not gated. */
+  readonly lazy: LazyChunksReport;
+}
+
+export interface LazyChunksReport {
+  /** Chunks reached through `dynamicImports` (and their static imports) that are not in the entry's static set. */
+  readonly chunks: readonly SizedFile[];
+  readonly totalGzipBytes: number;
+  /** CSS those chunks load. */
+  readonly css: readonly SizedFile[];
 }
 
 /**
@@ -273,10 +321,15 @@ const sizeOf = (distDir: string, file: string): SizedFile => {
   return { file, bytes: bytes.length, gzipBytes: gzipSize(bytes) };
 };
 
+/** The sizes of the files that exist, sorted by path. */
+const sizedIfPresent = (distDir: string, files: Iterable<string>): readonly SizedFile[] =>
+  [...files].sort(compareStrings).filter((file) => existsSync(join(distDir, file))).map((file) => sizeOf(distDir, file));
+
 interface ManifestChunk {
   readonly file: string;
   readonly isEntry: boolean;
   readonly imports: readonly string[];
+  readonly dynamicImports: readonly string[];
   readonly css: readonly string[];
 }
 
@@ -287,7 +340,13 @@ function parseViteManifest(value: unknown): ReadonlyMap<string, ManifestChunk> {
     if (!isRecord(raw) || typeof raw.file !== 'string') throw new Error(`entry "${key}" has no "file"`);
     const list = (field: unknown): readonly string[] =>
       Array.isArray(field) ? field.filter((item): item is string => typeof item === 'string') : [];
-    chunks.set(key, { file: raw.file, isEntry: raw.isEntry === true, imports: list(raw.imports), css: list(raw.css) });
+    chunks.set(key, {
+      file: raw.file,
+      isEntry: raw.isEntry === true,
+      imports: list(raw.imports),
+      dynamicImports: list(raw.dynamicImports),
+      css: list(raw.css),
+    });
   }
   return chunks;
 }
@@ -295,6 +354,8 @@ function parseViteManifest(value: unknown): ReadonlyMap<string, ManifestChunk> {
 /**
  * ARCHITECTURE §14: for every entry in dist/.vite/manifest.json, the gzip size of the entry
  * chunk plus its transitive static `imports` (never `dynamicImports`) must stay within budget.
+ * The chunks it loads lazily (`dynamicImports`, transitively) are sized and reported, not gated,
+ * so a lazy chunk cannot grow unnoticed (M3 review PERF-11).
  */
 export function checkEntryChunks(
   distDir: string,
@@ -337,12 +398,33 @@ export function checkEntryChunks(
       for (const imported of chunk.imports) visit(imported);
     };
     visit(entry);
+    // Everything reached through a dynamic import, with its own static and dynamic imports, minus
+    // what the entry already loads statically.
+    const lazyFiles = new Set<string>();
+    const lazyCss = new Set<string>();
+    const lazySeen = new Set<string>();
+    const queue = [...seen].flatMap((key) => chunks.get(key)?.dynamicImports ?? []);
+    for (let key = queue.shift(); key !== undefined; key = queue.shift()) {
+      if (seen.has(key) || lazySeen.has(key)) continue;
+      lazySeen.add(key);
+      const chunk = chunks.get(key);
+      if (chunk === undefined) continue;
+      if (!files.has(chunk.file)) lazyFiles.add(chunk.file);
+      for (const sheet of chunk.css) if (!css.has(sheet)) lazyCss.add(sheet);
+      queue.push(...chunk.imports, ...chunk.dynamicImports);
+    }
     const sized = [...files].sort(compareStrings).flatMap((file) => {
       if (existsSync(join(distDir, file))) return [sizeOf(distDir, file)];
       violations.push({ rule: 'entry-chunk', path: file, message: 'chunk listed in the manifest is missing' });
       return [];
     });
-    const sheets = [...css].sort(compareStrings).filter((file) => existsSync(join(distDir, file))).map((file) => sizeOf(distDir, file));
+    const sheets = sizedIfPresent(distDir, css);
+    const lazyChunks = sizedIfPresent(distDir, lazyFiles);
+    const lazy: LazyChunksReport = {
+      chunks: lazyChunks,
+      totalGzipBytes: lazyChunks.reduce((sum, file) => sum + file.gzipBytes, 0),
+      css: sizedIfPresent(distDir, lazyCss),
+    };
     const totalGzipBytes = sized.reduce((sum, file) => sum + file.gzipBytes, 0);
     if (totalGzipBytes > budgetBytes) {
       violations.push({
@@ -351,7 +433,7 @@ export function checkEntryChunks(
         message: `entry "${entry}" plus static imports is ${formatBytes(totalGzipBytes)} gzip, over the ${formatBytes(budgetBytes)} budget (ARCHITECTURE §14)`,
       });
     }
-    return { entry, chunks: sized, totalGzipBytes, css: sheets };
+    return { entry, chunks: sized, totalGzipBytes, css: sheets, lazy };
   });
   return { reports, violations };
 }
@@ -434,7 +516,7 @@ export function auditDist(options: {
   for (const path of files) {
     const bytes = readFileSync(join(distDir, path));
     totalBytes += bytes.length;
-    violations.push(...checkFileContent(path, bytes));
+    violations.push(...checkFileContent(path, bytes), ...checkFileSignature(path, bytes));
   }
   const required = resolveRequiredFiles(requirements, repoRoot, distDir);
   violations.push(...required.violations, ...checkRequiredFiles(files, required.files));
@@ -475,6 +557,15 @@ export function formatAuditReport(result: AuditResult): string {
     lines.push('', `Entry "${report.entry}" + static imports (budget ${formatBytes(result.entryChunkBudgetBytes)} gzip):`);
     lines.push(...report.chunks.map(row), `    ${'total'.padEnd(48)} ${''.padStart(10)}  gzip ${formatBytes(report.totalGzipBytes).padStart(10)}`);
     if (report.css.length > 0) lines.push('  CSS loaded by the entry (not gated):', ...report.css.map(row));
+    const lazy = report.lazy;
+    if (lazy.chunks.length > 0) {
+      lines.push(
+        '  Loaded lazily by dynamic import() (not gated):',
+        ...lazy.chunks.map(row),
+        `    ${'total'.padEnd(48)} ${''.padStart(10)}  gzip ${formatBytes(lazy.totalGzipBytes).padStart(10)}`,
+      );
+    }
+    if (lazy.css.length > 0) lines.push('  CSS loaded by those chunks (not gated):', ...lazy.css.map(row));
   }
   if (result.data.files.length > 0) {
     lines.push('', 'data/ files:', ...result.data.files.map(row), `    ${'total'.padEnd(48)} ${''.padStart(10)}  gzip ${formatBytes(result.data.totalGzipBytes).padStart(10)}`);

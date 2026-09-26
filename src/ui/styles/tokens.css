@@ -119,6 +119,7 @@
   --frl-unknown-hatch: #737d8b;
   --frl-placeholder-stripe: rgb(20 24 30 / 0.06);
   --frl-map-grid: rgb(20 24 30 / 0.08);
+  --frl-map-frame: #6b7482;
   --frl-overlay: rgb(15 18 24 / 0.45);
   --frl-shadow: 0 1px 2px rgb(15 18 24 / 0.08), 0 4px 16px rgb(15 18 24 / 0.12);
   --frl-difficulty-well-border: #101216;
@@ -159,6 +160,7 @@
     --frl-unknown-hatch: #707c8e;
     --frl-placeholder-stripe: rgb(229 232 237 / 0.05);
     --frl-map-grid: rgb(229 232 237 / 0.07);
+    --frl-map-frame: #7a8699;
     --frl-overlay: rgb(0 0 0 / 0.6);
     --frl-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.5);
     --frl-difficulty-well-border: #3a4350;
@@ -199,6 +201,7 @@
   --frl-unknown-hatch: #707c8e;
   --frl-placeholder-stripe: rgb(229 232 237 / 0.05);
   --frl-map-grid: rgb(229 232 237 / 0.07);
+  --frl-map-frame: #7a8699;
   --frl-overlay: rgb(0 0 0 / 0.6);
   --frl-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.5);
   --frl-difficulty-well-border: #3a4350;

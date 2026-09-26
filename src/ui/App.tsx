@@ -1,12 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { EditorStore } from '../app';
 import type { DatasetSource } from '../app/dataset-source';
+import type { StepId } from '../domain/ids';
+import { createMapController, type MapEngineSetup } from '../app/map-exports';
 import { useEditor } from '../app/react';
-import { type ActiveRow, buildRouteView } from './app-model';
+import { type ActiveRow, buildRouteView, mapStepLabel } from './app-model';
 import { AppSidePanel } from './app/AppSidePanel';
-import { AppStatusBar, MapPanel } from './app/AppStatusBar';
+import { AppStatusBar } from './app/AppStatusBar';
 import { AppTopBar } from './app/AppTopBar';
 import { createAnnouncer, LiveRegion, useSelectionAnnouncements } from './app/LiveAnnouncer';
+import { MapPanel } from './app/MapPanel';
 import { createRouteActions } from './app/route-actions';
 import { RoutePanel } from './app/RoutePanel';
 import { selectCharacterClass, selectCustomQuests, selectFaction, selectImports, selectQuestOverrides, selectRoute, selectStartLevel } from './app/selectors';
@@ -42,12 +45,18 @@ export interface AppProps {
   readonly routeNotice?: string | null | undefined;
   /** Which map geometry is loaded, for the map panel; null when not known. */
   readonly geometrySummary?: string | null | undefined;
+  /**
+   * The map: the geometry it draws, the local set's art, and the loader of the map engine (a
+   * dynamic import in the composition root, so Leaflet stays out of the entry chunk). Null or
+   * omitted: the centre panel says there is no map.
+   */
+  readonly map?: MapEngineSetup | null | undefined;
   readonly version: string;
   /** Exact source commit, injected by release builds; null otherwise. */
   readonly sourceCommit: string | null;
 }
 
-export function App({ store, data, projectName, routeNotice = null, geometrySummary = null, version, sourceCommit }: AppProps) {
+export function App({ store, data, projectName, routeNotice = null, geometrySummary = null, map = null, version, sourceCommit }: AppProps) {
   const route = useEditor(store, selectRoute);
   const imports = useEditor(store, selectImports);
   const startLevel = useEditor(store, selectStartLevel);
@@ -68,6 +77,11 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
   const routeRef = useRef<HTMLDivElement>(null);
 
   const [announcer] = useState(createAnnouncer);
+  // One controller for the app's lifetime: the top bar's jump-to-zone and the map panel share it.
+  const [mapController] = useState(() =>
+    map === null ? null : createMapController({ store, data, geometry: map.geometry, art: map.art, describeStep: mapStepLabel }),
+  );
+  const mapWiring = useMemo(() => (map === null || mapController === null ? null : { setup: map, controller: mapController }), [map, mapController]);
   const actions = useMemo(() => createRouteActions(store, announcer.announce), [store, announcer]);
   useSelectionAnnouncements(store, announcer.announce);
 
@@ -81,6 +95,14 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
     routeRef.current?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
   }, []);
   useGlobalShortcuts({ actions, focusSearch, enabled: !aboutOpen });
+
+  // Hovering a route row highlights its step markers on the map.
+  const onHoverSteps = useCallback(
+    (ids: readonly StepId[] | null) => {
+      mapController?.hoverSteps(ids);
+    },
+    [mapController],
+  );
 
   const onSearchChange = useCallback(
     (value: string) => {
@@ -118,6 +140,8 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
             onSearchSubmit={onSearchSubmit}
             searchRef={searchRef}
             onAbout={openAbout}
+            mapController={mapController}
+            announce={announcer.announce}
           />
         }
         left={
@@ -132,9 +156,10 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
             actions={actions}
             containerRef={routeRef}
             onFocusList={focusList}
+            onHoverSteps={onHoverSteps}
           />
         }
-        centre={<MapPanel store={store} view={view} dataset={dataset} activeRow={activeRow} geometry={geometrySummary} />}
+        centre={<MapPanel store={store} view={view} activeRow={activeRow} map={mapWiring} geometry={geometrySummary} announce={announcer.announce} />}
         right={
           <AppSidePanel
             store={store}

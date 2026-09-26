@@ -1,0 +1,208 @@
+/*
+ * The map key's glyphs (docs/UI.md §12): the canvas colours of src/map/leaflet/style.ts, from the
+ * same kit tokens, so the key matches the map in both themes. Dash patterns are the canvas ones at
+ * half scale.
+ */
+
+.frl-mapglyph {
+  flex: none;
+  width: 20px;
+  height: 16px;
+  overflow: visible;
+}
+
+.frl-mapglyph__accent {
+  fill: var(--frl-accent);
+}
+
+.frl-mapglyph__ink {
+  fill: var(--frl-fg);
+}
+
+.frl-mapglyph__muted {
+  fill: var(--frl-fg-muted);
+}
+
+.frl-mapglyph__edge {
+  stroke: var(--frl-surface);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.frl-mapglyph__edge-thin {
+  stroke: var(--frl-surface);
+  stroke-width: 1;
+}
+
+.frl-mapglyph__hole {
+  fill: var(--frl-surface);
+}
+
+.frl-mapglyph__ring {
+  fill: var(--frl-surface);
+  stroke: var(--frl-accent);
+  stroke-width: 2.5;
+}
+
+.frl-mapglyph__halo-edge {
+  fill: none;
+  stroke: var(--frl-surface);
+  stroke-width: 4.5;
+}
+
+.frl-mapglyph__halo {
+  fill: none;
+  stroke: var(--frl-accent);
+  stroke-width: 2.5;
+}
+
+.frl-mapglyph__box {
+  fill: var(--frl-surface-raised);
+  stroke: var(--frl-border-strong);
+  stroke-width: 1.5;
+}
+
+.frl-mapglyph__count,
+.frl-mapglyph__stack,
+.frl-mapglyph__question {
+  font-family: var(--frl-font-ui);
+  font-weight: 700;
+  dominant-baseline: middle;
+}
+
+.frl-mapglyph__count {
+  fill: var(--frl-fg);
+  font-size: 8px;
+  text-anchor: middle;
+}
+
+.frl-mapglyph__stack {
+  fill: var(--frl-surface);
+  font-size: 6px;
+  text-anchor: middle;
+}
+
+.frl-mapglyph__question {
+  fill: var(--frl-fg);
+  font-size: 10px;
+  dominant-baseline: auto;
+}
+
+.frl-mapglyph__badge {
+  fill: var(--frl-fg);
+}
+
+.frl-mapglyph__dashed {
+  fill: none;
+  stroke: var(--frl-fg);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+.frl-mapglyph__frame {
+  fill: var(--frl-surface);
+  fill-opacity: 0.25;
+  stroke: var(--frl-map-frame);
+  stroke-width: 1;
+}
+
+.frl-mapglyph__extent {
+  fill: none;
+  stroke: var(--frl-map-frame);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+
+.frl-mapglyph__art {
+  fill: var(--frl-surface-raised);
+  stroke: var(--frl-fg-muted);
+  stroke-width: 1;
+}
+
+.frl-mapglyph__art-line {
+  fill: none;
+  stroke: var(--frl-fg-muted);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+
+.frl-mapglyph__line {
+  fill: none;
+  stroke-width: 3;
+}
+
+.frl-mapglyph__line.is-route {
+  stroke: var(--frl-accent);
+  stroke-linecap: round;
+}
+
+.frl-mapglyph__line.is-transport {
+  stroke: var(--frl-fg-muted);
+  stroke-dasharray: 5 3;
+}
+
+.frl-mapglyph__line.is-flight {
+  stroke: var(--frl-accent);
+  stroke-width: 2.5;
+  stroke-dasharray: 0.5 3;
+  stroke-linecap: round;
+}
+
+.frl-mapglyph__line.is-hearth {
+  stroke: var(--frl-fg-muted);
+  stroke-width: 2.5;
+  stroke-dasharray: 6 2.5 1 2.5;
+}
+
+.frl-mapglyph__line.is-highlight {
+  stroke: var(--frl-accent-hover);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.frl-mapglyph__line.is-proposal {
+  stroke: var(--frl-fg);
+  stroke-dasharray: 7 3.5;
+}
+
+/* The key */
+
+.frl-mapkey {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+  min-width: 0;
+  padding: var(--frl-space-2) var(--frl-space-3) var(--frl-space-3);
+  border-top: 1px solid var(--frl-border);
+  font-size: var(--frl-text-xs);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-mapkey__heading {
+  color: var(--frl-fg-muted);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-mapkey__list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.frl-mapkey__entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--frl-fg);
+}
+
+.frl-mapkey__note {
+  color: var(--frl-fg-subtle);
+}
+
+@media (forced-colors: active) {
+  .frl-mapglyph {
+    forced-color-adjust: none;
+  }
+}

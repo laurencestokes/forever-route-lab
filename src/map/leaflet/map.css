@@ -1,0 +1,119 @@
+/*
+ * The map's own chrome (docs/MAPS.md §7, §8.1; docs/UI.md §3). Leaflet's structural stylesheet
+ * (leaflet-core.css, a copy of leaflet/dist/leaflet.css without its image rules, BSD-2-Clause) is
+ * imported beside this file; this one only restyles it with the kit's tokens, so both themes work.
+ * Canvas colours are not here: the adapter reads them from the same tokens (style.ts).
+ */
+
+.frl-map {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.frl-map.leaflet-container {
+  background: var(--frl-surface-sunken, #e9ecf0);
+  color: var(--frl-fg, #14181e);
+  font-family: var(--frl-font-ui, system-ui, sans-serif);
+  font-size: var(--frl-text-sm, 12px);
+  line-height: var(--frl-leading-tight, 16px);
+}
+
+.frl-map.leaflet-container:focus-visible {
+  outline: var(--frl-focus-width, 2px) solid var(--frl-focus, #3a4fc4);
+  outline-offset: calc(-1 * var(--frl-focus-width, 2px));
+}
+
+/* The grid and art panes never take pointer events: the path canvas above them does. */
+.frl-map .leaflet-frl-grid-pane,
+.frl-map .leaflet-frl-art-pane,
+.frl-map__grid {
+  pointer-events: none;
+}
+
+.frl-map__art {
+  image-rendering: auto;
+}
+
+/* Zoom buttons */
+.frl-map .leaflet-bar {
+  border: 1px solid var(--frl-border-strong, #737d8b);
+  border-radius: var(--frl-radius, 4px);
+  box-shadow: none;
+}
+
+.frl-map .leaflet-bar a {
+  width: var(--frl-control-height, 26px);
+  height: var(--frl-control-height, 26px);
+  line-height: var(--frl-control-height, 26px);
+  background: var(--frl-surface-raised, #f5f6f8);
+  color: var(--frl-fg, #14181e);
+  border-bottom-color: var(--frl-border, #d5dae1);
+}
+
+.frl-map .leaflet-bar a:hover,
+.frl-map .leaflet-bar a:focus-visible {
+  background: var(--frl-surface-hover, #eceff3);
+  color: var(--frl-fg, #14181e);
+}
+
+.frl-map .leaflet-bar a:focus-visible {
+  outline: var(--frl-focus-width, 2px) solid var(--frl-focus, #3a4fc4);
+  outline-offset: 1px;
+}
+
+.frl-map .leaflet-bar a.leaflet-disabled {
+  background: var(--frl-surface, #ffffff);
+  color: var(--frl-fg-disabled, #9aa2ad);
+}
+
+/* Yard scale bar */
+.frl-map__scale {
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-1, 4px);
+  padding: var(--frl-space-half, 2px) var(--frl-space-1, 4px);
+  background: var(--frl-surface, #ffffff);
+  border: 1px solid var(--frl-border, #d5dae1);
+  border-radius: var(--frl-radius-sm, 3px);
+  color: var(--frl-fg-muted, #4b5563);
+  font-size: var(--frl-text-xs, 11px);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.frl-map__scale-bar {
+  height: 6px;
+  border: 2px solid var(--frl-fg-muted, #4b5563);
+  border-top: 0;
+}
+
+/* Hover labels (one shared tooltip; its text is set as text, never HTML) */
+.frl-map .frl-map__tooltip {
+  padding: var(--frl-space-half, 2px) var(--frl-space-2, 8px);
+  background: var(--frl-surface-raised, #f5f6f8);
+  color: var(--frl-fg, #14181e);
+  border: 1px solid var(--frl-border-strong, #737d8b);
+  border-radius: var(--frl-radius-sm, 3px);
+  box-shadow: var(--frl-shadow, 0 1px 4px rgba(0, 0, 0, 0.2));
+  font-size: var(--frl-text-sm, 12px);
+  white-space: nowrap;
+}
+
+.frl-map .frl-map__tooltip.leaflet-tooltip-top::before {
+  border-top-color: var(--frl-border-strong, #737d8b);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frl-map .leaflet-zoom-anim .leaflet-zoom-animated,
+  .frl-map .leaflet-fade-anim .leaflet-popup {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .frl-map__scale-bar {
+    border-color: CanvasText;
+  }
+}

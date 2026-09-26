@@ -397,3 +397,85 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
   and object collision instead (D-028). A spawn-inferred grid may serve as an independent
   cross-check, not as the source.
 
+## D-030: Navigation data budget: the lighter mesh
+
+- **Date:** 2026-09-26
+- **Decided by:** project owner
+- **Context:** The Milestone 3b research prototype measured about 8.6 MB gzip for both continents.
+  The critique showed its settings disconnect quest caves (Skull Rock, Burning Blade Coven) and
+  Thunder Bluff's rises. The accurate fix (0.52 yd cells) costs about +25%, roughly 11-12 MB
+  (docs/research/terrain-navigation.md; critique TN-01, TN-09).
+- **Decision:** Target a lighter, less accurate mesh of about 5-6 MB gzip in total, with a hard
+  cap of 7 MB, in its own gated `nav` budget. Measurements use gzip level 6 and decimal units.
+  A mandatory **spawn-census gate** lists every dataset spawn that snaps outside the main
+  connected component of its map, each with a reviewed reason. Disconnections caused by the
+  coarser mesh are therefore visible and never silent. Build settings are chosen by measured
+  sweep against the budget and the census.
+
+## D-031: Elevator and lift connectors come from the owner's in-game observations
+
+- **Date:** 2026-09-26
+- **Decided by:** project owner
+- **Context:** Thunder Bluff's, Undercity's and the Great Lift's elevators are server-spawned and
+  absent from client files.
+- **Decision:** Connectors are cited in-game observations recorded by the owner: endpoints as
+  `/way` coordinates, ride and wait seconds, date and build. Transport keyframe data may supply
+  ride times where a transport id is cited (D-022). Until a connector exists, a leg between
+  disconnected parts of one map uses the labelled straight-line fallback (basis `assumption`)
+  plus a warning. It is never reported as a confident path, and never silently unknown.
+- **Not now:** a general in-game calibration set of walked legs (owner: "not now"). Navigation
+  estimates stay labelled `derived` (mesh-derived), and calibration remains an open item.
+
+## D-032: Terrain-derived map byproducts are committed and deployed
+
+- **Date:** 2026-09-26
+- **Decided by:** project owner
+- **Decision:** The terrain pipeline's map byproducts are committed and deployed with provenance
+  notices, extending D-028. They are:
+  - coastlines and zone outlines (vector geometry from terrain and per-chunk area ids);
+  - a low-resolution shaded relief raster derived from heightmaps.
+
+  They are derived from client terrain data, not from Blizzard's painted map art, which stays
+  local-only (D-018). The deployed map can then show terrain-shaped zones instead of rectangles.
+- **Provenance:** the same posture as D-018 and D-028. Each output records its pin, build, input
+  hashes and tool tree hash, and carries its own NOTICE.
+
+## D-033: Blizzard's painted map art is extracted, committed and deployed
+
+- **Date:** 2026-09-26
+- **Decided by:** project owner
+- **Supersedes:** D-018's art rule (map art "never committed or deployed") and OD-10. D-018's
+  `local-maps/` arrangement for developer-local sets stays.
+- **Owner's rationale, recorded as stated, not verified here:** many third-party sites already
+  show Blizzard's map art, and the owner believes Blizzard's policies allow this for third-party
+  fan sites. This log draws no legal conclusion. The owner accepts the risk, as with D-016.
+- **Decision:**
+  - The world map's painted art is committed and deployed with a NOTICE. That covers the zone and
+    continent images assembled from the client's UiMapArt / UiMapArtTile textures, and the
+    WorldMapOverlay "explored area" pieces where they apply.
+  - Extraction is reproducible. It uses our own read-only CASC reader over the local client's
+    `Data/` folder (D-028), is pinned to a recorded build, and records per-file input hashes and
+    the tool tree hash. The output is web images with a manifest, under a committed map-art
+    folder, with its own size budget in the dist audit.
+  - The procedural layers from D-032 (coastlines, zone outlines, relief) remain. They render where
+    the painted art is missing or too coarse at close zoom.
+- **Consequences:** the dist audit's map-image rule becomes an allowlist: the committed art folder
+  and its manifest and NOTICE only. THIRD_PARTY_NOTICES, the README and the About dialog name
+  Blizzard Entertainment as the owner of the artwork and state non-affiliation.
+- **Governing source, recorded 2026-09-26:** Blizzard's Legal FAQ,
+  https://www.blizzard.com/en-us/legal/c1ae32ac-7ff9-4ac3-a03b-fc04b8697010/blizzard-legal-faq,
+  section "Copyright/Trademark Policy for the Internet". It grants a limited licence for "home,
+  noncommercial and personal use only". Copyright and other notices must be kept. The licence is
+  revocable at Blizzard's discretion, and it excludes sites with objectionable content, including
+  hacks or cheats. The FAQ's mention of "fan-created maps" concerns custom game levels, not map
+  artwork. Whether a public fan site hosting extracted map art fits "personal use" is not settled
+  by the text, and no conclusion is drawn here.
+- **Supporting context supplied by the owner:** third-party sites (MapGenie and Wowhead are the
+  examples given) host stitched Blizzard map art for reference, quest tracking and coordinates.
+  That is evidence of practice, not permission.
+- **Project rules adopted from the FAQ's conditions:**
+  1. The site stays non-commercial: no ads, paid features or sales.
+  2. Blizzard copyright and trademark notices accompany the art (NOTICE, About dialog, README).
+  3. The art is removed promptly if Blizzard asks.
+  4. The project never distributes hacks, cheats or similar content.
+

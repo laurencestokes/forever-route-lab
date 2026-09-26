@@ -92,6 +92,20 @@ export {
   type LoadRemedy,
 } from './shell/BootScreen';
 export { AppShell, LEFT_PANEL_DEFAULT, LEFT_PANEL_MAX, LEFT_PANEL_MIN, clampLeftWidth, type AppShellProps } from './shell/AppShell';
+export {
+  LayerPanel,
+  MAP_CHOICE_WIDTH,
+  MapFrame,
+  MapHoverText,
+  mapChoicePosition,
+  type LayerPanelProps,
+  type MapChoiceProps,
+  type MapCommand,
+  type MapEngineState,
+  type MapFrameProps,
+  type MapLayerRow,
+} from './shell/MapFrame';
+export { MAP_GRID_NOTE, MAP_KEY, MapGlyph, MapLegend, type MapGlyphKind, type MapGlyphProps, type MapKeyEntry, type MapKeySection } from './shell/MapLegend';
 export { MapPlaceholder, PLANNED_MAP_LAYERS, type MapLayerStub, type MapPlaceholderProps } from './shell/MapPlaceholder';
 export {
   DetailList,

@@ -15,9 +15,10 @@
  *       recomputes it at load.
  * No CSV and no network request is needed (D-011).
  *
- * Local-set checks (--local [dir], default local-maps/): L0-L7 (lib/local-set.ts). With
- * --activate, a passing set gets local-maps/maps.manifest.json (which activates it); a failing set
- * has any existing manifest removed.
+ * Local-set checks (--local [dir], default local-maps/): L0-L7 (lib/local-set.ts; L3 is the art,
+ * lib/art.ts), plus L8 (an existing manifest still matches the files) in a report. With
+ * --activate, a passing set gets local-maps/maps.manifest.json with its `art` section (which
+ * activates it); a failing set has any existing manifest removed.
  *
  * Usage: pnpm maps:validate [--skip-tracking]
  *        pnpm tsx tools/maps/validate.ts [--questiedb-repo <dir>] [--commit <sha>] [--rows <file>] [--placeholder-dir <dir>]
@@ -97,10 +98,13 @@ function main(argv: readonly string[]): number {
     committed: parsed.geometry,
     committedFrameHash: expected.frameHash,
     taxiNodesCsv: taxiPath === undefined ? null : readFileSync(resolve(REPO_ROOT, taxiPath), 'utf8'),
+    // Activation rewrites the manifest, so only a report compares the existing one (L8).
+    activeManifest: args.flags.has('--activate') ? 'ignore' : 'check',
   });
   console.log(`\nmaps validate: local set ${toPosix(relative(REPO_ROOT, localDir))}/ (build ${local.build ?? 'unknown'})`);
   console.log(format(local.checks));
   if (local.merge?.kind === 'merged') console.log(`maps validate: compatible, ${String(local.merge.added.length)} UiMap(s) added: ${local.merge.added.join(', ') || 'none'}`);
+  if (local.art !== null) console.log(`maps validate: art for ${String(Object.keys(local.art).length)} UiMap(s): ${Object.keys(local.art).join(', ') || 'none'}`);
   if (!args.flags.has('--activate')) return local.passed ? 0 : 1;
 
   if (!local.passed || local.build === null || local.product === null) {

@@ -288,6 +288,10 @@ const CONTRAST_PAIRS: readonly ContrastPair[] = [
     (bg): ContrastPair => ({ fg: 'border-strong', bg, min: 3, use: 'control edges and the uncertain chip edge' }),
   ),
   ...[...ROW_AND_PANEL_BACKGROUNDS, 'surface-sunken'].map((bg): ContrastPair => ({ fg: 'focus', bg, min: 3, use: 'focus ring' })),
+  // Zone frames are the only geography on the schematic map (WCAG 1.4.11, M3 review MAP-A11Y-6):
+  // stroked at full opacity on the map area, and over the frames' faint surface fill where they stack.
+  { fg: 'map-frame', bg: 'surface-sunken', min: 3, use: 'zone frame outlines on the map' },
+  { fg: 'map-frame', bg: 'surface', min: 3, use: 'zone frame outlines over stacked frame fills' },
   { fg: 'selection-bar', bg: 'selection-bg', min: 3, use: 'selected-row bar' },
   { fg: 'accent', bg: 'surface-raised', min: 3, use: 'selected-tab bar' },
   { fg: 'drop-indicator', bg: 'surface', min: 3, use: 'drop line' },
@@ -394,6 +398,8 @@ const COMPONENT_CSS = [
   'shell/SidePanel.css',
   'shell/StatusBar.css',
   'shell/MapPlaceholder.css',
+  'shell/MapFrame.css',
+  'shell/MapLegend.css',
 ] as const;
 const PARSED = new Map(COMPONENT_CSS.map((path) => [path, parseCss(readCss(path))]));
 const rulesOf = (path: (typeof COMPONENT_CSS)[number]): readonly CssRule[] => PARSED.get(path) ?? [];
@@ -595,6 +601,26 @@ describe('buttons (F-18)', () => {
   it('gives disabled secondary buttons the hairline edge', () => {
     const { container } = mount(createElement(Button, { variant: 'secondary', disabled: true }, 'Export'));
     expect(computed(container.querySelector('button')).borderTopColor).toBe(THEMES.light.get('--frl-border'));
+  });
+});
+
+describe('map frame (M3 review MAP-A11Y-6, MAP-A11Y-13)', () => {
+  const NARROW = ['@container frl-mapframe (width < 560px)'];
+
+  it('keeps a visible "Schematic" in a narrow panel instead of hiding the notice', () => {
+    const rules = rulesOf('shell/MapFrame.css');
+    expect(declarationsOf(rules, '.frl-mapframe__notice-short').get('display')).toBe('none');
+    expect(declarationsOf(rules, '.frl-mapframe__notice-short', NARROW).get('display')).toBe('inline');
+    // Only a notice that has a short form loses its long one, and the badge itself is never hidden.
+    expect(declarationsOf(rules, '.frl-mapframe__notice.has-short .frl-mapframe__notice-long', NARROW).get('display')).toBe('none');
+    expect(declarationsOf(rules, '.frl-mapframe__notice', NARROW).get('display')).toBeUndefined();
+  });
+
+  it('strokes the key’s frames with the map frame token, as the canvas does', () => {
+    const rules = rulesOf('shell/MapLegend.css');
+    expect(declarationsOf(rules, '.frl-mapglyph__frame').get('stroke')).toBe('var(--frl-map-frame)');
+    expect(declarationsOf(rules, '.frl-mapglyph__extent').get('stroke')).toBe('var(--frl-map-frame)');
+    expect(THEMES.light.get('--frl-map-frame')).not.toBe(THEMES.light.get('--frl-border-strong'));
   });
 });
 

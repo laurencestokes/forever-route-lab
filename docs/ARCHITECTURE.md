@@ -345,7 +345,10 @@ thousands of paths.
 ### 7.3 Placeholder and local maps
 
 With no local art the map draws zone frames, labels, grid, yard scale bar and data points,
-procedurally, from committed geometry and data. It contains no Blizzard art.
+procedurally, from committed geometry and data. **Superseded in part by D-032/D-033:** from
+Milestone 3b the deployed map shows the committed painted map art, extracted from the client, plus
+terrain-derived coastlines, zone outlines and relief. The rectangle placeholder remains the
+fallback when those files are absent.
 
 A **local extraction set** lives in gitignored `local-maps/` at the repository root, **outside
 `public/`**: `maps.manifest.json`, `geometry.local.json`, `art/`, and optionally
@@ -842,8 +845,8 @@ interface EditorState {
   holder cannot release another's lock; `editingLocked` is derived from it. `replaceProject`
   (load or import) is refused while any lock is held and clears history, selection and clipboard.
   Copying stays allowed while locked.
-- Lazy boundaries (dynamic `import()`): RXP import/export, diff and proposal review, optimiser
-  client and worker, migrations. zod stays in the entry chunk to validate restored projects.
+- Lazy boundaries (dynamic `import()`): the map engine (Leaflet adapter), RXP import/export, diff
+  and proposal review, optimiser client and worker, navigation worker, migrations. zod stays in the entry chunk to validate restored projects.
 
 ### 12.2 Undo and redo
 
@@ -908,7 +911,7 @@ Machine-independent CI gates (fail the build):
 
 | Gate | Budget |
 |---|---|
-| Entry chunk + static imports (gzip, from Vite's build manifest) | ≤ 250 KB |
+| Entry chunk + static imports (gzip, from Vite's build manifest; chunks loaded by `import()` are reported, not gated) | ≤ 250 KB |
 | Each `public/data` file (gzip) | recorded baseline + 10%; total ≤ 1.2 MB |
 | Optimiser evaluations on fixed fixtures | recorded baseline, exact |
 

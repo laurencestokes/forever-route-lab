@@ -99,6 +99,7 @@ token.
 | `--frl-unknown-hatch` | `#737d8b` | `#707c8e` | Hatching of unknown bars: unknown XP, and indeterminate progress under reduced motion (3:1 on the track, so an unknown bar never passes for an empty one) |
 | `--frl-placeholder-stripe` | ink at 6% | ink at 5% | Hatching of the Placeholder label (decorative: the dashed edge and the word carry it) |
 | `--frl-map-grid` | ink at 8% | ink at 7% | Grid of the map placeholder |
+| `--frl-map-frame` | `#6b7482` | `#7a8699` | Zone-frame and extent outlines on the map canvas and in the map key, at full opacity (3:1 or more on `--frl-surface-sunken` and on `--frl-surface`, the frames' fill: 3.99 and 4.72 light, 4.97 and 4.78 dark; WCAG 1.4.11, M3 review MAP-A11Y-6). The canvas reads it as the `frame` role (MAPS.md §7.5) |
 | `--frl-overlay` | ink at 45% | black at 60% | Dialog backdrop |
 | `--frl-shadow` | soft | deeper | Floating cards and dialogs |
 | `--frl-difficulty-well-border` | `#101216` | `#3a4350` | Edge of the difficulty chip |
@@ -205,7 +206,7 @@ Rules:
 | > 1200px | Everything visible; action buttons show icon and word |
 | ≤ 1200px | Top-bar action words become visually hidden (icon buttons with names and tooltips) |
 | ≤ 1180px | XP numbers in the status bar hide (the bar and its spoken value stay, and an unknown value keeps its visible "XP ?") |
-| ≤ 1024px | Two columns: the route panel keeps the full height (36%, min 280px); the side panel moves under the map; the splitter hides; the map's layer stub hides |
+| ≤ 1024px | Two columns: the route panel keeps the full height (36%, min 280px); the side panel moves under the map; the splitter hides (the map's layer panel stays a toggle, §12) |
 | ≤ 900px | The product name hides (the mark stays) |
 | ≤ 720px | One column; the page scrolls; top and status bars wrap |
 
@@ -224,17 +225,22 @@ containing blocks, absolutely positioned content such as `.frl-visually-hidden` 
 the initial containing block and lengthens the page (the M1 review measured a 176px page scroll
 at 1366×657 with Details open). At 720px and below the page scrolls as a whole.
 
-**Map placeholder.** The statement card and the layer stub share one grid: the card is centred in
-a column of up to 400px and the stub's column never gets narrower than the stub, so the card gives
-way instead of being covered. Below 520px of panel width (a container query) the stub goes above
-the card; a panel too short for its content scrolls.
+**Map panel.** The centre is the map (§12): a 32px toolbar, the stage the map engine fills, the
+layer panel and the map key beside the stage when it is open (never over it), and a 24px status
+line. Below 560px of panel width (a container query) the open layer panel lies over the stage's
+right edge instead of squeezing it, and the toolbar's "Schematic map: zone frames, not terrain"
+badge shows its short form, "Schematic" (the full text stays its tooltip and starts the map's
+instructions, M3 review MAP-A11Y-13).
 
 **Checked by hand.** happy-dom has no layout, so the tests check the mechanism (containing blocks,
 overflow, grid areas; `tests/ui-tokens.test.ts`) and these results are checked in a browser after
 layout changes: at 1920×1080, 1366×657, 1280×600, 1201×700, 1100×700 and 1024×768, in both
 themes, with Details open on a quest step, `document.documentElement.scrollHeight` equals
-`innerHeight`, `window.scrollTo(0, 500)` moves nothing, and the bounding rectangles of
-`.frl-mapph__card` and `.frl-mapph__layers` do not intersect.
+`innerHeight`, `window.scrollTo(0, 500)` moves nothing, and with the layer panel open the bounding
+rectangles of `.frl-mapframe__stage` and `.frl-mapframe__side` do not intersect. *Milestone 3:*
+checked at 1366×768 in the built-in browser, light theme only (the page does not scroll with the
+layer panel open; stage 424px and panel 260px wide, side by side); the other sizes and the dark
+theme are still to check.
 
 ## 7. Component inventory
 
@@ -254,10 +260,12 @@ All exported from `src/ui/kit.ts`.
 | `SeverityIcon` | `markers/SeverityIcon.tsx` | Error, warning, info shapes |
 | `SidePanel` | `shell/SidePanel.tsx` | Tabs Available, Quest log, Details, Validation with counts; one content node per tab |
 | `Tabs` | `shell/Tabs.tsx` | Accessible tablist, controlled, automatic activation; one tabpanel that every tab controls |
-| `PanelSection`, `EmptyState`, `DetailList`, `IssueList`, `QuestListItem` | `shell/PanelContent.tsx` | Side-panel building blocks |
+| `PanelSection`, `EmptyState`, `DetailList`, `IssueList`, `QuestListItem` | `shell/PanelContent.tsx` | Side-panel building blocks; `QuestListItem` takes `onOpen` ("Show in Details: <quest>", the info icon) and `onAdd` |
 | `StatusBar` | `shell/StatusBar.tsx` | XP bar, current step, duration, XP/hour, optimiser state and progress, data and ruleset badges |
 | `XpBar` | `shell/XpBar.tsx` | Level and XP progressbar with lower-bound, unknown and cap states |
-| `MapPlaceholder` | `shell/MapPlaceholder.tsx` | Centre panel until Milestone 3, labelled Placeholder, with a disabled layer-panel stub beside the card, never over it (§6); `geometry` states the loaded map geometry in one line (MAPS.md §5.6 step 6) |
+| `MapFrame`, `LayerPanel`, `MapHoverText` | `shell/MapFrame.tsx` | The map panel's frame (§12), memoised: surface `Select`, a `Toolbar` of `MapCommand`s (unavailable ones `aria-disabled` with their reason) and the Layers toggle, the always-visible map-kind `notice` (with `noticeShort` for narrow panels), the `stageRef` host the engine mounts into, the visually hidden instructions (`instructionsId`), the layer panel (`MapLayerRow`s: checkbox, the layer's `glyph`, count, notes, disabled with a reason) with the map key under it, the `status` line and the `hover` text (a string, or an element that renders `MapHoverText` so only it re-renders), and `choice`: the items at a clicked point where several share it (a `dialog` beside the point, `mapChoicePosition`; focus on the first item, arrows, Home and End between items, Escape or a press outside closes, focus back to the map); `engine` shows loading, failed (with "Try again") or unavailable over the stage |
+| `MapGlyph`, `MapLegend` | `shell/MapLegend.tsx` | The map key (§12): `MapGlyph` draws one canvas glyph, line style or badge as a 20 × 16 inline SVG (`aria-hidden`, kit colours, the canvas geometry and dash patterns); `MapLegend` lists `MAP_KEY` (markers, route lines, badges, each with its meaning) and `MAP_GRID_NOTE` (the grid's axes) |
+| `MapPlaceholder` | `shell/MapPlaceholder.tsx` | *Milestone 1-2 centre panel, no longer rendered by the app (Milestone 3).* Kept, with its CSS, because `tests/ui-tokens.test.ts` checks its card-and-stub grid; it can go once that check moves to `MapFrame` |
 | `AboutDialog` | `shell/AboutDialog.tsx` | Licence (GPL-3.0-or-later) and no-warranty line, data notice (D-016, with the LIC-10 carve-out verbatim; with `dataUpstreamCommit` set it is the real-data notice with the pinned commit, `dataIdentity`'s revision and frame build, and the "Full data notice" link to `data/NOTICE.md`), non-affiliation, source commit link |
 | `LoadingScreen`, `LoadErrorScreen` | `shell/BootScreen.tsx` | The screens before the shell (Milestone 2): loading the dataset and geometry, with a progress bar and a `status` line ("Fetching and verifying data files: 3 of 7 (2.9 MB of 9.0 MB)"), then "placing … on the map geometry"; a failed start as an `alert` with title, message, a details disclosure and what can fix it (`remedy`): "Try again" for `reload`, or a sentence instead of the button for `redeploy` ("the deployed files need to be regenerated and redeployed") and `open-over-https` (no WebCrypto: "open the site over https (or on localhost)"). The heading takes focus. `src/ui/Boot.tsx` drives them |
 | `Button`, `IconButton` | `primitives/` | Text and icon buttons; `IconButton` requires `label`, supports `pressed` and `shortcut` (tooltip text and `aria-keyshortcuts`, §9 rule 3). Both style `disabled` and `aria-disabled="true"` alike |
@@ -375,6 +383,19 @@ and truncate rather than round up (level 12.99 reads 12.9).
 11. A long name in a list ellipsises in its own element and never pushes out the signal after
     it: in `QuestListItem` the name is `.frl-quest-item__label` (with the full name as its
     tooltip) and the provenance badge after it does not shrink.
+12. **The map is supplementary.** Everything it does has a keyboard path elsewhere: select a step
+    (the route list), open a quest in Details (the Available tab's "Show in Details"), jump to a
+    zone (the top bar), fit the route and focus the active step (the map toolbar), switch surface
+    (the surface select), show and hide layers (the layer panel's checkboxes). The engine's
+    focusable surface is named ("Route map: Kalimdor", `role="application"`,
+    `aria-roledescription="map"`) and described by instructions that start with the map's kind
+    ("Schematic map: zone frames, not terrain.") and say so; its own arrow-key panning and +/−
+    zoom stay on, and Tab leaves it (no trap). Every glyph, line style and badge is named in the
+    layer panel's key, and hover text says what a marker's badges mean. Hover text also shows in
+    the status line, never in a live region. Only results of explicit map commands are announced
+    ("Map shows Durotar.", "Map centred on step 12."), and the one thing the map cannot do on its
+    own: follow the active step to a world map it has no surface for ("Step 6 is on world map 36,
+    which this map cannot show.").
 
 ## 10. Adding a component
 
@@ -408,9 +429,10 @@ and truncate rather than round up (level 12.99 reads 12.9).
   apply `onSelect(index, mode)` there (`replace`, `toggle`, `range` from the anchor), and turn
   `onDrop(from, to)` into one move command. Pass `readOnly` while an optimiser run or a proposal
   is open.
-- Anything that stands in for real content (sample routes, the map) carries the Placeholder
-  label: `TopBar placeholder`, `PlaceholderTag`, `EmptyState placeholder`, `MapPlaceholder`, and a
-  `StatusBar` data badge with `placeholder: true`. The auto-generated sample route over the real
+- Anything that stands in for real content (sample routes, placeholder data) carries the
+  Placeholder label: `TopBar placeholder`, `PlaceholderTag`, `EmptyState placeholder`, and a
+  `StatusBar` data badge with `placeholder: true`. The map is real geometry drawn schematically:
+  it says "Schematic map: zone frames, not terrain" instead (§12). The auto-generated sample route over the real
   dataset (Milestone 2) says "Sample" instead of "Placeholder": `TopBar placeholderLabel="Sample"`
   and a banner line "Sample route (auto-generated, not a recommended route)" above the route
   (`RoutePanel notice`, from `App routeNotice`).
@@ -444,3 +466,81 @@ and truncate rather than round up (level 12.99 reads 12.9).
   yd"), with RXP's written `Y, X` order swapped back.
 - *Milestone 2:* the map panel's geometry line says why a local map set is not used ("local set:
   refused (… changed after the set was activated …)"), except when there is none at all.
+  *Milestone 3:* the line is the layer panel's footer ("Geometry loaded: …").
+- *Milestone 3:* `src/main.tsx` passes `App` a `map` (`MapEngineSetup`: the merged geometry, the
+  local set's art and `loadAdapter`, a dynamic import of `src/map/leaflet` started with the data
+  load). `App` creates one map controller (`createMapController`, `src/app/map-controller.ts`) and
+  gives it to `MapPanel` (`src/ui/app/MapPanel.tsx`, which mounts it) and to `AppTopBar` (jump to
+  zone). Without `map` the centre says there is no map and jump-to-zone is unavailable ("No map is
+  loaded").
+
+## 12. Map panel
+
+The centre panel (ARCHITECTURE §7, §12.4; MAPS.md §7). By the §4 import rules the logic lives in
+`app` and the ui only renders it:
+
+| Where | What |
+|---|---|
+| `src/app/map-view.ts` | The map's view state in the store (`ViewState.map`): `surface`, `zoomBand` (`zone`/`continent`), `layers` (visibility) and `zone` (the zone last jumped to, cleared once it is panned out of view or the surface changes). Hover is not in the store (below). `patchMapUi` keeps the object when nothing changes, so a no-op write notifies nobody. `ViewState.openedQuests` holds quests opened in Details with the selection they were opened under (`shownOpenedQuests`). `openQuestsInDetails`, `closeOpenedQuests`, `setMapUi` and `setMapLayerVisible` write them |
+| `src/app/map-model.ts` | Pure view models: `questGiverModel` (the Available tab's rule: quests open by race and class), `objectiveModel` and `turnInModel` (the focused quests), `flightMasterModel` (the faction's, unknown-faction ones labelled so, each with the open quests it starts), `createRouteInputBuilder` (cached by step id) and `mapRouteInput`, `createDrawnRouteFilter` and `focusWithin` (what the route layers draw from), `routeMapSummary`, `stepsWithoutSurface`, `legUnknownAt`, `routeBoundsOn`, `routeStepIndex`, `zoneBounds`, `zoneGroups`, `focusQuestIds`, `stepFocusOf`. What has no map position (item starters, reputation objectives) or no spawn in the dataset is counted, never placed |
+| `src/app/map-controller.ts` | `createMapController`. Store to layers: memoised inputs, `createMapLayers`, `setLayer` only for a changed `LayerContent`, visibility from the store. The adapter's label provider (`labelFor`). Adapter events to the store; hover kept here (`getHover`, `subscribeHover`); a merged marker's choice (`getStatus().choice`, `choose`, `chooseAll`, `dismissChoice`). The commands `focusStep`, `fitRoute`, `jumpToZone`, `showSurface` and `hoverSteps`. Local art: only the images drawn at this level of detail, verified, drawn through object URLs, revoked on detach. `getStatus` (per-layer stats and notes, the route summary, the active step's placement, the choice) and the `frl:map:sync` User Timing measure (at most `MAX_SYNC_MEASURES` kept) |
+| `src/app/map-exports.ts` | Re-exports for the ui: the controller and its types, `BADGE_TEXT`, `layerStatsNotes`, `DEFAULT_LOD`, `lodLevelAt` and the local-art types |
+| `src/ui/shell/MapFrame.tsx`, `MapLegend.tsx` | The kit's frame, `LayerPanel`, the choice list and the map key (§7) |
+| `src/ui/app/MapPanel.tsx` | Loads the engine (loading, or failed with a retry), attaches and detaches the controller, names the engine's surface, reports the active step to it, maps its status to the frame's props, and renders the pointer line from the controller's hover alone |
+
+**Behaviour.**
+
+- **It follows the route list.** When the active step changes (list, keyboard, map click), the map
+  brings it into view with `focus`, which zooms in to at least −2 and pans only when the point is
+  not comfortably visible; a step on another world map switches surface. A selection change moves
+  the active step in the same sync, so one click or arrow key costs one sync (M3 review PERF-6).
+  "Focus step" recentres on request, and says why it cannot ("Step 1 has no location", "Step 6 is
+  not on the map: it moves the character somewhere the route does not say", "Step 6 is on world
+  map 36, which this map cannot show"). The last one is also announced and shown in the status
+  line when the active step lands there, since the map cannot follow it (MAP-UX-9).
+- **Labels.** Route descriptors carry no step numbers (MAPS §7.3): the controller is the adapter's
+  label provider and numbers steps from the current route order when a tooltip opens ("12 ·
+  Accept quest: Your Place in the World", "Route: steps 3–40", "Transport to Eastern Kingdoms:
+  step 12 to step 13", "Step 20: Hearthstone (destination unknown until simulation)"). A marker's
+  badges are said in words after its text: "(outside its zone’s map frame)", "(leg unknown: an
+  earlier step could not be placed)", "(inside an instance: drawn at its entrance)" (MAP-A11Y-10).
+  The status line's "Pointer on:" text is the tooltip's.
+- **Clicks.** A step marker, halo, route segment (the leg into the step after it) or leg selects
+  that step; a transition glyph selects the step at its other end, so the map follows across; a
+  departure glyph (a hearth with no known bind point) selects its step; a quest giver, objective,
+  turn-in or flight master that starts quests opens its quests in Details; an aggregate glyph
+  opens its zone. Several items at one point are one marker with a count badge: when their clicks
+  would differ, a small list beside the point names them ("6 steps here", each with its hover
+  text) with an "all" action ("Select all 6 steps", "Open all 9 quests in Details"); the first item
+  takes focus, arrows move, Escape or a press outside closes, and focus returns to the map
+  (MAP-UX-3). A click on empty map at continent zoom jumps to the zone frame the point is most
+  central in (`zoneFramesContaining`; the Crossroads opens The Barrens, not Durotar's overlapping
+  frame, coordinates.md §15; MAP-UX-1). Frames themselves are not interactive (MAPS §7.5).
+- **Zones.** Jump to zone (the top bar, an aggregate click, an empty click) fits the zone's frame
+  at the zone zoom or closer, so its points are drawn raw even where the stage is too small to
+  fit the zone there, and the zone's points stay raw at any zoom while it is the zone (PERF-4,
+  MAP-UX-2). Its frame is drawn emphasised and the top bar's select shows it until the zone is
+  panned out of view or another surface is shown; then both reset (MAP-UX-12).
+- **Route rows.** The pointer over a route row highlights that step's marker (a group header: its
+  steps'), on top of every layer, without rebuilding anything.
+- **Focused quests.** The quests opened in Details while they are shown, otherwise the active
+  step's quests: their objectives and turn-ins are drawn, and their givers raw and emphasised at
+  any zoom.
+- **Initial view.** The route's first surface, fitted to the route there (never closer than zoom
+  −1.5). A remount keeps the adapter and its views.
+- **Honest counts.** The layer panel lists every layer, topmost first, with its glyph, what is
+  drawn and notes that always name their unit (MAP-HONEST-5): points folded into zone counts,
+  markers over the cap, points not placed and why, points or steps on other world maps, quests that
+  start from an item, quest givers, objectives, turn-ins and flight masters with no spawn in the
+  dataset (MAP-HONEST-4), flight masters of the other faction. Under the layers, the key names every
+  glyph, line style and badge and says how to read the grid (MAP-A11Y-10). Art is unavailable
+  without a compatible local set, and the proposal until proposals exist. The status line gives
+  the route on this surface ("Route: 54 of 55 steps on Kalimdor · 1 without a location"; steps on
+  maps no surface shows are counted apart, "1 on maps with no surface") and, zoomed out, "Zoomed
+  out: quest points shown as zone counts".
+- **Performance.** Only a layer whose inputs changed is rebuilt and sent. Route layers are built
+  from the steps they draw (`createDrawnRouteFilter`, `focusWithin`), so inserting, editing,
+  deleting or selecting a note rebuilds no route layer; an insert elsewhere changes only the
+  descriptors next to it (no step numbers in them), and a step move sends the route line and the
+  selection. Hover writes nothing to the store, so no panel but the pointer line re-renders for it
+  (PERF-14). `docs/measurements/map-m3.json` has the numbers and how they were taken.

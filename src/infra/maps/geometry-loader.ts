@@ -2,6 +2,7 @@ import type { UiMapId } from '../../domain/ids';
 import { canonicalFrameTuples, canonicalGeometryContent, frameSetOf, type MapGeometry, mergeLocalGeometry, parseGeometryFile } from '../../geo';
 import { sha256Hex, type Sha256Digest } from '../hash';
 import { decodeUtf8, type FetchLike, isAbortError, joinUrl } from '../http';
+import { createLocalArt, type LocalArt, noLocalArt } from './local-art';
 
 /**
  * Map geometry at runtime (ARCHITECTURE §6, §7.3; docs/MAPS.md §5.3, §5.6 "Runtime behaviour"):
@@ -27,6 +28,8 @@ import { decodeUtf8, type FetchLike, isAbortError, joinUrl } from '../http';
  *    hash checked when it records one, and merged with `mergeLocalGeometry`, which compares frames
  *    from the rows themselves; the manifest's own `frameHash` is never trusted. A mismatch keeps
  *    the placeholder and reports the UiMaps.
+ * 4. For a compatible set, the manifest's `art` section is parsed and checked against the local
+ *    geometry (`local-art.ts`); each image's SHA-256 is verified lazily, when it is first drawn.
  */
 
 export const PLACEHOLDER_GEOMETRY_PATH = 'maps/placeholder/geometry.placeholder.json';
@@ -71,6 +74,11 @@ export interface LoadedGeometry {
    */
   readonly frameSource: { readonly commit: string | null; readonly build: string | null; readonly sha256: string | null };
   readonly local: LocalMapSetStatus;
+  /**
+   * The compatible local set's art (MAPS.md §5.3, §5.6 step 7): entries for the map adapter's art
+   * layer, each verified on its first `load`. No entries without a compatible set.
+   */
+  readonly art: LocalArt;
 }
 
 export type GeometryLoadErrorCode =
@@ -211,6 +219,8 @@ interface LocalManifest {
   readonly build: string;
   readonly geometryFile: string;
   readonly geometrySha256: string;
+  /** The `art` section as written (checked by `local-art.ts`); undefined when the manifest has none. */
+  readonly art: unknown;
 }
 
 function readLocalManifest(json: unknown): LocalManifest | string {
@@ -225,13 +235,22 @@ function readLocalManifest(json: unknown): LocalManifest | string {
   if (typeof set !== 'string' || typeof build !== 'string') return 'set or build missing';
   if (typeof file !== 'string' || !FILE_NAME.test(file)) return 'geometry.file must be a file name inside local-maps/';
   if (typeof hash !== 'string' || !HEX64.test(hash)) return 'geometry.sha256 must be a SHA-256 hex digest';
-  return { set, build, geometryFile: file, geometrySha256: hash };
+  return { set, build, geometryFile: file, geometrySha256: hash, art: json['art'] };
 }
 
-async function loadLocal(opts: GeometryLoaderOptions, sha256: Sha256Digest, placeholder: MapGeometry): Promise<{ status: LocalMapSetStatus; geometry: MapGeometry }> {
-  const none = (reason: Extract<LocalMapSetStatus, { kind: 'none' }>['reason'], detail: string) => ({
-    status: { kind: 'none', reason, detail } as const,
+interface LocalResult {
+  readonly status: LocalMapSetStatus;
+  readonly geometry: MapGeometry;
+  readonly art: LocalArt;
+}
+
+const NO_SET_ART = noLocalArt({ kind: 'none', detail: 'no compatible local set' });
+
+async function loadLocal(opts: GeometryLoaderOptions, sha256: Sha256Digest, placeholder: MapGeometry): Promise<LocalResult> {
+  const none = (reason: Extract<LocalMapSetStatus, { kind: 'none' }>['reason'], detail: string): LocalResult => ({
+    status: { kind: 'none', reason, detail },
     geometry: placeholder,
+    art: NO_SET_ART,
   });
   const found = await probe(opts, LOCAL_MANIFEST_PATH);
   if (found.kind === 'missing') return none(found.reason, found.detail);
@@ -269,11 +288,14 @@ async function loadLocal(opts: GeometryLoaderOptions, sha256: Sha256Digest, plac
         sharedRowUiMapIds: merged.sharedRowUiMapIds,
       },
       geometry: placeholder,
+      art: NO_SET_ART,
     };
   }
   return {
     status: { kind: 'compatible', set: manifest.set, build: manifest.build, frameHash: localHash, added: merged.added },
     geometry: merged.geometry,
+    // Art is read only now: its bounds are checked against the verified, frame-compatible rows.
+    art: createLocalArt(manifest.art, parsed.geometry, { fetch: opts.fetch, baseUrl: opts.baseUrl, sha256 }),
   };
 }
 
@@ -308,6 +330,7 @@ export async function loadGeometry(opts: GeometryLoaderOptions): Promise<LoadedG
     contentHash: placeholder.contentHash,
     frameSource: placeholder.frameSource,
     local: local.status,
+    art: local.art,
   };
 }
 
@@ -328,6 +351,18 @@ function localNoneText(local: Extract<LocalMapSetStatus, { kind: 'none' }>): str
   }
 }
 
+/** The art part of a compatible set's line: nothing when it lists none. */
+function localArtText(art: LocalArt): string {
+  switch (art.status.kind) {
+    case 'none':
+      return '';
+    case 'listed':
+      return `, art for ${String(art.status.count)} UiMaps (verified when drawn)`;
+    case 'refused':
+      return `; local art refused (${art.status.detail})`;
+  }
+}
+
 /** One line for the UI: which geometry is in use, and why a local set is not (MAPS.md §5.6 step 6). */
 export function describeGeometry(loaded: LoadedGeometry): string {
   const rows = [...loaded.placeholder.maps.values()].flatMap((m) => m.assignments);
@@ -340,7 +375,7 @@ export function describeGeometry(loaded: LoadedGeometry): string {
     case 'none':
       return `${placeholder}; ${localNoneText(loaded.local)}`;
     case 'compatible':
-      return `${placeholder}; local set ${loaded.local.build}: compatible, ${String(loaded.local.added.length)} UiMaps added`;
+      return `${placeholder}; local set ${loaded.local.build}: compatible, ${String(loaded.local.added.length)} UiMaps added${localArtText(loaded.art)}`;
     case 'incompatible':
       return `${placeholder}; local set ${loaded.local.build}: incompatible, using the placeholder`;
   }

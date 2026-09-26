@@ -11,6 +11,7 @@ import { formatDuration, formatInteger, formatPercent, plural } from './lib/form
 import { NO_ISSUES } from './lib/issues';
 import { type Readout, unknownReadout } from './lib/readout';
 import { UNKNOWN_FOREVER_PROVENANCE, foreverProvenanceOf } from './markers/provenance';
+import { STEP_KIND_LABELS } from './markers/StepTypeGlyph';
 import type { GroupRowModel, RouteRowModel, StepRowModel } from './route/rows';
 import type { SidePanelTabId } from './shell/SidePanel';
 
@@ -336,6 +337,11 @@ export function stepTitle(step: RouteStep, dataset: DatasetView): string {
     case 'note':
       return step.text.trim() === '' ? '(empty note)' : step.text;
   }
+}
+
+/** A step's hover text on the map: `12 · Accept quest: Your Place in the World` (the map controller's `describeStep`). */
+export function mapStepLabel(step: RouteStep, index: number, dataset: DatasetView): string {
+  return `${formatInteger(index + 1)} · ${STEP_KIND_LABELS[step.kind]}: ${stepTitle(step, dataset)}`;
 }
 
 /** Dimmed text after the title: where the step happens (travel titles already say it). */

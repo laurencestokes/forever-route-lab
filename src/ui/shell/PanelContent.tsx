@@ -137,6 +137,9 @@ export interface QuestListItemProps {
   readonly detail: string | null;
   readonly onAdd?: (() => void) | undefined;
   readonly addLabel?: string | undefined;
+  /** Opens the quest in Details (and so puts it in focus on the map). */
+  readonly onOpen?: (() => void) | undefined;
+  readonly openLabel?: string | undefined;
 }
 
 /** One quest in the Available or Quest log lists. Render inside a `<ul>`. */
@@ -149,6 +152,8 @@ export function QuestListItem({
   detail,
   onAdd,
   addLabel = 'Add to route',
+  onOpen,
+  openLabel = 'Show in Details',
 }: QuestListItemProps) {
   return (
     <li className="frl-quest-item">
@@ -162,6 +167,7 @@ export function QuestListItem({
         </span>
         {detail !== null && <span className="frl-quest-item__detail">{detail}</span>}
       </span>
+      {onOpen !== undefined && <IconButton icon="about" label={`${openLabel}: ${name}`} size="sm" onClick={onOpen} />}
       {onAdd !== undefined && <IconButton icon="add" label={`${addLabel}: ${name}`} size="sm" onClick={onAdd} />}
     </li>
   );

@@ -28,6 +28,8 @@ interface RowFrameProps {
   readonly style?: CSSProperties | undefined;
   readonly onClick?: ((event: MouseEvent<HTMLDivElement>) => void) | undefined;
   readonly onDoubleClick?: ((event: MouseEvent<HTMLDivElement>) => void) | undefined;
+  /** The pointer entered the row (the map highlights its step's marker). */
+  readonly onMouseEnter?: (() => void) | undefined;
   /** Pointer down on the drag handle. Omit to hide the handle (read-only lists). */
   readonly onHandlePointerDown?: ((event: PointerEvent<HTMLElement>) => void) | undefined;
 }
@@ -124,6 +126,7 @@ function RowFrame({
   style,
   onClick,
   onDoubleClick,
+  onMouseEnter,
   onHandlePointerDown,
   label,
   className,
@@ -147,6 +150,7 @@ function RowFrame({
       style={style}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onMouseEnter={onMouseEnter}
       {...data}
     >
       {onHandlePointerDown === undefined ? (

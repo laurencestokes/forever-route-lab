@@ -2,8 +2,8 @@
  * Audits dist/ after a build (docs/ARCHITECTURE.md §14, §16; docs/MAPS.md §5.7; D-018, D-025):
  * no local map sets or local-only data, no images outside the app-asset allowlist, no user paths
  * or `.cache` references, no Lua, BLP or source maps, every required notice present, and the
- * entry chunk plus its static imports within the gzip budget. Prints a size report; exits
- * non-zero on any violation.
+ * entry chunk plus its static imports within the gzip budget. Prints a size report (with the
+ * lazily loaded chunks, reported but not gated); exits non-zero on any violation.
  *
  * With --strip-manifest, a passing audit then deletes dist/.vite: the Vite build manifest the
  * entry-chunk gate reads has no runtime use and must not deploy. A failing audit keeps it for

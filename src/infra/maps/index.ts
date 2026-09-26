@@ -1,4 +1,4 @@
-/** `infra/maps`: the committed placeholder geometry and the local-map probe (ARCHITECTURE §7.3). */
+/** `infra/maps`: the committed placeholder geometry, the local-map probe and local art (ARCHITECTURE §7.3). */
 export {
   contentHashOf,
   describeGeometry,
@@ -12,3 +12,5 @@ export {
   type LoadedGeometry,
   type LocalMapSetStatus,
 } from './geometry-loader';
+export { contentTypeOfName, readImageHeader, type ImageContentType, type ImageHeader, type ImageHeaderResult } from './image-header';
+export type { LocalArt, LocalArtBounds, LocalArtEntry, LocalArtLoad, LocalArtStatus } from './local-art';

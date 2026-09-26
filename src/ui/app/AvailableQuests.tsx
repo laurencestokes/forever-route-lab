@@ -1,5 +1,5 @@
-import { memo, useMemo, useState } from 'react';
-import type { EditorStore } from '../../app';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { type EditorStore, openQuestsInDetails } from '../../app';
 import { useEditor } from '../../app/react';
 import { effectiveQuestLevel, questDifficultyAt, questsForCharacter, requiredLevelAbove } from '../../app/shell-support';
 import type { DatasetView, QuestRecord } from '../../domain/dataset';
@@ -34,6 +34,7 @@ interface QuestRowProps {
   readonly startLevel: number;
   readonly inRoute: boolean;
   readonly note: string | undefined;
+  readonly onOpen: (id: QuestId) => void;
 }
 
 /**
@@ -42,7 +43,7 @@ interface QuestRowProps {
  * above the start level is stated ("requires 42"): the sort already puts such a quest with its
  * required level, and the row says why.
  */
-const QuestRow = memo(function QuestRow({ quest, dataset, startLevel, inRoute, note }: QuestRowProps) {
+const QuestRow = memo(function QuestRow({ quest, dataset, startLevel, inRoute, note, onOpen }: QuestRowProps) {
   const zone = questZoneName(dataset, quest);
   const starter = quest.starters[0];
   const required = requiredLevelAbove(quest, startLevel);
@@ -62,6 +63,9 @@ const QuestRow = memo(function QuestRow({ quest, dataset, startLevel, inRoute, n
       uncertain
       provenance={foreverProvenanceOf(quest.provenance)}
       detail={detail === '' ? null : detail}
+      onOpen={() => {
+        onOpen(quest.id);
+      }}
     />
   );
 });
@@ -74,13 +78,14 @@ interface QuestListProps {
   readonly inRoute: ReadonlySet<QuestId>;
   /** Extra text after the zone and starter, for every quest in this list. */
   readonly note?: string | undefined;
+  readonly onOpen: (id: QuestId) => void;
 }
 
-function QuestList({ label, quests, dataset, startLevel, inRoute, note }: QuestListProps) {
+function QuestList({ label, quests, dataset, startLevel, inRoute, note, onOpen }: QuestListProps) {
   return (
     <ul className="frl-app-quests" aria-label={label}>
       {quests.map((quest) => (
-        <QuestRow key={quest.id} quest={quest} dataset={dataset} startLevel={startLevel} inRoute={inRoute.has(quest.id)} note={note} />
+        <QuestRow key={quest.id} quest={quest} dataset={dataset} startLevel={startLevel} inRoute={inRoute.has(quest.id)} note={note} onOpen={onOpen} />
       ))}
     </ul>
   );
@@ -101,13 +106,14 @@ interface OpenQuestPagesProps {
   readonly inRoute: ReadonlySet<QuestId>;
   readonly who: string;
   readonly searching: boolean;
+  readonly onOpen: (id: QuestId) => void;
 }
 
 /**
  * The open quests matching one search, a page at a time. Its parent keys it on the search, so the
  * page count starts over whenever the search changes, including back to a search shown before.
  */
-function OpenQuestPages({ quests, dataset, startLevel, inRoute, who, searching }: OpenQuestPagesProps) {
+function OpenQuestPages({ quests, dataset, startLevel, inRoute, who, searching, onOpen }: OpenQuestPagesProps) {
   const [limit, setLimit] = useState(AVAILABLE_PAGE_SIZE);
   const shown = useMemo(() => quests.slice(0, limit), [quests, limit]);
   return (
@@ -118,7 +124,7 @@ function OpenQuestPages({ quests, dataset, startLevel, inRoute, who, searching }
           {quests.length > shown.length && !searching ? ' Search by name or quest id to find others.' : ''}
         </p>
       )}
-      <QuestList label="Quests" quests={shown} dataset={dataset} startLevel={startLevel} inRoute={inRoute} />
+      <QuestList label="Quests" quests={shown} dataset={dataset} startLevel={startLevel} inRoute={inRoute} onOpen={onOpen} />
       {quests.length > shown.length && (
         <div className="frl-app-actions">
           <Button
@@ -153,6 +159,14 @@ export const AvailableQuests = memo(function AvailableQuests({ store, dataset, s
   const start = character.startLevel;
   const placeholder = dataset.identity.dataRevision === 'placeholder';
   const searching = needle !== '';
+  // Opening a quest shows it in Details and puts it in focus on the map (its givers, objectives
+  // and turn-ins): the keyboard path to what a click on a map marker does.
+  const onOpen = useCallback(
+    (id: QuestId) => {
+      openQuestsInDetails(store, [id]);
+    },
+    [store],
+  );
   return (
     <PanelSection
       title="Quests"
@@ -165,7 +179,16 @@ export const AvailableQuests = memo(function AvailableQuests({ store, dataset, s
         <p className="frl-app-hint">{searching ? `No quests match “${search.trim()}”.` : 'No quests in the dataset.'}</p>
       ) : (
         matching.length > 0 && (
-          <OpenQuestPages key={needle} quests={matching} dataset={dataset} startLevel={start} inRoute={inRoute} who={who} searching={searching} />
+          <OpenQuestPages
+            key={needle}
+            quests={matching}
+            dataset={dataset}
+            startLevel={start}
+            inRoute={inRoute}
+            who={who}
+            searching={searching}
+            onOpen={onOpen}
+          />
         )
       )}
       {matchingUnknown.length > 0 && (
@@ -178,6 +201,7 @@ export const AvailableQuests = memo(function AvailableQuests({ store, dataset, s
             startLevel={start}
             inRoute={inRoute}
             note={UNREADABLE_MASK_REASON}
+            onOpen={onOpen}
           />
           {matchingUnknown.length > shownUnknown.length && (
             <p className="frl-app-hint">{`${plural(matchingUnknown.length - shownUnknown.length, 'more quest')} with unknown availability not shown.`}</p>

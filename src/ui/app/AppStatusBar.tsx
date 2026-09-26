@@ -2,8 +2,8 @@ import { memo } from 'react';
 import type { EditorStore } from '../../app';
 import { useEditor } from '../../app/react';
 import type { DatasetView } from '../../domain/dataset';
-import { type ActiveRow, dataBadgeDetail, dataBadgeLabel, locationText, type RouteView, SIMULATION_PENDING, stepTitle } from '../app-model';
-import { MapPlaceholder, StatusBar, unknownReadout } from '../kit';
+import { type ActiveRow, dataBadgeDetail, dataBadgeLabel, type RouteView, SIMULATION_PENDING, stepTitle } from '../app-model';
+import { StatusBar, unknownReadout } from '../kit';
 import { selectCharacter, selectRulesetId, useActiveTarget } from './selectors';
 
 const SIMULATION_READOUT = unknownReadout<number>(SIMULATION_PENDING);
@@ -40,22 +40,6 @@ export const AppStatusBar = memo(function AppStatusBar({ store, view, dataset, a
       optimizer={OPTIMIZER}
       data={{ label: dataBadgeLabel(identity), detail: dataBadgeDetail(identity), placeholder: identity.dataRevision === 'placeholder' }}
       ruleset={{ label: rulesetId, detail: RULESET_DETAIL, eraFallback: true }}
-    />
-  );
-});
-
-export interface MapPanelProps extends ActivePanelProps {
-  /** Which map geometry is loaded (the placeholder, a local set), or null when not known. */
-  readonly geometry?: string | null | undefined;
-}
-
-/** The centre: the map placeholder, focused on the active step. */
-export const MapPanel = memo(function MapPanel({ store, view, dataset, activeRow, geometry = null }: MapPanelProps) {
-  const { step } = useActiveTarget(store, view, activeRow);
-  return (
-    <MapPlaceholder
-      focus={step === null ? null : { title: stepTitle(step, dataset), location: locationText(step.location, dataset) }}
-      geometry={geometry}
     />
   );
 });

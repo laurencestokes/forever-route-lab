@@ -16,10 +16,10 @@
 
 </div>
 
-> **Pre-alpha.** The shell now runs on the real dataset derived from QuestieDB (Milestone 2), with
-> an auto-generated sample route that is not a recommendation. Every number that needs the
-> simulator still reads "unknown", and there is no map yet. Where the project stands, and what
-> comes next, is in [STATUS.md](STATUS.md). Screenshots will be added once the map lands.
+> **Pre-alpha.** The shell runs on the real dataset derived from QuestieDB (Milestone 2), with an
+> auto-generated sample route that is not a recommendation, and a schematic map of zone frames
+> (Milestone 3, before its reviews). Every number that needs the simulator still reads "unknown".
+> Where the project stands, and what comes next, is in [STATUS.md](STATUS.md).
 
 ## What this is
 
@@ -41,8 +41,28 @@ assumptions", never "optimal".
 
 ## Highlights
 
-**Available now (Milestones 1 and 2: Foundation, Forever data pipeline)**
+**Available now (Milestones 1 and 2: Foundation, Forever data pipeline; Milestone 3: the map, before its reviews)**
 
+- **A map of the route**: Leaflet behind the project's own adapter, one surface per world map
+  (Kalimdor, Eastern Kingdoms and the others the geometry has) with a switcher, pan and zoom.
+  It draws zone frames with their names, the route line split per world map (transport dashed,
+  flight dotted, hearthstone dash-dot) with a glyph where the route changes world map, step
+  markers (number and title on hover), the givers of the quests open to your character, the
+  objectives and turn-ins of the quest in focus, and your faction's flight masters. Fit the
+  route, focus the selected step, jump to a zone from the top bar or by clicking it zoomed out
+  (always close enough to show its quest points), and show or hide each layer. Clicking a step
+  marker selects the step; clicking a quest giver, or a flight master that starts quests, opens
+  them in Details; where several items share a point, a small list lets you pick one. Hovering a
+  route row highlights its marker.
+- **A map that says what it leaves out**: zoomed out, quest points fold into per-zone counts; the
+  layer panel counts, with their units, points it could not place (and why), points on other
+  world maps, quests that start from an item and quest NPCs with no spawn in the dataset, and its
+  key explains every glyph, line style and badge. With no local map set it says "Schematic map:
+  zone frames, not terrain": no game art ships. A local set of your own client's art is drawn on
+  your machine only, from bytes checked against its manifest, loading only the images in view.
+- **Keyboard first, map second**: everything the map does can also be done from the route list,
+  the Available tab, Details and the top bar, and the map follows the route list's selection.
+  Leaflet loads on demand in its own chunk, fetched while the data loads.
 - **The real dataset, integrity-checked at load**: 4,257 quests, 6,003 NPCs, 952 objects and
   2,962 items derived from QuestieDB at a pinned commit, about 0.94 MB gzip. Every file is checked against the
   SHA-256 in its manifest and against its shape before anything is shown; a mismatch shows an
@@ -60,8 +80,8 @@ assumptions", never "optimal".
   (a page of 100 at a time with an honest count, and search), and Details shows a quest's givers
   and receivers at zone and percent, its objectives and where they are done, its quest text, and
   where the record came from.
-- **A three-panel editor shell**: route list on the left, a map placeholder in the centre, and
-  Available, Quest log, Details and Validation tabs on the right, with a top bar and a status bar.
+- **A three-panel editor shell**: route list on the left, the map in the centre, and Available,
+  Quest log, Details and Validation tabs on the right, with a top bar and a status bar.
 - **A route list built for long routes**: fixed one-line rows with in-house virtualisation,
   single, toggle and range selection, keyboard navigation, drag to reorder, Alt+↑/↓ moves, lock,
   duplicate, delete, and insert note, travel or grind steps.
@@ -82,7 +102,7 @@ assumptions", never "optimal".
 
 | Milestone | Scope |
 |---|---|
-| 3 | Map: Leaflet behind an adapter, placeholder geometry, route lines and markers, no game art |
+| 3 | Map: the independent rendering, coordinate and accessibility reviews of what is above; then 3b, terrain navigation (D-028) |
 | 4 | Route editor and storage: IndexedDB autosave, native JSON import and export |
 | 5 | RestedXP custom guide import and export with lossless round trips |
 | 6 | Ruleset, simulation (XP, level, time) and validation |

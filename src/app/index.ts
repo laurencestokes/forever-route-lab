@@ -6,5 +6,6 @@ export * from './clock';
 export * from './commands';
 export * from './history';
 export * from './ids';
+export * from './map-view';
 export * from './selection';
 export * from './store';

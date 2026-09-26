@@ -1,0 +1,129 @@
+{
+  "$comment": [
+    "Milestone 3 map measurements after the M3 review fixes (docs/ARCHITECTURE.md §14: map moveend redraw at the LOD cap <= 16 ms, one route edit applied <= 8 ms; docs/MAPS.md §7.2-§7.5; docs/UI.md §12). They replace the pre-review figures of 2026-09-25, which the review showed understated a 10,000-step route edit about 3x (they came from a fake adapter; M3 review PERF-2). Those are kept under 'beforeReview' for comparison.",
+    "browser: the real map controller (src/app/map-controller.ts), the real Leaflet adapter (src/map/leaflet) and the committed dataset (loadWorkspace over public/data), driven from the page with no React, in a 1280x800 host (DPR 1, the pane's Chrome 152) on the Vite dev server (sources as modules, not minified: the controller and adapter are not React code, so dev mode changes their cost little). The pane was hidden, so requestAnimationFrame never ran: after each action the canvas renderer was redrawn by calling its _redraw() once ('redrawForced'); 'handler' is the synchronous time of the action (store dispatch or select, the controller's sync, the adapter's setLayer and moveend work), 'sync' the frl:map:sync User Timing measure (recorded only when a layer is set), 'setLayer' the adapter's frl:map:set-layer measures, 'updatePaths' frl:map:update-paths. 11 to 15 runs per case, min / median / max.",
+    "Load: other processes kept the machine busy (other agents' builds and two long-running Vite dev servers from earlier sessions; system CPU 35-98% while measuring). A hidden tab runs at background priority, so browser figures moved by 2-4x with the load: runs at 97% CPU gave 45 ms for the same 10,000-step selection change that took 12-17 ms when the load was lower. The browser figures below come from the calmer runs, checked with a CPU probe (2e7 sqrt loop: 40 ms in the page, 40 ms in Node at that time). Treat them as indicative; the throttled Playwright run of Milestone 9 replaces them.",
+    "node: the same controller and map/layers over the same committed dataset (loadWorkspace through the test fake fetch, tests/support/fake-fetch.ts), with the fake adapter of src/app/map-test-helpers.ts (records calls, no Leaflet, no canvas), 21 runs per case, tsx on Node v22.13.1, a foreground process. It isolates the app and map/layers cost; the browser rows give the adapter's setLayer and redraw on top. 'storeOnly' is the same dispatch on a store without a map, so the map's share is total - storeOnly.",
+    "The 10,000-step route repeats the sample's 55 steps with each repeat's zone percentages shifted by up to 1.5 (so markers do not all stack; about 3,456 step markers remain after merging, 700 drawn under the step-marker budget). All of it lies in Durotar and the Valley of Trials: the densest possible case for the step-marker cap.",
+    "Scenarios: insert a note at spread positions; edit a note's text; move a placed step by one (it is selected and active first, outside the measurement); a selection change as the shell makes it (store.select, then controller.setActiveStep with the same step, which now changes nothing: one sync, M3 review PERF-6); pans of 120 px and 700 px at zone zoom with the cap biting; jump to zone on a 424x634 stage (1366x768 with the layer panel open), where The Barrens would fit only at zoom -5 and Durotar at -4 without the zoom floor."
+  ],
+  "date": "2026-09-26",
+  "machine": {
+    "os": "Windows 11 Home 10.0.26200",
+    "cores": 16,
+    "node": "v22.13.1",
+    "browser": "Chrome/152.0.7977.130 (Claude desktop app built-in browser, hidden pane)"
+  },
+  "bundle": {
+    "$comment": "gzip as reported by vite build and the dist audit (tools/build/audit-dist.ts) after the review fixes. The lazy chunk is the Leaflet adapter (src/map/leaflet), loaded with a dynamic import from src/main.tsx; the dist audit reports it (and its CSS) under 'Loaded lazily by dynamic import()', not gated (M3 review PERF-11). It holds no data-URI PNG; its one data URI is Leaflet's 1x1 transparent GIF placeholder (emptyImageUrl).",
+    "entryGzipKb": 141.88,
+    "entryGzipKbBeforeReviewFixes": 134.08,
+    "entryGzipBudgetKb": 250,
+    "entryGrowthContents": "the map key and its glyphs (src/ui/shell/MapLegend.tsx), the choice list for merged markers, the controller's label provider, hover channel and art level of detail, and map/layers' stacks and pieces",
+    "entryCssGzipKb": 8.62,
+    "lazyMapChunkJsRawKb": 182.07,
+    "lazyMapChunkJsGzipKb": 54.29,
+    "lazyMapChunkCssRawKb": 12.77,
+    "lazyMapChunkCssGzipKb": 3.09
+  },
+  "browser": {
+    "sampleRoute55": {
+      "paths": 608,
+      "pathsByLayer": { "zone-frames": 24, "available-quests": 543, "flight-masters": 21, "route-line": 1, "route-steps": 19 },
+      "attachMs": 39,
+      "insertNote": { "handlerMs": { "min": 0.1, "median": 0.3, "max": 0.7 }, "layersSet": [] },
+      "editNote": { "handlerMs": { "min": 0.1, "median": 0.2, "max": 0.4 }, "layersSet": [] },
+      "moveStep": { "handlerMs": { "min": 0.7, "median": 0.9, "max": 1.4 }, "syncMs": 0.7, "setLayerMs": 0.1, "redrawForcedMs": 0.5, "layersSet": ["route-line", "selection"] },
+      "selectionChange": {
+        "handlerMs": { "min": 2.0, "median": 2.9, "max": 4.5 },
+        "syncMs": 2.8,
+        "syncsPerChange": 1,
+        "setLayerMs": 0.5,
+        "redrawForcedMs": 0.3,
+        "layersSet": ["available-quests", "objectives", "turn-ins", "route-steps", "selection"]
+      }
+    },
+    "route10000": {
+      "paths": 1348,
+      "pathsByLayer": { "zone-frames": 24, "available-quests": 543, "flight-masters": 21, "route-line": 60, "route-steps": 700 },
+      "stepMarkersNotDrawn": 2756,
+      "attachMs": 62.5,
+      "insertNote": { "handlerMs": { "min": 3.5, "median": 3.9, "max": 5.2 }, "layersSet": [], "$comment": "about 2.5 ms of it is the store's own dispatch; the route layers are not rebuilt (createDrawnRouteFilter, focusWithin)" },
+      "editNote": { "handlerMs": { "min": 2.3, "median": 2.6, "max": 3.0 }, "layersSet": [] },
+      "moveStep": {
+        "handlerMs": { "min": 14.8, "median": 19.8, "max": 23.0 },
+        "syncMs": 17.6,
+        "setLayerMs": 0.2,
+        "redrawForcedMs": 2.6,
+        "layersSet": ["route-line", "route-steps", "selection"],
+        "budgetMs": 8
+      },
+      "selectionChange": {
+        "handlerMs": { "min": 14.0, "median": 17.4, "max": 23.9 },
+        "syncMs": 17.2,
+        "syncsPerChange": 1,
+        "setLayerMs": 0.7,
+        "redrawForcedMs": 2.3,
+        "layersSet": ["available-quests", "objectives", "turn-ins", "route-steps", "selection"]
+      },
+      "pan120pxSameBand": { "handlerMs": { "min": 3.2, "median": 4.6, "max": 8.4 }, "updatePathsMs": 2.7, "redrawForcedMs": 1.9, "layersSet": [], "budgetMs": 16 },
+      "pan700pxAcrossRankingCells": { "handlerMs": { "min": 3.3, "median": 4.0, "max": 4.5 }, "updatePathsMs": 2.3, "redrawForcedMs": 1.8, "layersSet": [], "$comment": "already-drawn step markers are held while in view (MAPS §7.2), so nothing was swapped" },
+      "zoneJumpSmallStage": {
+        "stagePx": [424, 634],
+        "leastZoom": -6.75,
+        "handlerMs": { "min": 4.5, "median": 5.15, "max": 10.3 },
+        "syncMs": 0.85,
+        "updatePathsMs": 3.1,
+        "zoomReached": -3.5,
+        "zoomWithoutFloor": { "The Barrens": -5, "Durotar": -4 },
+        "bandAfter": "zone",
+        "layersSet": ["zone-frames"],
+        "$comment": "every jump reached the zone zoom -3.5, so the zone's givers are drawn raw (PERF-4, MAP-UX-2); zoomed out to -5 afterwards, the jumped-to Barrens stayed raw (57 markers) while other zones were counts; a click on the Durotar count opened Durotar at -3.5, and an empty click at the Crossroads (TaxiNodes 25) chose The Barrens (MAP-UX-1)"
+      }
+    }
+  },
+  "node": {
+    "sampleRoute55": {
+      "attachMs": 8.57,
+      "insertNote": { "totalMs": { "min": 0.09, "median": 0.1, "p90": 0.23 }, "storeOnlyMs": { "median": 0.04 } },
+      "editNote": { "totalMs": { "min": 0.06, "median": 0.08, "p90": 0.15 }, "storeOnlyMs": { "median": 0.03 } },
+      "moveStep": { "totalMs": { "min": 0.08, "median": 0.25, "p90": 0.38 }, "syncMs": { "median": 0.15 } },
+      "selectionChange": { "totalMs": { "min": 0.17, "median": 1.47, "p90": 2.18 }, "syncMs": { "median": 1.38 }, "syncsPerChange": 1 },
+      "pan120pxMs": { "median": 0.06 },
+      "zoneJumpMs": { "median": 0.14 }
+    },
+    "route10000": {
+      "attachMs": 26.24,
+      "insertNote": { "totalMs": { "min": 3.87, "median": 4.2, "p90": 5.79 }, "storeOnlyMs": { "min": 2.38, "median": 2.51, "p90": 3.41 } },
+      "editNote": { "totalMs": { "min": 2.59, "median": 2.66, "p90": 3.07 }, "storeOnlyMs": { "min": 1.96, "median": 2.03, "p90": 2.22 } },
+      "moveStep": { "totalMs": { "min": 15.53, "median": 17.08, "p90": 18.22 }, "storeOnlyMs": { "median": 2.3 }, "syncMs": { "min": 12.89, "median": 14.27, "p90": 15.03 } },
+      "selectionChange": { "totalMs": { "min": 12.77, "median": 13.67, "p90": 16.34 }, "syncMs": { "min": 11.98, "median": 13.1, "p90": 15.78 }, "syncsPerChange": 1 },
+      "pan120pxMs": { "min": 0.32, "median": 0.32, "p90": 0.35, "layersSet": [] },
+      "panAcrossRankingCellsMs": { "min": 1.23, "median": 1.32, "p90": 1.84, "layersSet": ["route-steps"] },
+      "zoneJumpMs": { "min": 1.42, "median": 1.8, "p90": 1.93 },
+      "parts": {
+        "$comment": "the pieces of one 10,000-step sync, timed alone in the page (median of 9, calmer run): the app's share is small; map/layers routeSteps dominates",
+        "routeInputBuilderMs": 0.5,
+        "routeMapSummaryMs": 0.2,
+        "routeLineMs": 1.7,
+        "routeStepsMs": { "rangeMs": [9, 15], "$comment": "collect 10,000 steps, merge stacks, rank 3,456 markers for 700 slots; rebuilt on every route change and every focus change" },
+        "selectionMs": 0.4
+      }
+    },
+    "syncMeasuresKept": "at most 500 frl:map:sync measures (MAX_SYNC_MEASURES; M3 review PERF-8)"
+  },
+  "budgetMs": { "routeEditApplied": 8, "moveendRedrawAtCap": 16 },
+  "verdict": [
+    "Sample route: well within both budgets (a route edit 0.3-1 ms, a selection change about 3 ms, a pan 4-5 ms with its redraw).",
+    "10,000 steps, note edits: within budget (inserting or editing a note costs 2.6-4 ms, most of it the store's own dispatch; no route layer is rebuilt).",
+    "10,000 steps, moving a placed step or changing the selection: over the 8 ms budget (13-17 ms in Node, 15-20 ms in the browser when the machine was calmer). The app's own share is about 1 ms (route input 0.5 ms, route summary 0.2 ms); most of the rest is map/layers routeSteps rebuilding all 10,000 steps on any route or focus change (reported to the map core). One selection change is now one sync, where it was two.",
+    "Pans: within the 16 ms budget at 1,348 paths (4-5 ms with the redraw); a surface at the full 2,500-path cap is measured in MAPS §7.2 (standalone harness, 3.3-3.5 ms median update-paths)."
+  ],
+  "beforeReview": {
+    "$comment": "2026-09-25, before the M3 review fixes. browser: production build, sample route; node: the fake adapter as above but a 10,000-step route of exact repeats, labels in descriptors, and two syncs per selection change.",
+    "browserSampleRouteEditSyncMs": [0.9, 0.6],
+    "browserSampleSelectionChange": { "storeSyncMs": 0.4, "activeStepSyncMs": [5.7, 3.8] },
+    "node10000": { "noteEditMs": 9.25, "selectMs": 6.7, "moveStepMs": 9.38, "panSameLodMs": 2.78 },
+    "reviewBrowser10000": { "routeEditSyncMs": [23.6, 27.1], "$comment": "the M3 render review (PERF-2), real adapter" }
+  }
+}

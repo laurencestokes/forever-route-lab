@@ -15,6 +15,7 @@ import {
   toggleLockSelected,
   updateStepNote,
 } from './commands';
+import { DEFAULT_MAP_UI, patchMapUi } from './map-view';
 import { createEditorStore, DEFAULT_VIEW, type EditorStoreOptions, NO_LOCKS } from './store';
 import { notesProject, order, sid, sorted, T0 } from './test-helpers';
 
@@ -568,13 +569,29 @@ describe('setView', () => {
     const listener = vi.fn();
     store.subscribe(listener);
     store.setView({ rightTab: 'details', showLayerPanel: true });
-    expect(store.getState().view).toEqual({ rightTab: 'details', theme: 'system', showLayerPanel: true });
+    expect(store.getState().view).toEqual({ rightTab: 'details', theme: 'system', showLayerPanel: true, map: DEFAULT_MAP_UI, openedQuests: null });
     const before = store.getState();
     store.setView({ rightTab: 'details' });
     store.setView({});
     expect(store.getState()).toBe(before);
     expect(listener).toHaveBeenCalledTimes(1);
     expect(store.getState().revision).toBe(0);
+  });
+
+  it('compares nested view state by reference, so an unchanged map patch notifies nobody', () => {
+    const store = makeStore('a');
+    const listener = vi.fn();
+    store.subscribe(listener);
+    const current = store.getState().view.map;
+    store.setView({ map: patchMapUi(current, { surface: current.surface, layers: { ...current.layers } }) });
+    expect(listener).not.toHaveBeenCalled();
+    store.setView({ map: patchMapUi(current, { surface: 'world:1' }) });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(store.getState().view.map.surface).toBe('world:1');
+    expect(store.getState().view.map.layers).toBe(current.layers);
+    // Map state is view state: no revision, no undo entry.
+    expect(store.getState().revision).toBe(0);
+    expect(store.canUndo()).toBe(false);
   });
 });
 

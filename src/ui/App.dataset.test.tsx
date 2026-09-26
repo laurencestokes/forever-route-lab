@@ -77,8 +77,9 @@ describe('App over the real dataset (fixture slice) with the sample route', () =
     expect(quest?.textContent).toContain('Forever status: unknown');
   });
 
-  it('shows the geometry in use on the map panel', () => {
+  it('shows the geometry in use in the layer list of the map panel', () => {
     setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Layers' }));
     expect(screen.getByText(`Geometry loaded: ${GEOMETRY}.`)).toBeTruthy();
   });
 

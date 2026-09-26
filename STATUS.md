@@ -8,7 +8,7 @@ Last updated: 2026-09-25
 
 ## Current milestone
 
-**Milestone 2: Forever data pipeline**, complete. Next: **Milestone 3: Map**, then **3b: Terrain navigation** (D-028).
+**Milestone 3: Map**, complete. Next: **Milestone 3b: Terrain navigation and map art** (D-028, D-030..D-033). The design revision is in progress in `docs/research/terrain-navigation.md`. Milestones 4 (editor and storage) and 5 (RXP) can run in parallel with 3b.
 
 ## Completed work
 
@@ -64,11 +64,22 @@ Last updated: 2026-09-25
   - The app boots on real data with a labelled sample route (Durotar start).
   - Independent review: [docs/reviews/review-m2-data.md](docs/reviews/review-m2-data.md)
     (44 findings, all fixed).
+- **Milestone 3 (Map):**
+  - `src/map/adapter.ts`: `MapAdapter` and plain-data descriptors.
+  - `src/map/layers.ts`: pure layer builders with level of detail, caps, co-location merging,
+    honest counts of what is not drawn, and route lines split per world map and chunked.
+  - `src/map/leaflet`: `CRS.Simple` per world map (lat = x, lng = −y), a canvas renderer, glyphs,
+    grid and scale, id-based diffing and performance marks. It is lazy-loaded (about 54 kB gzip).
+  - Map panel with a surface switcher, layer panel and legend, route line and steps, quest givers,
+    objectives, turn-ins, flight masters, zone frames, focus, fit, jump-to-zone, hover and click.
+  - Local map sets: a dev/preview-only Vite plugin, an art manifest and hash-verified art loading.
+  - Independent review: [docs/reviews/review-m3-map.md](docs/reviews/review-m3-map.md)
+    (28 findings, 27 done, 1 partial).
 
 ## Branch / commit
 
 - Branch: `main`
-- Commits: `e2e577f` skeleton, `14acc7a` Milestone 0, `374354a` Milestone 1, then the Milestone 2 commit (see `git log`).
+- Commits: `e2e577f` skeleton, `14acc7a` M0, `374354a` M1, `daeefb1` M2, then the M3 commit (see `git log`).
 
 ## Build / test status
 
@@ -78,11 +89,11 @@ As of the Milestone 2 commit (`pnpm check`):
 |---|---|
 | Typecheck (pure, app, node configs) | pass |
 | Lint | pass |
-| Tests | 97 files, 1,221 tests, pass |
+| Tests | 116 files, 1,521 tests, pass |
 | Data validation (`data:validate`, public/data and fixture) | pass |
 | Reproducibility (`extract --check`, needs the QuestieDB clone) | byte-identical (manual gate until CI, Milestone 9) |
 | Licence gate | pass (8 shipped packages) |
-| Production build + dist audit | pass; entry about 116 kB gzip of 250 kB; data 938.6 kB gzip of 1.2 MB |
+| Production build + dist audit | pass; entry about 142 kB gzip of 250 kB; lazy map chunk about 54 kB; data 938.6 kB gzip of 1.2 MB |
 
 ## Known bugs / deferred checks
 
@@ -94,6 +105,10 @@ As of the Milestone 2 commit (`pnpm check`):
   data-F3). `extract.test.ts` is skipped, loudly, without the QuestieDB clone, and fails in CI
   (`CI` set) without it.
 - `pnpm data:check` (fetch, extract --check, validate) is a manual gate until CI exists (Milestone 9).
+- Map route-edit budget (8 ms) is missed at 10,000 steps (17-20 ms). The step-marker layer
+  rebuilds because its cache key includes the focus. Fix in Milestone 4 (review-m3-map.md).
+- One quest-giver aggregate is drawn for UiMap 947 (Azeroth). Review it with the terrain map
+  layers (Milestone 3b).
 - The planned 4× CPU-throttled startup measurement happens with Playwright (Milestone 9).
 
 ## Blockers
@@ -118,10 +133,14 @@ _None._
 | OD-7 | Ship item-start facts that come only from QuestieDB's Wowhead-generated `itemStartFixes`? | **Pending.** Default: shipped, origin noted in the manifest and NOTICE | pending | DATA_PROVENANCE §3.3 |
 | OD-8 | Archive the pinned upstream QuestieDB inputs with each release? | **Pending.** Default: not archived (the pinned commit is public) | pending | DATA_PROVENANCE §3.3 |
 | OD-9 | Contact the Questie team about licensing permission? | Owner's call; not required by D-016 | open | D-016 |
-| OD-10 | Any real map art ever deployed publicly? | Default: never; local only | default | D-018 |
+| OD-10 | Any real map art ever deployed publicly? | Yes: extracted, committed and deployed with notices (owner accepts the risk) | decided (D-033, supersedes D-018 art rule) | owner |
 | OD-11 | Terrain-aware walking: derived navigation data committed and deployed? | Commit + deploy with notices | decided (D-028) | owner |
 | OD-12 | Terrain extraction method | Own read-only TypeScript CASC reader over `Data/` | decided (D-028) | owner |
 | OD-13 | Push to the GitHub remote? | Not pushed until the owner says so | open | owner |
+| OD-14 | Navigation data size | Lighter mesh, target 5-6 MB gzip, hard cap 7 MB, mandatory spawn census | decided (D-030) | owner |
+| OD-15 | Elevator/lift connectors | Owner's in-game observations (cited); interim straight-line fallback plus warning | decided (D-031) | owner |
+| OD-16 | Terrain map byproducts (coastlines, zone outlines, low-res relief) | Commit and deploy with notices | decided (D-032) | owner |
+| OD-17 | In-game calibration set (walked legs) | Not now; estimates stay labelled mesh-derived | deferred (D-031) | owner |
 
 ## Open questions (research)
 
@@ -134,24 +153,31 @@ _None._
   labelled default).
 - Riding training level and cost in Forever.
 
-## Exact next tasks (Milestone 3: Map)
+## Exact next tasks
 
-1. `src/map/adapter.ts` (`MapAdapter`, descriptors, view-model inputs) and `src/map/layers.ts`
-   (pure view models → descriptors, memoised per layer, level of detail), per ARCHITECTURE §7.
-2. `src/map/leaflet/`: a `L.CRS.Simple` surface per world map (`latLng = (x, -y)`), the canvas
-   renderer, markers, polylines split per world map, zone frames with labels, grid and scale bar,
-   art overlays for local sets, layer toggles, highlight and focus, click and hover events, diffing
-   by id, and a path cap.
-3. UI: the map panel replaces the placeholder. It adds a surface switcher, a layer panel, the route
-   line, step, available-quest, objective, turn-in and flight-master markers, focus on the selected
-   step, fit route, and jump-to-zone wired to zone frames.
-4. `tools/maps/vite-local-maps.ts` (dev/preview only), a local art manifest and adapter support.
-   Art extraction from the client moves to Milestone 3b, which needs the CASC reader.
-5. Independent rendering/performance, map-coordinate and UI/accessibility reviews; fix; commit.
+**Milestone 3b (terrain navigation and map art).** The design is being revised against critique
+TN-01..18 and decisions D-030 to D-033. Once the re-critique gives a go:
 
-Then **Milestone 3b** (D-028): a research and design step (CASC reader, ADT/WMO/M2 collision, grid
-vs navmesh, sizes, query cost), then implementation. WoWF-QRP code may be reused with attribution
-(D-029).
+1. `tools/casc`: shared read-only CASC reader plus a WDC5 DB2 reader, from the Milestone 0/3b
+   experiments.
+2. `tools/terrain`: geometry assembly (ADT, liquids, holes, WMO/M2 collision); a Recast build
+   through recast-navigation-js (pinned dev dependency, build time only); the compact 4×4-block
+   format; build-time components; connectors from the owner's observations (D-031); validation
+   gates (spawn census, must-connect and must-not-connect fixtures, seams, determinism); the nav
+   budget (D-030).
+3. `src/nav` (pure): decode, snap, `legsFrom` (Dijkstra plus funnel), and a leg table. A worker
+   with fetch/verify/pin, and a `TravelModel` 'navigation' implementation.
+4. Map art (D-033): extraction via `tools/casc` (UiMapArt tiles, WorldMapOverlay), BLP decode,
+   stitching, web images, a manifest with NOTICE and a size budget, and an audit allowlist.
+5. Terrain byproducts (D-032): coastlines, zone outlines and low-res relief, rendered by the map
+   adapter.
+6. Reviews, fix, commit.
+
+**In parallel, Milestone 4 (editor and storage) and Milestone 5 (RXP):**
+- M4: editing polish, IndexedDB autosave and backups, JSON import/export UI, and the PERF-2
+  10k-step fix.
+- M5: `src/rxp` from RXP.md (unwrap, CST, diagnostics, lowering, serializer, fixtures, round
+  trips), import/export UI, and `tools/build/rxp-overlap.ts`.
 
 ## Important commands
 
