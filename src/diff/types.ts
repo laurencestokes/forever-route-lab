@@ -79,8 +79,9 @@ export interface DiffRelations {
   /** Quests mutually exclusive with `q`: their ops are merged into one change-set. */
   exclusive(q: QuestId): readonly QuestId[];
   /**
-   * Quests that `q` needs first. Placing `q` (a moved or inserted `q` step) requires placing them
-   * (their moved or inserted steps); removing one of them (a removed step) requires removing `q`.
+   * Quests that `q` needs first. When `q` and one of them are both placed (moved or inserted
+   * steps), their change-sets require each other (D-043 item 12); placing or removing one of them
+   * requires removing `q` when `q` is removed.
    */
   prerequisites(q: QuestId): readonly QuestId[];
 }

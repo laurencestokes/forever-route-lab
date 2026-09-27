@@ -133,15 +133,17 @@ describe('createTypeScriptBeamSearchOptimizer', () => {
     o.dispose();
   });
 
-  it('reports no candidate when the original order is the best found (fixture 4 at beam 1)', async () => {
-    const fixture = coreFixtures().find((f) => f.id === '4-beam1');
-    if (fixture === undefined) throw new Error('missing');
+  it('reports no candidate when the original order is the best found (fixture 4 with the exit on the other side)', async () => {
+    // Fixture 4's two quests with the exit at (−400, 0): X then Y is already the shortest order, so
+    // neither the seeds, the passes nor the beam find anything better.
+    const s = hSteps();
+    const scenario = hScenario({ quests: [hQuest(401, 1000), hQuest(402, 1000)], steps: [...s.quest(401, 100, 0), ...s.quest(402, -150, 0)], exit: { x: -400, y: 0 } });
     const o = optimizer();
-    const result = await o.optimize(requestOf(fixture.scenario, fixture.goal), { ...H_OPTIONS, beamWidth: 1 }, contextOf(fixture.scenario, fixture.goal), sequentialIdSource(5000)).result;
+    const result = await o.optimize(requestOf(scenario, {}), { ...H_OPTIONS, beamWidth: 1 }, contextOf(scenario, {}), sequentialIdSource(5000)).result;
     expect(result.status).toBe('searched');
     if (result.status === 'searched') {
       expect(result.candidates).toEqual([]);
-      expect(result.incumbent.estimatedMs).toBe(102_000);
+      expect(result.incumbent.estimatedMs).toBe(72_000);
       expect(result.unknownXpBlocked).toBeNull();
     }
     o.dispose();

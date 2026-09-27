@@ -119,7 +119,7 @@ describe('the optimiser worker host', () => {
     }
   });
 
-  it('posts progress at most every progressMs, best on each improvement, and done last', async () => {
+  it('posts progress at most every progressMs, best on each new head, and done last', async () => {
     const w = wire({ msPerSlice: 30, firstSlice: 256, progressMs: 100 });
     w.start(7, compile(grid40()), { beamWidth: 64, maxEvaluations: 60_000 });
     const outcome = await w.doneOf(7);
@@ -129,11 +129,18 @@ describe('the optimiser worker host', () => {
     // 30 ms per slice and 100 ms between progress messages: one progress per four slices at most.
     expect(progress.length).toBeGreaterThan(1);
     expect(progress.length).toBeLessThanOrEqual(Math.ceil(w.slices.length / 4) + 1);
-    const bests = w.posted.flatMap((m) => (m.type === 'best' ? [m.solution.estimatedMs] : []));
+    const solutions = w.posted.flatMap((m) => (m.type === 'best' ? [m.solution] : []));
+    const bests = solutions.map((s) => s.comparedMs);
     expect(bests.length).toBeGreaterThan(0);
-    for (let k = 1; k < bests.length; k += 1) expect(bests[k]).toBeLessThan(bests[k - 1] ?? 0);
-    expect(bests.at(-1)).toBe(outcome.solutions[0]?.estimatedMs);
-    expect(bests[0]).toBeLessThan(outcome.incumbent.estimatedMs);
+    // Each best is a new head: a lower figure, or another order at the same figure (the tie rule).
+    for (let k = 1; k < bests.length; k += 1) {
+      expect(bests[k]).toBeLessThanOrEqual(bests[k - 1] ?? 0);
+      expect(Array.from(solutions[k]?.units ?? [])).not.toEqual(Array.from(solutions[k - 1]?.units ?? []));
+    }
+    // The last best is the outcome's first solution.
+    expect(bests.at(-1)).toBe(outcome.solutions[0]?.comparedMs);
+    expect(Array.from(solutions.at(-1)?.units ?? [])).toEqual(Array.from(outcome.solutions[0]?.units ?? []));
+    expect(bests[0]).toBeLessThan(outcome.incumbent.comparedMs);
   });
 
   it('sends the last slice\'s improvement as best before done', async () => {

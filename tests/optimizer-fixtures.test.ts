@@ -14,7 +14,10 @@ import { at, killObjective, npcRecord } from '../src/engine/test-helpers';
 import type { OptimizationResult } from '../src/app/optimizer-run';
 import type { OptimizationGoal, OptimizationOptions, SearchOptions, SearchOutcome, SearchSolution, Stepper } from '../src/optimizer';
 import { ManualOptimizerTimers, until } from '../src/optimizer/worker/test-helpers';
+import { evaluateSequence } from '../src/optimizer/core';
+import { modelOracle } from '../src/optimizer/core/test-helpers';
 import {
+  adversarialInstance,
   builder,
   type Compiled,
   decode,
@@ -340,13 +343,15 @@ const CASES: readonly Case[] = [
     incumbentSeconds: 102,
   },
   {
-    name: '4 beam width 1 fails',
+    // The beam alone fails at width 1 ('fixture details' below); the local pass over the
+    // nearest-neighbour seed finds Y, X once its pre-screen sees the exit leg (review M7Q Q-04).
+    name: '4 beam width 1: the local pass finds what the beam misses',
     make: fixture4,
     goal: {},
     options: { beamWidth: 1 },
-    status: 'no-improvement',
-    order: ['a401', 't401', 'a402', 't402'],
-    seconds: 102,
+    status: 'improved',
+    order: ['a402', 't402', 'a401', 't401'],
+    seconds: 82,
     incumbentSeconds: 102,
   },
   {
@@ -563,9 +568,57 @@ describe('§11.7 fixtures through the app (startOptimization, in-process worker)
       // The route is the prefix, the steps and the suffix.
       const steps = f.project.route.steps;
       expect(result.route).toEqual([...steps.slice(0, f.section.first), ...result.steps, ...steps.slice(f.section.last + 1)]);
+      // The quests the result leaves out are listed (D-044, review M7Q Q-05): the original's quests
+      // that the expected order does not name.
+      const questOf = (l: string): number | null => (/^[atc]\d+$/.test(l) ? Number(l.slice(1)) : null);
+      const named = (ls: readonly string[]): Set<number> => new Set(ls.flatMap((l) => (questOf(l) === null ? [] : [questOf(l) as number])));
+      const kept = named(c.order);
+      expect(result.dropped).toEqual([...named(labels(originalSection(f)))].filter((q) => !kept.has(q)).sort((a, b) => a - b));
     },
     SLOW,
   );
+});
+
+// =============================================================================================
+// The search-quality review's adversarial instances (review M7Q Q-04 and Q-06)
+
+describe('adversarial instances: level gates, prerequisites, a hearth, arrival radii, unknown XP (review M7Q Q-04)', () => {
+  // The seeds whose optimum the local pass's pre-screen missed: it ignored the exit leg and judged
+  // moves by travel next to hearths and level gates, where the matrix does not see the whole effect.
+  const SEEDS = [11, 56, 123, 131] as const;
+
+  it.each(SEEDS)('seed %i: at beam 256 the search reaches the model oracle; no width goes below it; slices change nothing', (seed) => {
+    const instance = adversarialInstance(seed);
+    const made = mustCompile(instance.fixture, instance.goal);
+    const optimum = modelOracle(made.compiled.problem, 6_000_000).best;
+    const wide = searchToEnd(made.compiled, { beamWidth: 256, maxEvaluations: 1_000_000 });
+    expect(wide.solutions[0]?.comparedMs).toBe(optimum);
+    for (const beamWidth of [1, 4, 16]) expect(searchToEnd(made.compiled, { beamWidth }).solutions[0]?.comparedMs ?? 0).toBeGreaterThanOrEqual(optimum);
+    const sig = (o: SearchOutcome): string => JSON.stringify({ s: o.solutions.map((x) => [Array.from(x.units), x.comparedMs]), st: o.stats, t: o.termination });
+    const reference = sig(searchToEnd(made.compiled, { beamWidth: 16 }, 1_000_000));
+    for (const slice of [1, 7]) expect(sig(searchToEnd(made.compiled, { beamWidth: 16 }, slice))).toBe(reference);
+  });
+
+  it('seed 131: turning in 3002 before the last chain shortens the exit by more than it adds inside the section', () => {
+    const instance = adversarialInstance(131);
+    const made = mustCompile(instance.fixture, instance.goal);
+    const late = feasible(evaluateSequence(made.compiled.problem, Int32Array.from([3, 4, 7, 9, 10, 11, 8])));
+    const early = feasible(evaluateSequence(made.compiled.problem, Int32Array.from([3, 4, 7, 8, 9, 10, 11])));
+    expect(early.comparedMs).toBe(709_167);
+    expect(late.comparedMs).toBe(731_149);
+    expect(late.exitMs - early.exitMs).toBeGreaterThan(early.estimatedMs - early.exitMs - (late.estimatedMs - late.exitMs));
+    const outcome = searchToEnd(made.compiled, { beamWidth: 256, maxEvaluations: 1_000_000 });
+    expect(outcome.solutions[0]?.comparedMs).toBe(709_167);
+  });
+
+  it.each(SEEDS)('seed %i: through the app at beam 256, the verifier rejects nothing and the result is the optimum', async (seed) => {
+    const instance = adversarialInstance(seed);
+    const made = mustCompile(instance.fixture, instance.goal);
+    const optimum = modelOracle(made.compiled.problem, 6_000_000).best;
+    const result = improvedOrNot(await runApp(instance.fixture, instance.goal, { beamWidth: 256, maxEvaluations: 1_000_000 }));
+    expect(result.rejected).toEqual([]);
+    expect(result.estimate.comparedMs).toBe(Math.min(optimum, result.estimate.incumbentMs));
+  }, SLOW);
 });
 
 // =============================================================================================
@@ -596,13 +649,26 @@ describe('fixture details', () => {
     expect(Math.abs(greedy.estimatedMs - 84_000)).toBeLessThanOrEqual(partsOf(4, 1));
   });
 
-  it('4: beam 4 ends by exhaustion; beam 1 keeps the original', () => {
+  it('4: beam 4 ends by exhaustion; the beam alone at width 1 keeps the original', () => {
     const four = core({ make: fixture4, goal: {} }, { beamWidth: 4 });
     expect(four.outcome.termination).toBe('exhausted');
     expect(labels(four.bestSteps)).toEqual(['a402', 't402', 'a401', 't401']);
-    const one = core({ make: fixture4, goal: {} }, { beamWidth: 1 });
+    const one = core({ make: fixture4, goal: {} }, { beamWidth: 1, seeds: false, localWindow: 0 });
     expect(labels(one.bestSteps)).toEqual(['a401', 't401', 'a402', 't402']);
     expect(one.outcome.solutions.every((s) => s.estimatedMs >= one.outcome.incumbent.estimatedMs)).toBe(true);
+  });
+
+  it('4: at width 1 the local pass over the nearest-neighbour seed finds Y, X: its pre-screen counts the exit leg (review M7Q Q-04)', () => {
+    const made = mustCompile(fixture4(), {});
+    const [aX, tX, aY, tY] = originalSection(fixture4()) as [RouteStep, RouteStep, RouteStep, RouteStep];
+    // Y, X adds 50 yd (5 s) inside the section, at the pre-screen's tolerance, and saves 250 yd of exit.
+    const xy = feasible(evaluateSteps(made.compiled, [aX, tX, aY, tY]));
+    const yx = feasible(evaluateSteps(made.compiled, [aY, tY, aX, tX]));
+    expect(xy.exitMs - yx.exitMs).toBe(25_000);
+    expect(yx.estimatedMs - yx.exitMs - (xy.estimatedMs - xy.exitMs)).toBe(5_000);
+    const one = core({ make: fixture4, goal: {} }, { beamWidth: 1 });
+    expect(labels(one.bestSteps)).toEqual(['a402', 't402', 'a401', 't401']);
+    expect(one.best.estimatedMs).toBe(82_000);
   });
 
   it('5: any order with C before A or B is refused (VAL-4); C after both turn-ins is at level 11', () => {

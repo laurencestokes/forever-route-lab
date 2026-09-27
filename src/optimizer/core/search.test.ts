@@ -160,7 +160,16 @@ describe('determinism and slices (§7.6, fixture 10b)', () => {
     const outcome = runSearch(compiled, options);
     expect(outcome.solutions[0]?.estimatedMs).toBeLessThan(outcome.incumbent.estimatedMs);
     expect(outcome.stats.firstImprovementEvaluations).not.toBeNull();
-    expect(outcome.stats.rollouts).toBeGreaterThan(0);
+    // A beam of 64 over 120 units cannot reach a closing depth in 50,000 evaluations (about
+    // 64 × 120 × 40 / 2 = 153,600): no layer runs, and the budget after the seeds goes to kicks
+    // (review M7Q Q-01).
+    expect(outcome.stats.layers).toBe(0);
+    expect(outcome.stats.rollouts).toBe(0);
+    // With the beam alone (no seeds, pass or kicks), the same budget runs layers and rollouts.
+    const beamOnly = runSearch(compiled, { ...options, seeds: false, localWindow: 0 });
+    expect(beamOnly.stats.layers).toBeGreaterThan(0);
+    expect(beamOnly.stats.rollouts).toBeGreaterThan(0);
+    expect(outcome.solutions[0]?.estimatedMs).toBeLessThan(beamOnly.solutions[0]?.estimatedMs ?? 0);
   });
 });
 
@@ -169,25 +178,40 @@ describe('work items and termination (§7.6)', () => {
   if (fixture === undefined) throw new Error('missing');
   const compiled = compile(fixture.scenario, fixture.goal);
 
-  it('never cuts the first rollout short: a budget reached inside it stops the run when it ends', () => {
+  it('never cuts the first item short: a budget reached inside the nearest-neighbour seed stops the run when it ends', () => {
     const one = runSearch(compiled, { ...H_OPTIONS, maxEvaluations: 1 });
     const two = runSearch(compiled, { ...H_OPTIONS, maxEvaluations: 2 });
     expect(one.termination).toBe('budget');
-    expect(one.stats.rollouts).toBe(1);
+    expect(one.stats.rollouts).toBe(0);
     expect(one.stats.layers).toBe(0);
     expect(one.stats.evaluations).toBeGreaterThan(2);
     expect(signature(two)).toBe(signature(one));
-    // The greedy rollout falls into fixture 2's nearest-neighbour trap (142.142 s), still better than the incumbent.
+    // The nearest-neighbour seed falls into fixture 2's trap (142.142 s), still better than the incumbent.
     expect(one.solutions[0]?.estimatedMs).toBe(142_142);
+  });
+
+  it('ends the insertion seed and the local pass at the budget, at their own boundaries, whatever the slices', () => {
+    const nearest = runSearch(compiled, { ...H_OPTIONS, maxEvaluations: 1 }).stats.evaluations;
+    for (const extra of [1, 5, 20]) {
+      const maxEvaluations = nearest + extra;
+      const runs = [1, 3, 1_000_000].map((slice) => runSearch(compiled, { ...H_OPTIONS, maxEvaluations }, slice));
+      const [reference, ...others] = runs as [SearchOutcome, ...SearchOutcome[]];
+      expect(reference.termination).toBe('budget');
+      expect(reference.stats.evaluations).toBeGreaterThanOrEqual(maxEvaluations);
+      expect(reference.stats.rollouts).toBe(0);
+      for (const other of others) expect(signature(other)).toBe(signature(reference));
+    }
   });
 
   it('pauses mid-item and resumes exactly there', () => {
     const stepper = createSearch(compiled.problem, { ...DEFAULT_SEARCH_OPTIONS, ...H_OPTIONS });
     const first = stepper.advance(3);
     expect(first.done).toBe(false);
+    // Inside the nearest-neighbour seed: one transition per evaluation, a pause after each.
     if (!first.done) expect(first.progress.evaluations).toBe(3);
     let result = stepper.advance(5);
-    if (!result.done) expect(result.progress.evaluations).toBe(8);
+    // A local move, or the pass's prefix states, is atomic and may overrun a slice.
+    if (!result.done) expect(result.progress.evaluations).toBeGreaterThanOrEqual(8);
     while (!result.done) result = stepper.advance(5);
     expect(signature(result.outcome)).toBe(signature(runSearch(compiled, H_OPTIONS)));
   });
@@ -323,7 +347,7 @@ describe('closes refused only by the XP-4 fill rule (review PAR-04)', () => {
   });
 });
 
-describe('the local pass (review PRF-08)', () => {
+describe('the local pass (reviews PRF-08 and M7 open item 1)', () => {
   /** Twelve quests at seeded points, in the nearest-ready-action order from the start: a good incumbent. */
   function nearestNeighbour(): Scenario {
     let x = 2;
@@ -369,12 +393,18 @@ describe('the local pass (review PRF-08)', () => {
 
   it('improves a nearest-neighbour incumbent the beam alone cannot, the same whatever the slices', () => {
     const compiled = compile(nearestNeighbour(), {});
-    const beamOnly = runSearch(compiled, { ...H_OPTIONS, localWindow: 0 });
+    const beamOnly = runSearch(compiled, { ...H_OPTIONS, localWindow: 0, seeds: false });
     expect(beamOnly.termination).toBe('exhausted');
     expect(beamOnly.solutions[0]?.estimatedMs).toBe(beamOnly.incumbent.estimatedMs);
+    // The seeds alone: the nearest-neighbour seed is the incumbent's own order, and insertion is no better.
+    const seedsOnly = runSearch(compiled, { ...H_OPTIONS, localWindow: 0 });
+    expect(seedsOnly.solutions[0]?.estimatedMs).toBe(seedsOnly.incumbent.estimatedMs);
     const outcome = runSearch(compiled, H_OPTIONS);
     expect(outcome.incumbent.estimatedMs).toBe(935_936);
-    expect(outcome.solutions[0]?.estimatedMs).toBe(839_818);
+    // The single-unit pass of the first build reached 839,818 ms; the four neighbourhoods, polishing
+    // each rollout's order too, reach the same as a beam of 1,024 (a beam of 5,040 without the pass: 735,144 ms).
+    expect(outcome.solutions[0]?.estimatedMs).toBe(716_708);
+    expect(runSearch(compiled, { ...H_OPTIONS, localWindow: 0, seeds: false, beamWidth: 5040, maxEvaluations: 10_000_000 }).solutions[0]?.estimatedMs).toBe(735_144);
     expect(outcome.stats.firstImprovementEvaluations).not.toBeNull();
     for (const slice of [1, 7, 1000]) expect(signature(runSearch(compiled, H_OPTIONS, slice))).toBe(signature(outcome));
   });

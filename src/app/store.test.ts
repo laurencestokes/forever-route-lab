@@ -563,6 +563,126 @@ describe('subscribe', () => {
   });
 });
 
+describe('listeners that throw (review M7 open item 6)', () => {
+  it('neither stop the other listeners nor make the change fail; each error is reported after all listeners ran', () => {
+    const log: string[] = [];
+    const store = makeStore('ab', { onListenerError: (error) => log.push(`reported ${(error as Error).message}`) });
+    store.subscribe(() => {
+      log.push('first');
+      throw new Error('one');
+    });
+    store.subscribe(() => log.push(`second sees revision ${String(store.getState().revision)}`));
+    store.subscribe(() => {
+      log.push('third');
+      throw new Error('two');
+    });
+    expect(() => store.dispatch(setName('x'))).not.toThrow();
+    expect(store.getState().revision).toBe(1);
+    expect(store.getState().project.route.name).toBe('x');
+    expect(log).toEqual(['first', 'second sees revision 1', 'third', 'reported one', 'reported two']);
+  });
+
+  it('cannot leave an edit lock held: acquire and release never throw, so try/finally releases', () => {
+    const reported: unknown[] = [];
+    const store = makeStore('ab', { onListenerError: (error) => reported.push(error) });
+    const seen: number[] = [];
+    store.subscribe(() => {
+      throw new Error('subscriber failed');
+    });
+    store.subscribe(() => seen.push(store.getState().locks.size));
+    const work = (): void => {
+      store.acquireLock('optimizer');
+      try {
+        expect(store.getState().editingLocked).toBe(true);
+      } finally {
+        store.releaseLock('optimizer');
+      }
+    };
+    expect(work).not.toThrow();
+    expect(store.getState().locks.size).toBe(0);
+    expect(store.getState().editingLocked).toBe(false);
+    // The later listener saw both changes; both errors were reported.
+    expect(seen).toEqual([1, 0]);
+    expect(reported).toHaveLength(2);
+  });
+
+  it('are isolated on every kind of change: select, setView, undo, replaceProject and the clipboard', () => {
+    const reported: unknown[] = [];
+    const store = makeStore('abc', { onListenerError: (error) => reported.push(error) });
+    store.subscribe(() => {
+      throw new Error('always');
+    });
+    const calls = vi.fn();
+    store.subscribe(calls);
+    store.dispatch(setName('x'));
+    store.undo();
+    store.select({ kind: 'set', ids: [sid('a')] });
+    store.dispatch(copySelected());
+    store.setView({ theme: store.getState().view.theme === 'dark' ? 'light' : 'dark' });
+    expect(store.replaceProject(notesProject('de'))).toBe(true);
+    expect(calls).toHaveBeenCalledTimes(6);
+    expect(reported).toHaveLength(6);
+  });
+
+  it('isolates a reporter that throws too: the lock is released and its error is rethrown later (review M7Q Q-09)', () => {
+    const tasks: (() => void)[] = [];
+    const spy = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => {
+      tasks.push(task);
+    });
+    try {
+      const reporterError = new Error('reporter failed');
+      const store = makeStore('ab', {
+        onListenerError: () => {
+          throw reporterError;
+        },
+      });
+      store.subscribe(() => {
+        throw new Error('subscriber failed');
+      });
+      const after = vi.fn();
+      store.subscribe(after);
+      const work = (): void => {
+        store.acquireLock('optimizer');
+        try {
+          expect(store.getState().editingLocked).toBe(true);
+        } finally {
+          store.releaseLock('optimizer');
+        }
+      };
+      expect(work).not.toThrow();
+      expect(store.getState().locks.size).toBe(0);
+      expect(after).toHaveBeenCalledTimes(2);
+      // Each notification's reporter error is rethrown in a microtask of its own.
+      expect(tasks).toHaveLength(2);
+      for (const task of tasks) expect(task).toThrow(reporterError);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('by default rethrows the error in a microtask, outside the notification', () => {
+    const tasks: (() => void)[] = [];
+    const spy = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => {
+      tasks.push(task);
+    });
+    try {
+      const store = makeStore('ab');
+      const error = new Error('late');
+      const after = vi.fn();
+      store.subscribe(() => {
+        throw error;
+      });
+      store.subscribe(after);
+      expect(() => store.dispatch(setName('x'))).not.toThrow();
+      expect(after).toHaveBeenCalledTimes(1);
+      expect(tasks).toHaveLength(1);
+      expect(() => tasks[0]?.()).toThrow(error);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 describe('setView', () => {
   it('merges the patch and ignores patches that change nothing', () => {
     const store = makeStore('a');

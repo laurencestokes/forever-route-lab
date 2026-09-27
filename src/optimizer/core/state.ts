@@ -198,6 +198,7 @@ export const S_UNKNOWN_XP = 2;
 export const S_SINCE_CAST = 3;
 export const S_LEVEL = 4;
 export const S_XP_INTO = 5;
+export const S_KNOWN_TOTAL = 6;
 export const S_ELAPSED = 7;
 export const S_READY_AT = 8;
 export const S_LAST_VISIT = 9;

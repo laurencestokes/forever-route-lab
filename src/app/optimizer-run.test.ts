@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { questId, sequentialIdSource, worldMapId } from '../domain/ids';
 import type { ProjectV1 } from '../domain/project';
+import type { RouteStep } from '../domain/route';
+import { makeHearthStep, makeNoteStep, makeTravelStep } from '../domain/step-factory';
 import { applyChangeSets } from '../diff';
 import type { NavLegsProgress } from '../nav/worker/client';
 import type { NavLegQuery, NavLegResult } from '../nav/worker/protocol';
@@ -11,7 +13,7 @@ import { createNavigationRuntime, type DisposableNavLegService, type NavigationS
 import { ManualTimers, testNavManifest, walkable } from './navigation-test-helpers';
 import type { OptimizationHost } from './optimizer-host';
 import { type OptimizationResult, startOptimization, unknownsNote, yieldMacrotask } from './optimizer-run';
-import { appHost, appQuest, appRequest, type AppScenario, appScenario, appSteps, describeStep, questScenario, T0 } from './optimizer-test-helpers';
+import { appHost, appQuest, appRequest, type AppScenario, appScenario, appSteps, at, describeStep, questScenario, T0 } from './optimizer-test-helpers';
 import { createEditorStore, type EditorStore } from './store';
 
 /**
@@ -77,12 +79,13 @@ function answer(call: LegsCall | undefined): void {
 }
 
 function setup(navigation: 'unavailable' | 'available' = 'unavailable', made: AppScenario = fixture1()) {
-  const store: EditorStore = createEditorStore({ project: made.project, ids: sequentialIdSource(1000), clock: fixedClock(T0) });
+  const listenerErrors: unknown[] = [];
+  const store: EditorStore = createEditorStore({ project: made.project, ids: sequentialIdSource(1000), clock: fixedClock(T0), onListenerError: (error) => listenerErrors.push(error) });
   const service = new FakeService();
   const runtime = createNavigationRuntime(testNavManifest([1]), service, new ManualTimers());
   const nav: NavigationState = navigation === 'available' ? { kind: 'available', runtime } : { kind: 'unavailable', reason: 'test' };
   const host = appHost({ ...made, project: store.getState().project }, nav, store.getState().revision);
-  return { store, host, service, runtime, project: store.getState().project };
+  return { store, host, service, runtime, project: store.getState().project, listenerErrors };
 }
 
 function improved(result: OptimizationResult): Extract<OptimizationResult, { status: 'improved' | 'no-improvement' }> {
@@ -282,7 +285,71 @@ describe('startOptimization', () => {
       expect(result.diff.ops).toEqual([]);
       expect(result.verification).toBeNull();
       expect(result.estimate.resultMs).toBe(result.estimate.incumbentMs);
+      expect(result.estimate.comparedMs).toBe(result.estimate.incumbentMs);
+      expect(result.estimate.savingMs).toBe(0);
     }
+    optimizer.dispose();
+  });
+});
+
+describe('startOptimization: the saving shown is the guaranteed one (D-043 item 7, review COR-02)', () => {
+  /**
+   * Review COR-02's hearth family, seed 10 with 3,500 s (src/optimizer/core/hearth-waits.test.ts):
+   * the prefix casts the hearthstone at 0 s, spends 3,500 known seconds, then travels a zone (unknown
+   * time); the section's quests end with a hearth use, whose wait is therefore uncertain.
+   */
+  function hearthScenario(): AppScenario {
+    let x = 10;
+    const next = (): number => {
+      x = (x * 48271) % 2147483647;
+      return x;
+    };
+    const coordinate = (): number => (next() % 801) - 400;
+    const s = appSteps();
+    const count = 3 + (next() % 2);
+    const quests = [];
+    const steps: RouteStep[] = [];
+    for (let k = 0; k < count; k += 1) {
+      const id = 7000 + k;
+      quests.push(appQuest(id, 500));
+      const px = coordinate();
+      const py = coordinate();
+      steps.push(...s.pair(id, px, py));
+    }
+    const ids = sequentialIdSource(8000);
+    steps.push(makeHearthStep(ids, { mode: 'use', location: null }));
+    const prefix = [
+      makeHearthStep(ids, { mode: 'use', location: null }),
+      { ...makeNoteStep(ids, { text: 'known time', location: null }), durationOverride: 3500 },
+      makeTravelStep(ids, { location: null }),
+      makeTravelStep(ids, { location: at(0, 0) }),
+    ];
+    return appScenario({ quests, prefix, steps, suffix: [makeNoteStep(ids, { text: 'exit', location: at(10, 0) })], character: { hearthLocation: at(0, 0) } });
+  }
+
+  it('estimate.savingMs and the progress bestSeconds use comparedMs, below what the engine figure would claim', async () => {
+    const made = hearthScenario();
+    const { store, host, project } = setup('unavailable', made);
+    const optimizer = inProcessOptimizer();
+    const run = startOptimization({ host, store, optimizer, ids: sequentialIdSource(5000) }, appRequest({ ...made, project }, host.revision));
+    const bests: number[] = [];
+    run.onProgress((p) => {
+      if (p.bestSeconds !== null) bests.push(p.bestSeconds);
+    });
+    const result = improved(await run.result);
+    const { estimate } = result;
+    // The core's figures for the first candidate (hearth-waits probe): 127,061 ms for the original,
+    // 94,658 ms by the engine's figure, 111,000 ms compared. Several orders share the compared
+    // figure; the tie rule (the unit sequence) picks this one since the local pass sees the exit leg
+    // (review M7Q Q-04).
+    expect(estimate.incumbentMs).toBe(127_061);
+    expect(estimate.resultMs).toBe(94_658);
+    expect(estimate.comparedMs).toBe(111_000);
+    expect(estimate.savingMs).toBe(16_061);
+    expect(estimate.savingMs).toBeLessThan(estimate.incumbentMs - estimate.resultMs);
+    // The progress never showed a best below the compared figure.
+    expect(bests.length).toBeGreaterThan(0);
+    expect(Math.min(...bests)).toBe(estimate.comparedMs / 1000);
     optimizer.dispose();
   });
 });
@@ -306,6 +373,14 @@ describe('startOptimization: the incumbent with a fill (review PAR-05)', () => {
     expect(Math.abs((result.verification?.incumbentMs ?? 0) - result.estimate.incumbentMs)).toBeLessThanOrEqual(20);
     expect(result.estimate.engineMs).toBeGreaterThan(result.estimate.originalMs);
     expect(Math.abs(result.estimate.resultMs - result.estimate.engineMs)).toBeLessThanOrEqual(20);
+    // Review M7Q Q-10: the estimate carries the incumbent's re-walk, so the engine's saving can be
+    // checked against the shown one. The original alone would overstate it by the fill's time.
+    const { estimate } = result;
+    expect(estimate.incumbentEngineMs).toBe(result.verification?.incumbentMs);
+    expect(estimate.incumbentEngineMs).toBeGreaterThan(estimate.originalMs);
+    expect(Math.abs(estimate.incumbentEngineMs - estimate.engineMs - estimate.savingMs)).toBeLessThanOrEqual(40);
+    expect(estimate.originalMs - estimate.engineMs).toBeLessThan(estimate.savingMs);
+    expect(result.dropped).toEqual([]);
     optimizer.dispose();
   });
 
@@ -328,6 +403,8 @@ describe('startOptimization: the incumbent with a fill (review PAR-05)', () => {
     expect(result.estimate.resultMs).toBe(result.estimate.incumbentMs);
     expect(Math.abs(result.estimate.resultMs - result.estimate.engineMs)).toBeLessThanOrEqual(20);
     expect(result.estimate.engineMs).toBeGreaterThan(result.estimate.originalMs);
+    // The incumbent is the result: its re-walk is the result's (review M7Q Q-10).
+    expect(result.estimate.incumbentEngineMs).toBe(result.estimate.engineMs);
     expect(result.estimate.knownGain).toBe(2000);
     expect(result.verification?.ok).toBe(true);
     expect(result.verification?.metrics.xpGained.value).toBeGreaterThanOrEqual(2500);
@@ -341,22 +418,25 @@ describe('startOptimization: the incumbent with a fill (review PAR-05)', () => {
 });
 
 describe('startOptimization: the edit lock and the revision (reviews RTD-03, RTD-04)', () => {
-  it('fails, and holds no lock, when a store subscriber throws as the lock is taken', async () => {
-    const { store, host, project } = setup();
+  it('runs, and holds no lock at the end, when a store subscriber throws as the lock is taken (the store reports it)', async () => {
+    const { store, host, project, listenerErrors } = setup();
     const optimizer = inProcessOptimizer();
     const unsubscribe = store.subscribe(() => {
       throw new Error('subscriber failed');
     });
     const run = startOptimization({ host, store, optimizer, ids: sequentialIdSource(5000) }, request(project, host.revision));
+    // The lock is taken all the same, and the subscriber's error went to the store's reporter.
+    expect(store.getState().locks.has('optimizer')).toBe(true);
+    expect(listenerErrors).toEqual([new Error('subscriber failed')]);
     unsubscribe();
     const result = await run.result;
-    expect(result).toMatchObject({ status: 'failed', reason: 'the edit lock could not be taken: subscriber failed' });
+    expect(result.status).toBe('improved');
     expect(store.getState().locks.size).toBe(0);
     optimizer.dispose();
   });
 
   it("keeps the outcome and releases the run's lock when a subscriber throws during the hand-over", async () => {
-    const { store, host, project } = setup();
+    const { store, host, project, listenerErrors } = setup();
     const optimizer = inProcessOptimizer();
     store.subscribe(() => {
       if (store.getState().locks.has('proposal')) throw new Error('subscriber failed on the proposal lock');
@@ -364,6 +444,7 @@ describe('startOptimization: the edit lock and the revision (reviews RTD-03, RTD
     const result = await startOptimization({ host, store, optimizer, ids: sequentialIdSource(5000), handOver: 'proposal' }, request(project, host.revision)).result;
     expect(result.status).toBe('improved');
     expect([...store.getState().locks]).toEqual(['proposal']);
+    expect(listenerErrors).toEqual([new Error('subscriber failed on the proposal lock'), new Error('subscriber failed on the proposal lock')]);
     optimizer.dispose();
   });
 

@@ -585,6 +585,7 @@ export function compileProblem(
     exitOps: Int32Array.from(exitOps),
     fill: { replaceQuests: input.goal.grindFill === 'replace-quests', total: fillTotal, until: fillUntil },
     targetXp,
+    dropMove: input.goal.targetXp !== 'keep-original' || input.goal.grindFill === 'replace-quests',
     visitKeyCount: pointCount + entityKeys.size,
     incumbent: { ms: 0, gain: 0, readyAtMs: Number.POSITIVE_INFINITY, unknownParts: Number.POSITIVE_INFINITY, tier: 0 },
     incumbentWaits: new Float64Array(ops.length),

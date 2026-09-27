@@ -797,3 +797,179 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
       move, their change-sets require each other. This is to be built in Milestone 8, and until
       then the M8 re-walk catches the case.
   13. **No Milestone 7 UI.** The proposal UX is Milestone 8.
+
+## D-044: Optimiser search quality after the seeds (architect; the owner may overrule)
+
+- **Date:** 2026-09-27
+- **Context:** the search-quality review of the seeds and local pass (review M7Q, findings Q-01 to
+  Q-10), docs/research/optimizer-m7.md §19 and ARCHITECTURE §11.4. It follows D-043 items 2 and 9.
+- **Decisions:**
+  1. **The drop move is off under `'keep-original'` (Q-05; the owner's call, default proposed
+     here).** With the `'shortfall'` fill and the original's own XP as the target, the local pass
+     never drops a quest. The drop relied on extra kill XP from reordering, which is estimated and
+     thin (192 XP, 0.2%, in the bench pool), and it fired in 39 of 40 generated pools. With a
+     numeric target or `'replace-quests'` the move stays on, because the request asks for less XP
+     or lets grinding replace quests. Closing can still leave out an optional quest an order does not
+     schedule, as the contract allows (§11.2 rule 3). So every result lists the quests it leaves
+     out (`OptimizationResult.dropped`), and Milestone 8 shows them. The alternative the owner may
+     choose instead is a margin: allow the drop under `'keep-original'` only when the rest exceeds
+     the target by a set amount. **Adopted as the default (architect, 2026-09-27).** Milestone 8
+     offers "allow dropping quests" as an explicit per-run option.
+  2. **Kicks after the seeds (Q-01).** An iterated local search spends the budget after the
+     seeds. Each kick swaps two adjacent segments of the best order (1-30 units each), repairs the
+     precedence edges inside the span, and runs the local pass from there. It accepts an equal or
+     lower `comparedMs`, and draws its kicks from a fixed Lehmer sequence, so runs stay
+     deterministic. The beam runs first only when it can reach a closing depth within the budget
+     (width × depth × units enabled at the root / 2 evaluations). Kicks follow an exhausted beam in
+     sections of 16 units or more; a smaller section gets one last pass over the best instead.
+  3. **Stop on stall (Q-07).** The kicks end, with termination `converged`, after
+     max(100,000, 2,000 × units) evaluations without a strict improvement. The default budget stays
+     4,000,000 evaluations.
+  4. **The insertion seed's allowance (Q-03).** The seed may spend min(700 × units, budget / 2)
+     evaluations. After that, nearest neighbour finishes its partial order, so the spend always
+     yields a route. The allowance does not grow with the budget, so a larger budget only continues
+     the same run.
+  5. **The quality gate (Q-02).** The bench compares eleven generated pools with a stored,
+     independent reference: for each pool, the better of two runs of 20,000,000 evaluations, from the
+     nearest-neighbour seed, with other kick streams, one with the local pass's pre-screen and one
+     pricing every move exactly. `--check` fails when the median gap exceeds 3% or any pool's
+     exceeds 7%. The nearest-neighbour tour is the search's own first seed, so it is reported, not
+     gated.
+  6. **Divergence penalty (Q-08).** Under a divergence penalty above 0, the seeds, the pass and the
+     kicks stay off, because they reorder freely and do not price divergence. From a weak route,
+     the search under a penalty is still the beam alone, so review-m7 open item 1 stays open there.
+
+## D-045: MapGenie-style map: minimap base, painted style as a toggle, pins and category panel (owner, 2026-09-27)
+
+- **Date:** 2026-09-27
+- **Decided by:** project owner.
+- **Context:** the owner asked for "a mapgenie.io style overall (which I think would be better)".
+  MapGenie's map (map-presentation.md §3.2) has:
+  - a seamless top-down "minimap-style" render with buildings at close zoom;
+  - a navy sea;
+  - teardrop pins with a glyph per category;
+  - a category panel with counts, show/hide and search.
+- **Decisions:**
+  1. **Base map: the client's minimap textures**, extracted read-only through `tools/casc` and
+     deployed as the atlas tiles. They are Blizzard art: a new publishing step beyond D-033,
+     which covered the painted map art. D-033's terms apply to them in the same way:
+     - non-commercial;
+     - a NOTICE naming Blizzard, with non-affiliation;
+     - removal on request;
+     - a manifest with provenance, `--check` and the dist audit's allowlist.
+     No legal conclusion is drawn.
+  2. **The painted zone-map atlas (D-042) stays as a switchable map style.** The minimap style is
+     the default. Both share the atlas surface, placements, tile engine, underlay and smooth
+     wheel. The budgets are set from the probe's measurements, in an addendum to
+     docs/research/map-atlas.md.
+  3. **Presentation: MapGenie-style pins and a category panel, plus our route-planning extras.**
+     - Pins are teardrops with a glyph per category.
+     - The side panel lists the categories with counts, show/hide, "Show all"/"Hide all" and a
+       search that filters the map.
+     - The extras are zone names with level spans, the flight network, quest state at the
+       selected step, and the route line.
+     - Faction is shown by glyph and outline, never by MapGenie's red, blue or yellow, because
+       those hues are reserved for difficulty. Quest pins keep D-041 G: the difficulty colour with
+       pips, from 11 px.
+     - D-039 A stands: these are our own glyphs, not Blizzard interface icons.
+  4. **Sea:** navy in the minimap style. The painted style keeps D-042's painted-water tones.
+- **Supersedes:** D-041 H (painted art as the only base-map look), now the optional style; and the
+  achromatic plate glyph families of map-presentation.md revision 2 §6, replaced by pins, pending
+  its addendum.
+- **Addendum (owner, 2026-09-27, after the minimap probe):**
+  - **The probe:** .cache/minimap-probe/, independently checked. It found:
+    - 1,796 minimap tiles (736 for the Eastern Kingdoms, 988 for Kalimdor, 72 for Zephras Isle),
+      each 512×512 DXT1 at 1.042 yd/px, none missing or encrypted;
+    - city exteriors drawn in (Ironforge is underground, so only its gate shows);
+    - alignment with our coordinates within about 4 yd;
+    - that MapGenie's base map matches the stitched minimap (correlation 0.90).
+  - **Resolution: full detail, native 1 yd/px everywhere.**
+  - **Format:** AVIF (about 28 MB) if a side-by-side visual check finds it as good as WebP q80.
+    Otherwise WebP q80 (about 51 MB). The budget is set from the chosen build.
+  - **Sea:** every water tone is recoloured to one navy: the dark family, the navy family, and the
+    black background of Zephras Isle and of the map edges. Lava and slime keep their own colours.
+  - **Phases:** only the default phase (map 0) is shown. The phase maps 2868, 2980 and 2959 are
+    not drawn.
+
+## D-046: The general UI follows WoWF-QRP's layout and affordances (owner, 2026-09-27)
+
+- **Date:** 2026-09-27
+- **Decided by:** project owner ("Let's also make our general UI more like
+  https://tyba-dev.github.io/WoWF-QRP/, e.g. how we present the quests on the left with the
+  exclamation mark, and the buttons").
+- **Decision:**
+  - The left panel's quest presentation (rows with "!" and "?" marks, grouping and inline action
+    buttons) and the button style follow WoWF-QRP's layout and interaction.
+  - It is built with our own code, glyphs and styles. The brief's rule against copying its
+    branding, icons or assets stands. D-029 still allows porting code with attribution.
+  - Quest marks keep D-041 G: difficulty colour with pips, from 11 px.
+  - UI.md §1's "original look" principle is amended to match: the look is ours, but the layout
+    and affordances may follow WoWF-QRP.
+- **Design:** docs/research/ui-refresh.md (in design). It is built together with the D-045 map
+  presentation.
+
+## D-047: Map presentation revision 3.1: pins, state table and drawer (owner and architect, 2026-09-27)
+
+- **Date:** 2026-09-27
+- **Decided by:** the owner took P1 to P4 at the recommended defaults after reviewing
+  `.cache/ui-refresh/rev2/sheets/owner-sheet.png`. The other choices are the design's, adopted by
+  the architect.
+- **Context:** docs/research/map-presentation.md revision 3.1 (the D-045 addendum) and its review
+  (docs/reviews/review-ui-refresh-design.md).
+- **Decisions:**
+  - **The 11 px measure (D-041 G):** it is taken on whatever carries the colour: the disc in a
+    route row, and the glyph's box on a map pin.
+  - **Pins:** MapGenie-style teardrops with our own glyphs, with a dark body and a coloured glyph.
+    - The difficulty pips sit in a tag beside the pin.
+    - Pins take colour from 16 px, and are ink below that (P1).
+    - One state table (§25.2.3) governs quest marks in rows and on pins. Their paths live in a pure
+      module, `src/map/marks.ts`.
+  - **Zoomed out:** pins form clusters, and a cluster is coloured only when all its quests share a
+    difficulty (P2). The per-band limits count clusters, so no quest giver is dropped. The pin cap
+    is 300 per zoom level.
+  - **Services** (innkeepers, trainers, vendors) are light pins (P3).
+  - **The "Map layers" drawer:**
+    - It sits on the map's left, 300 px wide, docked when the map area is 900 px or wider, and open
+      by default where it docks (P4).
+    - It holds the Minimap/Painted toggle, a search, "Show all"/"Hide all"/"Defaults", and the
+      category groups with counts.
+    - It is lazily loaded.
+    - It replaces the layer panel, the map toolbar and the status line. The map's controls float on
+      the map.
+  - **Map look:**
+    - Zone borders are drawn only where two land zones meet, and not at the world view.
+    - The navy sea is one even colour.
+    - Zephras Isle is a framed card.
+    - When zoomed in, only the hovered or selected flight point's flights and the route's own
+      flights are drawn.
+
+## D-048: UI refresh defaults (owner and architect, 2026-09-27)
+
+- **Date:** 2026-09-27
+- **Decided by:** the owner took A, B, D, E and F at the recommended options. The rest are the
+  design's defaults, adopted by the architect.
+- **Context:** docs/research/ui-refresh.md revision 2 (D-046) and its review.
+- **Owner:**
+  - **A:** two-line rows of 40 px by default: the verb first; the NPC and zone; the XP and the level
+    after; any issue in words. One-line rows remain a View choice.
+  - **B:** a shaded band under the steps after the selection. Text keeps its contrast, and a
+    selection change does not re-render the rows.
+  - **D:** the character button ("Orc Warrior · Horde") opens Settings.
+  - **E:** warm neutral surfaces (low saturation, channels within 6%; no parchment or gold). The
+    accent, severity, difficulty and provenance colours are unchanged, and the system typeface stays.
+  - **F:** row action buttons appear on every row, muted. The toolbar and keys remain the keyboard
+    path.
+- **Architect:**
+  - **Row marks:** the step-kind disc takes the quest's difficulty colour, with a dark "!" or "?" and
+    a dark outline.
+  - **Quiet zeros:** a zero XP is shown muted.
+  - **Buttons:** the button kit and tokens of ui-refresh §8, with `secondary` kept as an alias until
+    its last use is gone.
+  - **Projects menu:** the route name opens it, with New.
+  - **Collapsible panels:** the side panels collapse from handles, or with Enter on a separator, and
+    "Map focus" (Alt+M) hides both.
+  - **Lists:** layout grids for the quest lists, with headers in the reading order.
+  - **Quest log tab:** built as a lazy part.
+  - **Details panel:** made lazy now, to keep the entry chunk under 250 kB, tracked in the shared
+    ledger.
+  - **Ownership:** MP.3 owns the Available tab's content, and this design its look and keys.

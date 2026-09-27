@@ -235,6 +235,12 @@ _None._
 | OD-24 | Quest-mark colour | Difficulty colour at the selected step, with pips, from 11 px | decided (D-041 G) | owner |
 | OD-25 | Wowhead link in the quest pop-up | Yes, marked external | decided (D-041 J) | owner |
 | OD-26 | Graveyards on the map | Not now (no sourced table) | architect default (D-041 I) | architect |
+| OD-27 | Base-map style | MapGenie-style minimap base by default (client minimap textures deployed with notices); painted atlas kept as a style toggle | decided (D-045) | owner |
+| OD-28 | Markers and filters | MapGenie-style pins and a category panel (counts, show/hide, search), plus zone names and levels, flight lines, quest state and the route line | decided (D-045) | owner |
+| OD-29 | Sea colour | Navy in the minimap style; painted-water in the painted style | decided (D-045) | owner |
+| OD-30 | General UI style | Left panel quests ("!"/"?"), buttons and layout follow WoWF-QRP, built with our own code, glyphs and styles | decided (D-046) | owner |
+| OD-31 | UI refresh choices A, B, D, E, F | Two-line rows; a shaded band for later steps; the character button opens Settings; warm neutrals with the system font; muted buttons on every row | decided (D-048) | owner |
+| OD-32 | Pin choices P1-P4 | Colour from 16 px with a pip tag; clusters when zoomed out; light service pins; drawer on the map's left, open where it docks | decided (D-047) | owner |
 
 ## Open questions (research)
 

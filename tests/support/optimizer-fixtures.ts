@@ -5,7 +5,7 @@ import type { Location } from '../../src/domain/points';
 import type { CharacterProfile, CustomQuest, ProjectV1 } from '../../src/domain/project';
 import { createEmptyProject } from '../../src/domain/project-factory';
 import type { AcceptStep, CompleteStep, GrindStep, NoteStep, RouteStep, TrainStep, TravelStep, TurnInStep } from '../../src/domain/route';
-import { makeAcceptStep, makeCompleteStep, makeGrindStep, makeNoteStep, makeTrainStep, makeTravelStep, makeTurnInStep } from '../../src/domain/step-factory';
+import { makeAcceptStep, makeCompleteStep, makeGrindStep, makeHearthStep, makeNoteStep, makeTrainStep, makeTravelStep, makeTurnInStep } from '../../src/domain/step-factory';
 import type { EngineContext, ReadonlyCharacterState, WalkProject } from '../../src/engine/types';
 import { at, fixtureContext, fixtureDataset, KALIMDOR, killObjective, npcRecord, questRecord } from '../../src/engine/test-helpers';
 import { createRouteWalker } from '../../src/engine/walker';
@@ -26,6 +26,7 @@ import type {
   SectionAnalysis,
 } from '../../src/optimizer/types';
 import { inProcessOptimizerWorker, type InProcessOptions } from '../../src/optimizer/worker/test-helpers';
+import { xpCurveOf } from '../../src/sim/xp';
 import { validateRoute } from '../../src/validate/validator';
 
 /**
@@ -530,3 +531,106 @@ export function fillStep(ids: IdSource, xpInto: number): GrindStep {
 }
 
 export const questIds = (ids: readonly number[]): QuestId[] => ids.map(questId);
+
+
+// =============================================================================================
+// Adversarial instances (review M7Q Q-04 and Q-06)
+
+export interface AdversarialInstance {
+  readonly seed: number;
+  readonly fixture: Fixture;
+  readonly goal: Partial<OptimizationGoal>;
+  /** What the instance exercises: gated, prereq, hearth, unknownXp, subset, fill, replace. */
+  readonly tags: readonly string[];
+}
+
+/**
+ * The search-quality review's adversarial instances (review M7Q, the critic's generator): four quests
+ * at uniform points in [−800, 800]² with arrival radii of none, 15 or 40 yards; each quest with
+ * probability 1/7 of unknown XP, 1/2 of a kill objective (with a located complete), 1/4 of a
+ * level-11 gate (the character then starts 400 XP short of level 11) and, after the first, 1/4 of
+ * its predecessor as a prerequisite. The chains are interleaved at random, keeping every
+ * prerequisite's turn-in before its dependant's accept; with probability 1/3 an unlocated hearth
+ * use is inserted (bind point random). The target by `seed mod 4`: keep-original, half the known
+ * XP, the known XP + 300 (a fill), or half the known XP with `'replace-quests'`. Up to 12 units.
+ * Seeds 11, 56, 123 and 131 are the ones the review found the local pass's pre-screen missing.
+ */
+export function adversarialInstance(seed: number): AdversarialInstance {
+  const next = lehmer(seed * 7919 + 17);
+  const b = builder(sequentialIdSource(seed * 1000));
+  const n = 4;
+  const tags: string[] = [];
+  const coord = (): number => (next() % 1601) - 800;
+  const where = (): Location => at(coord(), coord(), KALIMDOR, ([null, null, 15, 40] as const)[next() % 4] ?? null);
+  const records: QuestRecord[] = [];
+  const chains: RouteStep[][] = [];
+  const prereq: (number | null)[] = [];
+  let gated = false;
+  for (let k = 0; k < n; k += 1) {
+    const id = 3000 + k;
+    const xp = next() % 7 === 0 ? null : 50 * (10 + (next() % 31));
+    const kill = next() % 2 === 0;
+    const minLevel = next() % 4 === 0 ? 11 : 1;
+    const pre = k > 0 && next() % 4 === 0 ? 3000 + k - 1 : null;
+    if (minLevel > 1) gated = true;
+    if (xp === null) tags.push('unknownXp');
+    prereq.push(pre);
+    records.push(hQuest(id, xp, { minLevel, ...(kill ? { objectives: [killObjective(KILL_NPC, 2)] } : {}), ...(pre === null ? {} : { preQuestSingle: [questId(pre)] }) }));
+    const chain: RouteStep[] = [{ ...b.accept(id, 0, 0), location: where() }];
+    if (kill) chain.push({ ...b.complete(id, 0, 0), location: where() });
+    chain.push({ ...b.turnin(id, 0, 0), location: where() });
+    chains.push(chain);
+  }
+  if (gated) tags.push('gated');
+  if (prereq.some((p) => p !== null)) tags.push('prereq');
+  const cursor = chains.map(() => 0);
+  const turnedIn = new Set<number>();
+  const steps: RouteStep[] = [];
+  for (;;) {
+    const ready = chains.flatMap((chain, k) => {
+      const step = chain[cursor[k] ?? 0];
+      if (step === undefined) return [];
+      const pre = prereq[k] ?? null;
+      if (step.kind === 'accept' && pre !== null && !turnedIn.has(pre)) return [];
+      return [k];
+    });
+    if (ready.length === 0) break;
+    const k = ready[next() % ready.length] ?? 0;
+    const step = chains[k]?.[cursor[k] ?? 0] as RouteStep;
+    cursor[k] = (cursor[k] ?? 0) + 1;
+    if (step.kind === 'turnin') turnedIn.add(step.questId);
+    steps.push(step);
+  }
+  const ids = sequentialIdSource(seed * 1000 + 900);
+  let character: Partial<CharacterProfile> = {};
+  if (next() % 3 === 0) {
+    tags.push('hearth');
+    const pos = 1 + (next() % (steps.length - 1));
+    steps.splice(pos, 0, makeHearthStep(ids, { mode: 'use', location: null }));
+    character = { hearthLocation: at(coord(), coord()) };
+  }
+  if (gated) {
+    const curve = xpCurveOf(fixtureContext(fixtureDataset({ quests: [] }), { assumptions: H_ASSUMPTIONS }).rules);
+    character = { ...character, startXp: (curve.cumulative[10] ?? 0) - (curve.cumulative[9] ?? 0) - 400 };
+  }
+  const exit: [number, number] = [coord(), coord()];
+  const fixture = hFixture({ quests: records, npcs: [npcRecord(KILL_NPC, { minLevel: 10, maxLevel: 12 })], steps, exit, character });
+  const known = records.reduce((sum, r) => sum + (r.xp?.baseXp ?? 0), 0);
+  let goal: Partial<OptimizationGoal> = {};
+  switch (seed % 4) {
+    case 0:
+      break;
+    case 1:
+      goal = { targetXp: Math.max(0, Math.floor(known / 2)) };
+      tags.push('subset');
+      break;
+    case 2:
+      goal = { targetXp: known + 300 };
+      tags.push('fill');
+      break;
+    default:
+      goal = { targetXp: Math.floor(known / 2), grindFill: 'replace-quests' };
+      tags.push('replace');
+  }
+  return { seed, fixture, goal, tags };
+}

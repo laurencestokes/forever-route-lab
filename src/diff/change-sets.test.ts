@@ -101,7 +101,7 @@ describe('change-sets', () => {
     expect(summary(diff)).toEqual([{ id: 'q:1', quests: [1, 2], steps: ['-a1', '-a2'], requires: [] }]);
   });
 
-  it('turns prerequisites into requires edges: placing needs the prerequisite placed, removing needs the dependant removed', () => {
+  it('turns prerequisites into requires edges: both placed require each other (D-043 item 12), removing needs the dependant removed', () => {
     const rel = relations({ prerequisites: { 2: [1] } });
     // Both quests moved to the end, past quest 3: quest 2's set requires quest 1's.
     const placed = diffRoutes(
@@ -117,9 +117,12 @@ describe('change-sets', () => {
       { relations: rel, fixed: (s) => s.id === 'a3' || s.id === 't3' || s.id === 'n' },
     );
     expect(summary(placedBoth)).toEqual([
-      { id: 'q:1', quests: [1], steps: ['~a1', '~t1'], requires: [] },
+      { id: 'q:1', quests: [1], steps: ['~a1', '~t1'], requires: ['q:2'] },
       { id: 'q:2', quests: [2], steps: ['~a2', '~t2'], requires: ['q:1'] },
     ]);
+    // Either set brings the other: the prerequisite never moves past a dependant left behind.
+    expect([...closeChangeSets(placedBoth, ['q:1'])].sort()).toEqual(['q:1', 'q:2']);
+    expect([...closeChangeSets(placedBoth, ['q:2'])].sort()).toEqual(['q:1', 'q:2']);
     const removed = diffRoutes([accept('a1', 1), turnIn('t1', 1), accept('a2', 2), turnIn('t2', 2), accept('a3', 3)], [accept('a3', 3)], { relations: rel });
     expect(summary(removed)).toEqual([
       { id: 'q:1', quests: [1], steps: ['-a1', '-t1'], requires: ['q:2'] },

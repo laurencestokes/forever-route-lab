@@ -1,6 +1,6 @@
 {
   "$comment": [
-    "Milestone 7 optimiser and route diff measurements (docs/research/optimizer-m7.md §14; docs/ARCHITECTURE.md §14). Each top-level entry belongs to the bench or test named in its own $comment: diff10000 to tests/bench/diff.bench.ts; compile, compileNav, walks, firstImprovement, search and heap to tests/bench/optimizer.bench.ts; fixtures to tests/optimizer-evaluations.test.ts; lazyChunks to a scratch Vite build (a projection for Milestone 8). Node 22 on the reference Windows machine; timed figures are process medians, probe-normalised as docs/measurements/engine-m6.json. The optimiser's results are the best route found under these assumptions, never optimal."
+    "Milestone 7 optimiser and route diff measurements (docs/research/optimizer-m7.md §14; docs/ARCHITECTURE.md §14). Each top-level entry belongs to the bench or test named in its own $comment: diff10000 to tests/bench/diff.bench.ts; compile, compileNav, walks, firstImprovement (weak, guide), search (weak, guide), heap and quality to tests/bench/optimizer.bench.ts; fixtures to tests/optimizer-evaluations.test.ts; lazyChunks to a scratch Vite build (a projection for Milestone 8). Node 22 on the reference Windows machine; timed figures are process medians, probe-normalised as docs/measurements/engine-m6.json. The optimiser's results are the best route found under these assumptions, never optimal."
   ],
   "date": "2026-09-27",
   "machine": {
@@ -200,74 +200,127 @@
   },
   "firstImprovement": {
     "$comment": [
-      "Time to the first improvement (docs/ARCHITECTURE.md §14: under 2 s for a pool of 100 quests, about 300 actions, at beam 256; docs/research/optimizer-m7.md §14.1 clocks): from the client's start post (with the problem's buffers transferred) to the main thread receiving the first best below the incumbent, with the real host in a Node worker_threads worker (the bench bundle is the worker too); each run is then cancelled. exact is machine-independent: the evaluations the core counted to that improvement, the incumbent and the first best (integer ms), from the core's stepper in process one evaluation per slice (so the first improvement is exactly the first); the bench checks that the worker counted the same evaluations.",
-      "The pool (tests/bench/optimizer.bench.ts generatedPool, seed 7): 100 generated quests on Kalimdor, each an accept at its giver, a located complete of one 2-kill objective (level-12 NPC) within 600 yd of the giver, and a turn-in at its finisher (300 actions; 12 hubs over 4,000 yd, 70% of quests turned in where taken), in id order (a weak incumbent), with a note back at the start as the suffix. Level-10 Horde orc warrior, straight-line model at 10 yd/s and detour 1, target keep-original, beam 256. The run goes through the app's path (src/app/optimizer-host.ts and optimizer-walk.ts, the real validator).",
-      "As engine-m6.json: pnpm exec tsx tests/bench/optimizer.bench.ts --check docs/measurements/optimizer-m7.json --repeat 3 --runs 15 bundles the script with esbuild, runs each gated case in a fresh process 3 times in rotating order (15 runs after 3 warm-ups per process; the search case 7 runs after 1), and times the CPU probe (2e7 square roots, median of 5) in the same process; medianMs is the median of the process medians and normalised = medianMs x 40 / probeMs. --check fails on a normalised median more than 25% over the stored one or over its budget, then on a worker heap of 64 MB or more, and then on any difference in the exact blocks of firstImprovement and search (re-run in process; review PRF-09).",
-      "Re-recorded 2026-09-27 after the M7 review fixes (the core's PRF-01 to PRF-05 changes were in the tree: search arrays 14.8 MB to 8.9 MB); the machine was calm: the probe read 40.8-41.0 ms."
+      "Time to the first improvement (docs/ARCHITECTURE.md §14: under 2 s for a pool of 100 quests, about 300 actions, at beam 256; docs/research/optimizer-m7.md §14.1 clocks): from the client's start post (with the problem's buffers transferred) to the main thread receiving the first best below the incumbent, with the real host in a Node worker_threads worker (the bench bundle is the worker too); each run is then cancelled. weak and guide are both gated at 2,000 ms. exact is machine-independent: the evaluations the core counted to that improvement, the incumbent and the first best (integer ms), from the core's stepper in process one evaluation per slice (so the first improvement is exactly the first); the bench checks that the worker counted the same evaluations.",
+      "The pool (tests/bench/optimizer.bench.ts generatedPool, seed 7): 100 generated quests on Kalimdor, each an accept at its giver, a located complete of one 2-kill objective (level-12 NPC) within 600 yd of the giver, and a turn-in at its finisher (300 actions; 12 hubs over 4,000 yd, 70% of quests turned in where taken), with a note back at the start as the suffix. Two incumbents (plan §14.1): weak, the quests in id order (each accept, complete and turn-in in a row); guide, the nearest-neighbour tour by straight line from the start (the nearest action whose quest's earlier actions are done: M7 review open item 1's tour, 12,951,092 ms priced in the weak problem). Level-10 Horde orc warrior, straight-line model at 10 yd/s and detour 1, target keep-original, beam 256. The run goes through the app's path (src/app/optimizer-host.ts and optimizer-walk.ts, the real validator).",
+      "As engine-m6.json: pnpm exec tsx tests/bench/optimizer.bench.ts --check docs/measurements/optimizer-m7.json --repeat 3 --runs 15 bundles the script with esbuild, runs each gated case in a fresh process 3 times in rotating order (15 runs after 3 warm-ups per process; the search case 7 runs after 1), and times the CPU probe (2e7 square roots, median of 5) in the same process; medianMs is the median of the process medians and normalised = medianMs x 40 / probeMs. --check fails on a normalised median more than 25% over the stored one or over its budget, then on a worker heap of 64 MB or more, then on any difference in the exact blocks of firstImprovement and search (weak and guide, re-run in process; review PRF-09), and on the quality entry gate (review M7Q Q-02).",
+      "Re-recorded 2026-09-27 for the search-quality work (M7 review open item 1; docs/research/optimizer-m7.md §19): the nearest-neighbour seed is the first work item, so from the weak incumbent the first improvement is the seed itself at 300 evaluations (12,951,092 ms, the same order as the review's tour); the previous record was 11.15 ms (10.92 normalised) at 16,997 evaluations, a first rollout of 19,622,441 ms. From the guide incumbent (new case) the seed is the incumbent's own order, and the first improvement is the local pass over it at 7,754 evaluations. The machine was calm: the probe read 41.0-41.5 ms.",
+      "Re-measured 2026-09-27 after the search-quality review (review M7Q; docs/research/optimizer-m7.md §19, D-044): the exact blocks are unchanged (the nearest-neighbour seed and the pass over it come first as before); the timings are within 3% of the previous record. The probe read 40.5-41.2 ms."
     ],
     "date": "2026-09-27",
-    "pool": {
+    "weak": {
       "processMedians": [
-        11.15,
-        11.07,
-        11.24
+        5.93,
+        5.94,
+        5.87
       ],
-      "medianMs": 11.15,
-      "probeMs": 40.83,
-      "normalised": 10.92,
+      "medianMs": 5.93,
+      "probeMs": 40.61,
+      "normalised": 5.84,
       "limitMs": 2000,
       "beamWidth": 256,
       "exact": {
-        "evaluationsToFirstImprovement": 16997,
+        "evaluationsToFirstImprovement": 300,
         "incumbentMs": 37741315,
-        "firstBestMs": 19622441
+        "firstBestMs": 12951092
+      }
+    },
+    "guide": {
+      "processMedians": [
+        7.14,
+        6.88,
+        7.03
+      ],
+      "medianMs": 7.03,
+      "probeMs": 40.49,
+      "normalised": 6.94,
+      "limitMs": 2000,
+      "beamWidth": 256,
+      "exact": {
+        "evaluationsToFirstImprovement": 7754,
+        "incumbentMs": 12951092,
+        "firstBestMs": 12943738
       }
     }
   },
   "search": {
     "$comment": [
-      "A search to maxEvaluations 2,000,000 (docs/research/optimizer-m7.md §14.1 `search`; review PRF-10: it was 1,000,000) at beam 256 in the worker, from the start post to done, gated against its stored baseline + 25%; evaluationsPerSecond is exact.evaluations over medianMs. exact is machine-independent (the budget stops after the work item that reaches it, so evaluations exceed 2,000,000) and --check compares it for equality. At 2,000,000 evaluations the search has reached 48 of the 300 layers, and its best (15,906,464 ms) is below the first rollout's (19,622,441 ms, the first improvement).",
-      "The pool (tests/bench/optimizer.bench.ts generatedPool, seed 7): 100 generated quests on Kalimdor, each an accept at its giver, a located complete of one 2-kill objective (level-12 NPC) within 600 yd of the giver, and a turn-in at its finisher (300 actions; 12 hubs over 4,000 yd, 70% of quests turned in where taken), in id order (a weak incumbent), with a note back at the start as the suffix. Level-10 Horde orc warrior, straight-line model at 10 yd/s and detour 1, target keep-original, beam 256. The run goes through the app's path (src/app/optimizer-host.ts and optimizer-walk.ts, the real validator).",
-      "As engine-m6.json: pnpm exec tsx tests/bench/optimizer.bench.ts --check docs/measurements/optimizer-m7.json --repeat 3 --runs 15 bundles the script with esbuild, runs each gated case in a fresh process 3 times in rotating order (15 runs after 3 warm-ups per process; the search case 7 runs after 1), and times the CPU probe (2e7 square roots, median of 5) in the same process; medianMs is the median of the process medians and normalised = medianMs x 40 / probeMs. --check fails on a normalised median more than 25% over the stored one or over its budget, then on a worker heap of 64 MB or more, and then on any difference in the exact blocks of firstImprovement and search (re-run in process; review PRF-09).",
-      "Re-recorded 2026-09-27 after the M7 review fixes (the core's PRF-01 to PRF-05 changes were in the tree: search arrays 14.8 MB to 8.9 MB); the machine was calm: the probe read 40.8-41.0 ms."
+      "A search to maxEvaluations 2,000,000 (docs/research/optimizer-m7.md §14.1 search; review PRF-10) at beam 256 in the worker, from the start post to done: weak is gated against its stored baseline + 25%, guide is reported (three fresh processes of the bundle, --case searchGuide --runs 7 --warm 1). Since review M7Q the run may end before the budget, when the kicks stall (termination converged; D-044 item 3). evaluationsPerSecond is exact.evaluations over medianMs. exact is machine-independent (the budget stops the run after the work item that reaches it, or a seed, pass or kick at its own boundary) and --check compares it for equality; nearestNeighbourMs is the review's nearest-neighbour tour priced in the same problem by the search's own evaluation (null when the tour breaks a rule of the search), and gapToNearestNeighbourPct the best's gap to it, reported only: that tour is the search's own first seed (review M7Q Q-02). The quality gate is the quality entry. bestUnits counts the best order's units: all 300, because the drop move is off under keep-original (D-044 item 1).",
+      "The pool (tests/bench/optimizer.bench.ts generatedPool, seed 7): 100 generated quests on Kalimdor, each an accept at its giver, a located complete of one 2-kill objective (level-12 NPC) within 600 yd of the giver, and a turn-in at its finisher (300 actions; 12 hubs over 4,000 yd, 70% of quests turned in where taken), with a note back at the start as the suffix. Two incumbents (plan §14.1): weak, the quests in id order (each accept, complete and turn-in in a row); guide, the nearest-neighbour tour by straight line from the start (the nearest action whose quest's earlier actions are done: M7 review open item 1's tour, 12,951,092 ms priced in the weak problem). Level-10 Horde orc warrior, straight-line model at 10 yd/s and detour 1, target keep-original, beam 256. The run goes through the app's path (src/app/optimizer-host.ts and optimizer-walk.ts, the real validator).",
+      "As engine-m6.json: pnpm exec tsx tests/bench/optimizer.bench.ts --check docs/measurements/optimizer-m7.json --repeat 3 --runs 15 bundles the script with esbuild, runs each gated case in a fresh process 3 times in rotating order (15 runs after 3 warm-ups per process; the search case 7 runs after 1), and times the CPU probe (2e7 square roots, median of 5) in the same process; medianMs is the median of the process medians and normalised = medianMs x 40 / probeMs. --check fails on a normalised median more than 25% over the stored one or over its budget, then on a worker heap of 64 MB or more, then on any difference in the exact blocks of firstImprovement and search (weak and guide, re-run in process; review PRF-09), and on the quality entry's gate (review M7Q Q-02).",
+      "Re-recorded 2026-09-27 for the search-quality work (M7 review open item 1). Previous record from the weak incumbent: best 15,906,464 ms (22.8% above the nearest-neighbour tour) at 2,115,281 evaluations and 48 layers, 516.83 ms (504.1 normalised). Now: 11,559,284 ms, 10.75% below the tour; with every quest kept (a scratch run with the drop move off) 11,701,098 ms, 9.65% below. Four more pools (seeds 11, 23, 42 and 99) gave 7.05-9.46% below their tours with drops and 6.08-8.96% without (the previous core: 16.6-30.3% above). The run takes longer per evaluation (about 3.0 million evaluations per second against 4.1 million): the seeds and the local pass copy states, and the pass's travel pre-screen is arithmetic that counts no evaluation. The machine was calm: the probe read 40.7-41.5 ms.",
+      "Re-recorded 2026-09-27 after the search-quality review (review M7Q; docs/research/optimizer-m7.md §19, D-044). The beam of 256 cannot reach a closing depth in 2,000,000 evaluations on this pool (about 256 x 300 x 100 / 2 = 3,840,000 evaluations), so after the seeds the budget goes to kicks: no layer and no rollout run. Weak: best 11,706,355 ms with every quest kept (the previous record, 11,559,284 ms, dropped a quest on a 192 XP margin; with every quest kept it was 11,701,098 ms), 9.61% below the nearest-neighbour tour and 2.22% above the pool's stored reference (quality); the kicks converged at 1,761,587 evaluations. Guide: the same best (the nearest-neighbour seed is the guide's own order), converged at 1,760,469 evaluations. About 3.2 million evaluations per second (was 3.0). The probe read 40.6-41.4 ms."
     ],
     "date": "2026-09-27",
-    "pool": {
+    "weak": {
       "processMedians": [
-        505.22,
-        516.83,
-        553.22
+        545.86,
+        551.05,
+        630.25
       ],
-      "medianMs": 516.83,
-      "probeMs": 41.01,
-      "normalised": 504.1,
+      "medianMs": 551.05,
+      "probeMs": 40.67,
+      "normalised": 541.97,
       "beamWidth": 256,
       "maxEvaluations": 2000000,
-      "evaluationsPerSecond": 4092798,
+      "evaluationsPerSecond": 3196783,
       "exact": {
-        "evaluations": 2115281,
-        "layers": 48,
-        "duplicates": 63628,
-        "dominated": 81084,
-        "termination": "budget",
+        "evaluations": 1761587,
+        "layers": 0,
+        "duplicates": 0,
+        "dominated": 0,
+        "rollouts": 0,
+        "termination": "converged",
         "incumbentMs": 37741315,
-        "bestMs": 15906464,
-        "firstImprovementEvaluations": 16997
+        "bestMs": 11706355,
+        "bestUnits": 300,
+        "firstImprovementEvaluations": 300,
+        "nearestNeighbourMs": 12951092,
+        "gapToNearestNeighbourPct": -9.61
       },
-      "arrayBytes": 8898449
+      "arrayBytes": 9116299
+    },
+    "guide": {
+      "processMedians": [
+        559.22,
+        513.47,
+        587.35
+      ],
+      "medianMs": 559.22,
+      "probeMs": 40.77,
+      "normalised": 548.66,
+      "gated": false,
+      "beamWidth": 256,
+      "maxEvaluations": 2000000,
+      "evaluationsPerSecond": 3148079,
+      "exact": {
+        "evaluations": 1760469,
+        "layers": 0,
+        "duplicates": 0,
+        "dominated": 0,
+        "rollouts": 0,
+        "termination": "converged",
+        "incumbentMs": 12951092,
+        "bestMs": 11706355,
+        "bestUnits": 300,
+        "firstImprovementEvaluations": 7754,
+        "nearestNeighbourMs": 12951092,
+        "gapToNearestNeighbourPct": -9.61
+      }
     }
   },
   "heap": {
     "$comment": [
       "The optimiser worker's heap (docs/ARCHITECTURE.md §14: under 64 MB at beam 256): the largest used_heap_size + external_memory (v8.getHeapStatistics()) sampled in the worker after every slice, each after a full collection (--expose-gc set in the worker at run time), over a first-improvement run and a search to 2,000,000 evaluations, in a worker whose old generation is capped at 64 MB (resourceLimits). idleMB is the same measure before any run (the bench bundle loaded: more code than the app's worker chunk), so the search holds about peakMB - idleMB, which matches arrayBytes (the core's stats). pnpm exec tsx tests/bench/optimizer.bench.ts --case heap; --check runs it once and fails at 64 MB or more.",
-      "The pool (tests/bench/optimizer.bench.ts generatedPool, seed 7): 100 generated quests on Kalimdor, each an accept at its giver, a located complete of one 2-kill objective (level-12 NPC) within 600 yd of the giver, and a turn-in at its finisher (300 actions; 12 hubs over 4,000 yd, 70% of quests turned in where taken), in id order (a weak incumbent), with a note back at the start as the suffix. Level-10 Horde orc warrior, straight-line model at 10 yd/s and detour 1, target keep-original, beam 256. The run goes through the app's path (src/app/optimizer-host.ts and optimizer-walk.ts, the real validator)."
+      "The pool (tests/bench/optimizer.bench.ts generatedPool, seed 7): 100 generated quests on Kalimdor, each an accept at its giver, a located complete of one 2-kill objective (level-12 NPC) within 600 yd of the giver, and a turn-in at its finisher (300 actions; 12 hubs over 4,000 yd, 70% of quests turned in where taken), in id order (a weak incumbent), with a note back at the start as the suffix. Level-10 Horde orc warrior, straight-line model at 10 yd/s and detour 1, target keep-original, beam 256. The run goes through the app's path (src/app/optimizer-host.ts and optimizer-walk.ts, the real validator).",
+      "Re-measured 2026-09-27 for the search-quality work (M7 review open item 1): peak 26.82 MB (was 26.39 MB); the seeds' and the local pass's prefix states add 0.27 MB of search arrays (8.90 to 9.17 MB).",
+      "Re-measured 2026-09-27 after the search-quality review (review M7Q): peak 26.89 MB (was 26.82 MB), idle 17.24 MB; the search now ends by convergence at 1,761,587 evaluations. The kicks add two byte arrays per unit; no layer is built on this pool, but the layers' arrays are allocated as before."
     ],
     "date": "2026-09-27",
     "pool": {
-      "peakMB": 26.39,
-      "idleMB": 17.13,
+      "peakMB": 26.89,
+      "idleMB": 17.24,
       "limitMB": 64,
-      "arrayBytes": 8898449
+      "arrayBytes": 9116299
     }
   },
   "lazyChunks": {
@@ -309,18 +362,20 @@
       "Optimiser evaluations on fixed fixtures (docs/ARCHITECTURE.md §14: recorded baseline, exact; docs/research/optimizer-m7.md §14.1; review PRF-09). Owned by tests/optimizer-evaluations.test.ts, which fails the build on any difference.",
       "Cases: core-<id> are the §11.7 fixtures of src/optimizer/core/test-fixtures.ts (harness H: beam 16, 100,000 evaluations, unless the fixture sets its own options); 10b-grid40 is fixture 10b's 40-quest grid at beam 64 and 50,000 evaluations; 9-uniform-<seed> are fixture 9's uniform instances (tests/support/optimizer-fixtures.ts oracleInstance) through the app's compile path at beam 256. Each is searched to its end in one slice (the stepper's results do not depend on slicing).",
       "solutions is the first 16 hex digits of the SHA-256 of every solution's [units, estimatedMs, fillMs, fillXp, exitMs, knownGain, unknownParts], in order. Machine-independent: the search has no clock and no randomness.",
-      "Re-record only for a change meant to alter the search, and say why in its review: UPDATE_OPTIMIZER_EVALUATIONS=1 pnpm exec vitest run tests/optimizer-evaluations.test.ts"
+      "Re-record only for a change meant to alter the search, and say why in its review: UPDATE_OPTIMIZER_EVALUATIONS=1 pnpm exec vitest run tests/optimizer-evaluations.test.ts",
+      "Re-recorded 2026-09-27 for the search-quality work (M7 review open item 1; docs/research/optimizer-m7.md §19): the nearest-neighbour and cheapest-insertion seeds and a local pass per seed now come before the first rollout, the pass has or-opt (runs of 1-3), exchange, 2-opt and drop moves, and the pass after each rollout starts from that rollout order. Against the previous record: every case keeps its best estimate except 10b-grid40, which improves from 3,014,540 to 1,128,640 ms at the same 50,000-evaluation budget; none is worse; the first improvement comes earlier in 28 cases, later in 1 (core-6: 7 to 20 evaluations) and at the same count in 1; the evaluations over all 37 cases go from 55,432 to 54,061. The fixture 1-11 and oracle tests pass unchanged apart from the work-item tests that named the old order (src/optimizer/core/search.test.ts).",
+      "Re-recorded 2026-09-27 for the search-quality review (review M7Q): the local pass pre-screens a move by matrix travel only when the window ends before the order and touches no anchor, hearth, bind, flight, grind, train, condition, waypoint chain, level-limited or any-of accept, or unknown-XP quest (Q-04); the drop move is off under keep-original with the shortfall fill (Q-05); the insertion seed may spend 700 evaluations per unit (at most half the budget) and then finishes by nearest neighbour (Q-03); after the seeds, a beam that cannot reach a closing depth within the budget is skipped for kicks, and kicks follow an exhausted beam in sections of 16 or more units, else one last pass over the best (Q-01); kicks stop after max(100,000, 2,000 × units) evaluations without improvement (termination converged, Q-07). Against the previous record: all 37 cases keep their best estimate; the first improvement comes earlier in 1, later in 2 (core-7e 20 to 50, 9-uniform-2 14 to 16) and at the same count in 34; the evaluations over those cases go from 54,061 to 55,366. core-4-beam1 is now the beam alone (seeds and pass off: fixture 4 is about the beam), and core-4-beam1-pass is the full search at width 1, which finds Y then X because the pass now counts the exit leg. adv-11, adv-56, adv-123 and adv-131 are new: the adversarial instances of that review at beam 256, each at its model-oracle optimum (oracleMs)."
     ],
     "cases": {
       "core-1": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 122,
+        "evaluations": 189,
         "layers": 7,
         "duplicates": 2,
         "dominated": 36,
         "rollouts": 1,
-        "firstImprovementEvaluations": 10,
+        "firstImprovementEvaluations": 4,
         "incumbentMs": 632142,
         "bestMs": 46142,
         "solutions": "6692675199690266"
@@ -328,12 +383,12 @@
       "core-2": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 383,
+        "evaluations": 449,
         "layers": 9,
         "duplicates": 6,
         "dominated": 75,
         "rollouts": 1,
-        "firstImprovementEvaluations": 18,
+        "firstImprovementEvaluations": 6,
         "incumbentMs": 148142,
         "bestMs": 122142,
         "solutions": "7b072d2342163113"
@@ -341,12 +396,12 @@
       "core-3": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 128,
+        "evaluations": 211,
         "layers": 7,
         "duplicates": 12,
         "dominated": 30,
         "rollouts": 1,
-        "firstImprovementEvaluations": 10,
+        "firstImprovementEvaluations": 4,
         "incumbentMs": 90000,
         "bestMs": 74000,
         "solutions": "1cf78a7c29658d3c"
@@ -354,7 +409,7 @@
       "core-4-beam1": {
         "beamWidth": 1,
         "termination": "exhausted",
-        "evaluations": 37,
+        "evaluations": 12,
         "layers": 5,
         "duplicates": 0,
         "dominated": 0,
@@ -364,15 +419,28 @@
         "bestMs": 102000,
         "solutions": "c8972afaf535f349"
       },
+      "core-4-beam1-pass": {
+        "beamWidth": 1,
+        "termination": "exhausted",
+        "evaluations": 58,
+        "layers": 5,
+        "duplicates": 0,
+        "dominated": 0,
+        "rollouts": 1,
+        "firstImprovementEvaluations": 16,
+        "incumbentMs": 102000,
+        "bestMs": 82000,
+        "solutions": "12b1b787cabe5603"
+      },
       "core-4-beam4": {
         "beamWidth": 4,
         "termination": "exhausted",
-        "evaluations": 47,
+        "evaluations": 68,
         "layers": 5,
         "duplicates": 0,
         "dominated": 4,
         "rollouts": 1,
-        "firstImprovementEvaluations": 47,
+        "firstImprovementEvaluations": 16,
         "incumbentMs": 102000,
         "bestMs": 82000,
         "solutions": "12b1b787cabe5603"
@@ -380,12 +448,12 @@
       "core-5": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 92,
+        "evaluations": 152,
         "layers": 7,
         "duplicates": 0,
         "dominated": 5,
         "rollouts": 1,
-        "firstImprovementEvaluations": 92,
+        "firstImprovementEvaluations": 25,
         "incumbentMs": 298000,
         "bestMs": 296310,
         "solutions": "f2d38c43d578f5c7"
@@ -393,12 +461,12 @@
       "core-6": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 69,
+        "evaluations": 203,
         "layers": 6,
         "duplicates": 0,
         "dominated": 7,
         "rollouts": 1,
-        "firstImprovementEvaluations": 7,
+        "firstImprovementEvaluations": 20,
         "incumbentMs": 493508,
         "bestMs": 465028,
         "solutions": "8963b52ce575f76e"
@@ -406,12 +474,12 @@
       "core-7a": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 26,
+        "evaluations": 43,
         "layers": 4,
         "duplicates": 0,
         "dominated": 1,
         "rollouts": 1,
-        "firstImprovementEvaluations": 5,
+        "firstImprovementEvaluations": 3,
         "incumbentMs": 179000,
         "bestMs": 79000,
         "solutions": "48240844f24b49d4"
@@ -419,12 +487,12 @@
       "core-7b": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 45,
+        "evaluations": 48,
         "layers": 5,
         "duplicates": 0,
         "dominated": 3,
         "rollouts": 1,
-        "firstImprovementEvaluations": 37,
+        "firstImprovementEvaluations": 12,
         "incumbentMs": 192000,
         "bestMs": 186000,
         "solutions": "2d24a225c07313d1"
@@ -437,7 +505,7 @@
         "duplicates": 0,
         "dominated": 3,
         "rollouts": 1,
-        "firstImprovementEvaluations": 42,
+        "firstImprovementEvaluations": 10,
         "incumbentMs": 402000,
         "bestMs": 396000,
         "solutions": "98c5f2f689ac403e"
@@ -445,12 +513,12 @@
       "core-7d": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 47,
+        "evaluations": 74,
         "layers": 5,
         "duplicates": 0,
         "dominated": 4,
         "rollouts": 1,
-        "firstImprovementEvaluations": 6,
+        "firstImprovementEvaluations": 4,
         "incumbentMs": 286328,
         "bestMs": 91203,
         "solutions": "76f05144ca879a6a"
@@ -458,25 +526,25 @@
       "core-7e": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 258,
+        "evaluations": 691,
         "layers": 8,
         "duplicates": 0,
         "dominated": 67,
         "rollouts": 1,
-        "firstImprovementEvaluations": 110,
+        "firstImprovementEvaluations": 50,
         "incumbentMs": 230315,
         "bestMs": 205286,
-        "solutions": "c4de993a3c02c086"
+        "solutions": "fee755d2a45960c3"
       },
       "core-7f-v1": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 47,
+        "evaluations": 74,
         "layers": 5,
         "duplicates": 0,
         "dominated": 4,
         "rollouts": 1,
-        "firstImprovementEvaluations": 6,
+        "firstImprovementEvaluations": 4,
         "incumbentMs": 532000,
         "bestMs": 332000,
         "solutions": "2f5555a0e898bd99"
@@ -484,7 +552,7 @@
       "core-7f-v2": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 43,
+        "evaluations": 57,
         "layers": 5,
         "duplicates": 0,
         "dominated": 2,
@@ -497,12 +565,12 @@
       "core-7g-1000": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 47,
+        "evaluations": 74,
         "layers": 5,
         "duplicates": 0,
         "dominated": 4,
         "rollouts": 1,
-        "firstImprovementEvaluations": 47,
+        "firstImprovementEvaluations": 16,
         "incumbentMs": 152000,
         "bestMs": 132000,
         "solutions": "566aa2655e8b021c"
@@ -510,7 +578,7 @@
       "core-7g--1000": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 47,
+        "evaluations": 92,
         "layers": 5,
         "duplicates": 0,
         "dominated": 4,
@@ -523,12 +591,12 @@
       "core-8": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 47,
+        "evaluations": 60,
         "layers": 5,
         "duplicates": 2,
         "dominated": 2,
         "rollouts": 1,
-        "firstImprovementEvaluations": 6,
+        "firstImprovementEvaluations": 4,
         "incumbentMs": 232000,
         "bestMs": 212000,
         "solutions": "56fbca1af6f2d343"
@@ -536,7 +604,7 @@
       "core-8b-shortfall": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 47,
+        "evaluations": 60,
         "layers": 5,
         "duplicates": 2,
         "dominated": 2,
@@ -549,12 +617,12 @@
       "core-8b-replace-quests": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 26,
+        "evaluations": 50,
         "layers": 5,
         "duplicates": 2,
         "dominated": 2,
         "rollouts": 1,
-        "firstImprovementEvaluations": 4,
+        "firstImprovementEvaluations": 2,
         "incumbentMs": 412000,
         "bestMs": 356000,
         "solutions": "256069ff5e1be352"
@@ -562,12 +630,12 @@
       "core-10c": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 122,
+        "evaluations": 181,
         "layers": 7,
         "duplicates": 2,
         "dominated": 36,
         "rollouts": 1,
-        "firstImprovementEvaluations": 10,
+        "firstImprovementEvaluations": 4,
         "incumbentMs": 632142,
         "bestMs": 46142,
         "solutions": "76209b0830429cd9"
@@ -575,7 +643,7 @@
       "core-12": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 70,
+        "evaluations": 109,
         "layers": 6,
         "duplicates": 2,
         "dominated": 5,
@@ -588,7 +656,7 @@
       "core-13a": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 19,
+        "evaluations": 32,
         "layers": 4,
         "duplicates": 0,
         "dominated": 0,
@@ -601,7 +669,7 @@
       "core-13b": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 8,
+        "evaluations": 21,
         "layers": 3,
         "duplicates": 0,
         "dominated": 0,
@@ -614,7 +682,7 @@
       "core-13c": {
         "beamWidth": 16,
         "termination": "exhausted",
-        "evaluations": 19,
+        "evaluations": 32,
         "layers": 4,
         "duplicates": 0,
         "dominated": 0,
@@ -627,38 +695,38 @@
       "10b-grid40": {
         "beamWidth": 64,
         "termination": "budget",
-        "evaluations": 52188,
-        "layers": 12,
-        "duplicates": 22,
-        "dominated": 1112,
-        "rollouts": 2,
-        "firstImprovementEvaluations": 1640,
+        "evaluations": 50014,
+        "layers": 0,
+        "duplicates": 0,
+        "dominated": 0,
+        "rollouts": 0,
+        "firstImprovementEvaluations": 80,
         "incumbentMs": 5629347,
-        "bestMs": 3014540,
-        "solutions": "611f35771c1c1c96"
+        "bestMs": 1128640,
+        "solutions": "f3436f5c53f55156"
       },
       "9-uniform-0": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 51,
+        "evaluations": 120,
         "layers": 5,
         "duplicates": 2,
         "dominated": 2,
         "rollouts": 1,
-        "firstImprovementEvaluations": 19,
+        "firstImprovementEvaluations": 16,
         "incumbentMs": 82711,
         "bestMs": 81711,
-        "solutions": "891ba4ffcf593a5b"
+        "solutions": "81e1bef0bc0f0b02"
       },
       "9-uniform-1": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 134,
+        "evaluations": 191,
         "layers": 7,
         "duplicates": 0,
         "dominated": 46,
         "rollouts": 1,
-        "firstImprovementEvaluations": 10,
+        "firstImprovementEvaluations": 6,
         "incumbentMs": 352977,
         "bestMs": 216592,
         "solutions": "b55c1fcac04e08b9"
@@ -666,64 +734,64 @@
       "9-uniform-2": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 53,
+        "evaluations": 68,
         "layers": 5,
         "duplicates": 0,
         "dominated": 4,
         "rollouts": 1,
-        "firstImprovementEvaluations": 19,
+        "firstImprovementEvaluations": 16,
         "incumbentMs": 303697,
         "bestMs": 295269,
-        "solutions": "900bd1aecfc230e3"
+        "solutions": "d915379d082c464a"
       },
       "9-uniform-3": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 197,
+        "evaluations": 365,
         "layers": 7,
         "duplicates": 0,
         "dominated": 48,
         "rollouts": 1,
-        "firstImprovementEvaluations": 12,
+        "firstImprovementEvaluations": 6,
         "incumbentMs": 398285,
         "bestMs": 311928,
-        "solutions": "bf1317377708e2a8"
+        "solutions": "5b58f3fcf2eaec99"
       },
       "9-uniform-4": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 22,
+        "evaluations": 42,
         "layers": 5,
         "duplicates": 0,
         "dominated": 3,
         "rollouts": 1,
-        "firstImprovementEvaluations": 4,
+        "firstImprovementEvaluations": 2,
         "incumbentMs": 230951,
         "bestMs": 76486,
-        "solutions": "9bad190a819bf396"
+        "solutions": "e58e310df7640203"
       },
       "9-uniform-5": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 203,
+        "evaluations": 297,
         "layers": 7,
         "duplicates": 0,
         "dominated": 48,
         "rollouts": 1,
-        "firstImprovementEvaluations": 12,
+        "firstImprovementEvaluations": 6,
         "incumbentMs": 546689,
         "bestMs": 398289,
-        "solutions": "cbf9c49b91bd2c05"
+        "solutions": "ac39a4d224026ba6"
       },
       "9-uniform-6": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 58,
+        "evaluations": 108,
         "layers": 5,
         "duplicates": 0,
         "dominated": 4,
         "rollouts": 1,
-        "firstImprovementEvaluations": 32,
+        "firstImprovementEvaluations": 4,
         "incumbentMs": 266423,
         "bestMs": 242568,
         "solutions": "e5271d8046c10664"
@@ -731,12 +799,12 @@
       "9-uniform-7": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 141,
+        "evaluations": 236,
         "layers": 7,
         "duplicates": 0,
         "dominated": 46,
         "rollouts": 1,
-        "firstImprovementEvaluations": 10,
+        "firstImprovementEvaluations": 6,
         "incumbentMs": 376023,
         "bestMs": 202074,
         "solutions": "c28b916dfb84bb84"
@@ -744,25 +812,25 @@
       "9-uniform-8": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 53,
+        "evaluations": 75,
         "layers": 5,
         "duplicates": 0,
         "dominated": 4,
         "rollouts": 1,
-        "firstImprovementEvaluations": 19,
+        "firstImprovementEvaluations": 4,
         "incumbentMs": 301018,
         "bestMs": 281439,
-        "solutions": "de469d9290771b4c"
+        "solutions": "e8ed9f05eddf2005"
       },
       "9-uniform-9": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 224,
+        "evaluations": 353,
         "layers": 7,
         "duplicates": 0,
         "dominated": 48,
         "rollouts": 1,
-        "firstImprovementEvaluations": 12,
+        "firstImprovementEvaluations": 6,
         "incumbentMs": 472859,
         "bestMs": 355654,
         "solutions": "0a1de5fbc1a7e6b9"
@@ -770,29 +838,353 @@
       "9-uniform-10": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 61,
+        "evaluations": 92,
         "layers": 5,
         "duplicates": 0,
         "dominated": 4,
         "rollouts": 1,
-        "firstImprovementEvaluations": 6,
+        "firstImprovementEvaluations": 4,
         "incumbentMs": 276307,
         "bestMs": 260764,
-        "solutions": "4891c57933f61056"
+        "solutions": "5f813e3a875d1019"
       },
       "9-uniform-11": {
         "beamWidth": 256,
         "termination": "exhausted",
-        "evaluations": 201,
+        "evaluations": 373,
         "layers": 7,
         "duplicates": 0,
         "dominated": 48,
         "rollouts": 1,
-        "firstImprovementEvaluations": 12,
+        "firstImprovementEvaluations": 6,
         "incumbentMs": 409249,
         "bestMs": 347780,
-        "solutions": "7d14ef5608621791"
+        "solutions": "0529c920988928fc"
+      },
+      "adv-11": {
+        "beamWidth": 256,
+        "termination": "exhausted",
+        "evaluations": 3549,
+        "layers": 11,
+        "duplicates": 40,
+        "dominated": 1846,
+        "rollouts": 2,
+        "firstImprovementEvaluations": 10,
+        "incumbentMs": 755467,
+        "bestMs": 321200,
+        "solutions": "7ea8a3531595ea24",
+        "oracleMs": 321200,
+        "bestComparedMs": 321200
+      },
+      "adv-56": {
+        "beamWidth": 256,
+        "termination": "exhausted",
+        "evaluations": 4549,
+        "layers": 11,
+        "duplicates": 3,
+        "dominated": 1026,
+        "rollouts": 2,
+        "firstImprovementEvaluations": 10,
+        "incumbentMs": 900703,
+        "bestMs": 572336,
+        "solutions": "a72f1a7fb832bec9",
+        "oracleMs": 572336,
+        "bestComparedMs": 572336
+      },
+      "adv-123": {
+        "beamWidth": 256,
+        "termination": "exhausted",
+        "evaluations": 2310,
+        "layers": 11,
+        "duplicates": 0,
+        "dominated": 538,
+        "rollouts": 2,
+        "firstImprovementEvaluations": 10,
+        "incumbentMs": 924286,
+        "bestMs": 513503,
+        "solutions": "fd1e2ebe91b63f04",
+        "oracleMs": 513503,
+        "bestComparedMs": 513503
+      },
+      "adv-131": {
+        "beamWidth": 256,
+        "termination": "exhausted",
+        "evaluations": 5513,
+        "layers": 13,
+        "duplicates": 107,
+        "dominated": 2600,
+        "rollouts": 2,
+        "firstImprovementEvaluations": 12,
+        "incumbentMs": 1230333,
+        "bestMs": 709167,
+        "solutions": "e658af153680d90b",
+        "oracleMs": 709167,
+        "bestComparedMs": 709167
       }
+    }
+  },
+  "quality": {
+    "$comment": [
+      "Search quality against an independent reference (review M7Q Q-02; D-044 item 5), owned by tests/bench/optimizer.bench.ts (the quality case): the weak incumbent (quests in id order) of each quality pool (generatedPool seeds 1-10 and 17: 100 quests, 300 units, the same generator as the bench pool) searched in process to 2,000,000 evaluations at beam 256, keep-original. exact (per pool: the best comparedMs and its units, the evaluations and the termination) is machine-independent and --check compares it for equality; --check also fails when the median gap to the reference is above 3% or any pool's is above 7%. The nearest-neighbour tour is reported only: it is the search's own first seed, and pool 17's tour breaks a rule of the search (null).",
+      "Measured 2026-09-27: gap to the reference median 1.26%, from -1.44% to 5.69% (11 pools); gap to the nearest-neighbour tour median -9.64%, from -11.73% to -5.05% (10 pools). Every best keeps all 300 units."
+    ],
+    "date": "2026-09-27",
+    "limits": {
+      "medianGapPct": 3,
+      "maxGapPct": 7
+    },
+    "exact": [
+      {
+        "seed": 1,
+        "bestMs": 11016325,
+        "bestUnits": 300,
+        "evaluations": 2000005,
+        "termination": "budget"
+      },
+      {
+        "seed": 2,
+        "bestMs": 11515473,
+        "bestUnits": 300,
+        "evaluations": 2000004,
+        "termination": "budget"
+      },
+      {
+        "seed": 3,
+        "bestMs": 11697433,
+        "bestUnits": 300,
+        "evaluations": 2000459,
+        "termination": "budget"
+      },
+      {
+        "seed": 4,
+        "bestMs": 11415319,
+        "bestUnits": 300,
+        "evaluations": 1011991,
+        "termination": "converged"
+      },
+      {
+        "seed": 5,
+        "bestMs": 11032183,
+        "bestUnits": 300,
+        "evaluations": 2000062,
+        "termination": "budget"
+      },
+      {
+        "seed": 6,
+        "bestMs": 12319903,
+        "bestUnits": 300,
+        "evaluations": 2000193,
+        "termination": "budget"
+      },
+      {
+        "seed": 7,
+        "bestMs": 11706355,
+        "bestUnits": 300,
+        "evaluations": 1761587,
+        "termination": "converged"
+      },
+      {
+        "seed": 8,
+        "bestMs": 11553997,
+        "bestUnits": 300,
+        "evaluations": 2000115,
+        "termination": "budget"
+      },
+      {
+        "seed": 9,
+        "bestMs": 11049008,
+        "bestUnits": 300,
+        "evaluations": 2000096,
+        "termination": "budget"
+      },
+      {
+        "seed": 10,
+        "bestMs": 11785471,
+        "bestUnits": 300,
+        "evaluations": 2000003,
+        "termination": "budget"
+      },
+      {
+        "seed": 17,
+        "bestMs": 11534456,
+        "bestUnits": 300,
+        "evaluations": 2000002,
+        "termination": "budget"
+      }
+    ],
+    "pools": [
+      {
+        "seed": 1,
+        "nearestNeighbourMs": 12237853,
+        "gapToNearestNeighbourPct": -9.98,
+        "referenceMs": 10914057,
+        "gapToReferencePct": 0.94
+      },
+      {
+        "seed": 2,
+        "nearestNeighbourMs": 12749411,
+        "gapToNearestNeighbourPct": -9.68,
+        "referenceMs": 11502356,
+        "gapToReferencePct": 0.11
+      },
+      {
+        "seed": 3,
+        "nearestNeighbourMs": 13252087,
+        "gapToNearestNeighbourPct": -11.73,
+        "referenceMs": 11868234,
+        "gapToReferencePct": -1.44
+      },
+      {
+        "seed": 4,
+        "nearestNeighbourMs": 12022503,
+        "gapToNearestNeighbourPct": -5.05,
+        "referenceMs": 11095098,
+        "gapToReferencePct": 2.89
+      },
+      {
+        "seed": 5,
+        "nearestNeighbourMs": 12059372,
+        "gapToNearestNeighbourPct": -8.52,
+        "referenceMs": 10871313,
+        "gapToReferencePct": 1.48
+      },
+      {
+        "seed": 6,
+        "nearestNeighbourMs": 13512959,
+        "gapToNearestNeighbourPct": -8.83,
+        "referenceMs": 11656331,
+        "gapToReferencePct": 5.69
+      },
+      {
+        "seed": 7,
+        "nearestNeighbourMs": 12951092,
+        "gapToNearestNeighbourPct": -9.61,
+        "referenceMs": 11452398,
+        "gapToReferencePct": 2.22
+      },
+      {
+        "seed": 8,
+        "nearestNeighbourMs": 12484319,
+        "gapToNearestNeighbourPct": -7.45,
+        "referenceMs": 11210157,
+        "gapToReferencePct": 3.07
+      },
+      {
+        "seed": 9,
+        "nearestNeighbourMs": 12479132,
+        "gapToNearestNeighbourPct": -11.46,
+        "referenceMs": 11001363,
+        "gapToReferencePct": 0.43
+      },
+      {
+        "seed": 10,
+        "nearestNeighbourMs": 13143880,
+        "gapToNearestNeighbourPct": -10.33,
+        "referenceMs": 11638363,
+        "gapToReferencePct": 1.26
+      },
+      {
+        "seed": 17,
+        "nearestNeighbourMs": null,
+        "gapToNearestNeighbourPct": null,
+        "referenceMs": 11606277,
+        "gapToReferencePct": -0.62
+      }
+    ],
+    "gapToReferencePct": {
+      "median": 1.26,
+      "min": -1.44,
+      "max": 5.69,
+      "pools": 11
+    },
+    "gapToNearestNeighbourPct": {
+      "median": -9.64,
+      "min": -11.73,
+      "max": -5.05,
+      "pools": 10
+    },
+    "reference": {
+      "1": {
+        "referenceMs": 10914057,
+        "units": 300,
+        "withPrescreenMs": 10914057,
+        "exactPassMs": 11112605,
+        "seconds": 18.61
+      },
+      "2": {
+        "referenceMs": 11502356,
+        "units": 300,
+        "withPrescreenMs": 11502356,
+        "exactPassMs": 11787193,
+        "seconds": 20.39
+      },
+      "3": {
+        "referenceMs": 11868234,
+        "units": 300,
+        "withPrescreenMs": 11868234,
+        "exactPassMs": 11949738,
+        "seconds": 19.51
+      },
+      "4": {
+        "referenceMs": 11095098,
+        "units": 300,
+        "withPrescreenMs": 11095098,
+        "exactPassMs": 11293939,
+        "seconds": 20.31
+      },
+      "5": {
+        "referenceMs": 10871313,
+        "units": 300,
+        "withPrescreenMs": 10871313,
+        "exactPassMs": 11153888,
+        "seconds": 20.71
+      },
+      "6": {
+        "referenceMs": 11656331,
+        "units": 300,
+        "withPrescreenMs": 11656331,
+        "exactPassMs": 11849945,
+        "seconds": 19.78
+      },
+      "7": {
+        "referenceMs": 11452398,
+        "units": 300,
+        "withPrescreenMs": 11452398,
+        "exactPassMs": 11629024,
+        "seconds": 20.73
+      },
+      "8": {
+        "referenceMs": 11210157,
+        "units": 300,
+        "withPrescreenMs": 11210157,
+        "exactPassMs": 11417976,
+        "seconds": 20.25
+      },
+      "9": {
+        "referenceMs": 11001363,
+        "units": 300,
+        "withPrescreenMs": 11001363,
+        "exactPassMs": 11155314,
+        "seconds": 20.38
+      },
+      "10": {
+        "referenceMs": 11638363,
+        "units": 300,
+        "withPrescreenMs": 11638363,
+        "exactPassMs": 11829559,
+        "seconds": 22.43
+      },
+      "17": {
+        "referenceMs": 11606277,
+        "units": 300,
+        "withPrescreenMs": 11606277,
+        "exactPassMs": 11694621,
+        "seconds": 19.26
+      },
+      "$comment": [
+        "Each quality pool's reference (review M7Q Q-02; D-044 item 5): the better of two runs of 20,000,000 evaluations from the nearest-neighbour seed and the local pass over it, then kicks with no stall stop, from the core's own parts (NearestNeighbourSeed, LocalSearch, Kicks) but with other kick streams (seeds 424,242 + pool and 515,151 + pool, not the search's): withPrescreenMs with the pass's travel pre-screen, exactPassMs with every move priced exactly. Ten times the search's budget, no beam and no insertion seed, so it is independent of the search's budget, work items and kick sequence. It is not an optimum: a longer run can go lower.",
+        "Computed by pnpm exec tsx tests/bench/optimizer.bench.ts --reference (about 20 s per pool) and stored by hand; seconds is that run's time under tsx."
+      ]
     }
   }
 }

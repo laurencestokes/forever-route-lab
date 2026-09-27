@@ -90,7 +90,12 @@ export type { SelectAction };
 export interface EditorStore {
   /** The same object until something changes. */
   readonly getState: () => EditorState;
-  /** Calls `listener` after every state change; returns the unsubscribe function. */
+  /**
+   * Calls `listener` after every state change; returns the unsubscribe function. A listener that
+   * throws is isolated: the change is already committed, every other listener is still called, the
+   * error goes to `onListenerError`, and the store method that made the change does not throw (so
+   * `acquireLock(); try { … } finally { releaseLock(); }` cannot leave a lock held).
+   */
   readonly subscribe: (listener: () => void) => () => void;
   /**
    * Applies a command. A no-op when the command returns the project it was given, and while
@@ -136,6 +141,19 @@ export interface EditorStoreOptions {
   /** Coalescing window in ms, default 1000; null for no time limit. */
   readonly coalesceWindowMs?: number | null;
   readonly view?: Partial<ViewState>;
+  /**
+   * Receives each error a listener threw, after every listener has been called (review M7 open
+   * item 6). Default: rethrown in a microtask, so it reaches the host's uncaught-error reporting
+   * (the console, `window.onerror`) without interrupting the notification. An error this reporter
+   * throws is itself rethrown in a microtask; the store method still returns normally.
+   */
+  readonly onListenerError?: (error: unknown) => void;
+}
+
+function rethrowLater(error: unknown): void {
+  queueMicrotask(() => {
+    throw error;
+  });
 }
 
 function checkCount(name: string, value: number): number {
@@ -170,6 +188,7 @@ export function createEditorStore(opts: EditorStoreOptions): EditorStore {
   const { ids, clock } = opts;
   const limits = limitsFrom(opts);
   const listeners = new Set<() => void>();
+  const onListenerError = opts.onListenerError ?? rethrowLater;
   let history: History = EMPTY_HISTORY;
 
   function statusOf(h: History, locked: boolean, previous: HistoryStatus | null): HistoryStatus {
@@ -202,7 +221,32 @@ export function createEditorStore(opts: EditorStoreOptions): EditorStore {
     const locks = patch.locks ?? state.locks;
     const editingLocked = locks.size > 0;
     state = { ...state, ...patch, locks, editingLocked, history: statusOf(history, editingLocked, state.history) };
-    for (const listener of [...listeners]) listener();
+    notify();
+  }
+
+  /** Calls every listener; one that throws neither stops the others nor makes the caller throw. */
+  function notify(): void {
+    let errors: unknown[] | null = null;
+    for (const listener of [...listeners]) {
+      try {
+        listener();
+      } catch (error) {
+        (errors ??= []).push(error);
+      }
+    }
+    if (errors !== null) for (const error of errors) report(error);
+  }
+
+  /**
+   * Hands a listener's error to `onListenerError`. A reporter that throws is isolated too (review
+   * M7Q Q-09): its own error is rethrown in a microtask, and the store method still returns.
+   */
+  function report(error: unknown): void {
+    try {
+      onListenerError(error);
+    } catch (reporterError) {
+      rethrowLater(reporterError);
+    }
   }
 
   function setLock(reason: EditLockReason, held: boolean): void {

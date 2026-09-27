@@ -6,7 +6,8 @@ import type { RouteDiff } from './types';
 /**
  * Applying selected change-sets (docs/ARCHITECTURE.md §13; docs/research/optimizer-m7.md §10).
  *
- * 1. Close the selection over `requires`.
+ * 1. Close the selection over `requires` (a quest and a prerequisite that both move require each
+ *    other, D-043 item 12, so a partial application never splits them).
  * 2. Apply the selected removes.
  * 3. Apply the selected inserts and moves in `after` order, each placed directly after its anchor:
  *    the nearest preceding (in `after` order) step that is kept in place (matched and not moved)

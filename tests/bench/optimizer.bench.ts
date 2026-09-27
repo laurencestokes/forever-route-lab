@@ -4,18 +4,34 @@
  * docs/research/optimizer-m7.md §14). The committed script behind the optimiser entries of
  * docs/measurements/optimizer-m7.json (`compile`, `firstImprovement`, `search`, `heap`).
  *
- *   pnpm exec tsx tests/bench/optimizer.bench.ts [--case compile|compileNav|firstImprovement|search|walks|heap] [--runs 21] [--warm 3]
+ *   pnpm exec tsx tests/bench/optimizer.bench.ts [--case compile|compileNav|firstImprovement|firstImprovementGuide|search|searchGuide|quality|walks|heap] [--runs 21] [--warm 3]
  *   pnpm exec tsx tests/bench/optimizer.bench.ts --check docs/measurements/optimizer-m7.json [--repeat 3] [--runs 15]
+ *   pnpm exec tsx tests/bench/optimizer.bench.ts --reference   (prints the quality pools' references, minutes)
  *
  * **The pool** (generated, seeded; self-built, no guide text): 100 quests on Kalimdor, each an
  * accept at its giver, a located `complete` of one kill objective, and a turn-in at its finisher:
  * 300 actions. Givers and finishers stand at 12 quest hubs spread over 4,000 yd (70% of quests are
  * turned in where they were taken), and each objective lies within 600 yd of its giver. Quests are
  * level 30 with 400-1,000 XP (exact for the level-10 to level-35 character), and the kill NPCs are
- * level 12. The weak incumbent takes the quests in id order, each accept, complete and turn-in in a
- * row: a guide nobody optimised. The suffix is a note back at the start. The run goes through the
- * app's own path (src/app/optimizer-host.ts, -walk.ts: the real validator, the straight-line model
- * at harness H's 10 yd/s and detour 1), with `keep-original` as the target.
+ * level 12. The suffix is a note back at the start. Two incumbents (plan §14.1):
+ * - **weak**: the quests in id order, each accept, complete and turn-in in a row (a guide nobody
+ *   optimised);
+ * - **guide**: a nearest-neighbour tour, by straight line from the start, taking at each step the
+ *   nearest action whose quest's earlier actions are done (M7 review open item 1's tour).
+ * The run goes through the app's own path (src/app/optimizer-host.ts, -walk.ts: the real
+ * validator, the straight-line model at harness H's 10 yd/s and detour 1), with `keep-original` as
+ * the target. Each search's exact block also prices the nearest-neighbour tour in its own problem
+ * (`nearestNeighbourMs`, null when the tour breaks a rule of the search, as in pools 17 and 33).
+ *
+ * **Quality** (review M7Q Q-02): the search's own nearest-neighbour seed is that tour, so beating
+ * the tour says little. The `quality` case runs the weak incumbent of `QUALITY_SEEDS` (eleven pools
+ * of the same generator) to `SEARCH_EVALUATIONS` in process and compares each best with a stored,
+ * independent **reference**: the best of two long iterated local searches from the
+ * nearest-neighbour seed (`referenceRun`: 20,000,000 evaluations each, one with the local pass's
+ * pre-screen and one without it, each with its own kick stream), computed by `--reference` and
+ * stored in `quality.reference`. `--check` fails when the median gap to the reference exceeds
+ * `QUALITY_MEDIAN_LIMIT_PCT` or any pool's exceeds `QUALITY_MAX_LIMIT_PCT`, and when a pool's exact
+ * best changes. It reports the distribution of the gaps to the tour and to the reference.
  *
  * Cases, each timed with `performance.now()` (min / median / p90 in ms):
  * - `compile` (gated, ≤ 30 ms): `analyseSection` + `compileProblem`, fresh each run (no matrix
@@ -26,11 +42,13 @@
  *   then timed `analyseSection` + "computing paths" (nothing to ask for) + the pending check +
  *   `compileProblem` on the baseline re-walk (review PRF-07: the run's walks share one place cache,
  *   so compile reuses the model's per-point cache and the leg table's keys);
- * - `firstImprovement` (gated, < 2,000 ms): from the client's `start` post (with the transfer) to the
- *   main thread receiving the first `best` below the incumbent, at beam 256, in a `worker_threads`
- *   worker running the real host (this file, bundled, is the worker too); the run is then cancelled;
- * - `search` (gated against its baseline): a run to `maxEvaluations` 2,000,000 (plan §14.1) at beam
- *   256 in the worker, post to `done`; it reports evaluations per second;
+ * - `firstImprovement` and `firstImprovementGuide` (gated, < 2,000 ms): from the client's `start`
+ *   post (with the transfer) to the main thread receiving the first `best` below the incumbent, at
+ *   beam 256, in a `worker_threads` worker running the real host (this file, bundled, is the worker
+ *   too), from the weak and the guide incumbent; the run is then cancelled;
+ * - `search` (gated against its baseline) and `searchGuide` (reported): a run to `maxEvaluations`
+ *   2,000,000 (plan §14.1) at beam 256 in the worker, post to `done`, from the weak and the guide
+ *   incumbent; it reports evaluations per second;
  * - `walks` (reported): the analysis walk and the baseline re-walk, on the pool (the route is the
  *   section) and on a 150-step section in the middle of bench-support's realistic 10,000-step route
  *   (plan §14.1: each walk within the 20 ms / 10,000-step budget; review RTD-05);
@@ -42,8 +60,9 @@
  *   collected; `firstImprovement` and `search` report that as `heapUncollectedMB`.
  * `--check` runs the timed gated cases bundled, one process per case (bench-support.ts), and fails
  * on a probe-normalised median more than 25% over the stored one or over its budget; then it runs
- * `heap` once and fails at 64 MB or more; and it re-runs the pool's search in process to compare the
- * machine-independent `exact` blocks of `firstImprovement` and `search` for equality (review PRF-09;
+ * `heap` once and fails at 64 MB or more; it re-runs the pool's searches in process to compare the
+ * machine-independent `exact` blocks of `firstImprovement` and `search` (weak and guide) for
+ * equality (review PRF-09); and it runs `quality` against the stored references (above;
  * tests/optimizer-evaluations.test.ts gates the fixtures' exact counts in `pnpm test`).
  */
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -70,7 +89,13 @@ import { makeAcceptStep, makeCompleteStep, makeNoteStep, makeTurnInStep } from '
 import { fixtureGeometry } from '../../src/geo/test-fixtures';
 import type { NavLegsProgress } from '../../src/nav/worker/client';
 import type { NavLegQuery, NavLegResult } from '../../src/nav/worker/protocol';
-import { analyseSection, compileProblem, type CompiledProblem, createSearch, DEFAULT_SEARCH_OPTIONS, type SectionAnalysis, type SectionWalk } from '../../src/optimizer/core';
+import { analyseSection, compileProblem, type CompiledProblem, createSearch, DEFAULT_SEARCH_OPTIONS, evaluateSequence, type SearchProblem, type SearchSolution, type SectionAnalysis, type SectionWalk } from '../../src/optimizer/core';
+import { type AnytimeHost, Meter } from '../../src/optimizer/core/anytime';
+import { createTransitions, solutionOf } from '../../src/optimizer/core/evaluate';
+import { Kicks } from '../../src/optimizer/core/kicks';
+import { LocalSearch } from '../../src/optimizer/core/local';
+import { NearestNeighbourSeed } from '../../src/optimizer/core/seeds';
+import type { Closed } from '../../src/optimizer/core/transitions';
 import { createOptimizerWorkerClient, isStoppedRun, type OptimizerWorkerClient, type WorkerRunOptions } from '../../src/optimizer/worker/client';
 import { createOptimizerWorkerHost } from '../../src/optimizer/worker/host';
 import type { FromWorker, OptimizerWorkerPort, ToWorker } from '../../src/optimizer/worker/protocol';
@@ -208,6 +233,72 @@ export function generatedPool(count = 100, seed = 7): Pool {
   return { project, data: staticDatasetSource(dataset), section: { first: 0, last: steps.length - 2 }, quests: count, actions: count * 3 };
 }
 
+/** A straight-line point of a located step (the pool's steps are all located). */
+function pointOf(step: RouteStep): { readonly x: number; readonly y: number } {
+  const source = (step as { readonly location?: { readonly source?: { readonly x?: number; readonly y?: number } } | null }).location?.source;
+  return { x: source?.x ?? 0, y: source?.y ?? 0 };
+}
+
+/**
+ * The nearest-neighbour tour of the weak pool's section (M7 review open item 1): from the start,
+ * the nearest step by straight line whose quest's earlier actions are done (accept, complete,
+ * turn-in: the id-order section holds each quest's three steps in a row), ties to the earlier step.
+ * The steps in tour order.
+ */
+export function nearestNeighbourTour(pool: Pool): RouteStep[] {
+  const section = pool.project.route.steps.slice(pool.section.first, pool.section.last + 1);
+  const done = new Set<number>();
+  const tour: RouteStep[] = [];
+  let here = pointOf(pool.project.route.steps[pool.section.last + 1] as RouteStep);
+  while (tour.length < section.length) {
+    let pick = -1;
+    let best = Number.POSITIVE_INFINITY;
+    section.forEach((step, k) => {
+      if (done.has(k) || (k % 3 !== 0 && !done.has(k - 1))) return;
+      const p = pointOf(step);
+      const d = Math.sqrt((p.x - here.x) * (p.x - here.x) + (p.y - here.y) * (p.y - here.y));
+      if (d < best) {
+        best = d;
+        pick = k;
+      }
+    });
+    done.add(pick);
+    tour.push(section[pick] as RouteStep);
+    here = pointOf(section[pick] as RouteStep);
+  }
+  return tour;
+}
+
+/** The weak pool with its section in nearest-neighbour order: the guide incumbent (plan §14.1). */
+export function guidePool(pool: Pool): Pool {
+  const steps = pool.project.route.steps;
+  const route = { ...pool.project.route, steps: [...steps.slice(0, pool.section.first), ...nearestNeighbourTour(pool), ...steps.slice(pool.section.last + 1)] };
+  return { ...pool, project: { ...pool.project, route } };
+}
+
+/**
+ * The nearest-neighbour tour (`tour`: its steps) priced in a compiled problem by the search's own
+ * evaluation; null when the tour breaks one of the search's rules (it ignores the log capacity and
+ * the closing rules; review M7Q Q-02: pools 17 and 33).
+ */
+function nearestNeighbourMs(tour: readonly RouteStep[], compiled: CompiledProblem): number | null {
+  const offsetOf = new Map(compiled.decode.steps.map((step, k) => [step.id, k]));
+  const unitOf = new Map<number, number>();
+  for (let u = 0; u + 1 < compiled.decode.unitStart.length; u += 1) {
+    for (let k = compiled.decode.unitStart[u] ?? 0; k < (compiled.decode.unitStart[u + 1] ?? 0); k += 1) unitOf.set(compiled.decode.unitSteps[k] ?? -1, u);
+  }
+  const units: number[] = [];
+  for (const step of tour) {
+    const u = unitOf.get(offsetOf.get(step.id) ?? -1);
+    if (u !== undefined && !units.includes(u)) units.push(u);
+  }
+  const priced = evaluateSequence(compiled.problem, Int32Array.from(units));
+  return 'infeasible' in priced ? null : priced.estimatedMs;
+}
+
+/** 100 × (a − b) / b, rounded; null when either is missing. */
+const gapPct = (a: number, b: number | null | undefined): number | null => (b === null || b === undefined ? null : round((100 * (a - b)) / b));
+
 interface Prepared {
   readonly pool: Pool;
   readonly run: RunWalker;
@@ -338,7 +429,7 @@ async function firstImprovementRun(harness: WorkerHarness, compiled: CompiledPro
   const started = performance.now();
   const run = harness.client.run(compiled, runOptions(4_000_000), {
     onBest: (solution) => {
-      if (improvedAt !== null || solution.estimatedMs >= incumbentMs) return;
+      if (improvedAt !== null || solution.comparedMs >= incumbentMs) return;
       improvedAt = performance.now();
       bestMs = solution.estimatedMs;
       cancel();
@@ -493,15 +584,18 @@ function exactFirstImprovement(prepared: Prepared): Record<string, unknown> {
   for (;;) {
     const result = stepper.advance(1);
     if (result.done) throw new Error('the pool search ended without an improvement');
-    if (result.best !== null && result.best.estimatedMs < incumbentMs) {
+    if (result.best !== null && result.best.comparedMs < incumbentMs) {
       const outcome = stepper.finish('cancelled');
       return { evaluationsToFirstImprovement: outcome.stats.firstImprovementEvaluations, incumbentMs, firstBestMs: result.best.estimatedMs };
     }
   }
 }
 
-/** The pool's search in process to `SEARCH_EVALUATIONS`: the machine-independent figures of `search`. */
-function exactSearch(prepared: Prepared): Record<string, unknown> {
+/**
+ * The pool's search in process to `SEARCH_EVALUATIONS`: the machine-independent figures of `search`,
+ * with the nearest-neighbour tour (`tour`) priced in the same problem.
+ */
+function exactSearch(prepared: Prepared, tour: readonly RouteStep[]): Record<string, unknown> {
   const compiled = compile(prepared);
   const stepper = createSearch(compiled.problem, { ...DEFAULT_SEARCH_OPTIONS, beamWidth: BEAM, maxEvaluations: SEARCH_EVALUATIONS });
   for (;;) {
@@ -509,17 +603,151 @@ function exactSearch(prepared: Prepared): Record<string, unknown> {
     if (!result.done) continue;
     const { outcome } = result;
     const stats = outcome.stats;
+    const best = outcome.solutions[0];
+    const bestMs = best?.estimatedMs ?? Number.NaN;
+    const nearest = nearestNeighbourMs(tour, compiled);
     return {
       evaluations: stats.evaluations,
       layers: stats.layers,
       duplicates: stats.duplicates,
       dominated: stats.dominated,
+      rollouts: stats.rollouts,
       termination: outcome.termination,
       incumbentMs: outcome.incumbent.estimatedMs,
-      bestMs: outcome.solutions[0]?.estimatedMs ?? Number.NaN,
+      bestMs,
+      bestUnits: best?.units.length ?? 0,
       firstImprovementEvaluations: stats.firstImprovementEvaluations,
+      nearestNeighbourMs: nearest,
+      gapToNearestNeighbourPct: gapPct(bestMs, nearest),
     };
   }
+}
+
+// =============================================================================================
+// Quality against an independent reference (review M7Q Q-02)
+
+/** The quality pools: the bench generator's seeds 1-10 and 17 (whose nearest-neighbour tour is infeasible). */
+const QUALITY_SEEDS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 17];
+/** `--check` fails when the median gap to the reference is above this, or any pool's above the next. */
+const QUALITY_MEDIAN_LIMIT_PCT = 3;
+const QUALITY_MAX_LIMIT_PCT = 7;
+/** Each reference run's evaluations, and the kick seeds of its two runs (not the search's). */
+const REFERENCE_EVALUATIONS = 20_000_000;
+const REFERENCE_KICK_SEEDS = [424_242, 515_151] as const;
+
+/** A host for the reference runs: keeps the best order, never pauses. */
+class ReferenceHost implements AnytimeHost {
+  readonly t;
+  readonly meter: Meter;
+  best: SearchSolution | null = null;
+  constructor(
+    readonly problem: SearchProblem,
+    max: number,
+  ) {
+    this.t = createTransitions(problem);
+    this.meter = new Meter(max);
+    this.meter.left = Number.POSITIVE_INFINITY;
+  }
+  addSolution(units: ArrayLike<number>, closed: Closed): void {
+    if (this.best === null || closed.comparedMs < this.best.comparedMs) this.best = solutionOf(units, closed);
+  }
+  noteRefusal(): void {
+    // Not counted.
+  }
+}
+
+/**
+ * One reference run: the nearest-neighbour seed, the local pass over it, then kicks with no stall
+ * stop to `REFERENCE_EVALUATIONS`, from the core's own parts but with another kick stream and, when
+ * `prescreen` is false, a pass that prices every move exactly. Ten times the search's budget and no
+ * beam, so it is independent of the search's budget, its work items and its kick sequence.
+ */
+function referenceRun(problem: SearchProblem, kickSeed: number, prescreen: boolean): SearchSolution {
+  const host = new ReferenceHost(problem, REFERENCE_EVALUATIONS);
+  const resume = (): void => {
+    host.meter.left = Number.POSITIVE_INFINITY;
+  };
+  const seed = new NearestNeighbourSeed(host);
+  while (!seed.step()) resume();
+  const local = prescreen ? new LocalSearch(host, 24) : new LocalSearch(host, 24, Number.POSITIVE_INFINITY);
+  if (seed.result !== null) while (!local.step(seed.result)) resume();
+  const kicks = new Kicks(host, local, kickSeed);
+  while (!host.meter.spent) {
+    const before = host.meter.evaluations;
+    while (!kicks.step(host.best ?? undefined)) resume();
+    // An order too short to kick spends nothing: stop.
+    if (host.meter.evaluations === before) break;
+  }
+  if (host.best === null) throw new Error('the reference run found no order');
+  return host.best;
+}
+
+interface QualityPool {
+  readonly seed: number;
+  readonly bestMs: number;
+  readonly bestUnits: number;
+  readonly evaluations: number;
+  readonly termination: string;
+  readonly nearestNeighbourMs: number | null;
+  readonly gapToNearestNeighbourPct: number | null;
+  readonly referenceMs: number | null;
+  readonly gapToReferencePct: number | null;
+}
+
+const medianOrNull = (values: readonly number[]): number | null => {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? (sorted[mid] ?? null) : round(((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2);
+};
+
+const distribution = (values: readonly (number | null)[]): { readonly median: number | null; readonly min: number | null; readonly max: number | null; readonly pools: number } => {
+  const known = values.filter((v): v is number => v !== null);
+  return { median: medianOrNull(known), min: known.length === 0 ? null : Math.min(...known), max: known.length === 0 ? null : Math.max(...known), pools: known.length };
+};
+
+/**
+ * `quality`: each quality pool's weak incumbent searched in process to `SEARCH_EVALUATIONS` at beam
+ * 256, against its nearest-neighbour tour and its stored reference (`references`: seed → ms).
+ */
+function qualityCase(references: Readonly<Record<string, number>>): { readonly pools: readonly QualityPool[]; readonly gapToNearestNeighbourPct: ReturnType<typeof distribution>; readonly gapToReferencePct: ReturnType<typeof distribution> } {
+  const pools = QUALITY_SEEDS.map((seed): QualityPool => {
+    const pool = generatedPool(100, seed);
+    const compiled = compile(prepare(pool));
+    const stepper = createSearch(compiled.problem, { ...DEFAULT_SEARCH_OPTIONS, beamWidth: BEAM, maxEvaluations: SEARCH_EVALUATIONS });
+    let result = stepper.advance(1_000_000);
+    while (!result.done) result = stepper.advance(1_000_000);
+    const best = result.outcome.solutions[0];
+    if (best === undefined) throw new Error('no solution');
+    const nearest = nearestNeighbourMs(nearestNeighbourTour(pool), compiled);
+    const referenceMs = references[String(seed)] ?? null;
+    return {
+      seed,
+      bestMs: best.comparedMs,
+      bestUnits: best.units.length,
+      evaluations: result.outcome.stats.evaluations,
+      termination: result.outcome.termination,
+      nearestNeighbourMs: nearest,
+      gapToNearestNeighbourPct: gapPct(best.comparedMs, nearest),
+      referenceMs,
+      gapToReferencePct: gapPct(best.comparedMs, referenceMs),
+    };
+  });
+  return { pools, gapToNearestNeighbourPct: distribution(pools.map((p) => p.gapToNearestNeighbourPct)), gapToReferencePct: distribution(pools.map((p) => p.gapToReferencePct)) };
+}
+
+/** `--reference`: each quality pool's reference, the better of its two runs (printed, then stored by hand). */
+function referenceCase(): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const seed of QUALITY_SEEDS) {
+    const compiled = compile(prepare(generatedPool(100, seed)));
+    const started = performance.now();
+    const [a, b] = [referenceRun(compiled.problem, REFERENCE_KICK_SEEDS[0] + seed, true), referenceRun(compiled.problem, REFERENCE_KICK_SEEDS[1] + seed, false)];
+    const best = a.comparedMs <= b.comparedMs ? a : b;
+    out[String(seed)] = { referenceMs: best.comparedMs, units: best.units.length, withPrescreenMs: a.comparedMs, exactPassMs: b.comparedMs, seconds: round((performance.now() - started) / 1000) };
+    console.error(`pool ${String(seed)}: ${JSON.stringify(out[String(seed)])}`);
+  }
+  return out;
 }
 
 // =============================================================================================
@@ -530,12 +758,26 @@ const GATED: readonly GatedCase[] = [
   { route: 'realistic', name: 'compile', limit: COMPILE_LIMIT_MS },
   { route: 'realistic', name: 'compileNav', limit: COMPILE_LIMIT_MS },
   { route: 'realistic', name: 'firstImprovement', limit: FIRST_IMPROVEMENT_LIMIT_MS },
+  { route: 'realistic', name: 'firstImprovementGuide', limit: FIRST_IMPROVEMENT_LIMIT_MS },
   { route: 'realistic', name: 'search', limit: null },
 ];
+
+/** Where each gated case's baseline is stored: `<entry>.<variant>` of optimizer-m7.json. */
+const STORED: Readonly<Record<string, readonly [string, string]>> = {
+  compile: ['compile', 'pool'],
+  compileNav: ['compileNav', 'pool'],
+  firstImprovement: ['firstImprovement', 'weak'],
+  firstImprovementGuide: ['firstImprovement', 'guide'],
+  search: ['search', 'weak'],
+  searchGuide: ['search', 'guide'],
+};
 
 async function measure(only: string | null): Promise<Record<string, unknown>> {
   const pool = generatedPool();
   const prepared = prepare(pool);
+  const tour = nearestNeighbourTour(pool);
+  let guide: Prepared | null = null;
+  const guided = (): Prepared => (guide ??= prepare(guidePool(pool)));
   const out: Record<string, unknown> = { pool: { quests: pool.quests, actions: pool.actions, steps: pool.project.route.steps.length } };
   const wants = (name: string): boolean => only === null || only === name;
   const sample = compile(prepared);
@@ -560,33 +802,38 @@ async function measure(only: string | null): Promise<Record<string, unknown>> {
     });
   }
   if (wants('compileNav')) out.compileNav = await compileNavCase(pool);
-  if (wants('firstImprovement') || wants('search')) {
+  const firsts = [
+    ['firstImprovement', (): Prepared => prepared],
+    ['firstImprovementGuide', guided],
+  ] as const;
+  const searches = [
+    ['search', (): Prepared => prepared],
+    ['searchGuide', guided],
+  ] as const;
+  if ([...firsts, ...searches].some(([name]) => wants(name))) {
     const harness = workerHarness();
     try {
-      if (wants('firstImprovement')) {
-        const measured = await benchAsync(args.runs, args.warm, () => firstImprovementRun(harness, compile(prepared)), (r) => r.ms);
-        const exact = exactFirstImprovement(prepared);
+      for (const [name, which] of firsts) {
+        if (!wants(name)) continue;
+        const target = which();
+        const measured = await benchAsync(args.runs, args.warm, () => firstImprovementRun(harness, compile(target)), (r) => r.ms);
+        const exact = exactFirstImprovement(target);
         if (exact.evaluationsToFirstImprovement !== measured.last.evaluations) throw new Error('the worker and the in-process search disagree on the first improvement');
-        out.firstImprovement = { ...measured.stats, exact };
+        out[name] = { ...measured.stats, exact };
       }
-      if (wants('search')) {
+      for (const [name, which] of searches) {
+        if (!wants(name)) continue;
+        const target = which();
         const runs = Math.min(args.runs, 7);
-        const measured = await benchAsync(runs, Math.min(args.warm, 1), () => searchRun(harness, compile(prepared)), (r) => r.ms);
+        const measured = await benchAsync(runs, Math.min(args.warm, 1), () => searchRun(harness, compile(target)), (r) => r.ms);
         const last = measured.last;
-        out.search = {
+        const exact = exactSearch(target, tour);
+        if (exact.evaluations !== last.evaluations || exact.bestMs !== last.bestMs) throw new Error('the worker and the in-process search disagree on the search');
+        out[name] = {
           ...measured.stats,
           runs,
           evaluationsPerSecond: Math.round(last.evaluations / (measured.stats.median / 1000)),
-          exact: {
-            evaluations: last.evaluations,
-            layers: last.layers,
-            duplicates: last.duplicates,
-            dominated: last.dominated,
-            termination: last.termination,
-            incumbentMs: last.incumbentMs,
-            bestMs: last.bestMs,
-            firstImprovementEvaluations: last.firstImprovementEvaluations,
-          },
+          exact,
           arrayBytes: last.arrayBytes,
         };
       }
@@ -598,6 +845,20 @@ async function measure(only: string | null): Promise<Record<string, unknown>> {
   }
   if (wants('heap')) out.heap = await heapCase(prepared);
   return out;
+}
+
+/** The stored quality references (`quality.reference`: seed → { referenceMs }), or none. */
+function storedReferences(path: string): Record<string, number> {
+  try {
+    const stored = JSON.parse(readFileSync(path, 'utf8')) as { quality?: { reference?: Record<string, { referenceMs?: number } | string | string[]> } };
+    const out: Record<string, number> = {};
+    for (const [seed, entry] of Object.entries(stored.quality?.reference ?? {})) {
+      if (typeof entry === 'object' && !Array.isArray(entry) && typeof entry.referenceMs === 'number') out[seed] = entry.referenceMs;
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 const MB = 1024 * 1024;
@@ -631,26 +892,61 @@ async function heapCase(prepared: Prepared): Promise<Record<string, unknown>> {
 
 async function main(): Promise<void> {
   if (args.check !== null) {
-    const stored = JSON.parse(readFileSync(args.check, 'utf8')) as Record<string, { pool?: { normalised?: number; exact?: unknown } } | undefined>;
-    const { results, failures: timed } = runChecks(import.meta.url, GATED, args, (_route, name) => stored[name]?.pool?.normalised ?? null);
+    const stored = JSON.parse(readFileSync(args.check, 'utf8')) as Record<string, Record<string, { normalised?: number; exact?: unknown } | undefined> | undefined>;
+    const at = (name: string): { normalised?: number; exact?: unknown } | undefined => {
+      const where = STORED[name];
+      return where === undefined ? undefined : stored[where[0]]?.[where[1]];
+    };
+    const { results, failures: timed } = runChecks(import.meta.url, GATED, args, (_route, name) => at(name)?.normalised ?? null);
     const failures = [...timed];
-    const prepared = prepare(generatedPool());
+    const pool = generatedPool();
+    const prepared = prepare(pool);
+    const guided = prepare(guidePool(pool));
+    const tour = nearestNeighbourTour(pool);
     // The worker heap is an absolute ceiling, not a time: measured once, and a failure throws.
     const heap = await heapCase(prepared);
     // The machine-independent figures must equal the stored ones exactly (review PRF-09).
-    const exact = { firstImprovement: exactFirstImprovement(prepared), search: exactSearch(prepared) };
-    for (const name of ['firstImprovement', 'search'] as const) {
-      const want = JSON.stringify(stored[name]?.pool?.exact ?? null);
-      const got = JSON.stringify(exact[name]);
-      if (want !== got) failures.push(`${name}.pool.exact: ${got}, stored ${want}`);
+    const exact: Record<string, Record<string, unknown>> = {
+      firstImprovement: exactFirstImprovement(prepared),
+      firstImprovementGuide: exactFirstImprovement(guided),
+      search: exactSearch(prepared, tour),
+      searchGuide: exactSearch(guided, tour),
+    };
+    for (const [name, got] of Object.entries(exact)) {
+      const want = JSON.stringify(at(name)?.exact ?? null);
+      if (want !== JSON.stringify(got)) failures.push(`${name} exact: ${JSON.stringify(got)}, stored ${want}`);
     }
-    console.log(JSON.stringify({ node: process.version, repeat: args.repeat, runs: args.runs, results, heap, exact }, null, 2));
+    // Review M7Q Q-02: the quality pools against their stored, independent references (the
+    // nearest-neighbour tour is the search's own first seed, so it is reported, not gated).
+    const references = storedReferences(args.check);
+    const quality = qualityCase(references);
+    const storedPools = (stored.quality as { exact?: unknown } | undefined)?.exact ?? null;
+    const exactPools = quality.pools.map((p) => ({ seed: p.seed, bestMs: p.bestMs, bestUnits: p.bestUnits, evaluations: p.evaluations, termination: p.termination }));
+    if (JSON.stringify(exactPools) !== JSON.stringify(storedPools)) failures.push(`quality exact: ${JSON.stringify(exactPools)}, stored ${JSON.stringify(storedPools)}`);
+    const missing = quality.pools.filter((p) => p.referenceMs === null).map((p) => p.seed);
+    if (missing.length > 0) failures.push(`quality: no stored reference for pools ${missing.join(', ')} (run --reference)`);
+    const gaps = quality.gapToReferencePct;
+    if (gaps.median !== null && gaps.median > QUALITY_MEDIAN_LIMIT_PCT) failures.push(`quality: the median gap to the reference is ${String(gaps.median)}% (limit ${String(QUALITY_MEDIAN_LIMIT_PCT)}%)`);
+    for (const p of quality.pools) {
+      if (p.gapToReferencePct !== null && p.gapToReferencePct > QUALITY_MAX_LIMIT_PCT) failures.push(`quality: pool ${String(p.seed)} is ${String(p.gapToReferencePct)}% above its reference (limit ${String(QUALITY_MAX_LIMIT_PCT)}%)`);
+    }
+    console.log(JSON.stringify({ node: process.version, repeat: args.repeat, runs: args.runs, results, heap, exact, quality }, null, 2));
     if (failures.length > 0) {
       console.error(`Over the stored baseline by more than 25%, over a budget (probe-normalised), or an exact figure changed:\n  ${failures.join('\n  ')}`);
       process.exitCode = 1;
     } else {
-      console.error(`Within 25% of the stored baselines and within the budgets (probe-normalised); exact figures equal; worker heap ${String(heap.peakMB)} MB of 64 MB.`);
+      console.error(
+        `Within 25% of the stored baselines and within the budgets (probe-normalised); exact figures equal; quality: median ${String(quality.gapToReferencePct.median)}% and at most ${String(quality.gapToReferencePct.max)}% above the references (limits ${String(QUALITY_MEDIAN_LIMIT_PCT)}% and ${String(QUALITY_MAX_LIMIT_PCT)}%), median ${String(quality.gapToNearestNeighbourPct.median)}% against the nearest-neighbour tours; worker heap ${String(heap.peakMB)} MB of 64 MB.`,
+      );
     }
+    return;
+  }
+  if (process.argv.includes('--reference')) {
+    console.log(JSON.stringify(referenceCase(), null, 2));
+    return;
+  }
+  if (args.case === 'quality') {
+    console.log(JSON.stringify(qualityCase(storedReferences('docs/measurements/optimizer-m7.json')), null, 2));
     return;
   }
   if (args.case !== null) {

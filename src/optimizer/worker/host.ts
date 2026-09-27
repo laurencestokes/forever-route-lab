@@ -1,5 +1,5 @@
 import { createSearch } from '../core';
-import type { SearchOptions, SearchOutcome, SearchProblem, Stepper } from '../types';
+import type { SearchOptions, SearchOutcome, SearchProblem, SearchSolution, Stepper } from '../types';
 import type { FromWorker, ToWorker } from './protocol';
 
 /**
@@ -14,7 +14,9 @@ import type { FromWorker, ToWorker } from './protocol';
  * - between slices it yields through `yieldToEventLoop` (a `MessageChannel` self-post in the
  *   worker: a nested `setTimeout` is clamped to 4 ms), so a `cancel` is read between two slices;
  * - `progress` goes at most every `progressMs` (100 ms: about 10 per second), `best` whenever the
- *   head of the solution list improves, `done` once with the outcome.
+ *   head of the solution list changes to another order at the same or a lower `comparedMs` (the
+ *   figure solutions are ranked by, D-043 item 7), so the last `best` is the outcome's first
+ *   solution, and `done` once with the outcome.
  *
  * The core's stepper resumes exactly where a slice stopped, so a run that ends by exhaustion or
  * `maxEvaluations` gives the same outcome whatever the slices were (§7.6). `maxMillis` and cancel
@@ -87,7 +89,19 @@ export function createOptimizerWorkerHost(deps: OptimizerWorkerHostDeps): Optimi
   async function loop(run: Run): Promise<void> {
     let slice = firstSlice;
     let lastProgress = Number.NEGATIVE_INFINITY;
-    let bestMs = Number.POSITIVE_INFINITY;
+    let posted: SearchSolution | null = null;
+    /** Whether `solution` is a new head: another order, at the same or a lower figure than the last posted. */
+    const isNew = (solution: SearchSolution): boolean => {
+      if (posted === null) return true;
+      if (solution.comparedMs !== posted.comparedMs) return solution.comparedMs < posted.comparedMs;
+      const a = solution.units;
+      const b = posted.units;
+      return a.length !== b.length || a.some((u, k) => u !== b[k]);
+    };
+    const postBest = (solution: SearchSolution): void => {
+      posted = solution;
+      deps.post({ type: 'best', runId: run.runId, solution });
+    };
     for (;;) {
       // A later `start` replaced this run and has already answered for it.
       if (active !== run) return;
@@ -105,15 +119,10 @@ export function createOptimizerWorkerHost(deps: OptimizerWorkerHostDeps): Optimi
       if (result.done) {
         // The last slice's improvement is not in an advance result: send it before `done`.
         const head = result.outcome.solutions[0];
-        if (head !== undefined && head.estimatedMs < bestMs && head.estimatedMs < result.outcome.incumbent.estimatedMs) {
-          deps.post({ type: 'best', runId: run.runId, solution: head });
-        }
+        if (head !== undefined && head.comparedMs < result.outcome.incumbent.comparedMs && isNew(head)) postBest(head);
         return done(run, result.outcome);
       }
-      if (result.best !== null && result.best.estimatedMs < bestMs) {
-        bestMs = result.best.estimatedMs;
-        deps.post({ type: 'best', runId: run.runId, solution: result.best });
-      }
+      if (result.best !== null && isNew(result.best)) postBest(result.best);
       if (after - lastProgress >= progressMs) {
         lastProgress = after;
         deps.post({ type: 'progress', runId: run.runId, progress: result.progress });

@@ -1,6 +1,10 @@
+import { type AnytimeHost, Meter } from './anytime';
 import { createTransitions, runSequence, solutionOf } from './evaluate';
 import { addMod, P1, P2, powerOfTwoAtLeast, scalarLanes, tableSlot } from './hash';
 import { Heuristic } from './heuristic';
+import { KICK_MIN_UNITS, Kicks } from './kicks';
+import { LocalSearch } from './local';
+import { InsertionSeed, NearestNeighbourSeed } from './seeds';
 import {
   Candidates,
   Layer,
@@ -22,22 +26,33 @@ import { type Closed, loadScalars, type NodeState, SCALAR_COUNT, saveScalars, ty
 import type { AdvanceResult, SearchOptions, SearchOutcome, SearchProblem, SearchProgress, SearchSolution, SearchStats, SearchTermination, Stepper } from './types';
 
 /**
- * The search (docs/research/optimizer-m7.md §7): a layered beam over units, with candidate records
- * in typed arrays, an arithmetic duplicate table with exact comparison, dominance pruning with at
- * most four entries per key, a total deterministic order, an ancestry trail, anytime greedy
- * rollouts, and a local improvement of the best solution after each rollout (review PRF-08). A run
- * is a fixed sequence of work items (rollout R0, local pass P0, layers L0-L7, rollout R8, P8, ...);
- * the budget is checked after each item and never cuts one short, and `advance(n)` may stop
- * anywhere inside an item and resume exactly there, so results never depend on slice sizes.
+ * The search (docs/research/optimizer-m7.md §7, §19): a layered beam over units, with candidate
+ * records in typed arrays, an arithmetic duplicate table with exact comparison, dominance pruning
+ * with at most four entries per key, a total deterministic order, an ancestry trail, and anytime
+ * parts: two constructive seeds (nearest neighbour and cheapest insertion, `seeds.ts`), greedy
+ * rollouts, a local pass (or-opt, exchange, 2-opt and drop, `local.ts`) and an iterated local
+ * search (kicks, `kicks.ts`). A run is a fixed sequence of work items: the nearest-neighbour seed N
+ * and the local pass over it, the insertion seed I and the pass over it; then, when the beam can
+ * reach a closing depth within the budget (review M7Q Q-01), rollout R0, the pass P0, layers L0-L7,
+ * rollout R8, P8, and so on until the beam is exhausted, then kicks K (or, in a section of fewer
+ * than `KICK_MIN_UNITS` units, one last pass over the best); otherwise kicks only. Kicks end at the
+ * budget or when they stall (`converged`). The budget is checked after each
+ * item; the seeds and the passes also end at the budget at their own boundaries, and no other item
+ * stops short. `advance(n)` may stop anywhere inside an item and resume exactly there, so results
+ * never depend on slice sizes.
  *
- * No clock and no randomness: the lane constants are fixed.
+ * No clock and no randomness: the lane constants and the kicks' sequence are fixed.
  */
 
 /** At most this many non-dominated entries per exact key (§7.3, review OP-17). */
 export const ENTRIES_PER_KEY = 4;
 
-/** The local pass moves one unit at most this many places either way (review PRF-08). */
+/** The local pass's moves reach at most this many places either way (review PRF-08). */
 export const DEFAULT_LOCAL_WINDOW = 24;
+
+/** The work items before the first rollout: each seed, then the local pass over that seed. */
+const PRELUDE = ['seed-nn', 'local-nn', 'seed-insertion', 'local-insertion'] as const;
+type ItemKind = (typeof PRELUDE)[number] | 'local' | 'rollout' | 'layer' | 'kick' | 'polish';
 
 const EMPTY = -1;
 const TOMBSTONE = -2;
@@ -195,12 +210,9 @@ export function createSearch(problem: SearchProblem, options: SearchOptions): St
   return new BeamSearch(problem, options);
 }
 
-interface Budget {
-  left: number;
-}
-
-class BeamSearch implements Stepper {
-  private readonly t: Transitions;
+class BeamSearch implements Stepper, AnytimeHost {
+  readonly t: Transitions;
+  readonly meter: Meter;
   private readonly heuristic: Heuristic;
   private readonly beam: number;
   private readonly units: number;
@@ -218,7 +230,6 @@ class BeamSearch implements Stepper {
   readonly incumbent: SearchSolution;
   private readonly solutions: SearchSolution[] = [];
   // Counters.
-  private evaluations = 0;
   private layers = 0;
   private rollouts = 0;
   private firstImprovement: number | null = null;
@@ -235,31 +246,36 @@ class BeamSearch implements Stepper {
   private rolloutPhase: 'test' | 'children' = 'test';
   private rolloutBase: number[] = [];
   private readonly rolloutSeq: number[] = [];
+  /** The best order the latest rollout closed (the local pass after it starts there). */
+  private rolloutResult: SearchSolution | null = null;
   private rolloutBest = -1;
   private rolloutBestScore = Number.POSITIVE_INFINITY;
   private bestThisCall: SearchSolution | null = null;
-  // The local pass (review PRF-08): the sequence, its prefix states, the move being tried.
-  private readonly localWindow: number;
-  private readonly prefix: Layer;
-  private readonly w: NodeState;
-  private readonly localSeq: Int32Array;
-  private localLength = 0;
-  private localActive = false;
-  private localBuilt = 0;
-  private localI = 0;
-  private localD = 0;
-  private localMs = 0;
-  /** The solution the last pass started from: a pass is not repeated on an unchanged best. */
+  // The anytime parts: the seeds (null when off) and the local pass.
+  private readonly nearest: NearestNeighbourSeed | null;
+  private readonly insertion: InsertionSeed | null;
+  private readonly local: LocalSearch;
+  /** The iterated local search (null when off). */
+  private readonly kicks: Kicks | null;
+  /**
+   * After the prelude: the beam (then kicks once it is exhausted, or without kicks a last pass over
+   * the best, `polish`), or kicks only; null until decided.
+   */
+  private mode: 'beam' | 'kicks' | 'polish' | null = null;
+  /** Units enabled at the root (the beam's cost estimate). */
+  private readonly rootEnabled: number;
+  /** The solution the local pass in progress started from. */
   private localBase: SearchSolution | null = null;
   /** The dominance fields (§7.3): divergence only when it is penalised. */
   private readonly dominanceFields: readonly number[];
   private readonly heap: Int32Array;
 
   constructor(
-    private readonly problem: SearchProblem,
+    readonly problem: SearchProblem,
     private readonly options: SearchOptions,
   ) {
     validate(options);
+    this.meter = new Meter(options.maxEvaluations);
     // The wait excess joins the fields (review COR-01): with it, and uncertain waits no longer
     // limited at closing, the closed `comparedMs` is monotone in every field (see `close`).
     const fields = [S_ELAPSED, S_READY_AT, S_UNKNOWN_PARTS, S_WAIT_EXCESS];
@@ -293,11 +309,13 @@ class BeamSearch implements Stepper {
     );
     this.s = this.t.createState();
     this.r = this.t.createState();
-    this.w = this.t.createState();
-    // The pass reorders freely, so it stays off when out-of-order units are penalised.
-    this.localWindow = options.divergencePenalty > 0 ? 0 : (options.localWindow ?? DEFAULT_LOCAL_WINDOW);
-    this.prefix = new Layer(this.localWindow > 0 ? this.units + 1 : 0, this.units, this.quests);
-    this.localSeq = new Int32Array(this.units);
+    // The seeds and the pass reorder freely, so they stay off when out-of-order units are penalised.
+    const free = options.divergencePenalty === 0;
+    const seeds = free && options.seeds !== false;
+    this.nearest = seeds ? new NearestNeighbourSeed(this) : null;
+    this.insertion = seeds ? new InsertionSeed(this) : null;
+    this.local = new LocalSearch(this, free ? (options.localWindow ?? DEFAULT_LOCAL_WINDOW) : 0);
+    this.kicks = this.local.window > 0 && options.kicks !== false && this.units >= KICK_MIN_UNITS ? new Kicks(this, this.local) : null;
     // The incumbent (the original order) seeds the solutions (§7.5).
     const incumbentUnits = Int32Array.from({ length: this.units }, (_, u) => u);
     const priced = runSequence(createTransitions(problem), incumbentUnits, true);
@@ -306,6 +324,9 @@ class BeamSearch implements Stepper {
     this.solutions.push(this.incumbent);
     // The root is the beam's only node; it may close at once.
     const root = this.t.createState();
+    let enabled = 0;
+    for (let u = 0; u < this.units; u += 1) if (this.t.enabled(root, u)) enabled += 1;
+    this.rootEnabled = enabled;
     this.current.store(0, root, -1);
     this.current.size = 1;
     this.closeNode(this.current, 0, root, () => []);
@@ -314,7 +335,7 @@ class BeamSearch implements Stepper {
   // ===========================================================================================
   // Solutions
 
-  private addSolution(units: readonly number[], closed: Closed): void {
+  addSolution(units: ArrayLike<number>, closed: Closed): void {
     // A saving the uncertain hearth waits could absorb is no saving (review COR-02): such a
     // solution is not listed, so no caller can mistake its lower `estimatedMs` for one.
     const incumbentMs = this.incumbent.estimatedMs;
@@ -329,14 +350,16 @@ class BeamSearch implements Stepper {
       this.solutions.length = this.options.candidates;
     }
     const head = this.solutions[0];
-    if (head !== undefined && before !== undefined && head !== before && head.comparedMs < before.comparedMs) {
+    // A new head is reported even at an equal figure (an order ranked first by the tie rule), so the
+    // last `best` a caller sees is always the outcome's first solution.
+    if (head !== undefined && before !== undefined && head !== before && head.comparedMs <= before.comparedMs) {
       this.bestThisCall = head;
-      if (this.firstImprovement === null && head.comparedMs < incumbentMs) this.firstImprovement = this.evaluations;
+      if (this.firstImprovement === null && head.comparedMs < incumbentMs) this.firstImprovement = this.meter.evaluations;
     }
   }
 
   /** Records a close refused only by the XP-4 fill rule (review PAR-04). */
-  private noteRefusal(): void {
+  noteRefusal(): void {
     if (!this.t.blockedByUnknownXp) return;
     this.blockedCloses += 1;
     this.smallestShortfall = Math.min(this.smallestShortfall, this.t.unknownXpShortfall);
@@ -482,14 +505,37 @@ class BeamSearch implements Stepper {
   // ===========================================================================================
   // Work items (§7.6)
 
-  /** The item kind: a rollout, then the local pass, then `rolloutEvery` layers, repeated. */
-  private itemKind(): 'rollout' | 'local' | 'layer' {
-    const k = this.item % (this.options.rolloutEvery + 2);
+  /**
+   * The item kind: the prelude; then, in beam mode, a rollout, the local pass and `rolloutEvery`
+   * layers, repeated; in kicks mode, kicks; in polish mode (an exhausted beam without kicks), one
+   * pass over the best. The mode is chosen at the first item after the prelude from counts alone
+   * (deterministic), and changes only when the beam is exhausted.
+   */
+  private itemKind(): ItemKind {
+    const prelude = PRELUDE[this.item];
+    if (prelude !== undefined) return prelude;
+    this.mode ??= this.kicks !== null && !this.beamAffordable() ? 'kicks' : 'beam';
+    if (this.mode === 'kicks') return 'kick';
+    if (this.mode === 'polish') return 'polish';
+    const k = (this.item - PRELUDE.length) % (this.options.rolloutEvery + 2);
     return k === 0 ? 'rollout' : k === 1 ? 'local' : 'layer';
   }
 
+  /**
+   * Whether the beam can plausibly reach a closing depth within what is left of the budget (review
+   * M7Q Q-01): its layers cost about width × depth × (units enabled at the root) / 2 evaluations,
+   * the depth being the best order's length. A beam that cannot close any node only spends the
+   * budget, so the kicks get it instead.
+   */
+  private beamAffordable(): boolean {
+    const depth = this.solutions[0]?.units.length ?? this.units;
+    const predicted = (this.beam * depth * Math.max(1, this.rootEnabled)) / 2;
+    return this.meter.evaluations + predicted <= this.meter.max;
+  }
+
   /** Generates the layer's candidates; true when the layer is complete. */
-  private stepLayer(budget: Budget): boolean {
+  private stepLayer(): boolean {
+    const meter = this.meter;
     const layer = this.current;
     while (this.parentRank < layer.size) {
       if (!this.parentLoaded) {
@@ -502,12 +548,11 @@ class BeamSearch implements Stepper {
         this.unitCursor = 0;
       }
       while (this.unitCursor < this.units) {
-        if (budget.left <= 0) return false;
+        if (meter.paused) return false;
         const unit = this.unitCursor;
         this.unitCursor += 1;
         if (!this.t.enabled(this.s, unit)) continue;
-        budget.left -= 1;
-        this.evaluations += 1;
+        meter.spend();
         this.evaluateChild(this.s, this.parentRank, unit);
       }
       this.parentLoaded = false;
@@ -588,13 +633,15 @@ class BeamSearch implements Stepper {
   }
 
   /** A greedy rollout from the best-ranked node (§7.6); true when it is complete. */
-  private stepRollout(budget: Budget): boolean {
+  private stepRollout(): boolean {
+    const meter = this.meter;
     const r = this.r;
     if (!this.rolloutActive) {
       if (this.current.size === 0 || (this.current.expandable[0] ?? 0) === 0) return true;
       this.current.load(0, r);
       this.rolloutBase = this.trail.sequence(this.current.trail[0] ?? -1);
       this.rolloutSeq.length = 0;
+      this.rolloutResult = null;
       this.rolloutActive = true;
       this.rolloutPhase = 'children';
       this.unitCursor = 0;
@@ -607,7 +654,9 @@ class BeamSearch implements Stepper {
         const closed = this.t.close(r);
         if (closed === null) this.noteRefusal();
         else {
-          this.addSolution([...this.rolloutBase, ...this.rolloutSeq], closed);
+          const units = [...this.rolloutBase, ...this.rolloutSeq];
+          if (this.rolloutResult === null || closed.comparedMs < this.rolloutResult.comparedMs) this.rolloutResult = solutionOf(units, closed);
+          this.addSolution(units, closed);
           if (closed.fillXp === 0 && closed.knownGain >= this.problem.targetXp) {
             this.rolloutActive = false;
             return true;
@@ -619,12 +668,11 @@ class BeamSearch implements Stepper {
         this.rolloutBestScore = Number.POSITIVE_INFINITY;
       }
       while (this.unitCursor < this.units) {
-        if (budget.left <= 0) return false;
+        if (meter.paused) return false;
         const unit = this.unitCursor;
         this.unitCursor += 1;
         if (!this.t.enabled(r, unit)) continue;
-        budget.left -= 1;
-        this.evaluations += 1;
+        meter.spend();
         saveScalars(r, this.snapshot);
         if (this.t.applyEnabled(r, unit)) {
           const score = this.heuristic.score(r);
@@ -649,153 +697,19 @@ class BeamSearch implements Stepper {
   }
 
   // ===========================================================================================
-  // The local pass (review PRF-08)
-  //
-  // The beam compares nodes of equal depth, and on a good incumbent (a nearest-neighbour order, a
-  // hand-made route) it may never beat it. The pass takes the best solution so far and tries every
-  // move of one unit up to `localWindow` places either way (1, −1, 2, −2, ...), keeping the first
-  // that lowers `comparedMs`, until every move has been tried once. It prices with the same
-  // transitions and closing, from stored prefix states: a move changes only the window between its
-  // two positions, and when the state after the window has the same key, unknown parts and time to
-  // the hearth as the current order's there, the rest costs the same, so the move is judged on the
-  // window alone. Each unit applied counts one evaluation; a move is never split by `advance`.
+  // The local pass (local.ts) over the best solution so far
 
-  private elementAt(k: number, i: number, j: number): number {
-    const seq = this.localSeq;
-    if (j > i) return k === j ? (seq[i] ?? 0) : (seq[k + 1] ?? 0);
-    return k === j ? (seq[i] ?? 0) : (seq[k - 1] ?? 0);
-  }
-
-  /** Applies one unit to the pass's working state, counting it; false when it cannot be scheduled there. */
-  private localApply(u: number, budget: Budget): boolean {
-    budget.left -= 1;
-    this.evaluations += 1;
-    const ok = this.t.apply(this.w, u);
-    this.t.logSize = 0;
-    return ok;
-  }
-
-  /** Rebuilds the prefix states from position `from`; false (never expected) when the sequence breaks. */
-  private rebuildPrefix(from: number, budget: Budget): Closed | null {
-    const n = this.localLength;
-    this.prefix.load(from, this.w);
-    for (let k = from; k < n; k += 1) {
-      if (!this.localApply(this.localSeq[k] ?? 0, budget)) return null;
-      this.prefix.store(k + 1, this.w, -1);
-    }
-    return this.t.close(this.w);
-  }
-
-  /** Whether the state after a move's window can finish exactly as the current order does from `q`. */
-  private sameRest(q: number): boolean {
-    const w = this.w;
-    const at = q * SCALAR_COUNT;
-    const x = this.prefix.scalars;
-    return (
-      w.loc === x[at + S_LOC] &&
-      w.lastVisit === x[at + S_LAST_VISIT] &&
-      w.tier === x[at + S_TIER] &&
-      w.unknownXp === x[at + S_UNKNOWN_XP] &&
-      w.sinceCastUnknown === x[at + S_SINCE_CAST] &&
-      w.level === x[at + S_LEVEL] &&
-      w.xpInto === x[at + S_XP_INTO] &&
-      w.unknownParts === x[at + S_UNKNOWN_PARTS] &&
-      w.readyAt - w.elapsed === (x[at + S_READY_AT] ?? 0) - (x[at + S_ELAPSED] ?? 0)
-    );
-  }
-
-  /** Moves unit i to j in the pass's sequence; kept (and listed) only when it lowers `comparedMs`. */
-  private keepMove(i: number, j: number, budget: Budget): boolean {
-    const shift = (from: number, to: number): void => {
-      const moved = this.localSeq[from] ?? 0;
-      if (to > from) this.localSeq.copyWithin(from, from + 1, to + 1);
-      else this.localSeq.copyWithin(to + 1, to, from);
-      this.localSeq[to] = moved;
-    };
-    const p = Math.min(i, j);
-    shift(i, j);
-    const kept = this.rebuildPrefix(p, budget);
-    if (kept === null || kept.comparedMs >= this.localMs) {
-      shift(j, i);
-      this.rebuildPrefix(p, budget);
-      return false;
-    }
-    this.localMs = kept.comparedMs;
-    this.addSolution(Array.from(this.localSeq.subarray(0, this.localLength)), kept);
-    return true;
-  }
-
-  /** The local pass over the best solution; true when it is complete. */
-  private stepLocal(budget: Budget): boolean {
-    const n0 = this.localWindow;
-    if (!this.localActive) {
-      const base = this.solutions[0];
-      if (n0 === 0 || base === undefined || base === this.localBase || base.units.length < 2) return true;
+  /**
+   * The local pass over `base` (a seed's order, or the best solution so far); true when it is
+   * complete, or when there is nothing new to improve.
+   */
+  private stepLocal(base: SearchSolution | undefined): boolean {
+    if (this.localBase === null) {
+      if (!this.local.wants(base)) return true;
       this.localBase = base;
-      this.localLength = base.units.length;
-      this.localSeq.set(base.units);
-      this.localMs = base.comparedMs;
-      this.localBuilt = 0;
-      this.localI = 0;
-      this.localD = 0;
-      this.localActive = true;
-      const root = this.t.createState();
-      this.prefix.store(0, root, -1);
     }
-    const n = this.localLength;
-    if (this.localBuilt < n) {
-      // The prefix states of the base, built once per pass (one item, never split by a budget).
-      if (budget.left <= 0) return false;
-      if (this.rebuildPrefix(0, budget) === null) {
-        this.localActive = false;
-        return true;
-      }
-      this.localBuilt = n;
-    }
-    const moves = 2 * Math.min(n0, n - 1);
-    while (this.localI < n) {
-      if (this.localD >= moves) {
-        this.localI += 1;
-        this.localD = 0;
-        continue;
-      }
-      if (budget.left <= 0) return false;
-      const i = this.localI;
-      const step = Math.floor(this.localD / 2) + 1;
-      const j = this.localD % 2 === 0 ? i + step : i - step;
-      this.localD += 1;
-      if (j < 0 || j >= n) continue;
-      const p = Math.min(i, j);
-      const q = Math.max(i, j) + 1;
-      this.prefix.load(p, this.w);
-      let ok = true;
-      for (let k = p; k < q && ok; k += 1) ok = this.localApply(this.elementAt(k, i, j), budget);
-      // One unit past the window both orders apply the same unit, so both stand at its destination.
-      let r = q;
-      if (ok && r < n) {
-        ok = this.localApply(this.localSeq[r] ?? 0, budget);
-        r += 1;
-      }
-      if (!ok) continue;
-      let exact = false;
-      if (r < n) {
-        // At the same unit past the window: behind the current order, the move is dropped (with the
-        // same state it cannot win; with another, the XP differs, it is not worth pricing further).
-        // Ahead with the same state, it wins by exactly that much.
-        const at = r * SCALAR_COUNT;
-        const delta = this.w.elapsed + this.w.waitExcess - ((this.prefix.scalars[at + S_ELAPSED] ?? 0) + (this.prefix.scalars[at + S_WAIT_EXCESS] ?? 0));
-        if (delta >= 0) continue;
-        exact = this.sameRest(r);
-      }
-      if (!exact) {
-        for (let k = r; k < n && ok; k += 1) ok = this.localApply(this.localSeq[k] ?? 0, budget);
-        if (!ok) continue;
-        const closed = this.t.close(this.w);
-        if (closed === null || closed.comparedMs >= this.localMs) continue;
-      }
-      if (this.keepMove(i, j, budget)) this.localD = 0;
-    }
-    this.localActive = false;
+    if (!this.local.step(this.localBase)) return false;
+    this.localBase = null;
     return true;
   }
 
@@ -805,7 +719,7 @@ class BeamSearch implements Stepper {
   private progress(): SearchProgress {
     return {
       layer: this.layers,
-      evaluations: this.evaluations,
+      evaluations: this.meter.evaluations,
       beamSize: this.current.size,
       incumbentMs: this.incumbent.estimatedMs,
       bestMs: this.solutions[0]?.comparedMs ?? null,
@@ -814,13 +728,22 @@ class BeamSearch implements Stepper {
 
   private stats(): SearchStats {
     return {
-      evaluations: this.evaluations,
+      evaluations: this.meter.evaluations,
       layers: this.layers,
       duplicates: this.table.duplicates,
       dominated: this.table.dominated,
       rollouts: this.rollouts,
       firstImprovementEvaluations: this.firstImprovement,
-      arrayBytes: this.current.bytes + this.next.bytes + this.prefix.bytes + this.cands.bytes + this.table.slots.byteLength + this.trail.bytes + this.t.pricing.memoBytes,
+      arrayBytes:
+        this.current.bytes +
+        this.next.bytes +
+        this.local.bytes +
+        (this.insertion?.bytes ?? 0) +
+        (this.kicks?.bytes ?? 0) +
+        this.cands.bytes +
+        this.table.slots.byteLength +
+        this.trail.bytes +
+        this.t.pricing.memoBytes,
     };
   }
 
@@ -829,19 +752,49 @@ class BeamSearch implements Stepper {
     return { termination, incumbent: this.incumbent, solutions: [...this.solutions], stats: this.stats(), unknownXpBlocked };
   }
 
+  /** Runs the current work item; true when it is complete. */
+  private stepItem(kind: ItemKind): boolean {
+    switch (kind) {
+      case 'seed-nn':
+        return this.nearest?.step() ?? true;
+      case 'seed-insertion':
+        return this.insertion?.step() ?? true;
+      case 'local-nn':
+        return this.stepLocal(this.nearest?.result ?? undefined);
+      case 'local-insertion':
+        return this.stepLocal(this.insertion?.result ?? undefined);
+      case 'local':
+        // The latest rollout's order (a new start for the descent), else the best solution so far.
+        return this.stepLocal(this.local.wants(this.rolloutResult) ? this.rolloutResult : this.solutions[0]);
+      case 'rollout':
+        return this.stepRollout();
+      case 'layer':
+        return this.stepLayer();
+      case 'kick':
+        return this.kicks?.step(this.solutions[0]) ?? true;
+      case 'polish':
+        // The beam's last improvements came after the last pass: one pass over the best (if new).
+        return this.stepLocal(this.solutions[0]);
+    }
+  }
+
   advance(maxEvaluations: number): AdvanceResult {
     this.bestThisCall = null;
     if (this.termination !== null) return { done: true, outcome: this.outcome(this.termination) };
-    const budget: Budget = { left: Math.max(0, Math.floor(maxEvaluations)) };
+    this.meter.left = Math.max(0, Math.floor(maxEvaluations));
     for (;;) {
-      const kind = this.itemKind();
-      const finished = kind === 'rollout' ? this.stepRollout(budget) : kind === 'local' ? this.stepLocal(budget) : this.stepLayer(budget);
-      if (!finished) return { done: false, progress: this.progress(), best: this.bestThisCall };
+      if (!this.stepItem(this.itemKind())) return { done: false, progress: this.progress(), best: this.bestThisCall };
       this.item += 1;
+      if (this.exhausted && this.mode === 'beam' && !this.meter.spent) {
+        // The beam is exhausted: the rest of the budget goes to kicks, or to a last pass over the best.
+        this.exhausted = false;
+        this.mode = this.kicks !== null ? 'kicks' : 'polish';
+      } else if (this.mode === 'polish') this.exhausted = true;
       if (this.exhausted) this.termination = 'exhausted';
-      else if (this.evaluations >= this.options.maxEvaluations) this.termination = 'budget';
+      else if (this.meter.spent) this.termination = 'budget';
+      else if (this.mode === 'kicks' && (this.kicks?.stalled ?? true)) this.termination = 'converged';
       if (this.termination !== null) return { done: true, outcome: this.outcome(this.termination) };
-      if (budget.left <= 0) return { done: false, progress: this.progress(), best: this.bestThisCall };
+      if (this.meter.paused) return { done: false, progress: this.progress(), best: this.bestThisCall };
     }
   }
 

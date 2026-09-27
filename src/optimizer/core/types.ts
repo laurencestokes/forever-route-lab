@@ -209,11 +209,24 @@ export interface SearchOptions {
   /** Tests only: every hash lane constant, so every insertion probes one chain (§7.2). */
   readonly testHash?: 'constant';
   /**
-   * The local pass after each rollout (review PRF-08) moves one unit at most this many places
-   * either way; 0 turns it off, as does a divergence penalty above 0. Default 24
-   * (`DEFAULT_LOCAL_WINDOW`).
+   * The local pass (after the seeds and after each rollout; reviews PRF-08 and M7 open item 1)
+   * tries or-opt, exchange and 2-opt moves reaching at most this many places either way; 0 turns
+   * it off, as does a divergence penalty above 0. Default 24 (`DEFAULT_LOCAL_WINDOW`).
    */
   readonly localWindow?: number;
+  /**
+   * The constructive seeds before the first rollout (nearest neighbour and cheapest insertion;
+   * M7 open item 1). Default true; false turns them off (tests of the beam alone), as does a
+   * divergence penalty above 0.
+   */
+  readonly seeds?: boolean;
+  /**
+   * The iterated local search after the seeds (review M7Q Q-01): kicks of the best order, each
+   * followed by the local pass, when the beam cannot reach a closing depth within the budget or
+   * after it is exhausted. Default true; false turns it off (tests of the beam), as do a divergence
+   * penalty above 0, `localWindow: 0` and a section of fewer than `KICK_MIN_UNITS` units.
+   */
+  readonly kicks?: boolean;
 }
 
 export const DEFAULT_SEARCH_OPTIONS: SearchOptions = {
@@ -270,7 +283,12 @@ export interface SearchStats {
   readonly arrayBytes: number;
 }
 
-export type SearchTermination = 'exhausted' | 'budget' | 'timeout' | 'cancelled';
+/**
+ * Why a search ended: `exhausted` (a beam layer produced no children), `converged` (the iterated
+ * local search found no better order for its stall allowance; review M7Q Q-07), `budget`
+ * (`maxEvaluations`), `timeout` (`maxMillis`, not reproducible) or `cancelled`.
+ */
+export type SearchTermination = 'exhausted' | 'converged' | 'budget' | 'timeout' | 'cancelled';
 
 export interface SearchOutcome {
   readonly termination: SearchTermination;
@@ -294,7 +312,11 @@ export type AdvanceResult =
   | { readonly done: true; readonly outcome: SearchOutcome };
 
 export interface Stepper {
-  /** Evaluates up to `maxEvaluations` candidates; the next call resumes exactly where this one stopped. */
+  /**
+   * Evaluates about `maxEvaluations` candidates: it pauses at the first point after that where it
+   * can, and an atomic step (a seed's sub-step, a local move, the pass's prefix states) may overrun
+   * it. The next call resumes exactly where this one stopped, so results never depend on the slices.
+   */
   advance(maxEvaluations: number): AdvanceResult;
   finish(termination: 'timeout' | 'cancelled'): SearchOutcome;
 }
@@ -669,6 +691,13 @@ export interface SearchProblem {
   readonly fill: FillRule;
   /** Target known XP gain. */
   readonly targetXp: number;
+  /**
+   * Whether the local pass tries its drop move (D-044, review M7Q Q-05): false under
+   * `'keep-original'` with the `'shortfall'` fill, where the target is the original's own XP and a
+   * drop would rest on thin, estimated kill-XP margins; true for a numeric target or
+   * `'replace-quests'`. Closing still drops the optional quests an order leaves unscheduled.
+   */
+  readonly dropMove: boolean;
   /** Visit keys: point ids, then entity keys (§3.3). */
   readonly visitKeyCount: number;
   /**

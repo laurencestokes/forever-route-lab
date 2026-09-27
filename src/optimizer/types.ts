@@ -86,6 +86,10 @@ export interface OptimizationProgress {
   readonly evaluations: number;
   readonly beamSize: number;
   readonly incumbentSeconds: number;
+  /**
+   * The best order's compared figure (`SearchSolution.comparedMs`), null until one beats the
+   * incumbent: `incumbentSeconds − bestSeconds` is the guaranteed saving to show (D-043 item 7).
+   */
   readonly bestSeconds: number | null;
   readonly elapsedMs: number;
   /** "Computing paths" (phase `paths`): legs filled of those the section needs. */

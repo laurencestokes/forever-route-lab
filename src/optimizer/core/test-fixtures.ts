@@ -67,16 +67,24 @@ export function coreFixtures(): CoreFixture[] {
       units: [2, 3, 4, 5],
     });
   }
-  for (const beam of [1, 4]) {
+  // Fixture 4 is about the beam: at width 1 the beam alone (no seeds, no local pass) keeps the
+  // original. The full search at width 1 finds Y then X through the local pass over the
+  // nearest-neighbour seed, whose pre-screen now sees the exit leg (review M7Q Q-04: Y then X adds
+  // 5 s of travel inside the section and saves 25 s of exit).
+  for (const [id, options, best] of [
+    ['4-beam1', { beamWidth: 1, seeds: false, localWindow: 0 }, false],
+    ['4-beam1-pass', { beamWidth: 1 }, true],
+    ['4-beam4', { beamWidth: 4 }, true],
+  ] as const) {
     const s = hSteps();
     out.push({
-      id: `4-beam${String(beam)}`,
+      id,
       scenario: hScenario({ quests: [hQuest(401, 1000), hQuest(402, 1000)], steps: [...s.quest(401, 100, 0), ...s.quest(402, -150, 0)], exit: { x: 400, y: 0 } }),
       goal: {},
-      options: { beamWidth: beam },
-      bestMs: beam === 1 ? 102_000 : 82_000,
+      options,
+      bestMs: best ? 82_000 : 102_000,
       incumbentMs: 102_000,
-      units: beam === 1 ? [0, 1, 2, 3] : [2, 3, 0, 1],
+      units: best ? [2, 3, 0, 1] : [0, 1, 2, 3],
     });
   }
   {

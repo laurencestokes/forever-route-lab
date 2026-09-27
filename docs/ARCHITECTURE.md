@@ -964,8 +964,12 @@ Built in Milestone 7: **stage 1** (the section's own quest units reordered or dr
 blocks and bound steps kept) plus a **terminal grind fill**. The implementation plan,
 [research/optimizer-m7.md](research/optimizer-m7.md) (revision 2), holds the reasoning, the fixture
 figures and the step record; this section describes what was built and measured at the final
-verification (2026-09-27), including the Milestone 7 review's fixes. D-043 (proposed) records the
-choices. Every result is "the best route found under these assumptions", never "optimal".
+verification (2026-09-27), including the Milestone 7 review's fixes, and the search-quality work
+that followed it (review open item 1: constructive seeds and a stronger local pass; §11.4), with
+the fixes of its own review (M7Q: kicks after the seeds, a narrower pre-screen, the drop move and a
+quality gate). D-043 and D-044 (proposed) record the choices. Every result is "the best route found
+under these assumptions",
+never "optimal".
 
 Deferred: `allowNewQuests` (answered `failed`, "adding quests is not available yet"; `zones` and
 `levelWindow` only filter new quests), objective clusters, a grind fill anywhere but at the end
@@ -992,11 +996,11 @@ interface OptimizationOptions { beamWidth: number; maxEvaluations: number; maxMi
 interface OptimizationContext { analysis: SectionAnalysis; baseline: SectionWalk; cache?: MatrixCache }
 interface OptimizationProgress {
   phase: 'paths' | 'compiling' | 'searching' | 'finishing'; depth: number; evaluations: number;
-  beamSize: number; incumbentSeconds: number; bestSeconds: number | null; elapsedMs: number;
+  beamSize: number; incumbentSeconds: number; bestSeconds: number | null; elapsedMs: number;  // bestSeconds: the best's comparedMs
   legs: { done: number; total: number } | null;            // "computing paths", in the scheduler's unit
 }
 type SearchedSection =
-  | { status: 'searched'; termination: 'exhausted' | 'budget' | 'timeout'; reproducible: boolean;
+  | { status: 'searched'; termination: 'exhausted' | 'converged' | 'budget' | 'timeout'; reproducible: boolean;
       candidates: { steps: RouteStep[]; dependencies: StepDependency[]; solution: SearchSolution }[]; // ≤ 4, best first
       incumbent: SearchSolution; incumbentSection: { steps: RouteStep[]; dependencies: StepDependency[] };
       unknownXpBlocked: { closes: number; smallestShortfall: number } | null;
@@ -1014,8 +1018,9 @@ The app runs the other two phases in `startOptimization(deps, request, overrides
 type OptimizationResult =
   | { status: 'improved' | 'no-improvement'; termination; reproducible;
       steps: RouteStep[]; route: RouteStep[]; diff: RouteDiff; dependencies: StepDependency[];
+      dropped: QuestId[];                                     // pool quests the result leaves out (D-044)
       unknowns: { quests: QuestId[]; note: string };
-      estimate: { incumbentMs; resultMs; engineMs; originalMs; knownGain; targetXp };
+      estimate: { incumbentMs; resultMs; comparedMs; savingMs; engineMs; originalMs; incumbentEngineMs; knownGain; targetXp };
       verification: VerificationReport | null; rejected: VerificationReport[];
       summary: ContractSummary; anchors: ReadonlySet<StepId>;
       verifyRoute(route: RouteStep[]): VerificationReport;      // Milestone 8's "Apply selected changes"
@@ -1029,8 +1034,12 @@ read):
 
 1. **Checks.** The host's and the editor's revisions must both be the request's (checked before
    the lock); no `'optimizer'` or `'proposal'` lock may be held; the section must be in the route.
-   The `'optimizer'` edit lock (§12.1) is taken for the run, released when it ends even if a store
-   subscriber throws, and handed to `'proposal'` in the same task when `handOver: 'proposal'`.
+   The `'optimizer'` edit lock (§12.1) is taken for the run, released when it ends, and handed to
+   `'proposal'` in the same task when `handOver: 'proposal'`. The store isolates a subscriber that
+   throws: the change is committed, every other subscriber is called, the error goes to the store's
+   `onListenerError` (default: rethrown in a microtask), and no store method throws because of a
+   subscriber or of an `onListenerError` that throws itself (its error is rethrown in a microtask),
+   so a lock is never left held (review open item 6, review M7Q Q-09).
 2. **`paths`.** A private walker and validator (`createRunWalker` over the host's engine context,
    one `Places` per context, shared by both walks) walk the project once; `analyseSection` lists
    the legs the section's matrix needs; the navigation scheduler makes them complete, with leg
@@ -1045,6 +1054,20 @@ read):
    `improved`, with its diff. Otherwise `no-improvement` returns the incumbent (its steps, estimate
    and re-walk describe one route); an incumbent with a fill that fails verification is
    `infeasible`.
+
+**The saving shown** (D-043 item 7, review COR-02) is the guaranteed one: `estimate.savingMs =
+incumbentMs − comparedMs` (0 for `no-improvement`), and the progress's `bestSeconds` is the best
+order's `comparedMs`, so `incumbentSeconds − bestSeconds` is the same figure while the search runs.
+`resultMs` stays the engine-parity figure (an uncertain hearth wait at 0) that verification compares
+with the re-walk; `incumbentMs − resultMs` may include time such a wait absorbs and is never shown as
+a saving. Candidates are those whose `comparedMs` beats the incumbent's. `incumbentEngineMs` is the
+engine's re-walk of the incumbent (the original plus the fill a numeric target needs; review M7Q
+Q-10), so `incumbentEngineMs − engineMs` is the engine's side of the saving; `originalMs` has no
+fill and would overstate it by the fill's time.
+
+**Dropped quests** (D-044, review M7Q Q-05): `dropped` lists the pool quests whose steps the result
+no longer has. Under `'keep-original'` with the `'shortfall'` fill the local pass has no drop move,
+but an order may still close without an optional quest whose XP the target does not need.
 
 `unknowns.note` says which figures are lower bounds: unknown-XP turn-ins, parts with unknown time
 (counted as nothing, so the saving there is uncertain), turn-ins that carry objective work whose
@@ -1139,9 +1162,36 @@ which rebuilds the structure and refuses a baseline that differs from the analys
 ### 11.4 Search
 
 - **Stepper:** `createSearch(problem, options)` exposes `advance(maxEvaluations)`. A run is a fixed
-  sequence of **work items**: rollout R0, local pass P0, layers L0-L7, rollout R8, P8, and so on
-  (`rolloutEvery` 8). The budget is checked after each item and never cuts one short; `advance`
-  may pause anywhere inside an item and resume exactly there.
+  sequence of **work items**: the nearest-neighbour seed N, the local pass over it P(N), the
+  cheapest-insertion seed I, P(I); then either the **beam** (rollout R0, local pass P0, layers
+  L0-L7, rollout R8, P8, and so on, `rolloutEvery` 8) or **kicks** K (review M7Q Q-01). The beam
+  runs only when it can reach a closing depth within the budget: its layers cost about width ×
+  depth × (units enabled at the root) / 2 evaluations, the depth being the best order's length. A
+  beam that would stop short closes no node, so its budget goes to kicks. After an exhausted beam,
+  kicks follow in sections of 16 units or more (`KICK_MIN_UNITS`), and a smaller section gets one
+  last pass over the best. The budget is checked after each item; the seeds, the passes and the
+  kicks also end at the budget at their own boundaries, and no other item stops short. `advance`
+  pauses at the first point it can after its slice (an atomic step, such as a local move, a kick's
+  choice or the pass's prefix states, may overrun it) and resumes exactly there. Termination:
+  `exhausted` (a layer with no children, and no kicks after it), `converged` (the kicks stalled),
+  `budget`, `timeout` or `cancelled`.
+- **Seeds** (`seeds.ts`, review open item 1): complete orders built with the search's own
+  transitions (`enabled`, `apply`, `close`), so anchors, blocks, bound units, precedence and
+  availability edges, the level and log checks, carried work and the unknown-XP rules hold as for a
+  beam node, and a seed is listed only when it closes under the full rules. **Nearest neighbour**:
+  from the section start, the enabled unit whose first destination is nearest by the matrix,
+  preferring units that drop no quest, ties to the original order; refused candidates fall to the
+  next; it stops at the first close that meets the target without a fill. **Cheapest insertion**:
+  the open unit (every predecessor placed) and the position after its last predecessor that add the
+  least time, priced by applying the unit and the next one from the stored prefix state; each open
+  unit's best position is kept between insertions (only the two new positions are priced, a unit
+  whose best position was split is priced again), and the whole remaining order is re-applied before
+  an insertion. Its cost grows faster than n² and varies with the pool (320,000-1,000,000
+  evaluations for 300 units, over 2,000,000 for 600; review M7Q Q-03), so it may spend
+  min(700 × units, budget / 2) evaluations; nearest neighbour then finishes the partial order from
+  its end, so the spend always yields a route. The allowance does not grow with the budget, so a
+  larger budget only continues the same run. Both seeds are off under a divergence penalty
+  (`seeds: false` turns them off for tests of the beam).
 - **Layers:** a beam over units with **implicit drops** (an order edge drops the units it
   overtakes; closing drops the rest). Candidates are records in typed arrays (sized from 32,768
   entries and grown on demand); child states are built only for the kept top K, chosen with a
@@ -1171,10 +1221,50 @@ which rebuilds the structure and refuses a baseline that differs from the analys
   'shortfall'` only when every droppable quest is scheduled. A node that closes with its target
   met is not expanded (so a detour through an optional unit whose arrival radius shortens a move
   is never taken; review COR-04).
-- **Anytime:** each rollout is greedy from the best beam node; the **local pass** that follows
-  moves one unit of the best solution up to 24 places either way and keeps a move only when it
-  lowers `comparedMs` (off under a divergence penalty). Up to four distinct solutions are kept,
-  best first by `comparedMs`; `best` is emitted when the head improves.
+- **Anytime:** each rollout is greedy from the best beam node. The **local pass** (`local.ts`) is a
+  first-improvement descent over one order with four neighbourhoods: **or-opt** (a run of 1-3 units
+  moved up to 24 places either way), **exchange** (two units up to 24 places apart), **2-opt** (a run
+  of up to 25 units reversed) and **drop** (a droppable quest's units removed, tried only when the XP
+  they granted leaves the rest at the target, or the request lets the fill replace quests; the
+  closing rules decide). The drop move is off under `'keep-original'` with the `'shortfall'` fill
+  (`SearchProblem.dropMove`; D-044 item 1, review M7Q Q-05). A window move is tried only when it
+  keeps every precedence edge (checked on the edge table). A **pre-screen** skips a move whose
+  matrix travel delta (the three or four legs or-opt and exchange change, every leg of a reversal)
+  is 5 s or more, without counting an evaluation, but only where the matrix sees the move's whole
+  effect (review M7Q Q-04): the window ends before the order does (else the exit chain's first leg
+  changes), and neither it nor the unit after it holds an anchor, a hearth, bind, flight, transport,
+  grind or riding train, a condition, a waypoint chain or lost position, a level-limited or any-of
+  accept, or a quest with unknown XP. Every other move is priced from the stored prefix states and
+  judged on the window alone when the state after it has the same key, unknown parts and time to
+  the hearth. Don't-look bits per unit; the pass ends at a local optimum or at the budget. It runs
+  over each seed, and after each rollout over that rollout's order (else over the best, when it is
+  new); an order a pass started from or ended on is not passed again. The **kicks** (`kicks.ts`,
+  review M7Q Q-01) are an iterated local search: each swaps two adjacent segments of the current
+  order (1-30 units each, from a Lehmer sequence with a fixed seed), restores the precedence edges
+  inside the span without moving anything else, and runs the pass with only the units around the
+  three new junctions dirty; an end at or below the current `comparedMs` becomes the current order.
+  They stop, `converged`, after max(100,000, 2,000 × units) evaluations without a strict improvement
+  (Q-07). The seeds, the pass and the kicks are off under a divergence penalty (they reorder freely
+  and do not price divergence, so review-m7 open item 1 stays open there: D-044 item 6). Up to four
+  distinct solutions are kept, best first by `comparedMs` then by unit sequence; `best` is emitted
+  whenever the head changes, so the last `best` is the outcome's first solution, and the result is
+  never worse than the best seed.
+- **Measured** (§14; review M7Q): on eleven generated 100-quest pools (300 units) at beam 256 and
+  2,000,000 evaluations from the weak incumbent (id order), every best keeps all 300 units, and the
+  median gap to the pool's stored independent reference (§14) is 1.26% (from −1.44% to 5.69%).
+  Against the nearest-neighbour tour, which is the search's own first seed, the median is −9.64%
+  (from −11.73% to −5.05%, ten pools; pool 17's tour breaks a rule of the search). This is better
+  than the tour, not near-optimal: the best is above the ten-times-longer reference on 9 of the 11
+  pools, by up to 5.69%. On
+  the bench pool (seed 7) the best is 11,706,355 ms (−9.61% against the tour, 2.22% above the
+  reference); the kicks converge at 1,761,587 evaluations; the first improvement is the seed at
+  300 evaluations. At 30 quests (90 units) the beam runs and the kicks follow it, converging at
+  0.8-1.1 million evaluations; at 200 quests the insertion seed is capped at 420,000 evaluations,
+  where before it spent 2,000,000 and gave nothing. The model oracle is reached on fixture 9's 120
+  instances at beam 1 in 113 (66 at the Milestone 7 commit), at beam 4 in 117 (94), at 16 and 256
+  in all; and on the review's 154 adversarial instances (level gates, prerequisites, hearths,
+  arrival radii, unknown XP, every target kind) at beam 1, 4, 16 and 256 in 107, 123, 128 and 154
+  (the Milestone 7 commit: 29, 59, 82 and 152).
 - `optimizer/core` may not call `Math.hypot`, `pow`, `exp`, `log` or trigonometric functions, nor
   use clocks or randomness; the architecture test enforces it.
 
@@ -1201,12 +1291,17 @@ a fresh one; messages of stale runs are dropped; a crashed worker is replaced on
 
 ### 11.6 Determinism
 
-Identical (problem, options) give identical output when the run ends by exhaustion or
-`maxEvaluations`, whatever the slice size, because work items are never cut and the order is total.
+Identical (problem, options) give identical output when the run ends by exhaustion, convergence or
+`maxEvaluations`, whatever the slice size, because the order is total, no item is cut by a slice,
+the seeds, the passes and the kicks read the budget only at their own boundaries (their evaluation
+count is deterministic; a pre-screen shortens the slice without counting), and the kicks draw from
+a Lehmer sequence with a fixed seed. Ties go to the original order (the lower unit index).
 Results ended by `maxMillis` are `reproducible: false`; no test uses it. Tested: slices of 1, 7,
 1,000 and 10^6 (core and fixture 10b); every hash lane constant; a structured-clone copy of the
-problem; the in-process worker host against a direct loop; the local pass across slices; fixture 9
-through the app across slices; and the exact gate of §14 (`tests/optimizer-evaluations.test.ts`),
+problem; the in-process worker host against a direct loop; the local pass across slices; the
+insertion seed and the local pass ended by the budget across slices; the kicks across slices; the
+review's adversarial instances across slices; fixture 9 through the app across slices; and the
+exact gate of §14 (`tests/optimizer-evaluations.test.ts`),
 which compares evaluations, layers, duplicates, dominated, rollouts, the first improvement and a
 hash of every solution with the stored baseline.
 
@@ -1418,9 +1513,10 @@ interface DiffOptions {
 - **Change-sets:** an op belongs to the quests its step names; a non-quest step takes its host's
   (the next quest step, `hostIndices`), except a step that is a dependency's `stepId` (the grind
   fill), which forms its own `s:<stepId>` set. Union-find merges ops that share a quest or a step
-  and quests related by `exclusive`. `requires` edges: placing a quest needs its prerequisites
-  placed, removing a prerequisite needs its dependants removed, and the step dependencies. Set ids
-  are `q:<lowest quest id>`, `g:<group id>` or `s:<step id>`.
+  and quests related by `exclusive`. `requires` edges (D-043 item 12): a quest and a prerequisite
+  that are both placed (moved or inserted) require each other; placing a prerequisite needs a
+  removed dependant removed; removing a prerequisite needs a removed dependant removed; and the step
+  dependencies. Set ids are `q:<lowest quest id>`, `g:<group id>` or `s:<step id>`.
 - **Apply:** the selection is closed over `requires`; selected removes, then selected inserts and
   moves in `after` order, each placed directly after the nearest preceding `after` step that is
   kept in place or placed by a selected op (unselected moves and inserts are skipped, because
@@ -1428,10 +1524,12 @@ interface DiffOptions {
   keep their `after` order and the rest their `before` order; every set gives `after`, none gives
   `before`, and applying a selection to its own result changes nothing. The result is re-walked and
   re-validated before the user confirms (`OptimizationResult.verifyRoute`).
-- **Known gap:** a prerequisite moved later on its own can still break a dependant that stays put
-  (`requires` edges point from the dependant to its prerequisites, not back); Milestone 8's
-  re-walk catches it, and the spec should decide whether both-moved prerequisite pairs require
-  each other.
+- **Prerequisite order:** a partial application never puts a dependant's accept before a
+  prerequisite's turn-in. A prerequisite without ops is kept in place and a placed dependant follows
+  it; a placed prerequisite stays before a dependant kept in place; the edges above cover the rest
+  (with one-way edges, the prerequisite's set alone moved its steps past the dependant's unselected
+  ones, still at their `before` places). A property test over 1,000 seeded prerequisite graphs,
+  every single-set and random selections, checks it, and checks that the one-way edges fail it.
 - **Measured** (§14): reversed 10,000-step routes 6.5 ms, shuffled with 1% edits 7.4 ms, against
   50 ms.
 
@@ -1443,7 +1541,7 @@ Machine-independent CI gates (fail the build):
 |---|---|
 | Entry chunk + static imports (gzip, from Vite's build manifest; chunks loaded by `import()` and worker scripts are reported, not gated) | ≤ 250 KB |
 | Each `public/data` file (gzip) | recorded baseline + 10%; total ≤ 1.2 MB |
-| Optimiser evaluations on fixed fixtures (`tests/optimizer-evaluations.test.ts`: 37 cases, the §11.7 fixtures, 10b and fixture 9's first 12 instances; evaluations, layers, duplicates, dominated, rollouts, first improvement and a hash of the solutions; and the bench's `exact` blocks under `--check`) | recorded baseline in `docs/measurements/optimizer-m7.json`, exact |
+| Optimiser evaluations on fixed fixtures (`tests/optimizer-evaluations.test.ts`: 42 cases, the §11.7 fixtures, 10b, fixture 9's first 12 instances and the search-quality review's 4 adversarial instances; evaluations, layers, duplicates, dominated, rollouts, first improvement and a hash of the solutions, and each adversarial best equal to its stored model-oracle optimum; and the bench's `exact` blocks under `--check`) | recorded baseline in `docs/measurements/optimizer-m7.json`, exact |
 | `public/nav` (navmesh blocks, `map.bin`, connectors) | ≤ 7 MB total (target 5-6 MB; measured 5.44 MB); ≤ 300 kB per file; per-map baselines + 10% (D-030) |
 | `public/maps/art` | ≤ 12 MB total (measured 9.05 MB); per-file baselines + 10% (D-034) |
 | `public/maps/terrain` | ≤ 600 kB total (measured 445 kB); per-file baselines + 10% (D-034) |
@@ -1463,8 +1561,44 @@ Time budgets, as Node benchmarks against stored baselines in `docs/measurements/
 | Optimiser run's private walks (analysis and baseline re-walk) | each within the walk + validate budget (reported) |
 | RXP import of a typical guide (≤ 300 steps), main thread | ≤ 250 ms (measured about 100 ms for 150 steps); whole addon files (thousands of steps, about 1.3 s) move to a worker when a measured need arises |
 | Autosave IndexedDB put of a 10,000-step project | measured 35 ms median unthrottled; the Milestone 9 throttled run decides whether steps are stored in chunks (D-036) |
-| Optimiser, pool 100 quests (~300 actions), beam 256 | first improvement < 2 s; worker heap < 64 MB; a search to 2,000,000 evaluations within its stored baseline + 25% |
+| Optimiser, pool 100 quests (~300 actions), beam 256 | first improvement < 2 s from the weak and from the guide incumbent; worker heap < 64 MB; a search to 2,000,000 evaluations within its stored baseline + 25%; on eleven generated pools, the best from the weak incumbent within a median 3% and at most 7% of each pool's stored independent reference (`quality`, review M7Q Q-02; the nearest-neighbour tour is the search's own first seed, so it is reported, not gated) |
 | Navigation legs for a route section, in the nav worker (RC-07) | ceiling 16 s, with progress and cancel; measured 3.03 s for a realistic 116-point section, heap 60.9 MB; with the worker's fetch and SHA-256 (3b.6) 3.7-4.1 s, heap growth 64.7 MB after gc (peak 91-99 MB); the main thread never waits on it (straight-line fallback until legs arrive) |
+
+**Measured after the search-quality review (2026-09-27; review M7Q, D-044).**
+`tests/bench/optimizer.bench.ts --check docs/measurements/optimizer-m7.json --repeat 3 --runs 15`,
+bundled, as below; the CPU probe read 40.6-41.5 ms. The stored `firstImprovement`, `search`, `heap`
+and the new `quality` entries were re-recorded, and so was the exact gate
+(`tests/optimizer-evaluations.test.ts`: every case keeps its best; the four adversarial cases are
+new and each is at its model-oracle optimum; the reasons are in the entry's `$comment`). `--check`
+passes.
+
+| Area | Measured | Script, stored baseline |
+|---|---|---|
+| Quality: eleven generated pools, weak incumbent, 2,000,000 evaluations | against each pool's stored independent reference (two runs of 20,000,000 evaluations), median gap 1.26%, from −1.44% to 5.69%; against the nearest-neighbour tour (the search's own first seed; reported), median −9.64%, from −11.73% to −5.05% (pool 17's tour breaks a rule of the search). Every best keeps all 300 units | `quality` (new; gated at a 3% median and 7% per pool) |
+| First improvement, weak / guide | 5.88 ms [5.84-5.93] / 7.04 ms [6.77-7.05], 5.79 / 6.83 normalised, at 300 / 7,754 evaluations (unchanged: the nearest-neighbour seed, and the pass over the guide's own order) | `firstImprovement` |
+| Search, weak | 564.9 ms [551.0-585.5], 545.1 normalised (was 651.9); the kicks converge at 1,761,587 evaluations (no layer: the beam cannot reach a closing depth in the budget); best 11,706,355 ms with all 300 units, −9.61% against the tour and 2.22% above the reference (the previous record, 11,559,284 ms, dropped a quest on a 192 XP margin). About 3.1 million evaluations per second | `search.weak` |
+| Search, guide | 559.2 ms [513.5-587.4], 548.7 normalised (reported); the same best as weak, converged at 1,760,469 evaluations | `search.guide` |
+| Worker heap, beam 256 | peak 26.89 MB (idle 17.24 MB) of 64 MB; search arrays 9.12 MB | `heap` |
+| Compile, straight line and navigation (warm) | 8.59 and 14.35 ms normalised, against the unchanged baselines 9.10 and 14.52 | `compile`, `compileNav` |
+
+**Measured after the optimiser's search-quality work (2026-09-27; review-m7 open item 1; its search figures are superseded by the table above).**
+`tests/bench/optimizer.bench.ts --check docs/measurements/optimizer-m7.json --repeat 3 --runs 15`,
+bundled, as below; the CPU probe read 40.6-41.5 ms. The bench now has two incumbents of the same
+pool: **weak** (id order, as before) and **guide** (the review's nearest-neighbour tour, 12,951,092 ms);
+each search's exact block prices that tour in its own problem. The stored `firstImprovement`,
+`search` and `heap` entries were re-recorded, and so was the exact gate
+(`tests/optimizer-evaluations.test.ts`: every fixture keeps its best but grid-40, which improves;
+the reasons are in the entry's `$comment`).
+
+| Area | Measured | Script, stored baseline |
+|---|---|---|
+| First improvement, weak incumbent | 6.16 ms [6.08-6.17], 5.94 normalised (was 10.92), at exactly 300 evaluations: the nearest-neighbour seed (12,951,092 ms, the incumbent 37,741,315 ms) | `firstImprovement.weak` |
+| First improvement, guide incumbent | 6.98 ms [6.93-7.12], 6.75 normalised, at 7,754 evaluations: the local pass over the tour (12,943,738 ms) | `firstImprovement.guide` (new) |
+| Search to 2,000,000 evaluations, weak | 668.5 ms [643.8-686.7], 651.9 normalised (was 504.1); exactly 2,000,044 evaluations, 32 layers; best 11,559,284 ms, 10.75% below the nearest-neighbour tour (297 of 300 units: one quest the target no longer needs is dropped; with every quest kept, scratch, 11,701,098 ms, 9.65% below). Before: 15,906,464 ms, 22.8% above. About 3.0 million evaluations per second (was 4.1): the seeds and the pass copy states, and the pass's travel pre-screen counts no evaluation | `search.weak` |
+| Search to 2,000,000 evaluations, guide | 697.4 ms [683.4-703.1], 677.4 normalised (reported); best 11,840,712 ms, 8.57% below the tour (the review measured 12,308,828 ms, −4.96%, at 4,000,000 evaluations) | `search.guide` (new) |
+| Worker heap, beam 256 | peak 26.82 MB (idle 17.20 MB) of 64 MB; search arrays 9.17 MB (the seeds' and the pass's prefix states add 0.27 MB) | `heap` |
+| Optimiser compile, first-ever call (review-m7 open item 3) | through `startOptimization` in a fresh bundled process, 5 processes: `analyseSection` 14.1 ms [13.7-15.3] and the compile 23.3 ms [22.7-24.1], each in a main-thread task of its own (the analysis walk, "computing paths" and the baseline walk come between, with yields); the 36.8 ms was their sum. Warm (the 30th call) they are 1.9 and 4.4 ms: the rest is V8 running code it has not optimised yet. No clean saving: the only repeated work (the geometry, built by both calls) is repeated on purpose, because "computing paths" fills legs between the two walks and flights and transports are priced with the filled table | scratch (`.cache`), not stored |
+| Compile, straight line and navigation (warm) | 9.05 and 14.59 ms normalised, against the unchanged baselines 9.10 and 14.52 | `compile`, `compileNav` |
 
 **Measured at the Milestone 7 final verification (2026-09-27),** after the Milestone 7 review
 fixes, on the reference Windows machine (Node 22.13.1). Every `--check` run was `--repeat 3 --runs
@@ -1485,7 +1619,7 @@ The plan's Barrens and Durotar section was not built as the bench.
 | First improvement, beam 256 (worker thread, from the start post) | 11.08 ms [10.99-11.22], 10.89 normalised, at exactly 16,997 evaluations (incumbent 37,741,315 ms, first best 19,622,441 ms) | the same; `firstImprovement` |
 | Search to 2,000,000 evaluations, beam 256 | 513 ms [513-538], 492.9 normalised (baseline 504.1); exactly 2,115,281 evaluations, 48 layers, best 15,906,464 ms | the same; `search` |
 | Worker heap, beam 256 | peak 26.39 MB (idle 17.13 MB) of 64 MB; search arrays 8.9 MB | the same; `heap` |
-| A good incumbent (nearest-neighbour tour of the pool, 12,951,092 ms) | first improvement at 23,448 evaluations; best 12,308,828 ms (−4.96%) at 4,000,000 evaluations. From the weak incumbent the best at 2,000,000 evaluations is 15,906,464 ms, 23% slower than that tour | the review's scratch `reorder.ts`, not stored (no `firstImprovement.guide` case yet) |
+| A good incumbent (nearest-neighbour tour of the pool, 12,951,092 ms) | first improvement at 23,448 evaluations; best 12,308,828 ms (−4.96%) at 4,000,000 evaluations. From the weak incumbent the best at 2,000,000 evaluations is 15,906,464 ms, 23% slower than that tour (superseded: the table above) | the review's scratch `reorder.ts`, not stored (now `firstImprovement.guide` and `search.guide`) |
 | Optimiser run's walks, realistic route steps 4,900-5,049 | prefix replay 2.2 ms, analysis walk 15.3 ms, baseline re-walk 4.9 ms; the longest main-thread task before the worker starts 19.0 ms | `--case walks`, stored as `walks` (reported) |
 | Diff of two 10,000-step routes | reversed 6.54 ms [6.27-6.56], 6.46 normalised (baseline 8.08); shuffled with 1% edits 7.51 ms [6.93-7.63], 7.42 (9.24): within 50 ms. A merged 10,000-step chain 6.7 ms (reported) | `tests/bench/diff.bench.ts --check`; `diff10000` |
 | Walk only, 10,000 steps | realistic cold 12.77 ms [12.77-12.99], warm 9.04 [8.90-11.10], edit 4.33 [4.24-4.66]; stress cold 24.62 [24.45-24.70], warm 11.09, edit 5.49 | `tests/bench/engine.bench.ts --check`; `engine-m6.json` |

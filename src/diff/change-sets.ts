@@ -16,10 +16,19 @@ import type { ChangeSet, DiffOp, DiffRelations, RouteDiff, StepDependency } from
  *   op has no quest and forms an `s:` set.
  * - Union-find merges the ops that share a quest (so a multi-target complete merges its quests),
  *   the ops of one step (a move and a modify), and quests related by `relations.exclusive`.
- * - `requires` edges come from `relations.prerequisites` (placing a quest needs its prerequisites
- *   placed; removing a prerequisite needs its dependants removed), from `dependencies`, and, in a
+ * - `requires` edges come from `relations.prerequisites`, from `dependencies`, and, in a
  *   route-level diff, from the groups sidecar (a step op that leaves a step in an added group
  *   requires that group; a group removal requires the ops that take its steps out of it).
+ *   Prerequisites (D-043 item 12): when a quest and one of its prerequisites are both placed
+ *   (moved or inserted), their sets require each other, so a partial application moves both or
+ *   neither. One way only was not enough: the prerequisite's set alone moved its steps to their
+ *   `after` places while the dependant's unselected steps stayed at their `before` places, which
+ *   could now come first. For the same reason, placing a prerequisite needs a removed dependant
+ *   removed (its unselected removal would leave it at its `before` place). When the prerequisite
+ *   and the dependant are both removed, removing the prerequisite needs the dependant removed. A
+ *   prerequisite without ops is kept in place, and a placed dependant follows it (apply.ts places
+ *   a step after the nearest kept step before it); a placed prerequisite stays before a dependant
+ *   kept in place. The property test in apply.test.ts checks every selection.
  * - Set ids: `q:<lowest quest id>`, `g:<group id>` for a group op, or `s:<step id>`.
  */
 
@@ -203,7 +212,11 @@ export function buildChangeSets(input: ChangeSetInput): ChangeSet[] {
         const other = firstOpOfQuest.get(p);
         if (other === undefined) continue;
         const setP = setOfOp[other] ?? 0;
-        if (placed.has(q) && placed.has(p)) edge(setQ, setP);
+        if (placed.has(q) && placed.has(p)) {
+          edge(setQ, setP);
+          edge(setP, setQ);
+        }
+        if (placed.has(p) && removed.has(q)) edge(setP, setQ);
         if (removed.has(p) && removed.has(q)) edge(setP, setQ);
       }
     }

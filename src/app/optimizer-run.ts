@@ -75,12 +75,31 @@ export interface OptimizationTiming {
 export interface OptimizationEstimate {
   /** The optimiser's estimate of the original section plus exit chain, ms. */
   readonly incumbentMs: number;
-  /** Its estimate of the result. */
+  /** Its estimate of the result, as the engine prices it (an uncertain hearth wait at 0; §6.3). */
   readonly resultMs: number;
+  /**
+   * The result's compared figure (D-043 item 7, review COR-02): `resultMs` plus, at each hearth use
+   * whose wait is uncertain (TIME-4), how far that wait's bound exceeds the incumbent's there. It
+   * equals `resultMs` when no wait is uncertain.
+   */
+  readonly comparedMs: number;
+  /**
+   * The saving to show (D-043 item 7): `incumbentMs − comparedMs`, which holds however long the
+   * unknown time before an uncertain wait was. `incumbentMs − resultMs` can be larger, but the
+   * difference may be time the wait absorbs, so it is never shown as a saving. 0 for `no-improvement`.
+   */
+  readonly savingMs: number;
   /** The re-walk's section plus exit chain of the result (§6.3's engine side). */
   readonly engineMs: number;
-  /** The baseline walk's, for the original. */
+  /** The baseline walk's, for the original (without a fill). */
   readonly originalMs: number;
+  /**
+   * The engine's re-walk of the incumbent (review M7Q Q-10): the original plus the fill a numeric
+   * target above its XP needs, else the original (then equal to `originalMs`). It is what candidates
+   * are judged against, so `incumbentEngineMs − engineMs` is the engine's saving; `originalMs −
+   * engineMs` would overstate it by the fill's time.
+   */
+  readonly incumbentEngineMs: number;
   /** Known XP the result's units gain (before a fill). */
   readonly knownGain: number;
   readonly targetXp: number;
@@ -103,6 +122,13 @@ export type OptimizationResult =
       /** The route diff (no ops for `no-improvement`, unless the incumbent has a fill: then its addition). */
       readonly diff: RouteDiff;
       readonly dependencies: readonly StepDependency[];
+      /**
+       * Pool quests the result leaves out (D-044, review M7Q Q-05): each has steps in the original
+       * section and none in `steps`. Ascending; empty when every quest is kept. Under the default
+       * `'keep-original'` target the local pass does not drop quests, but a closing order may still
+       * leave out an optional quest whose XP the target does not need.
+       */
+      readonly dropped: readonly QuestId[];
       /**
        * Quests with unknown XP (kept), and what the result's unknowns mean: unknown XP turned in,
        * unknown time, and objective work carried to a turn-in whose travel is not priced (D-040).
@@ -172,6 +198,17 @@ export function yieldMacrotask(): Promise<void> {
 const EMPTY_STATS: SearchStats = { evaluations: 0, layers: 0, duplicates: 0, dominated: 0, rollouts: 0, firstImprovementEvaluations: null, arrayBytes: 0 };
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/**
+ * The pool quests `original` names and `result` does not (D-044, review M7Q Q-05), ascending: the
+ * quests a proposal drops.
+ */
+export function droppedQuests(pool: readonly QuestId[], original: readonly RouteStep[], result: readonly RouteStep[]): QuestId[] {
+  const inPool = new Set(pool);
+  const kept = new Set(result.flatMap(stepQuestIds));
+  const dropped = new Set(original.flatMap(stepQuestIds).filter((q) => inPool.has(q) && !kept.has(q)));
+  return [...dropped].sort((a, b) => a - b);
+}
 
 /** The section's anchor steps (locked and implicit), from compile's structure (the decode table's `fixed`). */
 export function sectionAnchors(analysis: { readonly internal: unknown }, steps: readonly RouteStep[]): ReadonlySet<StepId> {
@@ -266,7 +303,11 @@ export function startOptimization(deps: OptimizationRunDeps, request: Optimizati
     await yieldToEventLoop();
     checkCancel();
   };
-  /** Releases a lock of this run's; the store commits before it notifies, so a throwing subscriber cannot keep it held (review RTD-03). */
+  /**
+   * Releases a lock of this run's. The store isolates a throwing subscriber (its reporter gets the
+   * error; review M7 open item 6), and it commits before it notifies, so nothing here can keep the
+   * lock held; the guard stays for a reporter that throws (review RTD-03).
+   */
   const release = (reason: EditLockReason): void => {
     try {
       store.releaseLock(reason);
@@ -291,7 +332,8 @@ export function startOptimization(deps: OptimizationRunDeps, request: Optimizati
       store.acquireLock('optimizer');
       locked = true;
     } catch (error) {
-      // A subscriber threw after the lock was committed: release it and fail the run (review RTD-03).
+      // Only a store reporter that throws gets here (the store isolates its subscribers): the lock
+      // was committed, so release it and fail the run (review RTD-03).
       if (store.getState().locks.has('optimizer')) release('optimizer');
       lockFailure = `the edit lock could not be taken: ${messageOf(error)}`;
     }
@@ -418,12 +460,16 @@ export function startOptimization(deps: OptimizationRunDeps, request: Optimizati
         route,
         diff,
         dependencies: candidate.dependencies,
+        dropped: droppedQuests(searched.summary.pool, original, candidate.steps),
         unknowns: { quests: searched.summary.unknownXp, note: unknownsNote(searched.summary, candidate.solution.unknownParts, candidate.steps, searched.unknownXpBlocked) },
         estimate: {
           incumbentMs: searched.incumbent.estimatedMs,
           resultMs: candidate.solution.estimatedMs,
+          comparedMs: candidate.solution.comparedMs,
+          savingMs: searched.incumbent.comparedMs - candidate.solution.comparedMs,
           engineMs: report.engineMs,
           originalMs: report.originalMs,
+          incumbentEngineMs: incumbentReport?.engineMs ?? report.originalMs,
           knownGain: candidate.solution.knownGain,
           targetXp: searched.summary.targetXp,
         },
@@ -453,12 +499,16 @@ export function startOptimization(deps: OptimizationRunDeps, request: Optimizati
       route,
       diff,
       dependencies: incumbentReport === null ? [] : incumbent.dependencies,
+      dropped: [],
       unknowns: { quests: searched.summary.unknownXp, note: unknownsNote(searched.summary, searched.incumbent.unknownParts, incumbentReport === null ? original : incumbent.steps, searched.unknownXpBlocked) },
       estimate: {
         incumbentMs: searched.incumbent.estimatedMs,
         resultMs: searched.incumbent.estimatedMs,
+        comparedMs: searched.incumbent.comparedMs,
+        savingMs: 0,
         engineMs: incumbentReport?.engineMs ?? originalMs,
         originalMs,
+        incumbentEngineMs: incumbentReport?.engineMs ?? originalMs,
         knownGain: searched.incumbent.knownGain,
         targetXp: searched.summary.targetXp,
       },

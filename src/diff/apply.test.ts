@@ -6,7 +6,7 @@ import { closeChangeSets } from './change-sets';
 import { diffRoute, diffRoutes } from './diff';
 import { semanticStepKey } from './steps';
 import { accept, editSteps, note, pick, seeded, shuffled, syntheticRoute, travel, turnIn } from './test-helpers';
-import type { DiffOptions, RouteDiff } from './types';
+import type { DiffOptions, DiffRelations, RouteDiff } from './types';
 
 const ids = (steps: readonly RouteStep[]): string[] => steps.map((s) => s.id);
 const everySet = (diff: RouteDiff): Set<string> => new Set(diff.changeSets.map((set) => set.id));
@@ -97,6 +97,63 @@ function turnInBeforeAccept(steps: readonly RouteStep[]): string | null {
     else if (step.kind === 'turnin' && accepts.has(step.questId) && !accepted.has(step.questId)) return step.id;
   }
   return null;
+}
+
+/**
+ * The first accept that comes before the turn-in of one of its quest's prerequisites (when that
+ * turn-in is in the steps), as "a<q> before t<p>", or null.
+ */
+function prerequisiteBroken(steps: readonly RouteStep[], prerequisites: ReadonlyMap<number, readonly number[]>): string | null {
+  const present = new Set<number>(steps.flatMap((st) => (st.kind === 'turnin' ? [st.questId as number] : [])));
+  const turnedIn = new Set<number>();
+  for (const step of steps) {
+    if (step.kind === 'turnin') turnedIn.add(step.questId);
+    if (step.kind !== 'accept') continue;
+    for (const p of prerequisites.get(step.questId) ?? []) if (present.has(p) && !turnedIn.has(p)) return `a${String(step.questId)} before t${String(p)}`;
+  }
+  return null;
+}
+
+/**
+ * A seeded order of the quests not in `gone` that keeps every quest's accept before its turn-in
+ * and every prerequisite's turn-in before its dependant's accept, with a note before the accepts of
+ * `notes`. `byId` reuses steps.
+ */
+function prerequisiteOrder(
+  quests: number,
+  prerequisites: ReadonlyMap<number, readonly number[]>,
+  next: () => number,
+  notes: ReadonlySet<number>,
+  gone: ReadonlySet<number>,
+  byId?: ReadonlyMap<string, RouteStep>,
+): RouteStep[] {
+  const pending: RouteStep[][] = [];
+  const questOf: number[] = [];
+  for (let q = 1; q <= quests; q += 1) {
+    if (gone.has(q)) continue;
+    const unit: RouteStep[] = [];
+    if (notes.has(q)) unit.push(byId?.get(`n${String(q)}`) ?? note(`n${String(q)}`));
+    unit.push(byId?.get(`a${String(q)}`) ?? accept(`a${String(q)}`, q), byId?.get(`t${String(q)}`) ?? turnIn(`t${String(q)}`, q));
+    pending.push(unit);
+    questOf.push(q);
+  }
+  const turnedIn = new Set<number>();
+  const out: RouteStep[] = [];
+  for (;;) {
+    const ready = pending.flatMap((unit, k) => {
+      const head = unit[0];
+      if (head === undefined) return [];
+      const q = questOf[k] ?? 0;
+      const blocked = head.kind === 'accept' && (prerequisites.get(q) ?? []).some((p) => !gone.has(p) && !turnedIn.has(p));
+      return blocked ? [] : [k];
+    });
+    if (ready.length === 0) return out;
+    const k = ready[pick(next, ready.length)] ?? 0;
+    const step = pending[k]?.shift();
+    if (step === undefined) continue;
+    if (step.kind === 'turnin') turnedIn.add(step.questId);
+    out.push(step);
+  }
 }
 
 /**
@@ -243,6 +300,67 @@ describe('applyChangeSets', () => {
       }
     }
     expect(applications).toBeGreaterThan(5000);
+  });
+
+  it('never breaks a prerequisite order under single and random selections (D-043 item 12)', () => {
+    let applications = 0;
+    let oneWayBreaks = 0;
+    for (let seed = 1; seed <= 1000; seed += 1) {
+      const next = seeded(seed);
+      const quests = 3 + pick(next, 5);
+      // A seeded prerequisite DAG: each quest may need one or two earlier quests.
+      const prerequisites = new Map<number, number[]>();
+      for (let q = 2; q <= quests; q += 1) {
+        const needs = new Set<number>();
+        for (let k = 0; k < 2; k += 1) if (next() < 0.45) needs.add(1 + pick(next, q - 1));
+        prerequisites.set(q, [...needs]);
+      }
+      const notes = new Set<number>();
+      for (let q = 1; q <= quests; q += 1) if (next() < 0.3) notes.add(q);
+      const before = prerequisiteOrder(quests, prerequisites, next, notes, new Set());
+      // `after` drops a few quests whose dependants are dropped too, and reorders the rest.
+      const gone = new Set<number>();
+      for (let q = quests; q >= 1; q -= 1) {
+        const dependants = [...prerequisites].filter(([, needs]) => needs.includes(q)).map(([d]) => d);
+        if (dependants.every((d) => gone.has(d)) && next() < 0.15) gone.add(q);
+      }
+      const after = prerequisiteOrder(quests, prerequisites, seeded(200_000 + seed), notes, gone, new Map(before.map((st) => [st.id, st])));
+      const relations: DiffRelations = { exclusive: () => [], prerequisites: (q) => (prerequisites.get(q) ?? []).map(questId) };
+      const diff = diffRoutes(before, after, { relations });
+      expect(prerequisiteBroken(before, prerequisites)).toBeNull();
+      expect(prerequisiteBroken(after, prerequisites)).toBeNull();
+      expect(applyChangeSets(before, diff, everySet(diff))).toEqual(after);
+      // The requires edges of the first build: a placed dependant needed its placed prerequisite, and
+      // a removed prerequisite its removed dependant; nothing else.
+      const removedQuests = new Set(diff.ops.flatMap((op) => (op.kind === 'remove' ? [before[op.beforeIndex]] : [])).flatMap((st) => (st !== undefined && (st.kind === 'accept' || st.kind === 'turnin') ? [st.questId as number] : [])));
+      const oneWay: RouteDiff = {
+        ...diff,
+        changeSets: diff.changeSets.map((set) => ({
+          ...set,
+          requires: set.requires.filter((id) => {
+            const other = diff.changeSets.find((c) => c.id === id);
+            const needs = (from: readonly number[], to: readonly number[]): boolean => from.some((q) => (prerequisites.get(q) ?? []).some((p) => to.includes(p)));
+            const mine = set.questIds.map(Number);
+            const theirs = other?.questIds.map(Number) ?? [];
+            // Kept: this set's quests need the other's (placing), or both removed (removing).
+            return needs(mine, theirs) || (needs(theirs, mine) && mine.every((q) => removedQuests.has(q)) && theirs.every((q) => removedQuests.has(q)));
+          }),
+        })),
+      };
+      const selections = [...diff.changeSets.map((set) => new Set([set.id])), selection(diff, next, 0.3), selection(diff, next, 0.6)];
+      for (const selected of selections) {
+        applications += 1;
+        const result = applyChangeSets(before, diff, selected);
+        const where = `seed ${String(seed)}, {${[...selected].join(',')}}`;
+        expect(prerequisiteBroken(result, prerequisites), where).toBeNull();
+        expect(turnInBeforeAccept(result), where).toBeNull();
+        checkPartial(before, after, diff, selected, result);
+        if (prerequisiteBroken(applyChangeSets(before, oneWay, selected), prerequisites) !== null) oneWayBreaks += 1;
+      }
+    }
+    expect(applications).toBeGreaterThan(2500);
+    // The property has teeth: the one-way edges break a prerequisite order in some of these selections.
+    expect(oneWayBreaks).toBeGreaterThan(0);
   });
 
   it('refuses unknown sets and diffs of another route', () => {

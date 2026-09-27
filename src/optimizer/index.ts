@@ -131,7 +131,9 @@ export function createTypeScriptBeamSearchOptimizer(options: TypeScriptBeamSearc
 
       const decode = (compiled: CompiledProblem, outcome: SearchOutcome, termination: Exclude<SearchTermination, 'cancelled'>): SearchedSection => {
         const incumbent = outcome.incumbent;
-        const better = outcome.solutions.filter((s: SearchSolution) => s.estimatedMs < incumbent.estimatedMs && !sameUnits(s.units, incumbent.units));
+        // Better by the compared figure (D-043 item 7): the core never lists an order whose engine
+        // figure beats the incumbent's while its compared figure does not (review COR-02).
+        const better = outcome.solutions.filter((s: SearchSolution) => s.comparedMs < incumbent.comparedMs && !sameUnits(s.units, incumbent.units));
         const candidates = better.map((solution) => {
           const decoded = decodeSolution(compiled.decode, solution, ids);
           return { steps: decoded.steps, dependencies: decoded.dependencies, solution };
@@ -177,8 +179,10 @@ export function createTypeScriptBeamSearchOptimizer(options: TypeScriptBeamSearc
               emitThrottled(fromSearch(p));
             },
             onBest: (solution) => {
-              // The first improvement is shown at once; later ones ride the throttled stream.
-              if (solution.estimatedMs < problem.stats.incumbentMs) emitThrottled({ phase: 'searching', bestSeconds: solution.estimatedMs / 1000 }, (held?.bestSeconds ?? last.bestSeconds) === null);
+              // The first improvement is shown at once; later ones ride the throttled stream. The
+              // figure is the compared one, so `incumbentSeconds − bestSeconds` is the guaranteed
+              // saving (D-043 item 7, review COR-02), as in the core's progress.
+              if (solution.comparedMs < problem.stats.incumbentMs) emitThrottled({ phase: 'searching', bestSeconds: solution.comparedMs / 1000 }, (held?.bestSeconds ?? last.bestSeconds) === null);
             },
           },
         );
