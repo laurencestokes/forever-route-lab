@@ -241,6 +241,7 @@ _None._
 | OD-30 | General UI style | Left panel quests ("!"/"?"), buttons and layout follow WoWF-QRP, built with our own code, glyphs and styles | decided (D-046) | owner |
 | OD-31 | UI refresh choices A, B, D, E, F | Two-line rows; a shaded band for later steps; the character button opens Settings; warm neutrals with the system font; muted buttons on every row | decided (D-048) | owner |
 | OD-32 | Pin choices P1-P4 | Colour from 16 px with a pip tag; clusters when zoomed out; light service pins; drawer on the map's left, open where it docks | decided (D-047) | owner |
+| OD-33 | Minimap build choices | Look signed off; WebP q80 (51.8 MB); swamp water as drawn; contrast gate 2.0:1; underground-city labels; minimap default only once names are in; tiles hosted as a release-asset pack (published only when pushing is authorised) | decided (D-049) | owner |
 
 ## Open questions (research)
 
@@ -255,20 +256,25 @@ _None._
 
 ## Exact next tasks
 
-**1. Map rework (owner feedback, 2026-09-26).** Both designs are complete and reviewed. Build
-them in order: atlas steps ATL.0-ATL.11, then presentation steps MP.*, including the client taxi
-graph, zone faction and dungeon tuning levels (D-039). The owner signs off the atlas contact sheet
-before tiles are committed (D-042 O8).
-- [docs/research/map-atlas.md](docs/research/map-atlas.md): a seamless atlas surface placing both
-  continents by UiMap 947's UiMapAssignment rows, and a pre-composited tile pyramid built from the
-  painted art, masked to the terrain zone polygons. Continuous zoom from world to zone, wheel-zoom
-  and rendering speed. Zephras Isle is shown as a labelled inset, because the client does not place
-  it on the world map. The benchmarks are WoWF-QRP and MapGenie.
-- [docs/research/map-presentation.md](docs/research/map-presentation.md): quests, dungeons, flight
-  paths, transports and zone colouring, modelled on WoWF-QRP and MapGenie. It includes owner
-  decisions on Blizzard UI icons, a client-derived taxi graph (OD-6), and zone level ranges and
-  faction from the client.
-Then: implement, critique, fix and commit, replacing the interim one-image art layer.
+**1. Map and UI rework: resume the build** (paused after ATL.8, with MP.1-MP.2 interrupted mid-way).
+The designs, all reviewed and decided, are:
+- [docs/research/map-atlas.md](docs/research/map-atlas.md) revision 3.1: the atlas (Part I) and the minimap style (Part II; D-042, D-045, D-049);
+- [docs/research/map-presentation.md](docs/research/map-presentation.md) revision 3.1: pins, clusters, drawer and extras (D-039, D-041, D-047);
+- [docs/research/ui-refresh.md](docs/research/ui-refresh.md) revision 2: the WoWF-QRP-like left panel and buttons (D-046, D-048).
+
+Build order:
+1. Check the interrupted MP.1-MP.2 edits.
+2. MM.1-MM.6: two-style runtime, minimap tool, recolour, pyramid, hosting.
+3. MP.0c-MP.2b: bands, labels, tokens, `src/map/marks.ts`.
+4. UR.1a-UR.2b: Details made lazy, the button kit, quest marks, the list baseline.
+5. MP.3: quest state and the Available tab.
+6. UR.3-UR.6: rows, left panel, bars, panel collapse and map focus, tabs.
+7. MP.4a-MP.4c: pins, drawer, search. Then MM.7, the style control.
+8. MP.5-MP.11.
+9. MM.8, ATL.9 and UR.8: measurement.
+10. MM.9 and ATL.10: the minimap as default, the painted style as the toggle, per-image art retired.
+11. Docs.
+12. The joint review, fix and verify. The owner signs off the contact sheets, then the commit.
 
 **2. Optimiser search quality** (in parallel with the map build; files do not overlap): add
 constructive seeds and local moves (docs/reviews/review-m7.md open item 1).

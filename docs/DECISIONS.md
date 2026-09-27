@@ -973,3 +973,41 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
   - **Details panel:** made lazy now, to keep the entry chunk under 250 kB, tracked in the shared
     ledger.
   - **Ownership:** MP.3 owns the Available tab's content, and this design its look and keys.
+
+## D-049: Minimap style build decisions (owner, 2026-09-27)
+
+- **Date:** 2026-09-27
+- **Decided by:** project owner. After reviewing the revision 3.1 sheets at native pixels
+  (`.cache/minimap-addendum/r31/img/`), the owner signed off the look for building (O18) and took the
+  recommended defaults.
+- **Context:** docs/research/map-atlas.md revision 3.1, Part II "Minimap style" (§16-§28), and its
+  review (docs/reviews/review-map-minimap-design.md: 1 blocker, 5 majors and 5 minors, all resolved).
+- **Decisions:**
+  - **O12, sea:** the revision 3.1 recolour.
+    - A per-tile water reference moves water onto a navy ramp from #0d1b30 to rgb(60, 92, 130).
+    - It is gated by the client's liquid grid, reaches 8 yd from water, and never brightens land.
+    - The violet river by Dalaran, lava and slime keep their colours.
+  - **O13, format:** WebP q80: 6,669 tiles, 51.8 MB gzip-6. AVIF was softer or larger at every
+    setting tried.
+  - **O17, contrast:** the minimap style's world-band gate is 2.0:1 by Part I's method, with the
+    navy sea.
+  - **O20, swamp water:** kept as drawn, olive or brown. A liquid-grid-driven recolour may follow
+    as its own prototype.
+  - **O19, labels:** Ironforge and the Undercity are labelled as underground cities, with a dashed
+    outline.
+  - **Order (MM-05):** the minimap becomes the default only after the presentation layer's names
+    (MP.1, MP.7) are in, so it never shows without names.
+  - **O14, hosting:** a release-asset tile pack.
+    - The pack holds the NOTICE first, then the manifest and the tiles, with the NOTICE as the
+      release text.
+    - The main branch keeps the index, manifest, NOTICE and a SHA-256 pointer.
+    - The Pages deploy build (`pnpm build:deploy`) downloads and verifies the pack.
+    - `pnpm check` passes without the tiles, and warns loudly that they are absent.
+    - Nothing is published until the owner authorises pushing (OD-13).
+    - Removal on request: delete the asset, remove the pointer, redeploy, and confirm the tile URLs
+      return 404.
+  - **O15, O16 and the budgets:** the alterations are listed in the NOTICE and manifest, and black
+    texels are kept as drawn.
+    - The `minimap` folder is capped at 60 MB gzip-6, with 32 kB per tile and per-level baselines
+      plus 10%.
+    - `maps:validate` gains the offline checks M1-M10.
