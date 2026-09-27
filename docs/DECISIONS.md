@@ -707,3 +707,93 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
   - **K. Other sites' pages** (WoWF-QRP, MapGenie) are studied with read-only viewing only. Facts
     obtained earlier by running scripts in MapGenie's page are marked INSPECTED and carry no design
     weight.
+
+## D-042: The map atlas (owner and architect, 2026-09-27)
+
+- **Date:** 2026-09-27
+- **Decided by:** the owner decided O9, O3 and O11 when shown the prototype sheets. The other rows
+  are the design's recommended defaults, adopted by the architect, and the owner may overrule them.
+- **Context:** docs/research/map-atlas.md revision 2, and its review
+  (docs/reviews/review-map-atlas-design.md). It answers the owner's feedback of 2026-09-26 on
+  speed, flow from the world view to a zone, both continents at once, and Zephras Isle.
+- **Owner:**
+  - **O9 layout:** compact. The Eastern Kingdoms are placed 7,168 yd west of their 947 position,
+    and Zephras Isle's card sits at the top of the gap. As a result the game's world painting
+    (947) is not shown at the farthest zoom (O4 closed).
+  - **O3 sea:** painted-water tones as in the revision 2 prototype, from rgb(131, 118, 88) at the
+    coast to rgb(61, 55, 41) offshore, with a contrast of at least 2.5:1.
+  - **O11 alterations covered by D-041 H:** the atlas tiles make five changes to Blizzard's art:
+    1. each painting is masked to its terrain polygon, painted ground and coastal band, and
+       neighbouring paintings' colour is cross-faded over ±200 yd;
+    2. nine painted labels are hidden by a mirror fill from the same painting;
+    3. our own relief-shaded tint fills land that no painting shows;
+    4. our sea colours fill the water outside the coastal bands;
+    5. the art is resampled and re-encoded as WebP q80.
+
+    These changes are listed in the art NOTICE and manifest. No legal conclusion is drawn, and
+    D-033's other terms stand.
+- **Defaults (owner may overrule):**
+  - O1: the atlas replaces the per-world-map surfaces for maps 0, 1 and 2991. "Kalimdor" and
+    "Eastern Kingdoms" stay as view presets.
+  - O2: Zephras Isle appears as a captioned card ("not in position"). Darkspear Islands keeps its
+    own battleground surface.
+  - O5: the budgets become `atlas` ≤ 8.0 MB and `art` ≤ 1.0 MB, superseding D-034's 12 MB art cap.
+    The per-image art the atlas replaces is no longer deployed.
+  - O6: land with no zone painting gets the area tint, shaded by the relief.
+  - O7: the wheel moves 0.5 level per physical notch after calibration, with the trackpad
+    calibrated separately.
+  - O8: the owner signs off a contact sheet before the tiles are first committed and after any
+    parameter change.
+  - O10: the seven zones stored more than 1.2× coarser than their art are rounded up (6.88 MB).
+- **Architect:**
+  - A1: placement is a translation only, in yards and in whole 1,024-yd tiles.
+  - A2: map layers are built per world map and joined in the controller, so only the adapter sees
+    atlas coordinates.
+  - A3: one tile layer with virtual and sea keys, plus a level −5 underlay.
+  - A4: the Leaflet 1.9.4 internals the design names are pinned.
+  - A5: clicks always resolve to a world point.
+  - A6: the atlas is built from the lossless client rasters, with `--check` as a manual gate until CI.
+  - A8: zone rectangles are not drawn while tiles show.
+  - A9: the layout lives in `src/geo/atlas-layout.ts`, pinned by T4, with a file-level architecture
+    rule.
+  - A10: the underlay plus ancestor-first tiles, with `fadeAnimation` off.
+  - A11: labels are governed by `tools/maps/inputs/atlas-labels.json`, and T7 fails on any cut label.
+- **Supersedes:** D-034 item 4 (the 12 MB art budget), and the interim "one art image at a time"
+  rendering (D-038, "Superseded before commit").
+
+## D-043: Milestone 7 optimiser choices (architect; the owner may overrule)
+
+- **Date:** 2026-09-27
+- **Context:** docs/research/optimizer-m7.md (revision 2 and its §19 as-built notes), the plan
+  review (docs/reviews/review-optimizer-m7-plan.md) and the Milestone 7 review
+  (docs/reviews/review-m7.md).
+- **Decisions:**
+  1. **Stage 1 scope.** The section's own accept, complete and turn-in units are reordered or
+     dropped, and one grind fill may be appended at the end of the section.
+     - Adding new quests (`allowNewQuests`) is refused until stage 2.
+     - Hearth and flight moves wait for stage 3 and the committed taxi graph (D-039 B).
+  2. **Grind fill:** the default is `'shortfall'`, so grinding covers only the XP the kept quests
+     cannot reach. Replacing quests with grinding (`'replace-quests'`) is an explicit choice for a
+     run.
+  3. **Rule 3 is relative:** each pool quest keeps all of its units or none of them.
+  4. **Availability during search** comes from relations oriented by the original order, plus
+     level and log-capacity checks that must be no worse than at the original position. The
+     engine and validator re-walk the result, and that re-walk is the final authority.
+  5. **Travel matrices:** one per riding tier, in integer milliseconds, built from
+     `TravelModel.leg` once the leg table is filled.
+  6. **Duplicate detection** uses two arithmetic hash lanes (primes 2147483647 and 2147483629)
+     with an exact compare on every hit. XP is part of the key.
+  7. **Uncertain hearth waits:** solutions are ranked by `comparedMs`, while `estimatedMs` is what
+     gets checked against the engine. The UI shows the guaranteed saving (incumbent − `comparedMs`).
+  8. **Compile budget:** ≤ 30 ms applies to the main-thread compile after the walks, gated warm.
+     First-call figures are reported, not gated.
+  9. **Search contract:** a local pass after each rollout (window 24) is part of the fixed
+     work-item order.
+  10. **Parity bound:** max(1 ms, min(1%, 4 ms × (steps + exit steps))).
+  11. **A numeric XP target above the original's:** the incumbent is the original plus its fill.
+      `no-improvement` returns it with a non-empty diff. If it fails verification, the run is
+      `infeasible`.
+  12. **Diff:** partial apply uses the new placement rule. When a quest and its prerequisite both
+      move, their change-sets require each other. This is to be built in Milestone 8, and until
+      then the M8 re-walk catches the case.
+  13. **No Milestone 7 UI.** The proposal UX is Milestone 8.

@@ -960,36 +960,98 @@ UI labels: "Import RXP custom guide" and "Export RXP custom guide".
 
 ## 11. Optimiser (`src/optimizer`)
 
+Built in Milestone 7: **stage 1** (the section's own quest units reordered or dropped, anchors,
+blocks and bound steps kept) plus a **terminal grind fill**. The implementation plan,
+[research/optimizer-m7.md](research/optimizer-m7.md) (revision 2), holds the reasoning, the fixture
+figures and the step record; this section describes what was built and measured at the final
+verification (2026-09-27), including the Milestone 7 review's fixes. D-043 (proposed) records the
+choices. Every result is "the best route found under these assumptions", never "optimal".
+
+Deferred: `allowNewQuests` (answered `failed`, "adding quests is not available yet"; `zones` and
+`levelWindow` only filter new quests), objective clusters, a grind fill anywhere but at the end
+(stage 2); moving or inserting hearth and bind steps, and flights over known paths (stage 3);
+instance entrance edges (ENG-01, guarded); optimising over pending legs (never).
+
 ### 11.1 Interface
 
 ```ts
-interface Optimizer { optimize(request: OptimizationRequest, options: OptimizationOptions): OptimizerRun }
-interface OptimizerRun {
-  readonly result: Promise<OptimizationResult>;
-  cancel(): void;
-  onProgress(cb: (p: OptimizationProgress) => void): () => void;
+// optimizer/index (src/optimizer/types.ts, src/optimizer/index.ts)
+interface Optimizer {
+  optimize(request: OptimizationRequest, options: OptimizationOptions, context: OptimizationContext, ids: IdSource): OptimizerRun<SearchedSection>;
+  dispose(): void;
 }
+interface OptimizerRun<R> { readonly result: Promise<R>; cancel(): void; onProgress(cb: (p: OptimizationProgress) => void): () => void }
 interface OptimizationRequest {
   project: ProjectV1; baseRevision: number;
   section: { firstStepId: StepId; lastStepId: StepId };
   scope: { allowNewQuests: boolean; zones: UiMapId[] | null; levelWindow: [number, number] | null };
-  goal: { kind: 'min-time'; targetXp: 'keep-original' | number };
+  goal: { kind: 'min-time'; targetXp: 'keep-original' | number; grindFill?: 'shortfall' | 'replace-quests' };
 }
 interface OptimizationOptions { beamWidth: number; maxEvaluations: number; maxMillis: number | null; divergencePenalty: number }
+// DEFAULT_OPTIMIZATION_OPTIONS = { beamWidth: 256, maxEvaluations: 4_000_000, maxMillis: null, divergencePenalty: 0 }
+interface OptimizationContext { analysis: SectionAnalysis; baseline: SectionWalk; cache?: MatrixCache }
 interface OptimizationProgress {
-  phase: 'compiling' | 'searching' | 'finishing'; depth: number; evaluations: number;
+  phase: 'paths' | 'compiling' | 'searching' | 'finishing'; depth: number; evaluations: number;
   beamSize: number; incumbentSeconds: number; bestSeconds: number | null; elapsedMs: number;
+  legs: { done: number; total: number } | null;            // "computing paths", in the scheduler's unit
 }
-type OptimizationResult =
-  | { status: 'improved' | 'no-improvement'; termination: 'exhausted' | 'budget' | 'timeout';
-      reproducible: boolean; steps: RouteStep[]; unknowns: { quests: QuestId[]; note: string }; stats: SearchStats }
+type SearchedSection =
+  | { status: 'searched'; termination: 'exhausted' | 'budget' | 'timeout'; reproducible: boolean;
+      candidates: { steps: RouteStep[]; dependencies: StepDependency[]; solution: SearchSolution }[]; // ≤ 4, best first
+      incumbent: SearchSolution; incumbentSection: { steps: RouteStep[]; dependencies: StepDependency[] };
+      unknownXpBlocked: { closes: number; smallestShortfall: number } | null;
+      summary: ContractSummary; stats: SearchStats }
   | { status: 'cancelled'; stats: SearchStats }
   | { status: 'infeasible' | 'failed'; reason: string; stats: SearchStats };
 ```
 
-`createTypeScriptBeamSearchOptimizer({ dataset, ruleset, geometry, workerFactory })` implements it
-(a future WASM implementation would too). It returns candidate steps; `app` builds the `Proposal`
-(§12.5) with `diff` and an engine re-walk.
+`createTypeScriptBeamSearchOptimizer({ createPort?, cancelGraceMs?, timers?, now?, progressMs? })`
+implements it: compile on the main thread (phase `compiling`), the search in a worker (`searching`).
+The app runs the other two phases in `startOptimization(deps, request, overrides)`
+(`src/app/optimizer-run.ts`), which returns:
+
+```ts
+type OptimizationResult =
+  | { status: 'improved' | 'no-improvement'; termination; reproducible;
+      steps: RouteStep[]; route: RouteStep[]; diff: RouteDiff; dependencies: StepDependency[];
+      unknowns: { quests: QuestId[]; note: string };
+      estimate: { incumbentMs; resultMs; engineMs; originalMs; knownGain; targetXp };
+      verification: VerificationReport | null; rejected: VerificationReport[];
+      summary: ContractSummary; anchors: ReadonlySet<StepId>;
+      verifyRoute(route: RouteStep[]): VerificationReport;      // Milestone 8's "Apply selected changes"
+      stats: SearchStats; timing: OptimizationTiming }
+  | { status: 'cancelled'; stats; timing }
+  | { status: 'infeasible' | 'failed'; reason: string; stats; timing };
+```
+
+The run, in order (each main-thread phase yields a macrotask, so progress paints and a cancel is
+read):
+
+1. **Checks.** The host's and the editor's revisions must both be the request's (checked before
+   the lock); no `'optimizer'` or `'proposal'` lock may be held; the section must be in the route.
+   The `'optimizer'` edit lock (§12.1) is taken for the run, released when it ends even if a store
+   subscriber throws, and handed to `'proposal'` in the same task when `handOver: 'proposal'`.
+2. **`paths`.** A private walker and validator (`createRunWalker` over the host's engine context,
+   one `Places` per context, shared by both walks) walk the project once; `analyseSection` lists
+   the legs the section's matrix needs; the navigation scheduler makes them complete, with leg
+   progress and cancel. The prefix state is replayed once per run.
+3. **`compiling`.** The baseline re-walk from the last hearth cast before the section, with the
+   probe; a section whose legs are still pending is refused (SIMULATION §6); `compileProblem`.
+4. **`searching`.** The worker; progress and improvements are relayed, throttled to one emit per
+   100 ms (the first improvement and the final counts at once).
+5. **`finishing`.** When a numeric target is above the original's known gain, the incumbent (the
+   original plus the fill the target needs) is re-walked first and candidates are judged against
+   it. Each candidate is re-walked and verified in order (§11.2); the first that passes is
+   `improved`, with its diff. Otherwise `no-improvement` returns the incumbent (its steps, estimate
+   and re-walk describe one route); an incumbent with a fill that fails verification is
+   `infeasible`.
+
+`unknowns.note` says which figures are lower bounds: unknown-XP turn-ins, parts with unknown time
+(counted as nothing, so the saving there is uncertain), turn-ins that carry objective work whose
+travel is not priced (D-040), and orders refused because no fill may follow unknown XP, with the
+known XP by which a lower target would allow them. `DerivedActions.optimizationHost()` is not built
+yet: `createOptimizationHost` builds the host from the same inputs as the pipeline, and the quiet
+navigation view is `quietTravelModel` there (Milestone 8 moves both into the pipeline).
 
 ### 11.2 Section contract
 
@@ -997,104 +1059,162 @@ Let Q_ext be every quest mentioned outside the section. A proposal must satisfy:
 
 1. **End state:** the state at the section end, projected onto Q_ext (log membership, each
    objective's done flag, turned in, abandoned), equals the original's.
-2. **No new blocking:** for each suffix quest, the end state does not newly block it under
-   VAL-1..22 at its accept position (checked with the engine).
-3. **No loose ends:** pool quests outside Q_ext end the section untouched or turned in, never
-   left in the log.
-4. **Travel state no worse:** hearth bind point, known flight paths, riding state and
-   `hearthReadyAt` are at least as good as the original's.
-5. **Anchors:** locked steps are never removed and keep their relative order. **Implicit
-   anchors** are added for every step whose condition is not unconditionally true and, until
-   stage 3, every unlocked hearth, flight or abandon step. Every other non-quest step (travel,
-   note, vendor, train) is **bound** to the next quest action in the same group, or else the next
-   quest action, and moves with it; with no such action it is an implicit anchor. Nothing in the
-   section is dropped by omission.
-6. **Unknown XP:** quests in the section with unknown XP keep their accept and turn-in as
-   obligations. `allowNewQuests` never adds unknown-XP or repeatable quests. Target and achieved
-   XP count known XP only, and the result lists the unknowns.
-7. **Goal:** reach the target XP (default: the original section's known XP), then travel to the
-   first step after the section; minimise estimated elapsed time.
+2. **No new blocking:** the suffix is pinned in the search (suffix accepts' availability, suffix
+   step activity, and the **suffix XP interval** [ΔLo, ΔHi): the section's end XP may not cross a
+   level or XP threshold that a suffix step reads), and verified by the re-walk.
+3. **No loose ends (relative):** a pool quest outside Q_ext keeps all of its units or none, and
+   ends with its original status or as it started.
+4. **Travel state no worse:** bind point equal, known flight paths a superset, riding tier at
+   least, `hearthReadyAt` no later.
+5. **Anchors:** locked steps keep their relative order. **Implicit anchors**: steps with a
+   condition that is not unconditionally true, hearth, bind, flight and abandon steps, grind steps,
+   transport travel, any-of accepts and turn-ins, `skipIfMissing` turn-ins, group-condition steps,
+   completes before their accept (SIM-16) and inert steps. Every other non-quest step is **bound**
+   to the next quest step in the section, whatever its group, and moves with it; with none after
+   it, it is an implicit anchor. **Barriers** (steps that leave the position unknown) move only in
+   a **block** with their original neighbours, so no candidate prices as unknown a leg the original
+   priced. A `complete` is never dropped while its quest is kept, nor moved after its turn-in, and
+   a quest whose turn-in carries work (D-040) is obligatory. Nothing is dropped by omission.
+6. **Unknown XP:** unknown-XP quests keep their accept and turn-in, and the XP-granting units
+   before an unknown-XP turn-in stay before it; target and achieved XP count known XP only; no grind fill may
+   follow unknown XP (XP-4), and the closes refused for that reason are reported
+   (`unknownXpBlocked`).
+7. **Goal:** reach the target known XP (default: the original section's), then travel the exit
+   chain; minimise estimated elapsed time. A numeric target the fill could meet only by crossing a
+   suffix threshold is `infeasible`.
 
-The incumbent is the original section, which is always feasible, so every run returns a valid
-answer.
+**The incumbent** is the original section (plus the fill a numeric target above its gain needs).
+Compile closes it under the full closing rules and prices it with the search's own transitions; a
+disagreement with the engine is `failed` ("the model disagrees with the engine"), never a silent
+result, so every searched run can return a valid answer.
+
+**Verification** (`src/app/optimizer-verify.ts`; the validator is authoritative, and a failing
+candidate falls through to the next): `end-state`, `errors` (no new error-severity issue),
+`availability` (no accept, in the section or the suffix, less available than at its original
+position; any-of choices unchanged), `suffix-activity`, `loose-end`, `travel-state`, `anchors`,
+`improvement` (the re-walk at least 1 ms shorter than the incumbent's re-walk, with the target
+met) and `parity` (the estimate within max(1 ms, min(1% of the re-walk, 4 ms × (steps + exit
+steps))) of the re-walk; measured parity on real sections 0.2-1.0 ms).
 
 ### 11.3 Compilation
 
-`optimizer/core/problem.ts` compiles on the main thread (budget ≤ 30 ms):
+`optimizer/core` (`section.ts`, `locations.ts`, `relations.ts`, `matrix.ts`, `pricing.ts`,
+`replay.ts`, `problem.ts`) compiles on the main thread in two calls: `analyseSection` on the
+analysis walk (the structure and the legs to request) and `compileProblem` on the baseline walk,
+which rebuilds the structure and refuses a baseline that differs from the analysis.
 
-- pool quests sorted by QuestId, objectives by index, locations by (mapId, x, y, entity id), so
-  results never depend on data arrival order;
-- per-quest constraint records covering every VAL predicate the engine checks (min/max level,
-  required-done sets, required-in-log, blocked-if-done-or-in-log, race/class) plus
-  `externalActiveCount` for quest-log capacity;
-- actions (accept, complete target, turn in, anchor, bound units, grind; objective clusters in
-  stage 2) with location indices and (questLevel, baseXp, xpKnown); XP is computed at transition
-  time with the shared `sim` functions;
-- a location-by-location travel-time matrix in **integer milliseconds**, computed with `sqrt`
-  only; cross-world pairs only via `TravelGraph` edges, otherwise infeasible (never zero);
-- **(Milestone 3b, terrain-navigation.md §9.4; built in Milestone 7):** the matrix comes from
-  the app's navigation leg table, in integer **tenth-yards** (ground and swim separately) plus
-  connector tenth-seconds, as typed arrays; `transitions.ts` turns them into integer milliseconds
-  with the state's speeds, so riding state stays exact. Before compile the app makes the
-  section's legs complete (`computeLegs`, the "computing paths" phase with progress and cancel).
-  Fallback entries come from the same `TravelModel`; pairs across world maps, and same-map pairs
-  in different components that a transport joins, use the `TravelGraph`. Matrices are directed and
-  cached per (navRevision, sorted endpoint keys);
-- every action carries `sourceStepId | null`.
-
-The compiled problem (tens of KB) is posted to the worker by structured clone; the main thread
-keeps its decode tables.
+- **Order:** units by original step index, quests by id, locations by (mapId, x, y, zoneHint),
+  spawn candidates in dataset order, so results never depend on data arrival order.
+- **Replay:** the section, and the suffix to the end of the exit chain, are replayed through the
+  engine's own `runStep` from the walk's state and memo at the section start. Flights and
+  transports are priced per from-location and riding tier with scratch copies of that state, so
+  the optimiser and the engine agree by construction. (This stands in for the plan's M7.0 engine
+  exports `memoBefore`, `flightDeparture` and `chooseCrossing`, which were not built.)
+- **Relations and checks:** availability dependencies from the app
+  (`src/app/optimizer-availability.ts`, through the validator's own checks; `optimizer/core` reads
+  `validate` by `import type` only), oriented by the original order, with VAL-4, VAL-5, VAL-20 and
+  a breadcrumb target's availability evaluated dynamically, plus log capacity, any-of choices,
+  step conditions and the suffix pins.
+- **Locations:** interned endpoints; a spawn is a location only if it is the nearest spawn from
+  some reachable location (a fixpoint, TIME-2); at most 1,024 locations.
+- **Matrices:** one `Int32Array` of integer ms per riding tier present, over the pairs that can be
+  consecutive only, filled through the **quiet** travel model (it reads the leg table without
+  recording misses): `ms = round(1000 × leg.seconds)`, so the navigation model's tenth-yards,
+  speeds and same-map transports are the engine's. Sentinels: `-1` unknown (usable only where the
+  original used it), `-2` different world maps (a free unit's move is infeasible, never free),
+  `-3` never requested. At most 13,500 requested legs. Matrices are directed and cached by the
+  model's key (revision, detour, speeds, tiers, same-map transports) and the endpoints, and the
+  worker gets copies (the problem's typed-array buffers are transferred).
+- **Exit chain:** the travel from the section end to the first suffix position that no longer
+  depends on it. A move between world maps there is unknown travel, as in the engine (SIM-4); a
+  suffix step with no location whose NPC's spawns are all at one point ends the chain.
+- **Pricing slice:** what `sim` needs (quest XP inputs, objective work, grinds, trains) ships with
+  the problem; the worker calls the `sim` functions themselves, memoised per (unit, level); grinds
+  and hearth waits are priced per transition. Each part is rounded to integer ms.
+- **Hearth waits (TIME-4):** the incumbent's wait bound at each hearth use is recorded, so a
+  candidate's uncertain wait is compared with it (§11.4).
+- **Sizes:** the bench pool (100 quests, 300 units, 113 locations, 12,656 pairs, one tier) compiles
+  in 9.6 ms normalised warm; see §14.
 
 ### 11.4 Search
 
-- **Stepper:** `createSearch(problem, options)` exposes `advance(maxEvaluations) → progress | done`.
-  The output does not depend on slice size (tested with slices of 1 and 10^6).
-- **Candidates** are scored as records in preallocated typed arrays (parent rank, action, score,
-  elapsed, xp, 64-bit Zobrist key updated incrementally from fixed-seed constants); child states
-  are built only for the kept top K.
-- **Duplicate handling** per layer: an open-addressing table on the Zobrist key with an exact
-  state comparison on a hit. A node is dropped only if another with the same exact key dominates
-  it (elapsed ≤ and xp ≥, one strict); each key keeps at most K non-dominated entries.
-- **Ordering:** (score, elapsed, parent rank, action index), total and deterministic.
-- **Ancestry:** a trail of `(parentTrailIndex, action)` pairs in an `Int32Array`; memory is
-  beam width × depth × 8 bytes.
-- **Transitions by stage:** (1) accept, complete, turn in, anchors, bound units; (2) grind fill and
-  objective clusters (shared targets, drop sources, nearby spawns); (3) hearth (cooldown-aware) and
-  flights over known paths.
-- **Anytime:** every N layers a greedy rollout from the best beam node may replace the incumbent
-  and emits `best`.
-- **Heuristic:** `score = elapsed + travelToNearestUsefulWork + remainingXp / estimatedXpRate +
-  prerequisitePenalty + divergencePenalty × divergence`, with a precomputed per-location neighbour
-  order. It is a practical ranking, not a bound. The UI says "best route found under these
-  assumptions", never "optimal".
-- `optimizer/core` may not call `Math.hypot`, `pow`, `exp`, `log` or trigonometric functions
-  (their results may differ between engines); the architecture test enforces it.
+- **Stepper:** `createSearch(problem, options)` exposes `advance(maxEvaluations)`. A run is a fixed
+  sequence of **work items**: rollout R0, local pass P0, layers L0-L7, rollout R8, P8, and so on
+  (`rolloutEvery` 8). The budget is checked after each item and never cuts one short; `advance`
+  may pause anywhere inside an item and resume exactly there.
+- **Layers:** a beam over units with **implicit drops** (an order edge drops the units it
+  overtakes; closing drops the rest). Candidates are records in typed arrays (sized from 32,768
+  entries and grown on demand); child states are built only for the kept top K, chosen with a
+  bounded max-heap on the selection order. Ancestry is a trail of `(parent, unit)` pairs in an
+  `Int32Array`.
+- **Key and duplicates:** the exact key is the scheduled set, the quest statuses and (location,
+  last visit, riding tier, unknown-XP count, since-cast flag, level, XP into level). The table hashes
+  it with **two arithmetic lanes** (Lehmer constants from a fixed seed, sums modulo the primes
+  2^31 − 1 and 2^31 − 19, XP folded modulo 65,521, every value below 2^47; no bitwise operators),
+  and every lane match is followed by an exact comparison of the rows as 32-bit words.
+- **Dominance:** within a key, on (elapsed, hearth ready time, unknown parts, **wait excess**, and
+  divergence when penalised), keeping at most four non-dominated entries per key.
+- **Uncertain hearth waits:** a wait after unknown time is 0 in the engine's figure. Each adds
+  max(0, its bound − the incumbent's bound at that hearth) to the node's wait excess.
+  `estimatedMs` (elapsed + fill + exit) is the engine-parity figure; `comparedMs` (estimatedMs +
+  excess) is what solutions are ranked and compared by, and `incumbent − comparedMs` is a saving
+  that holds however long the unknown time was. A solution whose `estimatedMs` beats the
+  incumbent while its `comparedMs` does not is never listed.
+- **Ordering:** (score, elapsed, parent rank, unit index), total and deterministic; the unit index
+  follows the original step order, so ties prefer it.
+- **Heuristic:** `score = elapsed + waitExcess + nearestUsefulMs + remainingXp / incumbent's XP
+  rate + divergencePenalty × divergence`, with a per-location neighbour list (at most 48). It is
+  a practical ranking, not a bound.
+- **Closing:** the riding tier, the log, the suffix XP interval and the target. The terminal fill
+  (an unlocated `grind` to a level and XP, priced by `sim/grind.ts` at the end state) is offered
+  while no unknown XP is pending, up to max(target, the suffix floor); with `grindFill:
+  'shortfall'` only when every droppable quest is scheduled. A node that closes with its target
+  met is not expanded (so a detour through an optional unit whose arrival radius shortens a move
+  is never taken; review COR-04).
+- **Anytime:** each rollout is greedy from the best beam node; the **local pass** that follows
+  moves one unit of the best solution up to 24 places either way and keeps a move only when it
+  lowers `comparedMs` (off under a divergence penalty). Up to four distinct solutions are kept,
+  best first by `comparedMs`; `best` is emitted when the head improves.
+- `optimizer/core` may not call `Math.hypot`, `pow`, `exp`, `log` or trigonometric functions, nor
+  use clocks or randomness; the architecture test enforces it.
 
 ### 11.5 Worker protocol
 
 ```ts
 type ToWorker =
-  | { type: 'start'; runId: number; problem: SearchProblem; options: OptimizationOptions }
+  | { type: 'start'; runId: number; problem: SearchProblem; options: SearchOptions; maxMillis: number | null }
   | { type: 'cancel'; runId: number };
 type FromWorker =
-  | { type: 'progress'; runId: number; progress: OptimizationProgress }
-  | { type: 'best'; runId: number; actions: Int32Array; estimatedMs: number }
-  | { type: 'done'; runId: number; result: SearchOutcome }
+  | { type: 'progress'; runId: number; progress: SearchProgress }
+  | { type: 'best'; runId: number; solution: SearchSolution }
+  | { type: 'done'; runId: number; outcome: SearchOutcome }       // termination 'cancelled' acknowledges a cancel
   | { type: 'error'; runId: number; message: string };
 ```
 
-The worker owns the clock: it runs slices of about 25-50 ms, yields with a `MessageChannel`
-self-post (not `setTimeout`, which is clamped), checks for cancel between slices and throttles
-progress to about 10 per second. The client terminates and recreates the worker if a cancel is
-not acknowledged within a grace period, and ignores messages from stale runs.
+`start` transfers the problem's typed-array copies. The worker (`worker/host.ts`, entry
+`optimizer.worker.ts`, as `src/nav/worker`) owns the clock: slices of about 30 ms (the first 2,048
+evaluations, growing at most fourfold), a `MessageChannel` yield between slices, a cancel check
+between slices, `maxMillis` enforced there, progress at most every 100 ms and `best` on each
+improvement. The client (`worker/client.ts`) terminates the worker if a cancel is not acknowledged
+within 1,000 ms; a new run while a cancel is unacknowledged terminates the stuck worker and starts
+a fresh one; messages of stale runs are dropped; a crashed worker is replaced on the next run.
 
 ### 11.6 Determinism
 
 Identical (problem, options) give identical output when the run ends by exhaustion or
-`maxEvaluations`. Results ended by `maxMillis` are labelled `reproducible: false`; no test uses
-`maxMillis`. Determinism tests compare proposals modulo new step IDs.
+`maxEvaluations`, whatever the slice size, because work items are never cut and the order is total.
+Results ended by `maxMillis` are `reproducible: false`; no test uses it. Tested: slices of 1, 7,
+1,000 and 10^6 (core and fixture 10b); every hash lane constant; a structured-clone copy of the
+problem; the in-process worker host against a direct loop; the local pass across slices; fixture 9
+through the app across slices; and the exact gate of §14 (`tests/optimizer-evaluations.test.ts`),
+which compares evaluations, layers, duplicates, dominated, rollouts, the first improvement and a
+hash of every solution with the stored baseline.
 
-### 11.7 Fixtures (fully specified: coordinates, XP, target, scope, width, expected actions)
+### 11.7 Fixtures
+
+Fully specified in [research/optimizer-m7.md](research/optimizer-m7.md) §13 (harness H) and tested
+through the core and through the app (`tests/optimizer-fixtures.test.ts`, with the core's own
+cases in `src/optimizer/core/*.test.ts`):
 
 1. Greedy-XP trap: a far 3,000-XP quest vs two near 1,600-XP quests.
 2. Nearest-neighbour trap (the nearest quest leads away from a cluster near the exit).
@@ -1102,12 +1222,22 @@ Identical (problem, options) give identical output when the run ends by exhausti
 4. Beam width 1 fails, width ≥ 4 succeeds.
 5. Level gate: quest C needs a level reached only after A and B.
 6. Locked turn-in anchor whose objectives must be scheduled first.
-7. Each §11.2 rule, including a custom quest with null XP that must survive.
-8. Grind fill reaching a target quests alone cannot.
-9. Brute-force oracle over all orders of ≤ 7 actions: at sufficient width the beam equals the
-   optimum and never beats it; pruning never removes the optimum.
-10. Cancellation, evaluation budget, deterministic tie-breaking.
-11. Parity: the worker's estimate for a proposal matches `simulate` within 1%.
+7. Each §11.2 rule (7a-7g, and 7h for the suffix XP interval), including a custom quest with null
+   XP that must survive (7f).
+8. Grind fill reaching a target quests alone cannot; 8b: `'replace-quests'` against `'shortfall'`.
+9. Brute-force oracle over all orders of ≤ 7 units (40 seeds each of uniform, coarse-grid and
+   arrival-radius points): at beam 5,040 the search equals the oracle, with pruning on and off, and
+   no width beats it. That the beam equals the optimum holds for these instances, not in general
+   (COR-04). The model oracle (`modelOracle`) also checks pruning on hearth-wait and
+   suffix-threshold families.
+10. Cancellation (10a), the evaluation budget and slice independence (10b), and deterministic
+    tie-breaking (10c).
+11. Parity: every candidate's and the incumbent's estimate matches the engine's re-walk within
+    §11.2's parity bound (in practice within a few ms; the plan's 1% is the ceiling).
+
+Also: 12 (a position-unknown barrier keeps its block), 13a-13c (any-of choice, minimum reputation,
+breadcrumb target), and four real RXP sections whose exit chain starts with a move between world
+maps (review PAR-01).
 
 ## 12. Application shell
 
@@ -1261,14 +1391,49 @@ Accept, Reject, Apply selected changes (re-walked and re-validated before applyi
 
 ## 13. Route diff (`src/diff`)
 
-- Match steps by ID; for imported updates, also by semantic key, with ties broken by original
-  index. Each matched step maps to a unique before-index, so move detection is the longest
-  increasing subsequence of before-indices (O(n log n)); unmatched steps are inserts or removes.
-- Output: operations relative to `before` (`remove`, `insert after`, `move after`, `modify`),
-  grouped into **change-sets**: all operations touching one quest form one set, and sets are
-  closed under prerequisite and exclusivity dependencies. The UI selects change-sets.
-- `applyChangeSets(before, diff, selected)` resolves insert/move anchors to the nearest surviving
-  preceding step. The result is re-walked and re-validated before the user confirms.
+Built in Milestone 7 (`lis.ts`, `steps.ts`, `equal.ts`, `diff.ts`, `change-sets.ts`, `apply.ts`).
+Pure and deterministic; it imports only `domain`, so relations are injected.
+
+```ts
+diffRoutes(before: RouteStep[], after: RouteStep[], options?: DiffOptions): RouteDiff
+diffRoute(before: Route, after: Route, options?: DiffOptions): RouteDiff        // plus group ops
+applyChangeSets(steps: RouteStep[], diff: RouteDiff, selected: ReadonlySet<string>): RouteStep[]
+applyRouteChangeSets(route: Route, diff: RouteDiff, selected: ReadonlySet<string>): Route
+interface DiffOptions {
+  semanticKey?: (step: RouteStep) => string | null;     // imported updates: pass `semanticStepKey`
+  relations?: { exclusive(q: QuestId): QuestId[]; prerequisites(q: QuestId): QuestId[] };
+  fixed?: (step: RouteStep) => boolean;                 // default step.locked; the optimiser passes its anchors
+  dependencies?: { stepId: StepId; requires: StepId[] }[];  // the optimiser's step dependencies (the fill)
+}
+```
+
+- **Matching:** by id; with `semanticKey`, each unmatched `after` step (in order) takes the lowest
+  unmatched `before` index with an equal non-null key. Duplicate ids are an error.
+- **Moves:** the matched steps kept in place are a **maximum-weight** increasing subsequence of
+  their before-indices (O(n log n), a max segment tree, no bitwise operators), with fixed steps
+  weighing n + 1 and the others 1, so no locked step or optimiser anchor is reported as moved when
+  the fixed steps are in order. The tie rule is part of the contract (`lis.ts`). Every other
+  matched step is a move; unmatched steps are removes and inserts; a matched pair that is not the
+  same object and not structurally equal is also a modify.
+- **Change-sets:** an op belongs to the quests its step names; a non-quest step takes its host's
+  (the next quest step, `hostIndices`), except a step that is a dependency's `stepId` (the grind
+  fill), which forms its own `s:<stepId>` set. Union-find merges ops that share a quest or a step
+  and quests related by `exclusive`. `requires` edges: placing a quest needs its prerequisites
+  placed, removing a prerequisite needs its dependants removed, and the step dependencies. Set ids
+  are `q:<lowest quest id>`, `g:<group id>` or `s:<step id>`.
+- **Apply:** the selection is closed over `requires`; selected removes, then selected inserts and
+  moves in `after` order, each placed directly after the nearest preceding `after` step that is
+  kept in place or placed by a selected op (unselected moves and inserts are skipped, because
+  those steps are still at their `before` place), then selected modifies. Kept and selected steps
+  keep their `after` order and the rest their `before` order; every set gives `after`, none gives
+  `before`, and applying a selection to its own result changes nothing. The result is re-walked and
+  re-validated before the user confirms (`OptimizationResult.verifyRoute`).
+- **Known gap:** a prerequisite moved later on its own can still break a dependant that stays put
+  (`requires` edges point from the dependant to its prerequisites, not back); Milestone 8's
+  re-walk catches it, and the spec should decide whether both-moved prerequisite pairs require
+  each other.
+- **Measured** (§14): reversed 10,000-step routes 6.5 ms, shuffled with 1% edits 7.4 ms, against
+  50 ms.
 
 ## 14. Performance budgets
 
@@ -1278,7 +1443,7 @@ Machine-independent CI gates (fail the build):
 |---|---|
 | Entry chunk + static imports (gzip, from Vite's build manifest; chunks loaded by `import()` and worker scripts are reported, not gated) | ≤ 250 KB |
 | Each `public/data` file (gzip) | recorded baseline + 10%; total ≤ 1.2 MB |
-| Optimiser evaluations on fixed fixtures | recorded baseline, exact |
+| Optimiser evaluations on fixed fixtures (`tests/optimizer-evaluations.test.ts`: 37 cases, the §11.7 fixtures, 10b and fixture 9's first 12 instances; evaluations, layers, duplicates, dominated, rollouts, first improvement and a hash of the solutions; and the bench's `exact` blocks under `--check`) | recorded baseline in `docs/measurements/optimizer-m7.json`, exact |
 | `public/nav` (navmesh blocks, `map.bin`, connectors) | ≤ 7 MB total (target 5-6 MB; measured 5.44 MB); ≤ 300 kB per file; per-map baselines + 10% (D-030) |
 | `public/maps/art` | ≤ 12 MB total (measured 9.05 MB); per-file baselines + 10% (D-034) |
 | `public/maps/terrain` | ≤ 600 kB total (measured 445 kB); per-file baselines + 10% (D-034) |
@@ -1294,11 +1459,41 @@ Time budgets, as Node benchmarks against stored baselines in `docs/measurements/
 | Diff of two 10,000-step routes | ≤ 50 ms |
 | Autosave of a 10,000-step project (main thread) | ≤ 50 ms |
 | Map: moveend redraw at the LOD cap / one route edit applied | ≤ 16 ms / ≤ 8 ms |
-| Optimiser compile | ≤ 30 ms |
+| Optimiser compile (analyse + compile on the main thread, after the walks and "computing paths"; straight-line and navigation models) | ≤ 30 ms |
+| Optimiser run's private walks (analysis and baseline re-walk) | each within the walk + validate budget (reported) |
 | RXP import of a typical guide (≤ 300 steps), main thread | ≤ 250 ms (measured about 100 ms for 150 steps); whole addon files (thousands of steps, about 1.3 s) move to a worker when a measured need arises |
 | Autosave IndexedDB put of a 10,000-step project | measured 35 ms median unthrottled; the Milestone 9 throttled run decides whether steps are stored in chunks (D-036) |
-| Optimiser, pool 100 quests (~300 actions), beam 256 | first improvement < 2 s; worker heap < 64 MB |
+| Optimiser, pool 100 quests (~300 actions), beam 256 | first improvement < 2 s; worker heap < 64 MB; a search to 2,000,000 evaluations within its stored baseline + 25% |
 | Navigation legs for a route section, in the nav worker (RC-07) | ceiling 16 s, with progress and cancel; measured 3.03 s for a realistic 116-point section, heap 60.9 MB; with the worker's fetch and SHA-256 (3b.6) 3.7-4.1 s, heap growth 64.7 MB after gc (peak 91-99 MB); the main thread never waits on it (straight-line fallback until legs arrive) |
+
+**Measured at the Milestone 7 final verification (2026-09-27),** after the Milestone 7 review
+fixes, on the reference Windows machine (Node 22.13.1). Every `--check` run was `--repeat 3 --runs
+15`, bundled, one fresh process per case and repeat; the CPU probe read 40.3-41.6 ms against the
+calm 40 ms. Figures are the median of the three process medians, with the process medians' spread
+in brackets and the probe-normalised median after it. The optimiser's bench section is
+`tests/bench/optimizer.bench.ts`'s generated pool (seed 7): 100 quests on Kalimdor, 300 units,
+113 locations, 12,656 pairs, a level-10 Horde warrior, straight-line model at 10 yd/s, target
+`keep-original`, beam 256, in id order (a weak incumbent), run through the app's host and walks.
+The plan's Barrens and Durotar section was not built as the bench.
+
+| Area | Measured | Script, stored baseline |
+|---|---|---|
+| Entry chunk + static imports | 237.60 kB gzip of 250 kB; the optimiser is not in it (Milestone 8 adds the `import()`; the projection is 238.65 kB, with the lazy `optimizer-run` 9.53 kB and `optimizer.worker` 18.13 kB gzip) | `pnpm build` (dist audit); `lazyChunks` in `optimizer-m7.json` |
+| Optimiser compile, straight line (warm) | 9.71 ms [9.01-9.88], 9.63 normalised (baseline 9.10) | `tests/bench/optimizer.bench.ts --check docs/measurements/optimizer-m7.json`; `compile` |
+| Optimiser compile, navigation model (one click on a complete leg table: analyse, computing paths, pending check, compile) | 14.25 ms [13.82-14.87], 13.99 normalised (baseline 14.52) | the same; `compileNav` |
+| Optimiser compile, first call in a fresh process (tsx, after the walks) | straight line 18.0-19.2 ms (5 processes), navigation 24.2-25.1 ms (3): within 30 ms. The review measured 36.8 ms for a first analyse + compile with nothing warmed | `--case compile\|compileNav --runs 1 --warm 0`, not stored |
+| First improvement, beam 256 (worker thread, from the start post) | 11.08 ms [10.99-11.22], 10.89 normalised, at exactly 16,997 evaluations (incumbent 37,741,315 ms, first best 19,622,441 ms) | the same; `firstImprovement` |
+| Search to 2,000,000 evaluations, beam 256 | 513 ms [513-538], 492.9 normalised (baseline 504.1); exactly 2,115,281 evaluations, 48 layers, best 15,906,464 ms | the same; `search` |
+| Worker heap, beam 256 | peak 26.39 MB (idle 17.13 MB) of 64 MB; search arrays 8.9 MB | the same; `heap` |
+| A good incumbent (nearest-neighbour tour of the pool, 12,951,092 ms) | first improvement at 23,448 evaluations; best 12,308,828 ms (−4.96%) at 4,000,000 evaluations. From the weak incumbent the best at 2,000,000 evaluations is 15,906,464 ms, 23% slower than that tour | the review's scratch `reorder.ts`, not stored (no `firstImprovement.guide` case yet) |
+| Optimiser run's walks, realistic route steps 4,900-5,049 | prefix replay 2.2 ms, analysis walk 15.3 ms, baseline re-walk 4.9 ms; the longest main-thread task before the worker starts 19.0 ms | `--case walks`, stored as `walks` (reported) |
+| Diff of two 10,000-step routes | reversed 6.54 ms [6.27-6.56], 6.46 normalised (baseline 8.08); shuffled with 1% edits 7.51 ms [6.93-7.63], 7.42 (9.24): within 50 ms. A merged 10,000-step chain 6.7 ms (reported) | `tests/bench/diff.bench.ts --check`; `diff10000` |
+| Walk only, 10,000 steps | realistic cold 12.77 ms [12.77-12.99], warm 9.04 [8.90-11.10], edit 4.33 [4.24-4.66]; stress cold 24.62 [24.45-24.70], warm 11.09, edit 5.49 | `tests/bench/engine.bench.ts --check`; `engine-m6.json` |
+| Walk + simulate + validate, 10,000 steps | realistic cold 15.79 ms [14.63-15.79], warm 11.41 [11.14-11.46], edit 6.41 [5.73-6.91]: within 20 ms; stress cold 37.63, warm 20.66 [19.63-21.03], edit 10.26 | `tests/bench/validate.bench.ts --check`; `engine-m6.json` |
+
+Every `--check` passed: within 25% of its stored baseline and its budget, the optimiser's `exact`
+blocks equal. The stored `optimizer-m7.json` baselines were recorded after the review fixes and
+were not re-recorded here.
 
 **Measured at the final verification after the Milestone 6 review fixes (2026-09-26).** Node
 22.13.1 on the reference Windows machine. Two stale background processes kept about two to three

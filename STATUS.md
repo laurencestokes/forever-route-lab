@@ -4,16 +4,20 @@
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md).
 > Nothing here depends on any previous AI conversation.
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 ## Current milestone
 
-**Milestone 6** (rules, simulation, validation, route warnings and estimates) and **Milestone 3b
-step 3b.6** (navigation worker, leg table, navigation travel model, walking paths): complete.
-**Map rework** (owner feedback, 2026-09-26): in design. It covers a seamless atlas with both
-continents and the new islands, continuous zoom, speed, and a presentation layer for quests,
-dungeons, flight paths and zone colouring modelled on WoWF-QRP and MapGenie. It replaces the
-interim one-image-at-a-time art rendering. Then **Milestone 7** (optimiser).
+**Milestone 7** (optimiser and route diff): complete, with no UI yet; the proposal UX is
+Milestone 8. Milestones 6 and 3b.6 are complete.
+
+**Map rework** (owner feedback, 2026-09-26): both designs are complete and decided.
+- The seamless atlas: [docs/research/map-atlas.md](docs/research/map-atlas.md), D-042.
+- The presentation layer: [docs/research/map-presentation.md](docs/research/map-presentation.md),
+  D-039 and D-041.
+
+Building them is next, together with the optimiser search-quality fix. Milestone 8 (proposal UX)
+follows.
 
 ## Completed work
 
@@ -116,26 +120,38 @@ interim one-image-at-a-time art rendering. Then **Milestone 7** (optimiser).
   - Five critics with sceptic verification, three fixers and a final verifier: 67 findings, 66
     confirmed, all fixed or tracked. See [docs/reviews/review-m6-3b6.md](docs/reviews/review-m6-3b6.md)
     and D-038.
+- **D-040:** a turn-in carries the objective work that no complete step finished (owner decision),
+  with an adversarial review.
+- **Milestone 7:**
+  - `src/optimizer`: a deterministic beam search in a worker. It uses typed-array candidates,
+    an arithmetic two-lane hash with exact compare, dominance pruning, anytime rollouts and a
+    local pass. The section contract (§11.2) is checked, and the engine re-walks every result.
+  - `src/diff`: a weighted-LIS route diff with change-sets and apply-selected.
+  - The app compile, with "computing paths", the edit lock and verification.
+  - §11.7 fixtures 1-11, including a brute-force oracle.
+  - Review: 38 findings, all fixed except one kept by design and one finished at verification
+    ([docs/reviews/review-m7.md](docs/reviews/review-m7.md), D-043).
 
 ## Branch / commit
 
 - Branch: `main`
 - Commits: `e2e577f` skeleton, `14acc7a` M0, `374354a` M1, `daeefb1` M2, `0b56df9` M3,
-  `07daaa4` M4/M5/M3b part 1, then the M6/3b.6 commit (see `git log`).
+  `07daaa4` M4/M5/M3b part 1, `02c8d81` M6/3b.6, `efd1b1b` D-040, `6b79c31` presentation design,
+  then the M7 commit (see `git log`).
 
 ## Build / test status
 
-As of the Milestone 6 / 3b.6 commit (`pnpm check`, plus the nav, maps and RXP gates):
+As of the Milestone 7 commit (`pnpm check`, plus the nav, maps and RXP gates):
 
 | Check | Status |
 |---|---|
 | Typecheck (pure, app, node configs) | pass |
 | Lint | pass |
-| Tests | 228 files, 3,177 tests, pass (client tests need the installed client) |
+| Tests | 258 files, 3,840 tests, pass (client tests need the installed client) |
 | Data validation (`data:validate`, public/data and fixture) | pass |
 | Reproducibility (`extract --check`, needs the QuestieDB clone) | byte-identical (manual gate until CI, Milestone 9) |
 | Licence gate | pass (8 shipped packages) |
-| Production build + dist audit | pass; entry 236.96 kB gzip of 250 kB; derived pipeline lazy (about 36 kB); nav worker 17.2 kB gzip (reported); data 938.6 kB gzip of 1.2 MB |
+| Production build + dist audit | pass; entry 237.60 kB gzip of 250 kB (optimiser lazy); derived pipeline lazy (about 36 kB); nav worker 17.2 kB gzip (reported); data 938.6 kB gzip of 1.2 MB |
 | Benches (`--check`, bundled, probe-normalised) | engine, validate and map-edit pass. Realistic 10,000-step walk + validate: 12.2 ms warm, 16.3 ms cold. `derived --budget` passes bundled; the class change is 51.5 ms under tsx (open) |
 | Navigation (`nav:validate` plain, `--client`, `--partition`; `nav:check`) | 56 / 62 / 60 checks pass; 113 of 113 files byte-identical on rebuild; gates G1-G15 pass (manual until CI; needs the client) |
 | Map art and terrain (`convert.ts --check`, `byproducts.ts --check`, `maps:validate`) | up to date, byte-identical; 14 checks pass |
@@ -162,6 +178,14 @@ As of the Milestone 6 / 3b.6 commit (`pnpm check`, plus the nav, maps and RXP ga
   `.cache/map-atlas/perf.md`, summarised in the design doc when it lands: wheel-zoom settings,
   route-list re-renders (partly fixed by PERF-11), the art-swap gap, and the dev server over a
   network.
+- **Optimiser search quality (M7 open item 1):** starting from a weak route, the beam's best is
+  about 23% slower than a nearest-neighbour tour of the same pool. Seed it with constructive tours
+  and add or-opt and 2-opt moves before Milestone 8 shows results (docs/reviews/review-m7.md).
+- **M7 leftovers:**
+  - partial apply with a moved prerequisite (D-043 item 12, Milestone 8);
+  - the shown saving must use `comparedMs` (COR-02);
+  - a cold first compile can take 36.8 ms;
+  - store listeners are not isolated.
 - **ENG-01:** no instance world map ids, so there are no entrance edges. Instance steps get SIM-4,
   and the dungeon and raid multipliers never apply. Source it from QuestieDB's `instanceIdToAreaId`.
 - **NAV-08:** the dataset has no dock NPCs for the seeded transports, so the same-map transport rule
@@ -225,8 +249,10 @@ _None._
 
 ## Exact next tasks
 
-**1. Map rework (owner feedback, 2026-09-26).** Two design runs are in progress, each with
-research, competing designs, judges and an adversarial critic:
+**1. Map rework (owner feedback, 2026-09-26).** Both designs are complete and reviewed. Build
+them in order: atlas steps ATL.0-ATL.11, then presentation steps MP.*, including the client taxi
+graph, zone faction and dungeon tuning levels (D-039). The owner signs off the atlas contact sheet
+before tiles are committed (D-042 O8).
 - [docs/research/map-atlas.md](docs/research/map-atlas.md): a seamless atlas surface placing both
   continents by UiMap 947's UiMapAssignment rows, and a pre-composited tile pyramid built from the
   painted art, masked to the terrain zone polygons. Continuous zoom from world to zone, wheel-zoom
@@ -238,9 +264,14 @@ research, competing designs, judges and an adversarial critic:
   faction from the client.
 Then: implement, critique, fix and commit, replacing the interim one-image art layer.
 
-**2. Milestone 7 (optimiser)**, after the map rework: core, beam search, worker, anchors,
-fixtures and critics (ARCHITECTURE §11). Before compile, the optimiser takes its matrix from the
-leg table, via the "computing paths" phase.
+**2. Optimiser search quality** (in parallel with the map build; files do not overlap): add
+constructive seeds and local moves (docs/reviews/review-m7.md open item 1).
+
+**3. Milestone 8 (proposal UX)** after both: the proposal panel with metrics, the map overlay (on
+the atlas), and accept, reject or apply-selected change-sets with prerequisite requires-edges.
+
+**4. Milestone 9 (gauntlet):** Playwright smoke, axe, the throttled budgets, CI, the final docs
+and the README.
 
 **Milestone 3b history (terrain navigation and map art).** Design:
 [docs/research/terrain-navigation.md](docs/research/terrain-navigation.md) (revision 3, re-critique
