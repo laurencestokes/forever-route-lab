@@ -9,12 +9,11 @@ import type { CharacterProfile } from '../../domain/project';
 import type { DatasetView } from '../../domain/dataset';
 import type { QuestId } from '../../domain/ids';
 import type { Route, RouteStep } from '../../domain/route';
-import { type ActiveRow, entityName, grindTargetText, NOT_SIMULATED, originText, type RouteView, stepTitle } from '../app-model';
+import { type ActiveRow, entityName, grindTargetText, NOT_SIMULATED, type RouteView, stepTitle } from '../app-model';
+import { originText } from './detail-text';
 import {
   Button,
-  DetailList,
   EmptyState,
-  IssueList,
   PanelSection,
   PENDING_TRAVEL_TEXTS,
   ReadoutValue,
@@ -29,17 +28,15 @@ import {
   unknownReadout,
   type DetailItem,
 } from '../kit';
+import { DetailList, IssueList } from '../shell/DetailParts';
 import { sameStepNumbers, type StepNumbers, stepNumbersOf } from './derived-view';
 import type { Announce } from './LiveAnnouncer';
 import { QuestDetails, type QuestActions } from './QuestDetails';
 import type { RouteActions } from './route-actions';
-import { selectCharacter, selectEditingLocked, selectSelectionCount, useActiveTarget } from './selectors';
+import { DETAILS_LOCKED, selectCharacter, selectEditingLocked, selectSelectionCount, useActiveTarget } from './selectors';
 import { DurationEditor, LocationEditor } from './StepEditors';
 
 const xpWords = (value: number): string => `${formatInteger(value)} XP`;
-
-/** Why the Details editors are unavailable while editing is locked. */
-export const DETAILS_LOCKED = 'Unavailable while the optimiser runs or a proposal is open';
 
 function kindDetails(step: RouteStep, dataset: DatasetView): DetailItem[] {
   switch (step.kind) {
@@ -246,6 +243,7 @@ function StepDetails({
           <Button
             size="sm"
             icon="delete"
+            variant="danger"
             disabled={!editable}
             onClick={() => {
               // The step, and this button with it, leaves the panel: keep focus in the route.
@@ -304,6 +302,8 @@ function numberItems(numbers: StepNumbers, override: number | null): DetailItem[
     { term: 'Level after', value: <ReadoutValue readout={derived?.projectedLevel ?? duration} format={formatLevel} /> },
     // D-040: a turn-in that carries objective work, or an accept that counts items collected before it, says so.
     ...(derived === null || derived.objectiveWork === null ? [] : [{ term: 'Objective work', value: `${derived.objectiveWork}.` }]),
+    // TIME-7, MP-R32: the transport ridden and where its docks' positions come from.
+    ...(derived === null || derived.transport === null ? [] : [{ term: 'Transport', value: `${derived.transport}.` }]),
   ];
 }
 

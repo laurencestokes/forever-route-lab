@@ -24,7 +24,9 @@
     "src/optimizer/core",
     "src/nav",
     "src/map/adapter.ts",
-    "src/map/layers.ts"
+    "src/map/layers.ts",
+    "src/map/marks.ts",
+    "src/map/marks-pins.ts"
   ],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/nav/worker"]
 }

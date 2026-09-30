@@ -8,7 +8,15 @@ checks and `--activate`), the committed rows file and the committed placeholder
 (`tools/maps/README.md` is the operator's guide). Milestone 3 built `vite-local-maps.ts`;
 Milestone 3b (step 3b.8) built the extraction from the client, `import.ts --build` and
 `convert.ts`, on the shared CASC reader `tools/casc`, and commits the painted map art under
-`public/maps/art/` (D-033, §5.4 (b)). This file covers:
+`public/maps/art/` (D-033, §5.4 (b)). The map rework (2026-09-27 and 28;
+[research/map-atlas.md](research/map-atlas.md) revision 3.1, steps ATL.0 to ATL.10 and MM.1 to MM.9,
+D-042, D-045, D-049; [research/map-presentation.md](research/map-presentation.md), D-047) built the
+seamless **atlas** surface for both continents and Zephras Isle, in two base-map styles: the
+**minimap** (the client's minimap textures with a navy sea; the default since MM.9) and the
+**painted atlas** (the painted zone maps composed into one raster). Since step ATL.10 the atlas and
+its smooth wheel are on by default, `world:0`, `world:1` and `world:2991` are retired, and
+`public/maps/art/` keeps only the five images still drawn one at a time (§1, §7.1, §7.5, §9). This
+file covers:
 
 - where map data comes from and how a developer extracts it locally;
 - what is committed (the placeholder geometry) and how Milestone 2 reproduces it;
@@ -41,7 +49,8 @@ Rule: **never copy maps, tiles, geometry or code from any other WoW route-planne
 | Client build | **1.60.1.70009**, Build Key `05215079e3905ef5922ae0b03ffefb73`. The brief said 69977; the launcher updated the client on 2026-09-25 (D-013). | `<wow-install>/.build.info`; `us.version.battle.net/wow_classic_beta/versions` |
 | Data frame | **1.60.1.69893**, QuestieDB's DBC target (D-013). `UiMapAssignment` is byte-identical at 69893 and 70009. | [coordinates §10-11](research/coordinates.md) |
 | Frame compatibility | A local map set is accepted when its rows for the 49 shared zone frames **hash-equal** the committed rows, not when build strings match (D-018, F09). It may only **add** UiMaps: a local row for a UiMap the committed file already has must be identical, or the whole set is rejected (ARCHITECTURE §6). | §5.6 |
-| Map art | UI world-map art: `UiMapXMapArt → UiMapArt → UiMapArtStyleLayer + UiMapArtTile` BLP tiles, plus `WorldMapOverlay(Tile)` explored overlays. Every Forever map with 1002 × 668 art uses 4 × 3 tiles of 256 px. **Committed and deployed** under `public/maps/art/` with a manifest and NOTICE (D-033, which superseded D-018's art rule); extracted by `tools/maps/convert.ts` (§5.4 (b)). | DB2 at 70009 (§3) |
+| Map art | UI world-map art: `UiMapXMapArt → UiMapArt → UiMapArtStyleLayer + UiMapArtTile` BLP tiles, plus `WorldMapOverlay(Tile)` explored overlays. Every Forever map with 1002 × 668 art uses 4 × 3 tiles of 256 px. **Committed and deployed** with a manifest and NOTICE (D-033, which superseded D-018's art rule), extracted by `tools/maps/convert.ts` (§5.4 (b)): since step ATL.10 (D-042 O5) `public/maps/art/` holds only the images still drawn one at a time (Alterac Valley 1459, Warsong Gulch 1460, Arathi Basin 1461, Zephras Isle 2521, Darkspear Islands 2524); the zone, city and continent paintings of maps 0 and 1 reach the site composed into the painted atlas's tiles (`public/maps/atlas/`, `tools/maps/atlas.ts`). | DB2 at 70009 (§3) |
+| Base-map styles (D-045, D-049) | **Minimap** (default since MM.9): the client's minimap textures of maps 0, 1 and 2991, found through each map's WDT `MAID` chunk, recoloured to a navy sea and resampled onto the atlas grid (`tools/maps/minimap.ts`, `public/maps/minimap/`; the tiles come from a release-asset pack and are never committed, §9 item 14). **Painted**: the painted atlas. The choice is a per-browser view setting in the Map layers drawer; a style that cannot be drawn gives way to the other, saying why. | map-atlas.md §16-§28 |
 | Map metadata | DB2 tables `UiMap`, `UiMapAssignment`, `UiMapArt`, `UiMapArtTile`, `UiMapArtStyleLayer`, `UiMapXMapArt`, `WorldMapOverlay`, `WorldMapOverlayTile`, `AreaTable`, `Map`, `TaxiNodes`, `TaxiPath`, `TaxiPathNode`, decoded with WoWDBDefs `cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd` (has the 1.60.1.x layouts) | §3, §5 |
 | Primary tools (scripted, local) | **TACTTool** (wowdev/TACTSharp, declares MIT, `a507ff7b`) for read-only extraction by FileDataID. **DBC2CSV** (Marlamin, `1e4aaa46`) for DB2 → CSV. Our own `tools/maps/*.ts` for BLP decoding, stitching and manifests. | §4 |
 | Fallback tool (GUI) | **wow.export 0.2.19** (declares MIT, commit `c2fd7bde`, 2026-06-22). NW.js GUI only, with no CLI or headless mode. Never scripted (D-011). **Use CDN mode or disable cache collection first** (§4.1). | `.cache/wow.export` |
@@ -49,8 +58,8 @@ Rule: **never copy maps, tiles, geometry or code from any other WoW route-planne
 | Local map set | One local extraction set in `local-maps/` at the repository root: `maps.manifest.json`, `geometry.local.json`, `art/<uiMapId>.webp` and, optionally, `taxi.local.json`. It is gitignored and **outside `public/`**. `tools/maps/validate.ts --activate` writes `maps.manifest.json` after the checks pass; that file is the one `infra/maps` probes. Only `tools/maps/vite-local-maps.ts` serves the folder, in `dev` and `preview`; `vite build` never emits it (D-018, ARCHITECTURE §7.3). | §5.2, §5.7 |
 | Committed geometry | `public/maps/placeholder/geometry.placeholder.json` plus `NOTICE.md`, produced only by `tools/maps/import.ts --placeholder` from the pinned QuestieDB `conversion.json` and the committed `tools/maps/inputs/db2-rows-1.60.1.70009.json`, so it is reproducible. It holds 49 zone frames (`source: 'questiedb-conversion'`, build 1.60.1.69893) and 12 DB2-only rows for 11 UiMaps (`source: 'db2-csv'`, build 1.60.1.70009), taken from CSVs fetched as individual requests during research (not scripted crawling). Every row records its source and build (D-018, D-026). | §8 |
 | Coordinates | Dataset spawns ship as published zone percent and are converted to `WorldPoint` at load. A route `Location` stores the authored `SourcedPoint`; `resolve()` derives world coordinates at runtime, and nothing derived is persisted (D-017). | §6; [coordinates §15](research/coordinates.md#15-coordinate-model-srcgeo) |
-| Renderer | Leaflet 1.9.4 (declares BSD-2-Clause) behind `MapAdapter`, `L.CRS.Simple`, **one surface per world map**. Canvas renderer with level of detail. The combined overview surface is deferred until after the MVP (F23). No react-leaflet (D-005). | §7 |
-| Images | One image per UiMap and style layer at native `LayerWidth × LayerHeight` (1002 × 668; 512 × 512 for 1463, 1464, 2665), fully explored, **WebP** (lossy, quality 80, `drawing` preset): 60 images, 9.05 MB gzip-6 with the manifest and NOTICE, within the 12 MB `art` budget (D-034 item 4). No tile pyramid is needed at this size. | §5.4 |
+| Renderer | Leaflet 1.9.4 (declares BSD-2-Clause) behind `MapAdapter`, `L.CRS.Simple` in yards. **The atlas surface** (on by default since ATL.10, D-042) shows Kalimdor and the Eastern Kingdoms in the compact layout and Zephras Isle as a card, placed by translation only; instances, battlegrounds and Darkspear Islands keep **one surface per world map**. Canvas renderer with level of detail, our own smooth wheel, and the atlas tiles over an underlay. No react-leaflet (D-005). *Superseded:* the overview surface deferred until after the MVP (F23), replaced by the atlas. | §7 |
+| Images | `convert.ts` composes one image per UiMap and style layer at native `LayerWidth × LayerHeight` (1002 × 668; 512 × 512 for 1463, 1464, 2665), fully explored, **WebP** (lossy, quality 80, `drawing` preset), and keeps every composed UiMap's pixel hash (`sources`). Deployed since ATL.10: 5 images, 689 kB gzip-6 with the manifest and NOTICE, within the 1.0 MB `art` budget (D-042 O5; before ATL.10, 60 images, 9.05 MB, under D-034 item 4's 12 MB). The painted atlas: 792 tiles of 256 px, levels −8 to 0, 6.95 MB with its index, manifest and NOTICE (≤ 8.0 MB). The minimap: 6,647 tiles, 51.76 MB gzip-6 (52.17 MB with the committed files; ≤ 60 MB). | §5.4; map-atlas.md §7, §24 |
 
 ## 2. Client, build and data locations
 
@@ -84,7 +93,7 @@ placeholder's 61 `UiMapAssignment` rows are the one recorded exception (D-018, D
 | Art styles (`UiMapArtStyleLayer`) | Style 1: one layer of 1002 × 668 in 256 px tiles (57 UiMaps). Style 4: 512 × 512 single tile (1463, 1464, 2665). Styles 5, 106 and 107 (3840 × 2560) exist, but no Forever UiMap links to them. |
 | Tiles (`UiMapArtTile.FileDataID`) | 687 rows are linked. 675 of them have FileDataIDs ≥ 5,000,000 (range 364,696 to 8,128,990). Whether Forever repainted the art compared with Era is UNVERIFIED. |
 | Explored overlays (`WorldMapOverlay`, `WorldMapOverlayTile`) | 580 overlay rows on linked art, all with `PlayerConditionID = 0`, and 1,739 overlay tiles, placed at `OffsetX/OffsetY` in layer pixels |
-| Minimaps | `world/minimaps/<Map.Directory>/mapXX_YY.blp` (terrain, 533.33 yd per tile). **Not used**: large, unlabelled, and needs a listfile for names. |
+| Minimaps | 1,796 BLP2 DXT1 textures of 512 × 512 (533.33 yd per tile, 1.0417 yd per texel) for maps 0, 1 and 2991, found through each map's WDT `MAID` chunk (the legacy `world/minimaps/…` names are not in the root). *Superseded:* "not used" (Milestone 0). Since D-045 and D-049 they are the minimap style's source (`tools/maps/minimap.ts`; map-atlas.md §17). |
 | Taxi (`TaxiNodes`) | 100 nodes (51 on MapID 0, 47 on MapID 1, 2 on 30), world positions in `Pos_0/1/2`. Taxi-derived leg timings are local-only by default (D-022, STATUS OD-6). |
 | `UiMapLink` | wago.tools reports "Table not found" at 70009, although WoWDBDefs lists the build. UNKNOWN. |
 
@@ -824,8 +833,9 @@ There is no `src/map/index.ts`: the architecture test maps only `adapter.ts`, `l
 
 | Surface | Status | CRS mapping | Image overlays (art, relief) |
 |---|---|---|---|
-| `world:<mapId>` (MapIDs 0, 1, 2991, 2997, …) | **MVP.** One surface per world map, chosen with the surface switcher | `L.CRS.Simple`, `latLng = (X, −Y)` in yards (north up, east right) | `L.imageOverlay(url, [[Xmin, −Ymax], [Xmax, −Ymin]])` |
-| Overview (both continents on one canvas, Azeroth 947 layout; revision 1's `UiSurface`) | **Deferred until after the MVP** (F23, ARCHITECTURE §7.2). The surface abstraction keeps it possible; the maths is in [coordinates §14.1](research/coordinates.md#141-surfaces). | `latLng = (−v·668, u·1002)` | `L.imageOverlay(url, [[−668, 0], [0, 1002]])` |
+| `atlas` (MapIDs 1 and 0 placed, 2991 as an inset card) | **The default since step ATL.10** (D-042): one surface for both continents and Zephras Isle; "Kalimdor" and "Eastern Kingdoms" are presets that fit it to a continent | `L.CRS.Simple` in atlas yards: `E = eOff − Y`, `S = sOff − X` per placement, `latLng = (−S, E)` (translation only; [coordinates §14.1](research/coordinates.md#141-surfaces)) | the base map's tile band and underlay (§7.5); per-map relief and Zephras Isle's image only as fallbacks |
+| `world:<mapId>` (instances, the battlegrounds 30, 489, 529, Darkspear Islands 2997, …) | One surface per world map the atlas does not place, listed under "Separate maps". `world:0`, `world:1` and `world:2991` are **retired** since ATL.10 (they return only when a geometry cannot place the continents: no atlas without both 947 rows) | `L.CRS.Simple`, `latLng = (X, −Y)` in yards (north up, east right) | `L.imageOverlay(url, [[Xmin, −Ymax], [Xmax, −Ymin]])` |
+| Overview (both continents on one canvas, Azeroth 947 layout; revision 1's `UiSurface`) | *Superseded by the atlas* (D-042; it was deferred until after the MVP, F23) | `latLng = (−v·668, u·1002)` | – |
 
 - Surface extent: the committed continent frame (1414 for MapID 1, 1415 for MapID 0). For
   Zephras Isle (2991) and Darkspear Islands (2997), the union of their zone frames plus a margin.
@@ -837,7 +847,31 @@ There is no `src/map/index.ts`: the architecture test maps only `adapter.ts`, `l
   handling. Zone rectangles overlap and cities sit inside zones: use them for placeholders,
   hit-testing and "zoom to zone", and the committed continent art (§7.5) for the picture.
 
-*As built:*
+*As built, the atlas (steps ATL.2 to ATL.10; map-atlas.md §5, §8):*
+
+- **Placements** (`src/geo/atlas-layout.ts`, `atlas.ts`): Kalimdor at eOff 5,652 and sOff 12,778,
+  the Eastern Kingdoms at 22,499 and 7,907 (the 947 translation moved by whole 1,024-yd tiles; the
+  compact layout, D-042 O9), Zephras Isle's 2521 rectangle as a card with its north-west corner at
+  E 13,440, S 512. The extent is E 0–30,720, S 0–26,112, card included. The relative position of the
+  continents is a layout choice, stated in the key's note, not a geographic claim; atlas units never
+  feed a distance, which stays per world map (D-017). `atlasHash` pins the placements, and the tile
+  indexes are refused unless they carry it.
+- **Partition** (`partition`): inside the card → 2991; else `E ≤ seamE` (16,617) → map 1; else map
+  0. A click therefore always yields a real `WorldPoint`; picks round to 0.1 yd, after which the
+  inverse is exact.
+- **Views**: `MapView.visible` lists each placed map's part of the view padded by 50 %; `center`
+  and `mapId` name the partition under the view centre, and the scale bar names that map. Layers are
+  built per placed map in view and joined (ARCHITECTURE §7.2).
+- **Zoom**: `minZoomFor` fits the atlas extent, card included (−5.22 in a 918 × 700 panel);
+  `maxZoom` 2; `zoneZoom` −3.5 and focus −2 are unchanged, since the unit is still a yard. Since
+  ATL.0 the buttons and keys move one level (`zoomDelta` 1) and Leaflet's wheel used 60 px a level;
+  since ATL.10 our `SmoothWheel` replaces it and `zoomSnap` is 0 (§7.5).
+- **Cross-map legs**: rides between the continents are `connector` arcs (a dashed quadratic arc in
+  the leg's style, a mid-arc ring and a label; never measured); legs to the card or to an instance
+  keep their transition glyph pairs.
+
+*As built, world surfaces (Milestone 3; since ATL.10 only for the maps the atlas does not place, or
+every map when a geometry has no atlas):*
 
 - `surfacesOf(geometry)` makes one `SurfaceInfo` per world map with at least one row, ascending.
   The extent is the frame of the map's one continent UiMap (Type 2 with a parent other than the
@@ -847,7 +881,8 @@ There is no `src/map/index.ts`: the architecture test maps only `adapter.ts`, `l
   `World map <id>`. The placeholder gives surfaces 0, 1, 30, 489, 529, 2991 and 2997.
 - The transform is in `src/map/leaflet/transform.ts`: `lat = x`, `lng = 0 − y` and back, exact
   (negation only; `0 − v` so a world 0 never becomes −0), with tests for round trips and bounds.
-- `maxZoom 2` (Orgrimmar's native zoom is −0.5), `zoomSnap 0.25`, `zoomDelta 0.5`. The least
+- `maxZoom 2` (Orgrimmar's native zoom is −0.5), `zoomSnap 0.25`, `zoomDelta 0.5` (Milestone 3;
+  `zoomDelta` 1 since ATL.0, and `zoomSnap` 0 with the smooth wheel since ATL.10). The least
   zoom follows the container (`minZoomFor`, M3 review MAP-UX-7): −6 where the stage shows the
   largest surface extent at −6 (with 24 px padding), otherwise the zoom that fits it, snapped down
   to a quarter, never below −7.5; it is recomputed on every resize. At −6 Kalimdor (36,800 yd)
@@ -1134,7 +1169,9 @@ pan frame rate.
   point is most central in (`zoneFramesContaining`, coordinates.md §15; M3 review MAP-UX-1).
 - **Grid and scale** (procedural, §8.1): a yard grid on its own canvas in a pane below the paths
   (spacing 1, 2 or 5 × 10ⁿ yards, at least 96 px apart, clipped to the extent, hidden while
-  zooming) and a yard scale bar bottom left. Leaflet's own scale control would say metres and
+  zooming; on the atlas drawn per placement, clipped to its map's rectangle, and hidden for a whole
+  wheel gesture) and a yard scale bar (bottom right since MP.4b, naming the map under the view
+  centre on the atlas). Leaflet's own scale control would say metres and
   feet. Labels name the axis, the value with a true minus sign and the direction the axis grows,
   `X 500 (N)` and `Y −4100 (W)` (`gridLabel`): world X runs north and Y west, and RXP writes
   pairs as (Y, X), so a bare `X`/`Y` invited swapping them (M3 review MAP-COORD-14). The grid
@@ -1149,7 +1186,32 @@ pan frame rate.
   splitter drag, at most once a frame) calls `invalidateSize` with a debounced `moveend`, so the
   renderer redraws, the adapter emits one `move` and the controller syncs once, 200 ms after the
   resizing stops (M3 review PERF-5); `resize()` settles at once.
-- **Painted art** (D-033, Milestone 3b): the committed images of `public/maps/art/` (Blizzard
+- **The base map on the atlas** (D-042, D-045, D-049; steps ATL.7, MM.1, MM.9; map-atlas.md §8.3,
+  §21): one `tiles` descriptor per style, `atlas-tiles:minimap` (the default) or
+  `atlas-tiles:painted`, drawn by `AtlasTileLayer` (a `GridLayer` in the `frl-atlas` pane, z-index
+  245, 256 px tiles, levels −8 to 0, `updateInterval` 100) over `AtlasUnderlay` (pane `frl-underlay`,
+  244: every stored tile of the index's `underlayLevel`, −6 for the minimap and −5 for the painted
+  atlas, never pruned, one transform per zoom event). Sea keys create no element, so the container's
+  sea colour shows (navy #0d1b30 in the minimap style, rgb(61, 55, 41) in the painted one); a
+  virtual key (painted only) draws its nearest stored ancestor; every tile starts as the crop of its
+  nearest ancestor already decoded in its own band, then fades its own image in over 150 ms (none
+  under reduced motion). The band keeps 1 (minimap) or 2 (painted) rows of tiles around the view. A
+  style switch adds the new band above the old one, prunes the old band's off-view tiles, and removes
+  the old band once the new first view has decoded and faded in, or after 2 s; the container's
+  `data-map-style` and the palette follow the picture shown. Each index (`maps/minimap/index.json`,
+  `maps/atlas/index.json`) is fetched when its style is first shown. Zone rectangles are kept for
+  hit-testing and jump-to-zone but not painted while tiles show; Ironforge's and the Undercity's
+  frames are dashed in the minimap style (they are underground). The painted style's names are
+  Blizzard's own lettering; the minimap has none, so the presentation layer's labels canvas names
+  zones, continents and cities in both styles (map-presentation.md §13).
+- **Fallbacks on the atlas** (map-atlas.md §8.6, §21.4): a style whose index is missing or refused,
+  or whose first view's images all fail (a clone or build without the minimap tile pack, message
+  "Minimap tiles not downloaded (run `pnpm maps:minimap:fetch`)"), gives way to the other style, with
+  the reason in the drawer's notices; the choice is kept. With neither, or with "Painted art" off,
+  the relief is drawn per placement (hidden above zoom 0), with outlines and frames, and Zephras
+  Isle's painting (2521) on its card when the tiles cannot be used.
+- **Per-image painted art** (D-033, Milestone 3b; since ATL.10 on world surfaces only, and for
+  Zephras Isle's card as above): the committed images of `public/maps/art/` (Blizzard
   Entertainment's artwork, with its notice) as image overlays in the `frl-art` pane (z-index 250),
   below the grid (350) and the canvas (400), placed by the world rectangle the art manifest
   records for each image (its UiMapAssignment row at the art's build; `ArtInput.bounds`), in
@@ -1166,14 +1228,17 @@ pan frame rate.
   deployed URLs: they ship with the app as its code does, an `<img>` loads and decodes them off
   the main thread, and `tools/maps/validate.ts` and the dist audit check their hashes at build
   time. An art switch therefore never waits for an image; the old image is removed at once and
-  the new one appears when it has loaded.
+  the new one appears when it has loaded. Since ATL.10 the folder holds only the battlegrounds',
+  Darkspear Islands' and Zephras Isle's images (D-042 O5); the continent and zone rules above apply
+  to a local set's art and to a geometry without the atlas.
 - **Local art** (dev and preview only, D-018): a compatible local set's art replaces the
   committed art while it lists images. It is drawn from object URLs of the verified image bytes
   (`infra/maps` local art), never from the plain file URL, and its rectangle comes from the
   geometry `createMapLayers` was given.
 - **Relief** (D-032): the world map's shaded relief PNG (about 17 yd per pixel; maps 0 and 1) as
   an image overlay in the `frl-relief` pane (z-index 240), under everything, placed by the
-  terrain manifest's rectangle. It is the backdrop at `RELIEF_OPACITY.backdrop` (0.85) where no
+  terrain manifest's rectangle (on the atlas, per placement, and only as the fallback above:
+  never while tiles show). It is the backdrop at `RELIEF_OPACITY.backdrop` (0.85) where no
   painted art is drawn on the world map (none exists, the art layer is hidden, or the art could
   not be loaded), and faint at `RELIEF_OPACITY.underArt` (0.4) while art is drawn over it
   (terrain-navigation.md §13.2): the art covers it where it exists, and it shows the terrain
@@ -1206,9 +1271,21 @@ pan frame rate.
   descriptor (`MapHit.refs`); paths do not bubble to the map, so an item click is never also a map
   click. Hover labels use one shared tooltip whose text is set as text, never HTML, from
   `labelOf` and the label provider.
+- **Wheel and gestures** (map-atlas.md §8.4; steps ATL.0, ATL.8, on since ATL.10): our own
+  `SmoothWheel` (`smooth-wheel.ts`) replaces Leaflet's `scrollWheelZoom`. Every wheel event moves
+  the target zoom (0.5 level per 100 px, at most one level per event; line and page modes scaled,
+  `ctrlKey` pinches doubled), the view eases towards it every frame around the pointer with the
+  centre clamped to the bounds (no pan-back), and one `moveend` settles the gesture 140 ms after the
+  last event. Notch-like and stream input have separate rates, both at the design's starting value
+  until ATL.9 calibrates them on the owner's hardware. During a gesture the grid is hidden and hover
+  labels are held back; the path canvas is re-rendered mid-gesture after half a level of drift when
+  its last draw took under 8 ms; canvases use the device pixel ratio (capped at 2); new paths are
+  created at most 150 per animation frame; near the level-of-detail edge the other band's spawn
+  layers are built in idle time. Touch keeps Leaflet's `TouchZoom`; the map's `fadeAnimation` is off.
 - **Accessibility**: Leaflet's keyboard panning and zoom buttons stay on and take the kit's focus
   ring; the route list, not the canvas, is the accessible view of the route. With
-  `prefers-reduced-motion: reduce`, zoom, fade and inertia animations are off.
+  `prefers-reduced-motion: reduce`, zoom, fade and inertia animations are off, the wheel jumps to
+  each target without easing, and tiles do not fade.
 - **Leaflet internals** (`leaflet-layers.ts`, Leaflet pinned to exactly 1.9.4): the glyph and
   frame classes draw from the canvas renderer's draw hook (`_updatePath`, `_renderer._ctx`,
   `_drawing`, `_point`, `_radius`, `_pxBounds`, `_updateBounds`, `_clickTolerance`); the measured
@@ -1217,7 +1294,13 @@ pan frame rate.
   `_order`) and calls `_requestRedraw`; `destroy` clears the map's `_sizeTimer`. The renderer's
   `_redraw` also cancels a pending animation frame first: in 1.9.4 a synchronous redraw leaves the
   frame requested before it scheduled, and a map removed in between (a React StrictMode remount)
-  would then throw on the deleted context. An upgrade must re-check these names.
+  would then throw on the deleted context. The atlas and the smooth wheel add (steps ATL.7, ATL.8,
+  MM.1, MP.1): `GridLayer._isValidTile`, `_update`, `_pruneTiles` and the maths of
+  `_setZoomTransform` (reproduced by the underlay); `Map._getNewPixelOrigin`, `_stop`, `_moveStart`,
+  `_move` (with its `pinch` and `round` flags), `_moveEnd` and `_limitCenter`; the renderers'
+  `_update`, `_reset`, `_updateTransform`, `_bounds`, `_zoom`, `_container` and `_redrawRequest`,
+  the canvas's backing-store sizing and `_postponeUpdatePaths`; `Polyline._rawPxBounds` and
+  `_parts`. An upgrade must re-check these names.
 - **Stylesheet** (M3 review PERF-11): `leaflet-core.css` is Leaflet 1.9.4's `leaflet.css`
   (BSD-2-Clause, notice kept in the file) without its three image rules (the layers-control
   toggle's `layers.png` and `layers-2x.png`, and the default marker icon path), which Vite
@@ -1281,8 +1364,27 @@ pan frame rate.
   not committed): the Kalimdor and Eastern Kingdoms continent images and the Durotar image line up
   with the zone outlines and the coastline, and the relief orientation matches known land and sea
   points (north up, west left).
-- Not covered yet: a real-browser run of the app itself (visual check, and the §14 budgets at the
-  cap), which lands with the Playwright smoke test (Milestone 9).
+- The map rework (steps ATL.2 to ATL.10, MM.1 to MM.9; map-atlas.md §11, §25): `src/geo/atlas.test.ts`
+  (offsets of both layouts, the card, 10,000 seeded round trips per placement, `atlasHash` pinned,
+  the card's clearance against the committed coastline); the file-level architecture rule; the
+  transforms through placements (identity placements bit-identical to the old functions); the
+  per-map builders (a world surface's layers equal one builder's; the two-map join; the shared cap;
+  the memo); the atlas surface, presets, connectors and the card in the controller and the panel
+  (`*.atlas.test.ts`); the tile layer, underlay and index loader (a key not in the index makes no
+  request, sea keys create no element, virtual keys resolve their ancestor, ancestor-first tiles,
+  one underlay transform per zoom event, a refused hash falls back); the smooth wheel with fake
+  frames; the two styles (`*.styles.test.ts`: no bare-container frame during a switch, never
+  another style's tile, off-view pruning, the 2 s limit, failure and hand-back, the setting never
+  written by a fallback); since ATL.10 and MM.9, the defaults (the atlas with no `atlas` option,
+  the smooth wheel passed to the adapter, the minimap chosen first and its index alone fetched, the
+  panel's notice and instructions naming the minimap art) and a geometry without the 947 rows
+  keeping its world surfaces. `tests/map-labels.test.ts` runs MP.7's acceptance test in both styles:
+  all 50 zone and city names placed at the fit-both view (0.0239 px per yard) and at 0.022 px per
+  yard (MM.9's gate). The tools' tests are in `tools/maps` (`atlas*`, `minimap*`, `art-build` with
+  the deployed set) and `tools/build` (the audit's tiled, plain and deploy modes; the pack).
+- Not covered yet: the rework's time and memory targets (ARCHITECTURE §14), which ATL.9 and MM.8
+  measure in a browser at 1× and 4× and on the owner's laptop, and the Playwright smoke test
+  (Milestone 9).
 
 ## 8. Placeholder map and committed geometry
 
@@ -1597,6 +1699,25 @@ conclusions.
     reads the committed rows file and makes no request (§8.3).
 12. **Privacy.** wow.export uploads `Cache/` files from local installs by default (§4.1). This
     data-leak risk is separate from redistribution.
+13. **The painted atlas tiles** (`public/maps/atlas/`, D-042, committed): Blizzard Entertainment's
+    painted zone and city art, composited by this project's tool (`tools/maps/atlas.ts`) with
+    terrain-derived masks, tint, relief shading and sea (D-032). Its NOTICE and manifest list the
+    alterations the owner accepted as within D-041 H (D-042 O11): masking to each zone's terrain
+    polygon, painted ground and coastal band with a colour cross-fade; labels hidden by a mirror fill
+    (11 in the reviewed list); our tint where no painting shows; our sea colours; resampling and WebP
+    q80. D-033's terms apply.
+14. **The minimap tiles** (`public/maps/minimap/`, D-045, D-049): Blizzard Entertainment's minimap
+    textures from the same client, stitched, recoloured to a navy sea and resampled by
+    `tools/maps/minimap.ts`, with the alterations listed in the folder's NOTICE and manifest (D-049
+    O15). **The tiles are not committed** (O14): `main` holds the index, manifest, NOTICE and the
+    pointer `pack.json`; the tiles ship in a release-asset pack (`NOTICE.md` first, then
+    `manifest.json`, then `t/`) whose release text is the NOTICE, downloaded and verified by
+    `pnpm maps:minimap:fetch` and required only by the deploy build (`pnpm build:deploy`). The
+    release is published only when the owner authorises pushing (OD-13). Removal on request: delete
+    the asset and release, commit the removal of the folder, redeploy Pages and confirm the tile URLs
+    return 404; copies already downloaded cannot be recalled. D-033's terms apply.
+15. **The per-image art since ATL.10** (D-042 O5): `public/maps/art/` deploys only the five images
+    still drawn one at a time; the others remain in git history from the commits before ATL.10.
 
 ## 10. Risks and open questions
 
@@ -1604,10 +1725,10 @@ conclusions.
 |---|---|---|
 | M1 | The Forever beta changes `UiMapAssignment` for the 49 shared frames, putting QuestieDB data in a stale frame | Frame hash (§5.6): local sets fall back with a banner. A QuestieDB pin bump re-runs P1-P5 (D-013). |
 | M2 | TACTTool list syntax, encryption support and DBC2CSV definition flags are unverified | Try them in `.cache/experiments/` in Milestone 3 |
-| M3 | Where Zephras Isle (MapID 2991) and Darkspear Islands (2997, InstanceType 3) sit on the world map | Not needed with per-world surfaces. Needed only for the deferred overview. `UiMapLink` was unavailable. |
+| M3 | Where Zephras Isle (MapID 2991) and Darkspear Islands (2997, InstanceType 3) sit on the world map | **Answered for 1.60.1.70009** (map-atlas.md §3.1, [coordinates.md C1](research/coordinates.md)): the client places **neither** on Azeroth 947 (`UiMapAssignment` has 947 rows only for MapIDs 0 and 1; `UiMapLink` has 0 records; `Map` parents are −1). Rows a server sends at run time are UNKNOWN. The atlas therefore shows Zephras Isle as a card "not in position" (D-042 O2), and Darkspear Islands keeps its own surface. |
 | M4 | 98 RXP Forever percent-form `.goto` lines on the changed zones may be Era-framed | Import-time frame option and `RXP030-frame-ambiguous` (ARCHITECTURE §10); landmark review |
 | M5 | Commit the 12 DB2-only geometry rows? | **Decided: commit** (D-018, STATUS OD-5) |
-| M6 | May any real map art ever be deployed? | Default never (D-018, STATUS OD-10); a change needs a new decision |
+| M6 | May any real map art ever be deployed? | **Decided: yes** (D-033, STATUS OD-10): the painted art, and the minimap textures (D-045, D-049), with NOTICEs (§9) |
 | M7 | wago.tools `robots.txt` disallows crawling, and some sibling tooling uses it | Manual only (D-011); never in CI. The 12 rows are committed with citations in `tools/maps/inputs/db2-rows-1.60.1.70009.json`, so reproducing the placeholder needs no request (§8.3). |
 | M8 | A frame-compatible local set has different rows for one of the 11 `db2-csv` UiMaps (a later build) | **Decided** (ARCHITECTURE §6): local geometry may only add UiMaps. A differing row for a UiMap the committed file has rejects the whole local set as a frame mismatch (§5.6 step 4). *Superseded:* the proposal that local rows win on that machine. A later build that really changes these rows needs a new committed rows file and owner review. |
 | M9 | wago.tools may not serve exactly the requested build | Not verified (§8.3 caveat). Mitigated by row-level comparison and the frame hash. |
@@ -1658,7 +1779,7 @@ rulings on the Milestone 0 consistency check replaced.
 | Beta terms unknown; check before publishing numbers | Superseded by D-022 (owner: no NDA) |
 | "GPL covers Questie-derived data" | Superseded by D-016 wording (§9 item 7) |
 | Route steps stored as `WorldPoint`, converted at import | Superseded by D-017: `Location` stores the authored `SourcedPoint`; resolved at runtime |
-| `UiSurface` for Azeroth 947 and a 947 connector | Deferred until after the MVP (F23; ARCHITECTURE §7.2) |
+| `UiSurface` for Azeroth 947 and a 947 connector | Deferred until after the MVP (F23); then superseded by D-042: the atlas surface places maps 0 and 1 by translation from the 947 rows, in a compact layout, without drawing the 947 painting (§7.1) |
 | Placeholder hex-bin "terrain hint" | Folded into level of detail as an optional aggregate (§7.2, PERF-7) |
 | Zone names from QuestieDB "zone and l10n tables" | Corrected (LIC-13; §8.1) |
 | Manifest `generatedAt` | Dropped for byte reproducibility (§5.3) |

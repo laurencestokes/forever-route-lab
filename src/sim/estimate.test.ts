@@ -126,7 +126,7 @@ describe('local flight times (TIME-6)', () => {
     const to = { mapId: worldMapId(1), x: 1600, y: 0 };
     const local = { data, usable: () => true };
     const auto = flightTime({ from, to, fromTaxiNodeId: 1, toTaxiNodeId: 3 }, forever, local);
-    expect(auto.model).toBe('local');
+    expect(auto.model).toBe('taxi-path');
     expect(auto.nodes).toEqual([1, 2, 3]);
     expect(stepDuration(auto.parts).duration).toEqual({ value: 3 + 2000 / 32, basis: 'assumption', eraFallback: true });
     const straight = { ...forever, values: { ...forever.values, taxiModel: { ...forever.values.taxiModel, value: 'straight-line' as const } } };

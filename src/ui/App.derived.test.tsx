@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createEditorStore, type DerivedState, type EditorStore, fixedClock, IDLE_PATHS } from '../app';
 import { mapTestWorkspace } from '../app/map-test-helpers';
 import { DerivedStoreProvider } from '../app/react';
@@ -11,7 +11,13 @@ import { App } from './App';
 import { PATHS_PAUSED_MESSAGE, PATHS_RESUMED_MESSAGE } from './app/AppStatusBar';
 import { derivedResults, derivedStoreWith, issue, known, readyState, unknownValue } from './app/derived-test-helpers';
 import type * as DerivedView from './app/derived-view';
+import { loadDetailsPanel } from './app/lazy';
 import { SELECTION_ANNOUNCE_DELAY_MS } from './app/LiveAnnouncer';
+
+// View is a lazy part (ui-refresh.md §10.3) that production builds preload when idle; so do these tests.
+beforeAll(async () => {
+  await loadDetailsPanel();
+});
 
 // Counts how often the rows' deriver and the status bar's metrics are worked out (PERF-11).
 const { deriverCalls, metricsViewCalls } = vi.hoisted(() => ({ deriverCalls: { count: 0 }, metricsViewCalls: { count: 0 } }));
@@ -37,7 +43,11 @@ vi.mock('./app/derived-view', async (importOriginal) => {
  * explanations, filter and keyboard path from an issue to its step.
  */
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // View's choices are kept per browser (view-prefs.ts): each test starts from the defaults.
+  localStorage.clear();
+});
 
 const NOW = '2026-09-25T12:00:00.000Z';
 
@@ -106,17 +116,52 @@ describe('route rows with the walk’s numbers', () => {
     expect(fourth?.getAttribute('aria-label')).toContain('Level after step at least 2.0');
   });
 
-  it('show the chosen estimate column with its markers', () => {
+  it('show XP gained over the level after in two-line rows, the step time on top as a View choice, and one chosen column in one-line rows', () => {
     setup();
+    const top = (row: HTMLElement | undefined) => row?.querySelector('.frl-steprow__top');
+    const bottom = (row: HTMLElement | undefined) => row?.querySelector('.frl-steprow__bottom');
+    expect(top(options()[3])?.getAttribute('data-column')).toBe('xp');
+    expect(top(options()[3])?.textContent).toContain('+450');
+    expect(top(options()[3])?.querySelector('[data-reason="assumption"]')).not.toBeNull();
+    // Level 1 to level 2 after step 3: a level-up.
+    expect(bottom(options()[3])?.querySelector('.frl-steprow__up')).not.toBeNull();
+    expect(options()[3]?.getAttribute('aria-label')).toContain(', reaches level 2.');
+    // A known zero is muted (review UO-14).
+    expect(top(options()[1])?.querySelector('.frl-steprow__xp')?.className).toContain('is-zero');
+    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Step time' }));
+    expect(top(options()[3])?.textContent).toContain('10m 00s');
+    expect(top(options()[3])?.querySelector('[data-state="pending"]')).not.toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'One line' }));
     const cell = (row: HTMLElement | undefined) => row?.querySelector('.frl-steprow__estimate');
     expect(cell(options()[3])?.getAttribute('data-column')).toBe('level');
-    fireEvent.change(screen.getByRole('combobox', { name: 'Rows show' }), { target: { value: 'xp' } });
-    expect(cell(options()[3])?.textContent).toContain('+450');
-    expect(cell(options()[3])?.querySelector('[data-reason="assumption"]')).not.toBeNull();
     fireEvent.change(screen.getByRole('combobox', { name: 'Rows show' }), { target: { value: 'time' } });
     expect(cell(options()[3])?.textContent).toContain('10m 00s');
-    expect(cell(options()[3])?.querySelector('[data-state="pending"]')).not.toBeNull();
     expect(cell(options()[4])?.querySelector('[data-state="unknown"]')?.textContent).toContain('?');
+  });
+
+  it('draw each quest step\u2019s mark from its issues, and put the worst issue in words on line 2', () => {
+    setup();
+    // Step 3 accepts Cull with an error at the step: locked, and line 2 names the error.
+    const locked = options()[2];
+    expect(locked?.querySelector('.frl-quest-mark')?.getAttribute('data-state')).toBe('locked');
+    expect(locked?.querySelector('.frl-steprow__issue')?.textContent).toContain('Cull needs level 3; the character is level 1.');
+    expect(locked?.getAttribute('aria-label')).toContain('Cannot be accepted here.');
+    expect(locked?.getAttribute('aria-label')).toContain('Error: Cull needs level 3; the character is level 1.');
+    expect(options()[1]?.querySelector('.frl-quest-mark')?.getAttribute('data-state')).toBe('available');
+  });
+
+  it('draw the insertion line and the later band after the selection, and name the Add footer for the place', () => {
+    const s = setup();
+    const step = s.steps[1];
+    if (step === undefined) throw new Error('step missing');
+    act(() => {
+      s.store.select({ kind: 'single', id: step.id });
+    });
+    const insert = document.querySelector<HTMLElement>('.frl-routelist__insert');
+    expect(insert?.style.top).toBe('80px');
+    expect(document.querySelector<HTMLElement>('.frl-routelist__later')?.style.top).toBe('80px');
+    expect(screen.getByRole('toolbar', { name: 'Add after step 2' })).toBeTruthy();
   });
 });
 

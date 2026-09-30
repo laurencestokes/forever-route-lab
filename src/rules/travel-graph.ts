@@ -1,44 +1,77 @@
 import type { Faction } from '../domain/character';
-import type { DatasetView, NpcRecord } from '../domain/dataset';
+import type { DatasetView } from '../domain/dataset';
 import type { AreaId, NpcId, WorldMapId } from '../domain/ids';
 import type { WorldPoint } from '../domain/points';
 import type { TaxiNodeRef } from '../domain/route';
 import type { EffectiveRules, EffectiveValue } from './precedence';
 import type { RuleBasis } from './ruleset';
+import { isFlightMaster } from './travel-graph-flags';
 import { FOREVER_TAXI_NODE_SEEDS, type TaxiNodeSeed, TRANSPORT_SEEDS, type TransportSeed } from './travel-seeds';
 
 /**
- * The TravelGraph (docs/ARCHITECTURE.md §9.1; docs/SIMULATION.md TIME-5, TIME-7;
+ * The TravelGraph (docs/ARCHITECTURE.md §9.1; docs/SIMULATION.md TIME-5, TIME-6, TIME-7;
  * terrain-navigation.md §9.3). It holds what joins places beyond walking: transports, taxi nodes
- * and instance entrance edges. Moves between world maps go through it; so do same-map pairs that
- * the navigation data cannot walk between but a transport joins.
+ * and their flights, and instance entrance edges. Moves between world maps go through it; so do
+ * same-map pairs that the navigation data cannot walk between but a transport joins.
+ *
+ * With the committed client taxi file (D-039 B, `CommittedTaxi`; map-presentation.md §9, §10):
+ * its nodes are joined to the dataset's flight masters (the nearest within
+ * `CLIENT_NODE_MATCH_YARDS`, INFERRED), the rows no flight master stands at become nodes of their
+ * own, its flights become the taxi edges (their path lengths are TIME-6's per-leg data), and the
+ * stops of the transport paths the seeds cite give the seeded docks an inferred position (TIME-7;
+ * NAV-08): the client berths, which lie in the water beside the piers (`inferredBerths`). A node's
+ * factions (`TaxiNode.factions`) are the one faction source of the engine and the map.
+ * Without it the graph is the dataset's flight masters, the cited seeds and TIME-5.
  *
  * `rules` may import only `domain` values, so the dataset comes in through `TravelGraphSource`,
- * whose points are already resolved world points (the app resolves them with `geo`).
+ * whose points are already resolved world points (the app resolves them with `geo`), and the taxi
+ * file through `CommittedTaxi`, which the app's loader decodes (`src/infra/maps/client-tables.ts`).
  */
 
 // =============================================================================================
 // Types
 
-/** A taxi node's identity in the graph: a dataset flight master, or a cited TaxiNodes row. */
+/** A taxi node's identity in the graph: a dataset flight master, or a TaxiNodes row (cited, or from the committed file). */
 export type TaxiNodeKey = `npc:${number}` | `taxi:${number}`;
+
+/** Which sides a client TaxiNodes row lets fly (`Flags` bits 0 and 1; an INFERRED decode). */
+export interface ClientSides {
+  readonly alliance: boolean;
+  readonly horde: boolean;
+}
 
 export interface TaxiNode {
   readonly key: TaxiNodeKey;
   readonly npcId: NpcId | null;
+  /** The TaxiNodes row: cited, the committed file's, or the one a dataset flight master was matched to. */
   readonly taxiNodeId: number | null;
-  /** Names a query can match: the flight master's name and its zone, or the cited node name. */
+  /** Names a query can match: the flight master's name and its zone, the client node name, or the cited node name. */
   readonly names: readonly string[];
   /** Null when the flight master's spawns resolve to no world point. */
   readonly point: WorldPoint | null;
-  /** Who may use the node; null when unknown. */
+  /**
+   * Who may use the node; null when unknown. The one faction source of the engine (TIME-5, TIME-6:
+   * endpoints, intermediate nodes, queries) and of the map: a node with a committed client row
+   * takes the row's sides when they name one (`Flags`, an INFERRED decode), else the dataset
+   * flight master's faction; a cited node its seed's.
+   */
   readonly factions: readonly Faction[] | null;
-  /** `dataset`: a flight master's spawn (a source input); `cited`: a client TaxiNodes row (D-022). */
-  readonly origin: 'dataset' | 'cited';
+  /**
+   * `dataset`: a flight master's spawn (a source input); `cited`: a client TaxiNodes row cited in
+   * the seeds (D-022); `client`: a row of the committed taxi file no flight master stands at (D-039 B).
+   */
+  readonly origin: 'dataset' | 'cited' | 'client';
   readonly source: string;
+  /** The sides the committed file's row lets fly; null or absent without a row. */
+  readonly clientSides?: ClientSides | null;
 }
 
-/** A known direct taxi leg (none are committed: taxi-derived data stays local, D-022, OD-6). */
+/**
+ * A direct taxi flight between two graph nodes: one `TaxiPath` of the committed file, or a leg
+ * given by the caller (`TravelGraphSeedOptions.taxiEdges`), as `report.client.edgeSource` says.
+ * It says only which flights exist: TIME-6's lengths are the per-leg data the walker is given
+ * (`EngineContext.localTaxi`, `taxiLegDataOf`), so the graph does not carry them a second time.
+ */
 export interface TaxiEdge {
   readonly from: TaxiNodeKey;
   readonly to: TaxiNodeKey;
@@ -49,10 +82,17 @@ export interface TransportDock {
   readonly stop: number;
   readonly name: string;
   readonly mapId: WorldMapId;
-  /** Null until a dock NPC or a user-entered location gives it (TIME-7). */
+  /** Null until a dock NPC, a user-entered location or a matched client transport stop gives it (TIME-7). */
   readonly point: WorldPoint | null;
-  readonly pointFrom: 'dock-npc' | 'user' | null;
+  /**
+   * Where the position comes from: a dock NPC's spawn, a user-entered location, or `inferred`, the
+   * committed taxi file's stop that the seed was matched to by hand (map-presentation.md §10: which
+   * service a client path is, and which of its stops a dock is, is INFERRED; `record` names it).
+   */
+  readonly pointFrom: 'dock-npc' | 'user' | 'inferred' | null;
   readonly npcId: NpcId | null;
+  /** For an inferred dock, its matching record: "client transport path 11167, stop 2 of 3"; absent otherwise. */
+  readonly record?: string;
 }
 
 /** One directed transport crossing: board at `from`, leave at `to`. */
@@ -127,14 +167,81 @@ export interface UserDock {
   readonly point: WorldPoint;
 }
 
+/**
+ * The committed client taxi file as the seed reads it (D-039 B; `public/maps/client/taxi.json`,
+ * decoded and hash-checked by the app's loader, whose `ClientTaxi` has this shape). Positions are
+ * world points (D-017). Every number is the client's: nothing here is estimated.
+ */
+export interface CommittedTaxi {
+  /** The client build the file was read from (`1.60.1.70009`). */
+  readonly build: string;
+  /** `TaxiNodes` rows on paid paths of maps 0 and 1, ascending by id. */
+  readonly nodes: readonly CommittedTaxiNode[];
+  /** `TaxiPath` rows with `Cost` > 0 between two of those nodes, ascending by path id. */
+  readonly flights: readonly CommittedTaxiFlight[];
+  /** The transport paths (`TaxiPath` rows with `Delay` stops), ascending by path id. */
+  readonly transports: readonly CommittedTransportPath[];
+}
+
+export interface CommittedTaxiNode {
+  readonly id: number;
+  /** `TaxiNodes.Name_lang` ("Crossroads, The Barrens"). */
+  readonly name: string;
+  readonly point: WorldPoint;
+  /** `Flags` bit 0 (value 1): Alliance; an INFERRED decode. */
+  readonly alliance: boolean;
+  /** `Flags` bit 1 (value 2): Horde; an INFERRED decode. */
+  readonly horde: boolean;
+}
+
+export interface CommittedTaxiFlight {
+  readonly pathId: number;
+  readonly from: number;
+  readonly to: number;
+  /** The 3D length along the path's `TaxiPathNode` points (TIME-6), rounded to 1 yd. */
+  readonly l3dYards: number;
+}
+
+export interface CommittedTransportPath {
+  readonly pathId: number;
+  readonly maps: readonly WorldMapId[];
+  /** The path's `Delay` stops in `NodeIndex` order. */
+  readonly stops: readonly { readonly point: WorldPoint; readonly delaySeconds: number }[];
+}
+
 export interface TravelGraphSeedOptions {
   /** Default TRANSPORT_SEEDS. */
   readonly transports?: readonly TransportSeed[];
   /** Default FOREVER_TAXI_NODE_SEEDS. */
   readonly taxiNodes?: readonly TaxiNodeSeed[];
   readonly userDocks?: readonly UserDock[];
-  /** Known direct taxi legs (from a local extraction); none by default. */
+  /** Known direct taxi legs given by the caller (for example a local extraction); none by default. */
   readonly taxiEdges?: readonly TaxiEdge[];
+  /**
+   * The committed client taxi file (D-039 B): nodes, flights and the transport stops the seeds'
+   * docks are matched to. Null or absent: none (TIME-5, docks from dock NPCs and the user only).
+   */
+  readonly taxi?: CommittedTaxi | null;
+}
+
+/** What the seed made of the committed taxi file (`TravelGraphReport.client`). */
+export interface ClientTaxiReport {
+  readonly build: string;
+  /** Client rows a dataset flight master was matched to, and the rows that became nodes of their own. */
+  readonly matchedNodes: number;
+  readonly clientNodes: number;
+  /** Dataset flight masters with a position and no client row within `CLIENT_NODE_MATCH_YARDS`, ascending. */
+  readonly unmatchedMasters: readonly NpcId[];
+  /** Cited node seeds the file has a row for, which its row replaces, ascending. */
+  readonly citedReplaced: readonly number[];
+  /** The graph's taxi edges (`TravelGraph.taxiEdges`), and where they come from. */
+  readonly edges: number;
+  /** `file`: the file's flights; `caller`: the legs given in `TravelGraphSeedOptions.taxiEdges`, which replace them. */
+  readonly edgeSource: 'file' | 'caller';
+  /** Seeded docks positioned from a matched client stop (a user dock or dock NPC wins over it). */
+  readonly inferredDocks: number;
+  /** Client transport paths no seed cites: their stops never reach the graph, ascending. */
+  readonly unmatchedPaths: readonly number[];
 }
 
 /** What the seed found and what it had to leave out. */
@@ -155,6 +262,8 @@ export interface TravelGraphReport {
     readonly noInstanceMap: number;
     readonly unresolved: number;
   };
+  /** The committed taxi file's part; null when the graph was seeded without it. */
+  readonly client: ClientTaxiReport | null;
 }
 
 export interface TravelGraph {
@@ -171,18 +280,7 @@ export interface TravelGraph {
 // =============================================================================================
 // Seeding
 
-/**
- * QuestieDB's Classic `npcFlags.FLIGHT_MASTER` (8, bit 3; DATA_PROVENANCE §6.3). Tested
- * arithmetically: no bitwise operators (D-012).
- */
-export const FLIGHT_MASTER_FLAG = 8;
-
-/** Whether an `npcFlags` value has the FLIGHT_MASTER bit; false for a value that is not a non-negative safe integer. */
-export function isFlightMaster(npc: Pick<NpcRecord, 'npcFlags'>): boolean {
-  const flags = npc.npcFlags;
-  if (!Number.isSafeInteger(flags) || flags < 0) return false;
-  return Math.floor(flags / FLIGHT_MASTER_FLAG) % 2 === 1;
-}
+export { FLIGHT_MASTER_FLAG, isFlightMaster } from './travel-graph-flags';
 
 /** The key of a dataset flight master's node. */
 export const npcNodeKey = (id: NpcId): TaxiNodeKey => `npc:${id}`;
@@ -193,12 +291,29 @@ const FACTIONS_OF: Readonly<Record<'A' | 'H' | 'AH', readonly Faction[]>> = {
   AH: ['Alliance', 'Horde'],
 };
 
-/** The order of taxi nodes: dataset nodes by NPC id, then cited nodes by TaxiNodes id. */
+/** The order of taxi nodes: dataset nodes by NPC id, then the TaxiNodes rows (cited or the committed file's) by id. */
 export function taxiNodeOrder(a: TaxiNode, b: TaxiNode): number {
-  if (a.origin !== b.origin) return a.origin === 'dataset' ? -1 : 1;
+  const aDataset = a.origin === 'dataset';
+  if (aDataset !== (b.origin === 'dataset')) return aDataset ? -1 : 1;
   const idA = a.npcId ?? a.taxiNodeId ?? 0;
   const idB = b.npcId ?? b.taxiNodeId ?? 0;
   return idA - idB;
+}
+
+/**
+ * How far a dataset flight master may stand from a TaxiNodes row of the committed file to be that
+ * node (INFERRED, as TIME-6's local rule): measured at 1.60.1.70009, the 60 flight masters on paid
+ * paths stand within 11.5 yd of their row, and the next nearest (the Moonglade druid flight
+ * masters, whose paths cost nothing) 338 yd away. A row further away is another node.
+ */
+export const CLIENT_NODE_MATCH_YARDS = 50;
+
+/** The factions a client row's side flags name; null when it names none (the client sets no side). */
+export function factionsOfSides(sides: ClientSides): readonly Faction[] | null {
+  if (sides.alliance && sides.horde) return FACTIONS_OF.AH;
+  if (sides.alliance) return FACTIONS_OF.A;
+  if (sides.horde) return FACTIONS_OF.H;
+  return null;
 }
 
 function datasetTaxiNode(source: TravelGraphSource, id: NpcId): TaxiNode | null {
@@ -235,11 +350,59 @@ function citedTaxiNode(seed: TaxiNodeSeed): TaxiNode {
   };
 }
 
+function clientTaxiNode(row: CommittedTaxiNode, build: string): TaxiNode {
+  const sides: ClientSides = { alliance: row.alliance, horde: row.horde };
+  return {
+    key: `taxi:${row.id}`,
+    npcId: null,
+    taxiNodeId: row.id,
+    names: [row.name],
+    point: row.point,
+    factions: factionsOfSides(sides),
+    origin: 'client',
+    source: `client TaxiNodes row ${String(row.id)} (committed taxi file, build ${build})`,
+    clientSides: sides,
+  };
+}
+
+/** The committed row nearest `point` on its world map within `CLIENT_NODE_MATCH_YARDS`; ties go to the lower id. */
+function nearestClientRow(rows: readonly CommittedTaxiNode[], point: WorldPoint): CommittedTaxiNode | null {
+  let best: CommittedTaxiNode | null = null;
+  let bestYards = Number.POSITIVE_INFINITY;
+  for (const row of rows) {
+    const yards = planarYards(point, row.point);
+    if (yards === null || yards > CLIENT_NODE_MATCH_YARDS) continue;
+    if (yards < bestYards || (yards === bestYards && best !== null && row.id < best.id)) {
+      best = row;
+      bestYards = yards;
+    }
+  }
+  return best;
+}
+
+/**
+ * A dataset flight master's node with the committed row it stands at: the row's id, name and
+ * sides, and the sides as its factions when they name one (the one faction source, `factions`).
+ */
+function withClientRow(node: TaxiNode, row: CommittedTaxiNode, build: string): TaxiNode {
+  const names = node.names.includes(row.name) ? node.names : [...node.names, row.name];
+  const sides: ClientSides = { alliance: row.alliance, horde: row.horde };
+  return {
+    ...node,
+    taxiNodeId: row.id,
+    names,
+    factions: factionsOfSides(sides) ?? node.factions,
+    source: `${node.source}; client TaxiNodes row ${String(row.id)} (committed taxi file, build ${build}; matched by position, INFERRED)`,
+    clientSides: sides,
+  };
+}
+
 function dockOf(
   source: TravelGraphSource,
   seed: TransportSeed,
   index: number,
   userDocks: readonly UserDock[],
+  taxi: CommittedTaxi | null,
 ): TransportDock {
   const stop = seed.stops[index];
   if (stop === undefined) throw new RangeError(`Transport ${seed.id} has no stop ${String(index)}`);
@@ -249,18 +412,41 @@ function dockOf(
     const world = source.spawns({ kind: 'npc', id: npcId }).find((candidate) => candidate.world?.mapId === stop.mapId)?.world ?? null;
     if (world !== null) return { stop: index, name: stop.name, mapId: stop.mapId, point: world, pointFrom: 'dock-npc', npcId };
   }
+  const inferred = inferredDock(seed, index, taxi);
+  if (inferred !== null) return { stop: index, name: stop.name, mapId: stop.mapId, point: inferred.point, pointFrom: 'inferred', npcId: null, record: inferred.record };
   return { stop: index, name: stop.name, mapId: stop.mapId, point: null, pointFrom: null, npcId: null };
 }
 
 /**
- * Builds the TravelGraph from the dataset, the cited seeds and the project's effective rules
- * (for the assumed transport wait and ride times). Deterministic: the output order depends only
- * on ids.
+ * A seeded stop's position from the committed taxi file (TIME-7, map-presentation.md §10): the
+ * `clientStop`-th stop of the seed's `clientPath`, when the file has that path and that stop is on
+ * the seed stop's world map; null otherwise (a stop on another map is never taken).
+ */
+export function inferredDock(seed: TransportSeed, index: number, taxi: CommittedTaxi | null): { readonly point: WorldPoint; readonly record: string } | null {
+  const stop = seed.stops[index];
+  const pathId = seed.clientPath ?? null;
+  const at = stop?.clientStop ?? null;
+  if (taxi === null || stop === undefined || pathId === null || at === null) return null;
+  const path = taxi.transports.find((candidate) => candidate.pathId === pathId);
+  const point = path?.stops[at]?.point;
+  if (path === undefined || point === undefined || point.mapId !== stop.mapId) return null;
+  return { point, record: `client transport path ${String(pathId)}, stop ${String(at + 1)} of ${String(path.stops.length)}` };
+}
+
+/**
+ * Builds the TravelGraph from the dataset, the cited seeds, the committed taxi file when given and
+ * the project's effective rules (for the assumed transport wait and ride times). Deterministic:
+ * the output order depends only on ids.
  *
  * - Taxi nodes: every candidate NPC whose record has FLIGHT_MASTER, at its first resolved spawn,
- *   plus the cited new Forever nodes (TIME-5).
- * - Transports: one directed edge per ordered pair of stops of each seed, docks from dock NPCs or
- *   user docks (TIME-7).
+ *   plus the cited new Forever nodes (TIME-5). With the taxi file, each flight master takes the
+ *   row it stands at (`CLIENT_NODE_MATCH_YARDS`; its `taxiNodeId`, the row's name and sides), each
+ *   row no flight master stands at is a node of its own (`taxi:<id>`), and a cited seed the file
+ *   has a row for is replaced by that row.
+ * - Taxi edges: the caller's legs, or the file's flights (which flights exist; their lengths are
+ *   TIME-6's per-leg data, not the graph's).
+ * - Transports: one directed edge per ordered pair of stops of each seed, docks from user docks,
+ *   dock NPCs, or the file's matched stops (`inferred`, TIME-7).
  * - Entrance edges: one per entrance of a dungeon with an instance map, skipping entrances with
  *   `frameVerified: false`, entrances that do not resolve and entrances already on the instance
  *   map.
@@ -269,25 +455,50 @@ export function seedTravelGraph(source: TravelGraphSource, rules: EffectiveRules
   const transportSeeds = options.transports ?? TRANSPORT_SEEDS;
   const taxiSeeds = options.taxiNodes ?? FOREVER_TAXI_NODE_SEEDS;
   const userDocks = options.userDocks ?? [];
+  const taxi = options.taxi ?? null;
 
   const datasetNodes: TaxiNode[] = [];
+  const matchedRows = new Set<number>();
+  const unmatchedMasters: NpcId[] = [];
   for (const id of [...new Set(source.flightMasterIds)].sort((a, b) => a - b)) {
     const node = datasetTaxiNode(source, id);
-    if (node !== null) datasetNodes.push(node);
+    if (node === null) continue;
+    const row = taxi === null || node.point === null ? null : nearestClientRow(taxi.nodes, node.point);
+    if (row !== null && taxi !== null) {
+      matchedRows.add(row.id);
+      datasetNodes.push(withClientRow(node, row, taxi.build));
+    } else {
+      if (taxi !== null && node.point !== null) unmatchedMasters.push(id);
+      datasetNodes.push(node);
+    }
   }
-  const citedNodes = [...taxiSeeds].sort((a, b) => a.taxiNodeId - b.taxiNodeId).map(citedTaxiNode);
-  const taxiNodes = [...datasetNodes, ...citedNodes];
+  const fileRows = new Set(taxi?.nodes.map((row) => row.id) ?? []);
+  const citedNodes = [...taxiSeeds].filter((seed) => !fileRows.has(seed.taxiNodeId)).map(citedTaxiNode);
+  const clientNodes = taxi === null ? [] : taxi.nodes.filter((row) => !matchedRows.has(row.id)).map((row) => clientTaxiNode(row, taxi.build));
+  const rowNodes = [...citedNodes, ...clientNodes].sort(taxiNodeOrder);
+  const taxiNodes = [...datasetNodes, ...rowNodes];
   const nodeKeys = new Set(taxiNodes.map((node) => node.key));
-  const taxiEdges = (options.taxiEdges ?? []).filter((edge) => nodeKeys.has(edge.from) && nodeKeys.has(edge.to) && edge.from !== edge.to);
+  // A row's node for the file's flights: the first in graph order that has it (a row two flight masters share keeps one).
+  const byRow = new Map<number, TaxiNodeKey>();
+  for (const node of taxiNodes) if (node.taxiNodeId !== null && !byRow.has(node.taxiNodeId)) byRow.set(node.taxiNodeId, node.key);
+  const fileEdges: TaxiEdge[] = [];
+  for (const flight of taxi?.flights ?? []) {
+    const from = byRow.get(flight.from);
+    const to = byRow.get(flight.to);
+    if (from !== undefined && to !== undefined && from !== to) fileEdges.push({ from, to });
+  }
+  const taxiEdges = options.taxiEdges === undefined ? fileEdges : options.taxiEdges.filter((edge) => nodeKeys.has(edge.from) && nodeKeys.has(edge.to) && edge.from !== edge.to);
 
   const transports: TransportEdge[] = [];
   let docksFromNpc = 0;
   let docksFromUser = 0;
+  let docksInferred = 0;
   for (const seed of transportSeeds) {
-    const docks = seed.stops.map((_, index) => dockOf(source, seed, index, userDocks));
+    const docks = seed.stops.map((_, index) => dockOf(source, seed, index, userDocks, taxi));
     for (const dock of docks) {
       if (dock.pointFrom === 'dock-npc') docksFromNpc += 1;
       if (dock.pointFrom === 'user') docksFromUser += 1;
+      if (dock.pointFrom === 'inferred') docksInferred += 1;
     }
     for (const from of docks) {
       for (const to of docks) {
@@ -310,6 +521,7 @@ export function seedTravelGraph(source: TravelGraphSource, rules: EffectiveRules
   const userDocksIgnored = userDocks.filter(
     (dock) => !transportSeeds.some((seed) => seed.id === dock.transportId && seed.stops[dock.stop]?.mapId === dock.point.mapId),
   ).length;
+  const citedPaths = new Set(transportSeeds.flatMap((seed) => (seed.clientPath === undefined || seed.clientPath === null ? [] : [seed.clientPath])));
 
   const entrances: EntranceEdge[] = [];
   let frameUnverified = 0;
@@ -353,6 +565,23 @@ export function seedTravelGraph(source: TravelGraphSource, rules: EffectiveRules
         userDocksIgnored,
       },
       entrances: { edges: entrances.length, frameUnverified, noInstanceMap, unresolved },
+      client:
+        taxi === null
+          ? null
+          : {
+              build: taxi.build,
+              matchedNodes: matchedRows.size,
+              clientNodes: clientNodes.length,
+              unmatchedMasters,
+              citedReplaced: taxiSeeds
+                .filter((seed) => fileRows.has(seed.taxiNodeId))
+                .map((seed) => seed.taxiNodeId)
+                .sort((a, b) => a - b),
+              edges: taxiEdges.length,
+              edgeSource: options.taxiEdges === undefined ? 'file' : 'caller',
+              inferredDocks: docksInferred,
+              unmatchedPaths: taxi.transports.filter((path) => !citedPaths.has(path.pathId)).map((path) => path.pathId),
+            },
     },
   };
 }
@@ -386,7 +615,7 @@ export type TaxiNodeLookup =
 export function findTaxiNodes(graph: TravelGraph, query: string, faction: Faction | null = null): TaxiNode[] {
   const needle = query.trim().toLowerCase();
   if (needle === '') return [];
-  const usable = graph.taxiNodes.filter((node) => faction === null || node.factions === null || node.factions.includes(faction));
+  const usable = graph.taxiNodes.filter((node) => faction === null || taxiNodeOpenTo(node, faction));
   const exact = usable.filter((node) => node.names.some((name) => name.toLowerCase() === needle));
   if (exact.length > 0) return exact;
   return usable.filter((node) => node.names.some((name) => name.toLowerCase().includes(needle)));
@@ -466,7 +695,53 @@ export function sameMapTransports(graph: TravelGraph, mapId: WorldMapId): Transp
  */
 export function withDeparture(edge: TransportEdge, point: WorldPoint): TransportEdge | null {
   if (point.mapId !== edge.from.mapId) return null;
-  return { ...edge, from: { ...edge.from, point, pointFrom: 'user', npcId: null } };
+  const { record: _record, ...dock } = edge.from;
+  return { ...edge, from: { ...dock, point, pointFrom: 'user', npcId: null } };
+}
+
+/** Whether `faction` may use `node` (TIME-5, TIME-6): its factions include it, or are unknown. */
+export function taxiNodeOpenTo(node: TaxiNode, faction: Faction): boolean {
+  return node.factions === null || node.factions.includes(faction);
+}
+
+const BERTHS = new WeakMap<TravelGraph, readonly WorldPoint[]>();
+
+/**
+ * The positions of the graph's inferred docks (TIME-7): the committed taxi file's transport stops,
+ * where the ship berths. A berth lies in the water beside its pier, and the navigation data snaps
+ * it to the water surface, not to the pier's deck, so a walk to or from one ends with a swim that
+ * stands for the walk along the pier (`berthTravel` in src/sim/travel.ts prices it as walking).
+ * A user dock or a dock NPC's spawn is not a berth. Computed once per graph.
+ */
+export function inferredBerths(graph: TravelGraph): readonly WorldPoint[] {
+  let berths = BERTHS.get(graph);
+  if (berths === undefined) {
+    const out: WorldPoint[] = [];
+    for (const edge of graph.transports) {
+      for (const dock of [edge.from, edge.to]) {
+        const point = dock.point;
+        if (dock.pointFrom !== 'inferred' || point === null) continue;
+        if (!out.some((p) => p.mapId === point.mapId && p.x === point.x && p.y === point.y)) out.push(point);
+      }
+    }
+    berths = out;
+    BERTHS.set(graph, berths);
+  }
+  return berths;
+}
+
+/** Whether `point` is one of `berths` (`inferredBerths`), by value. An index loop: it runs for every leg. */
+export function isBerthIn(berths: readonly WorldPoint[], point: WorldPoint): boolean {
+  for (let i = 0; i < berths.length; i += 1) {
+    const berth = berths[i];
+    if (berth !== undefined && berth.x === point.x && berth.y === point.y && berth.mapId === point.mapId) return true;
+  }
+  return false;
+}
+
+/** Whether `point` is one of the graph's inferred berths (`inferredBerths`), by value. */
+export function isInferredBerth(graph: TravelGraph, point: WorldPoint): boolean {
+  return isBerthIn(inferredBerths(graph), point);
 }
 
 /** Whether any entrance edge leads into `mapId`, i.e. `mapId` is a known instance map. */

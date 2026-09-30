@@ -35,7 +35,7 @@ async function run(grindFill: 'shortfall' | 'replace-quests'): Promise<Extract<O
   const project = workspace.project;
   const store = createEditorStore({ project, ids: sequentialIdSource(700_000), clock: fixedClock(NOW) });
   const revision = store.getState().revision;
-  const host = createOptimizationHost({ project, revision, data: workspace.data, geometry: workspace.geometry.geometry, navigation: { kind: 'unavailable', reason: 'test' } });
+  const host = createOptimizationHost({ project, revision, data: workspace.data, geometry: workspace.geometry.geometry, navigation: { kind: 'unavailable', reason: 'test' }, taxi: null });
   const optimizer = createTypeScriptBeamSearchOptimizer({ createPort: () => inProcessOptimizerWorker({ sliceMs: 20, firstSlice: 256, progressMs: 0 }).port });
   const steps = project.route.steps;
   const first = steps[5];
@@ -60,7 +60,7 @@ async function run(grindFill: 'shortfall' | 'replace-quests'): Promise<Extract<O
 /** An independent re-walk of the result's route on a fresh run walker: its section plus exit chain, ms. */
 function rewalkMs(result: Extract<OptimizationResult, { status: 'improved' | 'no-improvement' }>): number {
   const project = workspace.project;
-  const host = createOptimizationHost({ project, revision: 0, data: workspace.data, geometry: workspace.geometry.geometry, navigation: { kind: 'unavailable', reason: 'test' } });
+  const host = createOptimizationHost({ project, revision: 0, data: workspace.data, geometry: workspace.geometry.geometry, navigation: { kind: 'unavailable', reason: 'test' }, taxi: null });
   const spliced = spliceSection(project, 5, 30, result.steps);
   const newLast = 5 + result.steps.length - 1;
   const walked = walkRoute(createRunWalker(host), spliced, { first: 5, last: newLast }, { probe: false });

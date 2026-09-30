@@ -24,11 +24,17 @@ import { startNavigation } from '../src/app/navigation-runtime';
 import { createEditorStore } from '../src/app/store';
 import { loadWorkspace } from '../src/app/workspace';
 import type { SpawnPoint } from '../src/domain/dataset';
-import { npcId, sequentialIdSource } from '../src/domain/ids';
-import type { WorldPoint } from '../src/domain/points';
+import { npcId, sequentialIdSource, worldMapId } from '../src/domain/ids';
+import type { Location, WorldPoint } from '../src/domain/points';
 import { createNavWorkerClient } from '../src/nav/worker/client';
 import type { UserDock } from '../src/rules/travel-graph';
-import { type Bytes, fakeServer, fixtureSite, nodeSha256, publicSite, REPO_ROOT } from './support/fake-fetch';
+import { makeTravelStep } from '../src/domain/step-factory';
+import { enumerateLegs } from '../src/engine/legs';
+import { createClientTables } from '../src/infra/maps/client-tables';
+import { sameMapTransports, transportEdges } from '../src/rules/travel-graph';
+import { taxiLegDataOf } from '../src/sim/taxi';
+import { validateRoute } from '../src/validate/validator';
+import { type Bytes, fakeServer, fixtureSite, nodeSha256, publicSite, readDirectory, REPO_ROOT } from './support/fake-fetch';
 import { inProcessNavWorker } from './support/nav-mesh';
 
 const NOW = '2026-09-26T00:00:00.000Z';
@@ -152,6 +158,107 @@ describe('same-map transports on the committed navmesh (D-034 item 2, terrain-na
     expect(withDocks).toMatchObject({ method: 'same-map-transport', pending: false });
     expect(withDocks.seconds.basis).toBe('assumption');
     expect(withDocks.seconds.value).toBeGreaterThan(rules.values.transportWaitSeconds.value + rules.values.transportRideSeconds.value);
+    navigation.runtime.dispose();
+  });
+});
+
+describe('inferred docks on the committed navmesh and taxi file (TIME-7; NAV-08, review TR-03, TR-06)', () => {
+  it("rides the Auberdine – Rut'theran boat from the file's inferred docks, and prices the swims beside the piers as walking", { timeout: 120_000 }, async () => {
+    const server = fakeServer(site(new Map([...publicSite(), ...readDirectory('public/maps/client', 'maps/client/')])), BASE);
+    const workspace = await loadWorkspace({ fetch: server.fetch, baseUrl: BASE, sha256: nodeSha256, nowIso: NOW, yieldToRender: () => Promise.resolve() });
+    const taxiLoad = await createClientTables({ fetch: server.fetch, baseUrl: BASE, sha256: nodeSha256 }).taxi();
+    if (taxiLoad.kind !== 'loaded') throw new Error(`taxi file ${taxiLoad.kind}`);
+    const taxi = taxiLoad.table;
+    const view = workspace.data.view({ faction: 'Alliance', class: 'WARRIOR', customQuests: [], questOverrides: {} });
+    const geometry = workspace.geometry.geometry;
+    const spawnOf = (id: number): SpawnPoint & { readonly world: WorldPoint } => {
+      const spawn = view.spawns({ kind: 'npc', id: npcId(id) }).find((s): s is SpawnPoint & { readonly world: WorldPoint } => s.world !== null);
+      if (spawn === undefined) throw new Error(`NPC ${String(id)} has no resolved spawn`);
+      return spawn;
+    };
+    const navigation = await startNavigation({
+      fetch: server.fetch,
+      baseUrl: BASE,
+      sha256: nodeSha256,
+      createService: ({ json, baseUrl }) => createNavWorkerClient({ baseUrl, manifest: json, port: inProcessNavWorker({ fetch: server.fetch, digest: nodeSha256 }).port }),
+    });
+    if (navigation.kind !== 'available') throw new Error(`navigation ${navigation.kind}`);
+    const rules = projectRules('forever-beta', {});
+    const speeds = { groundYps: rules.values.runSpeed.value, swimYps: rules.values.swimSpeed.value };
+    // No user dock: every dock is the committed file's inferred stop (the client berth, in the water).
+    const graph = projectTravelGraph(view, workspace.data.flightMasterIds, rules, [], taxi);
+    expect(graph.report.client?.inferredDocks).toBe(15);
+    expect(graph.report.transports.docksFromUser).toBe(0);
+    const selection = selectTravelModel({ navigation, detourFactor: rules.values.groundDetourFactor.value, graph, faction: 'Alliance', dataset: view, geometry });
+    const model = selection.navigation;
+    if (model === null) throw new Error('no navigation model');
+    const at = (id: number) => {
+      const spawn = spawnOf(id);
+      return { point: spawn.world, zoneHint: selection.hints.spawn(spawn, spawn.world) };
+    };
+
+    // The navmesh snaps a berth to the water surface: the plain walk from Caylais Moonfeather to the
+    // 11616 Auberdine berth is a long swim, which the walker and the same-map rule count as walking.
+    const caylais = at(3841);
+    const auberdine = transportEdges(graph, 'stormwind-auberdine:0>1')[0]?.from.point ?? null;
+    expect(auberdine).toEqual({ mapId: 1, x: 6548, y: 942 });
+    if (auberdine === null) throw new Error('no inferred Auberdine dock');
+    expect(await navigation.runtime.scheduler.computeLegs(model, [{ from: caylais, to: { point: auberdine, zoneHint: 0 } }])).toMatchObject({ complete: true });
+    expect(model.leg(caylais, { point: auberdine, zoneHint: 0 }, speeds).warnings.some((warning) => warning.kind === 'long-swim')).toBe(true);
+
+    // Innkeeper Shaussiy (Auberdine) to Vesprystus (Rut'theran Village): no walking path, so the
+    // boat from the inferred docks, with the walks to and from the berths counted as walking.
+    const inn = at(6737);
+    const rutheran = at(3838);
+    expect(sameMapTransports(graph, worldMapId(1)).map((edge) => edge.id)).toEqual(['rutheran-auberdine:0>1', 'rutheran-auberdine:1>0']);
+    expect(await navigation.runtime.scheduler.computeLegs(model, [{ from: inn, to: rutheran }])).toMatchObject({ complete: true });
+    const boat = model.leg(inn, rutheran, speeds);
+    expect(boat).toMatchObject({ method: 'same-map-transport', pending: false });
+    expect(boat.seconds.basis).toBe('assumption');
+    expect(boat.warnings.filter((warning) => warning.kind === 'long-swim')).toEqual([]);
+
+    // The walker's own transport step from Caylais to Stormwind: no SIM-21 for the berth walks, and
+    // the ride's fact (Details) names both inferred docks with their records.
+    const ids = sequentialIdSource(9000);
+    const location = (id: number): Location => {
+      const source = spawnOf(id).source;
+      if (!('space' in source)) throw new Error(`NPC ${String(id)} has no zone point`);
+      return { source, label: null, radius: null };
+    };
+    const steps = [makeTravelStep(ids, { location: location(3841) }), makeTravelStep(ids, { mode: 'transport', transport: { id: 'stormwind-auberdine', dock: null }, location: location(352) })];
+    const base = workspace.project;
+    const project = { ...base, character: { ...base.character, faction: 'Alliance' as const, race: 'NightElf' as const, class: 'WARRIOR' as const, startLocation: location(3841) }, route: { ...base.route, steps, groups: {} } };
+    const context = { dataset: view, geometry, rules, travel: model, graph, zoneHints: selection.hints, localTaxi: taxiLegDataOf(taxi) };
+    const first = validateRoute(project, context);
+    expect(await navigation.runtime.scheduler.computeLegs(model, enumerateLegs(first.walk.records))).toMatchObject({ complete: true });
+    const { walk, issues } = validateRoute(project, context);
+    const crossing = walk.records[1];
+    expect(crossing?.legs.map((leg) => [leg.purpose, leg.method, leg.pending, leg.warnings])).toEqual([
+      ['dock', 'navigation', false, []],
+      ['step', 'navigation', false, []],
+    ]);
+    expect(crossing?.legs[0]?.seconds.basis).toBe('assumption');
+    expect(issues.filter((issue) => issue.stepId === steps[1]?.id).map((issue) => issue.code)).not.toContain('SIM021-long-swim');
+    expect(crossing?.estimate.facts).toContainEqual({
+      kind: 'transport-ride',
+      transportId: 'stormwind-auberdine',
+      edgeId: 'stormwind-auberdine:0>1',
+      name: 'Stormwind Harbor – Auberdine ship',
+      docks: [
+        { end: 'departure', name: 'Auberdine', pointFrom: 'inferred', record: 'client transport path 11616, stop 1 of 2' },
+        { end: 'arrival', name: 'Stormwind Harbor', pointFrom: 'inferred', record: 'client transport path 11616, stop 2 of 2' },
+      ],
+      berthWalk: true,
+    });
+
+    // Menethil and Southshore are one navmesh component (a swim across the water joins them), so
+    // the same-map rule never applies there: the leg is a navmesh path with its long swim (NAV-08).
+    const menethil = at(1571);
+    const southshore = at(2432);
+    expect(await navigation.runtime.scheduler.computeLegs(model, [{ from: menethil, to: southshore }])).toMatchObject({ complete: true });
+    const channel = model.leg(menethil, southshore, speeds);
+    expect(channel.method).toBe('navigation');
+    expect(channel.warnings.some((warning) => warning.kind === 'long-swim')).toBe(true);
     navigation.runtime.dispose();
   });
 });

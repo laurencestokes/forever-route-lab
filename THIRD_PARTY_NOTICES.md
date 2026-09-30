@@ -81,20 +81,40 @@ project or RestedXP. World of Warcraft is a trademark of Blizzard Entertainment,
   `79267e8be8034e47daab14350411b3acc0b1f64e86efc9d821a217497254ca0a`), and are marked
   `source: 'db2-csv'`, each row citing table, build and row ID. They are Blizzard client-derived
   values, committed by owner approval (D-018; cited individual values are allowed, D-022).
-- **Map art is separate.** The geometry file holds no images. Blizzard's painted map art is
-  committed and deployed only under `public/maps/art/` (see "Map art" below, D-033). Developer-local
+- **Map art is separate.** The geometry file holds no images. Blizzard's art is committed and
+  deployed only under `public/maps/art/` and `public/maps/atlas/` (see "Map art" below, D-033,
+  D-042), and deployed from a release pack under `maps/minimap/` (see "Minimap tiles", D-045,
+  D-049). Developer-local
   map sets still live in the gitignored `local-maps/` folder, outside `public/`; only a dev/preview
   plugin serves them, and the build audit fails if they reach `dist/` (D-018;
   [docs/MAPS.md](docs/MAPS.md)).
 
 ## Map art
 
-- **What:** `public/maps/art/`: one WebP image per UiMap with art in the World of Warcraft: Forever
-  client (60 at build 1.60.1.70009: zones, cities, battlegrounds, the continents 1414, 1415, 1463
-  and 1464, Azeroth 947 and the new Forever maps), each the world map's painted art stitched from
-  the client's `UiMapArtTile` textures with every `WorldMapOverlay` explored-area piece drawn in;
-  `manifest.json` (per image: SHA-256, pixel size, UiMap, world rectangle, tile FileDataIDs and an
-  input hash over the (FileDataID, CKey) list of the textures and tables) and `NOTICE.md`.
+The World of Warcraft: Forever client's painted world-map art, in two folders:
+
+- **What, the painted atlas** (`public/maps/atlas/`, D-042; the painted map style): 792 WebP tiles
+  (256 px, levels −8 to 0) of one continuous map of Kalimdor and the Eastern Kingdoms with Zephras
+  Isle in a card, composed from 50 of the client's painted zone, city and island maps;
+  `index.json`, `manifest.json` (every file's SHA-256, every source image's pixel hash, every
+  parameter, the censuses and the alterations) and `NOTICE.md`.
+- **What, the single images** (`public/maps/art/`): since step ATL.10 (D-042 O5), the five images
+  still drawn one at a time: Alterac Valley, Warsong Gulch and Arathi Basin, Darkspear Islands (their
+  own map surfaces) and Zephras Isle (the atlas card's picture when the tiles cannot be used). Each
+  is the world map's painted art stitched from the client's `UiMapArtTile` textures with every
+  `WorldMapOverlay` explored-area piece drawn in; `manifest.json` (per image: SHA-256, pixel size,
+  UiMap, world rectangle, tile FileDataIDs and an input hash over the (FileDataID, CKey) list of the
+  textures and tables; and the pixel hash of every one of the 60 images the tool composes, deployed or
+  not) and `NOTICE.md`. The other 55 images were deployed before ATL.10 and remain in the
+  repository's history.
+- **Alterations in the atlas tiles** (D-042 O11; listed in its NOTICE and manifest): (1) each
+  painting is masked to its terrain polygon, its painted ground and a coastal band, with
+  neighbouring paintings' colour cross-faded over ±200 yd; (2) painted labels are hidden by a mirror
+  fill from the same painting (11, each listed with its reason); (3) this project's own
+  relief-shaded tint fills land no painting shows; (4) this project's sea colours fill the water
+  outside the coastal bands; (5) the art is resampled and re-encoded as WebP at quality 80. The
+  masks, the tint's shading and the sea's distances come from the terrain byproducts (below). The
+  single images are stitched and re-encoded only.
 - **Owner:** the artwork is Blizzard Entertainment's (© Blizzard Entertainment, Inc.). World of
   Warcraft, Warcraft and Blizzard Entertainment are trademarks or registered trademarks of Blizzard
   Entertainment, Inc. The images are extracted from the game client and are not this project's
@@ -110,16 +130,83 @@ project or RestedXP. World of Warcraft is a trademark of Blizzard Entertainment,
   accompany the art; the art is removed promptly if Blizzard asks
   (https://github.com/laurencestokes/forever-route-lab/issues); the project never distributes hacks,
   cheats or similar content.
-- **How:** `tools/maps/convert.ts` reads the pinned client read-only through this project's CASC
-  reader (`tools/casc`; `.build.info` and `Data/` only, no network), decodes the BLP textures with
-  this project's own decoder (`tools/maps/lib/blp.ts`) and encodes WebP with `sharp` (below). No BLP,
-  DB2 or other client file is committed or deployed.
-- **Where the notices live:** `public/maps/art/NOTICE.md` (shipped as `dist/maps/art/NOTICE.md`,
-  which the build audit requires next to every art image), this file, the README and the in-app
-  About dialog (the last two are for their owners, D-033).
-- **Dist audit:** an image may ship only under `maps/art/` or `maps/terrain/`, only with that
-  folder's `NOTICE.md` and `manifest.json`, and only when the manifest lists it with its SHA-256;
-  the art has its own budget of 12 MB gzip-6 (D-034 item 4; `tools/build/dist-requirements.json`).
+- **How:** `tools/maps/convert.ts` and `tools/maps/atlas.ts` read the pinned client read-only
+  through this project's CASC reader (`tools/casc`; `.build.info` and `Data/` only, no network),
+  decode the BLP textures with this project's own decoder (`tools/maps/lib/blp.ts`) and encode WebP
+  with `sharp` (below). The atlas build refuses to run unless the rasters it reads equal the pixel
+  hashes `convert.ts` recorded. No BLP, DB2 or other client file is committed or deployed.
+- **Where the notices live:** `public/maps/art/NOTICE.md` and `public/maps/atlas/NOTICE.md` (shipped
+  as `dist/maps/art/NOTICE.md` and `dist/maps/atlas/NOTICE.md`, which the build audit requires next
+  to every image of its folder), this file, the README and the in-app About dialog and map key, which
+  name both base maps' notices and say which is shown (D-033).
+- **Dist audit:** an image may ship only in a listed map folder, only with that folder's `NOTICE.md`
+  and `manifest.json`, and only when the manifest lists it with its SHA-256. Budgets (D-042 O5,
+  `tools/build/dist-requirements.json`): `art` at most 1.0 MB gzip-6 (689 kB since ATL.10; it was
+  12 MB under D-034 item 4); `atlas` at most 8.0 MB, 32 kB per tile, each level within its baseline
+  + 10 % (6.95 MB).
+
+## Minimap tiles
+
+- **What:** `public/maps/minimap/`, the minimap map style (D-045, D-049): WebP tiles
+  `t/<z>/<x>/<y>.webp` (256 px; levels −8 to 0, 1 yd per pixel at level 0; 6,647 tiles in the current
+  manifest) of one continuous map of Kalimdor and the Eastern Kingdoms with Zephras Isle in a card;
+  `index.json` (the stored and sea keys per level), `manifest.json` (the client build, the tool tree
+  hash, every source texture's FileDataID and content key, every parameter, the census, each tile's
+  size and SHA-256, the alterations), `NOTICE.md` and `pack.json` (the pointer to the tile pack).
+- **Owner:** the artwork is Blizzard Entertainment's (© Blizzard Entertainment, Inc.): the World of
+  Warcraft: Forever client's minimap textures (1,796 at build 1.60.1.70009), altered by this
+  project's tool. World of Warcraft, Warcraft and Blizzard Entertainment are trademarks or
+  registered trademarks of Blizzard Entertainment, Inc. The tiles are not this project's work; this
+  repository's GPL-3.0-or-later licence grants no rights over them. Forever Route Lab is not
+  affiliated with or endorsed by Blizzard Entertainment.
+- **Owner's decisions:** D-045 extends D-033 to the client's minimap textures on the same terms, and
+  D-049 sets the build, the alterations and the hosting. The owner's rationale is recorded as stated
+  and not verified (see "Map art"); no legal conclusion is drawn, and the owner accepts the risk. The
+  same project rules apply: the site stays non-commercial; Blizzard's copyright and trademark notices
+  accompany the tiles; they are removed promptly if Blizzard asks
+  (https://github.com/laurencestokes/forever-route-lab/issues); the project never distributes hacks,
+  cheats or similar content.
+- **Alterations** (D-049 O15; listed in the NOTICE and the manifest):
+  1. water is recoloured onto a navy ramp from rgb(13, 27, 48) to rgb(60, 92, 130), by colour, gated
+     by the liquid areas of the client's terrain data (in full within about 4 yd of water, fading out
+     by about 8 yd), and the steps between tiles are feathered; water-coloured dry ground within about
+     8 yd of water (banks, and shallows the terrain data calls dry) may be darkened or shifted toward
+     the navy, but is never brightened (the NOTICE gives the census's counts per map);
+  2. the void (Zephras Isle's black background and the area beyond the map's tiles) is filled with
+     the navy, the dark haze joined to it is re-composited over the navy, and the flat strips along
+     map edges that face no tile (the edge skirts) are treated as void;
+  3. the textures are resampled from 1.0417 to 1 yd per pixel (Lanczos-3) and reduced by 2 × 2 box
+     filters for the coarser levels;
+  4. the three maps are drawn in one raster by translation only, with Zephras Isle as a card that is
+     not in its real position;
+  5. the tiles are re-encoded lossily as WebP at quality 80.
+  Kept as drawn: coloured water (bright ponds, the violet river by Dalaran), lava and slime; swamp
+  and brown water (O20); black texels not joined to the void (O16).
+- **How:** `tools/maps/minimap.ts` reads the pinned client read-only through this project's CASC
+  reader (`tools/casc`; `.build.info` and `Data/` only, no network), decodes the BLP2 DXT1 textures
+  with this project's own code and encodes WebP with `sharp` (below). No BLP, WDT, ADT, DB2 or other
+  client file is committed, published or deployed.
+- **Hosting** (D-049 O14): the tiles are never committed to git (`public/maps/minimap/t/` is
+  gitignored, and a test fails if any file under it is tracked). They ship as a release-asset tile
+  pack, `minimap-tiles-<tree hash 12>-<pack SHA-256 12>.tar`: an uncompressed tar of `NOTICE.md`
+  first, then `manifest.json` and the tiles, so every copy carries the notice, with the NOTICE as the
+  release text. `pack.json` pins it by SHA-256 and tree hash; the name carries the pack's own
+  SHA-256, so a new pack is always a new release and a published one is never replaced. `pnpm maps:minimap:fetch` (run by
+  `pnpm build:deploy`) downloads it and verifies its SHA-256, that its NOTICE and manifest are the
+  committed ones, and every tile's size and SHA-256. Nothing is published until the owner authorises
+  pushing (OD-13).
+- **Removal on request** (docs/research/map-atlas.md §23.3): delete the release asset and release;
+  commit the removal of `public/maps/minimap/` (index, manifest, NOTICE, pointer); redeploy Pages;
+  confirm on the published site that `maps/minimap/index.json` and a tile address per level return
+  404, and record the check in STATUS; delete any retained Pages artifacts of earlier runs. The
+  pixels were never in git history. Copies that others have already downloaded cannot be recalled.
+- **Where the notices live:** `public/maps/minimap/NOTICE.md` (in the repository, shipped as
+  `dist/maps/minimap/NOTICE.md`, first in the pack and the release text), this file, the README and
+  the in-app About dialog (for its owner, D-033).
+- **Dist audit:** the `minimap` folder has its own budget: 60 MB gzip-6, 32 kB per tile, each level
+  within its baseline + 10 % (D-049; `tools/build/dist-requirements.json`). Its tiles are `external`:
+  `pnpm build` (so `pnpm check`) passes without them, warns loudly and checks the budget from the
+  manifest's records; a partial set fails; `pnpm build:deploy` requires every tile.
 
 ## Derived terrain map data
 
@@ -136,6 +223,31 @@ project or RestedXP. World of Warcraft is a trademark of Blizzard Entertainment,
   This is a posture, not a legal conclusion.
 - **Where the notices live:** `public/maps/terrain/NOTICE.md` (shipped next to the files) and this
   file. Budget: 600 kB gzip-6 (D-034 item 4).
+
+## Client-derived tables
+
+- **What:** `public/maps/client/`: `taxi.json` (the flight nodes on paid paths of Eastern Kingdoms and
+  Kalimdor, the directed flights with their 3D path lengths and shapes simplified to 25 yd, and the
+  stops of the transport paths), `zones.json` (each world-map zone's faction group and sanctuary
+  flag), `dungeons.json` (the dungeon-finder rows with their tuning levels, and the dungeon and raid
+  maps with their type), `manifest.json` (pin, build, WoWDBDefs commit, tool tree hash, per table its
+  FileDataID, CKey and the columns used, per file its SHA-256, input hash and counts) and `NOTICE.md`.
+- **Origin:** selected columns of the World of Warcraft: Forever client's `TaxiNodes`, `TaxiPath`,
+  `TaxiPathNode`, `AreaTable`, `UiMapAssignment`, `LFGDungeons`, `ContentTuning` and `Map` tables at
+  build 1.60.1.70009, read-only through `tools/casc` by `tools/maps/client-tables.ts`, plus the path
+  lengths and simplified shapes this project computes from them. World of Warcraft and its game data
+  are Blizzard Entertainment's (© Blizzard Entertainment, Inc.); GPL-3.0-or-later covers the
+  project's own code and grants no rights over Blizzard content or client-derived values. No DB2 or
+  other client file is committed or deployed.
+- **Owner's decision:** D-039 B, C and E (committed and deployed with a manifest, a NOTICE and a
+  reproducible `--check`). This is a posture, not a legal conclusion.
+- **Layouts:** the layouts of `TaxiNodes`, `TaxiPath`, `TaxiPathNode`, `LFGDungeons` and
+  `ContentTuning` are adapted from WoWDBDefs at the commit and under the terms given in "Format
+  definitions", in the generated `tools/maps/lib/client-data/layouts.ts` (build-tool input only;
+  nothing from it reaches `dist/`).
+- **Where the notices live:** `public/maps/client/NOTICE.md` (shipped next to the files; the build
+  audit requires it once `public/maps/client/manifest.json` exists) and this file. Budget: 40 kB
+  gzip-6 for the folder (docs/research/map-presentation.md §16; `tools/build/dist-requirements.json`).
 
 ## Derived navigation data
 

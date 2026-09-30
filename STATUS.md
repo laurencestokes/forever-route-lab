@@ -8,16 +8,19 @@ Last updated: 2026-09-27
 
 ## Current milestone
 
-**Milestone 7** (optimiser and route diff): complete, with no UI yet; the proposal UX is
-Milestone 8. Milestones 6 and 3b.6 are complete.
+**The map and UI rework is built and signed off** (D-050). It has:
+- one atlas with both continents and Zephras Isle;
+- a MapGenie-style minimap by default, with the painted style as a toggle;
+- pins with the "Map layers" drawer;
+- a WoWF-QRP-like left panel and buttons;
+- dungeons, the client flight network, transports, zone levels and the faction overlay.
+See [docs/reviews/review-map-ui-rework.md](docs/reviews/review-map-ui-rework.md).
 
-**Map rework** (owner feedback, 2026-09-26): both designs are complete and decided.
-- The seamless atlas: [docs/research/map-atlas.md](docs/research/map-atlas.md), D-042.
-- The presentation layer: [docs/research/map-presentation.md](docs/research/map-presentation.md),
-  D-039 and D-041.
-
-Building them is next, together with the optimiser search-quality fix. Milestone 8 (proposal UX)
-follows.
+**Next:**
+1. The follow-up: re-pin to client 1.60.1.70124 and rebuild; fix the speed regressions; the entry
+   chunk; the default state and level ceiling; left-panel readability.
+2. Milestone 8, the proposal UX.
+3. Milestone 9, the gauntlet.
 
 ## Completed work
 
@@ -137,21 +140,22 @@ follows.
 - Branch: `main`
 - Commits: `e2e577f` skeleton, `14acc7a` M0, `374354a` M1, `daeefb1` M2, `0b56df9` M3,
   `07daaa4` M4/M5/M3b part 1, `02c8d81` M6/3b.6, `efd1b1b` D-040, `6b79c31` presentation design,
-  then the M7 commit (see `git log`).
+  `6667343` M7, `2bca3dc` M7 follow-up, `95e84cc` map/UI designs, then the map/UI rework commit
+  (see `git log`).
 
 ## Build / test status
 
-As of the Milestone 7 commit (`pnpm check`, plus the nav, maps and RXP gates):
+As of the map/UI rework commit (`pnpm check`; the client gates are blocked until the re-pin, D-050):
 
 | Check | Status |
 |---|---|
 | Typecheck (pure, app, node configs) | pass |
 | Lint | pass |
-| Tests | 258 files, 3,840 tests, pass (client tests need the installed client) |
+| Tests | 334 files, 4,814 tests, pass; 25 skipped (the client tests skip while the installed client is off the pin) |
 | Data validation (`data:validate`, public/data and fixture) | pass |
 | Reproducibility (`extract --check`, needs the QuestieDB clone) | byte-identical (manual gate until CI, Milestone 9) |
 | Licence gate | pass (8 shipped packages) |
-| Production build + dist audit | pass; entry 237.60 kB gzip of 250 kB (optimiser lazy); derived pipeline lazy (about 36 kB); nav worker 17.2 kB gzip (reported); data 938.6 kB gzip of 1.2 MB |
+| Production build + dist audit | pass; entry 248.98 kB gzip of 250 kB (0.48 kB over the 248.5 kB stop rule); minimap 52.17 MB of 60 MB (the tiles live in the release-asset pack, not git); atlas 6.95 MB; art 689 kB; derived pipeline lazy (about 36 kB); nav worker 17.2 kB gzip (reported); data 938.6 kB gzip of 1.2 MB |
 | Benches (`--check`, bundled, probe-normalised) | engine, validate and map-edit pass. Realistic 10,000-step walk + validate: 12.2 ms warm, 16.3 ms cold. `derived --budget` passes bundled; the class change is 51.5 ms under tsx (open) |
 | Navigation (`nav:validate` plain, `--client`, `--partition`; `nav:check`) | 56 / 62 / 60 checks pass; 113 of 113 files byte-identical on rebuild; gates G1-G15 pass (manual until CI; needs the client) |
 | Map art and terrain (`convert.ts --check`, `byproducts.ts --check`, `maps:validate`) | up to date, byte-identical; 14 checks pass |
@@ -172,7 +176,8 @@ As of the Milestone 7 commit (`pnpm check`, plus the nav, maps and RXP gates):
   (D-036).
 - Autosave of a 10,000-step project is 35 ms unthrottled. Chunked storage is decided after the
   Milestone 9 throttled run (D-036).
-- **Map (owner feedback, 2026-09-26):** it feels slow; zooming from the world to a zone does not
+- **Open after the rework (review-map-ui-rework.md):** the client is off the pin (every client gate is blocked; nav:validate G13 fails); map-edit and derived benches regressed; the map follows a selection in 89-95 ms and an edit in 40-54 ms; the 10,000-step pan at 4× has p99 48.7 ms; first art at 4× is 1.6-2.3 s; the entry is 248.98 kB; the left panel is less readable than WoWF-QRP (owner); TR-03 swims to berths.
+- **Superseded, the old map feedback (owner, 2026-09-26):** it felt slow; zooming from the world to a zone does not
   flow, because one art image is shown at a time; both continents are never visible together; and
   Zephras Isle is missing. The map rework (below) addresses all four. Measured causes are in
   `.cache/map-atlas/perf.md`, summarised in the design doc when it lands: wheel-zoom settings,
@@ -195,6 +200,25 @@ As of the Milestone 7 commit (`pnpm check`, plus the nav, maps and RXP gates):
 - `derived.bench --budget` runs under tsx, where the class change is 51.5 ms; it should bundle
   itself as the engine and validate benches do.
 - The planned 4× CPU-throttled startup measurement happens with Playwright (Milestone 9).
+- **The client moved off the pin (2026-09-30, map-data fixes):** the installed Forever beta client is
+  now 1.60.1.70124 (`.build.info`, build key `dd3dfc28…`); every client tool and client test is pinned
+  to 1.60.1.70009, so `convert.ts`, `atlas.ts`, `minimap.ts`, `nav:*` and the client tables cannot run,
+  and the client tests skip with a banner. The architect decides: re-pin to the new build (and rebuild
+  everything derived from the client) or run the gates where 1.60.1.70009 is still installed.
+- **Minimap gate record (map-atlas.md §23.4; review finding MD-01): not passed.** The last build on the
+  client wrote tool tree `831a2dc3…` and pinned pack `00ea08f9…`; the review's rebuild of 2026-09-30
+  (tool tree `082a90d1…`, before the client update) reproduced all 6,647 tiles, `index.json` and
+  `NOTICE.md` byte for byte. The committed manifest, NOTICE and pointer were then re-derived without the
+  client (`tools/maps/minimap-remanifest.ts`, recorded as `tool.remanifest`): tool tree `7c125c2d…`
+  (61 files), tiles tree `42b33cc8…` (unchanged), pack `minimap-tiles-42b33cc815cd-2a05fc565d2d.tar`,
+  58,071,040 B, SHA-256 `2a05fc56…`. `maps:validate` MT fails until `minimap.ts --pack` and then
+  `--check --pack` pass on the pinned client; no pack is published before then. The art and atlas
+  manifests' `tools/maps` tree ids are likewise stale until `convert.ts` and `atlas.ts` rerun there.
+- Stale local copies of earlier tiles and packs are outside the repository and not in git or dist
+  (review finding MD-10): `.cache/minimap-pack/minimap-tiles-42b33cc815cd.tar` and
+  `minimap-tiles-42b33cc815cd-6b9015630c99.tar` (neither is the pack `pack.json` pins, so the fetch refuses
+  both), `.cache/map-ui-build/verify-MD/`, `.cache/minimap-addendum/out/b4` and
+  `b5`, and the review agents' scratchpads. The owner deletes them when no longer needed.
 
 ## Blockers
 
@@ -256,28 +280,18 @@ _None._
 
 ## Exact next tasks
 
-**1. Map and UI rework: resume the build** (paused after ATL.8, with MP.1-MP.2 interrupted mid-way).
-The designs, all reviewed and decided, are:
-- [docs/research/map-atlas.md](docs/research/map-atlas.md) revision 3.1: the atlas (Part I) and the minimap style (Part II; D-042, D-045, D-049);
-- [docs/research/map-presentation.md](docs/research/map-presentation.md) revision 3.1: pins, clusters, drawer and extras (D-039, D-041, D-047);
-- [docs/research/ui-refresh.md](docs/research/ui-refresh.md) revision 2: the WoWF-QRP-like left panel and buttons (D-046, D-048).
+**1. Rework follow-up (D-050):**
+1. Re-pin to client 1.60.1.70124 and rebuild everything client-derived with the byte-identical
+   checks; review the diff; clear MD-01 and G13.
+2. Fix the speed regressions: map-edit and derived --check, selection-to-map and edit-to-map times,
+   the 10,000-step pan at 4×, first art at 4× and the first-view bytes.
+3. Move clustering into the derived publish (entry chunk under 248.5 kB).
+4. Default state and level ceiling (D-050 items 2 and 3).
+5. Left-panel readability against WoWF-QRP. Mocks go to the owner first.
+6. TR-03 berths, and the remaining minors listed in the review.
 
-Build order:
-1. Check the interrupted MP.1-MP.2 edits.
-2. MM.1-MM.6: two-style runtime, minimap tool, recolour, pyramid, hosting.
-3. MP.0c-MP.2b: bands, labels, tokens, `src/map/marks.ts`.
-4. UR.1a-UR.2b: Details made lazy, the button kit, quest marks, the list baseline.
-5. MP.3: quest state and the Available tab.
-6. UR.3-UR.6: rows, left panel, bars, panel collapse and map focus, tabs.
-7. MP.4a-MP.4c: pins, drawer, search. Then MM.7, the style control.
-8. MP.5-MP.11.
-9. MM.8, ATL.9 and UR.8: measurement.
-10. MM.9 and ATL.10: the minimap as default, the painted style as the toggle, per-image art retired.
-11. Docs.
-12. The joint review, fix and verify. The owner signs off the contact sheets, then the commit.
-
-**2. Optimiser search quality** (in parallel with the map build; files do not overlap): add
-constructive seeds and local moves (docs/reviews/review-m7.md open item 1).
+**2. Deployment:** needs the owner's go-ahead to push (OD-13). It then covers the Pages workflow,
+the release-asset minimap pack (D-049 O14) and `pnpm build:deploy`.
 
 **3. Milestone 8 (proposal UX)** after both: the proposal panel with metrics, the map overlay (on
 the atlas), and accept, reject or apply-selected change-sets with prerequisite requires-edges.
@@ -324,7 +338,10 @@ pnpm data:validate  # validate public/data and the fixture (no clone needed)
 pnpm data:check     # fetch the pinned QuestieDB, extract --check, validate (reproducibility)
 pnpm data:all       # regenerate public/data from the pin (commit with any tools/questiedb change)
 pnpm maps:placeholder  # regenerate public/maps/placeholder from the pin + tools/maps/inputs
-pnpm maps:validate     # placeholder geometry and committed art checks (no client needed)
+pnpm maps:validate     # placeholder, art, atlas T1-T9 and minimap M1-M11 and MT checks (no client needed; --skip-tool-tree, --skip-minimap-tiles for tests)
+pnpm maps:minimap:fetch  # fetch the minimap tile pack pack.json pins, verify it and every tile, fill public/maps/minimap/t/
+pnpm maps:minimap:pack   # assemble the pack from the built tiles; refuses unless it is the one pack.json pins
+pnpm build:deploy        # maps:minimap:fetch, then the build with the dist audit in deploy mode (every tile required); pnpm build audits in plain mode
 pnpm rxp:overlap       # D-019 gate: self-authored RXP text must not equal RXPGuides lines
 # The following need the installed WoW: Forever client (read-only: .build.info and Data/ only)
 pnpm nav:extract       # build public/nav from the client (about 76 s, 12 workers)
@@ -332,6 +349,10 @@ pnpm nav:check         # rebuild and compare byte for byte
 pnpm nav:validate      # gates; add --client or --partition for the client-backed checks
 pnpm tsx tools/maps/convert.ts --check          # painted map art is up to date
 pnpm tsx tools/terrain/byproducts.ts --check    # coastlines, zone outlines, relief are up to date
+pnpm tsx tools/maps/atlas.ts --check            # the painted atlas is up to date
+pnpm tsx tools/maps/minimap.ts --pack           # build the minimap tiles, index, manifest, NOTICE, pointer and pack
+pnpm tsx tools/maps/minimap.ts --check --pack   # the minimap gate (§23.4): before a commit that touches its closure, and before a release
+# without the client: pnpm tsx tools/maps/minimap-remanifest.ts --pack (a recorded stopgap; MT fails until the gate runs)
 ```
 
 ## Major design decisions

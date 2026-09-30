@@ -782,8 +782,13 @@ ones counted apart. Click opens the popover listing them (WoWF-QRP's checklist i
 ## 9. Flight paths (D-039 B)
 
 - **Nodes**: the committed taxi file's nodes on paid paths (65 on maps 0 and 1, MEASURED in the
-  mock's extract), matched to the dataset's 63 flight masters (all within 11.9 yd, `data.md` §3), plus
-  the cited Forever nodes. Only nodes the character's side may use (its own and both-sides nodes);
+  mock's extract), matched to 60 of the dataset's 63 flight masters (all within 11.9 yd), plus the cited
+  Forever nodes. `data.md` §3 matched all 63 against all 100 `TaxiNodes` rows; the committed file keeps
+  only the rows on paid paths, so Vesprystus (Rut'theran Village, row 27) and the two Nighthaven druid
+  masters (rows 62 and 63) have no node (`report.client.unmatchedMasters`: NPCs 3838, 11798, 11800).
+  Once the file loads, their pins are hidden (`map-places.ts`), and their Cost-0 paths stay on TIME-5.
+  Open for the architect (review finding TR-10): add those rows and their non-transport Cost-0 paths to
+  the file, or draw unmatched masters from the dataset with a note. Only nodes the character's side may use (its own and both-sides nodes);
   the other side's are hidden and counted. The side is from `TaxiNodes.Flags` (INFERRED decode, said in
   the hover).
 - **Known to the route or not** (review MP-R13): known after the active step is
@@ -2369,27 +2374,30 @@ alone. The pip tag makes vector pins dearer (five more fills), but pins are draw
 
 ### 25.8 Step plan delta
 
-The map-build team had started part of revision 2's plan (§20). The state on 2026-09-27, in the
-working tree (not committed):
+The map-build team had started part of revision 2's plan (§20). The State column was written on
+2026-09-27 and **updated on 2026-09-28, after the atlas's steps MM.9 and ATL.10**: every step below
+is in the working tree and not committed; the reports are the build teams' (the shared ledger,
+ui-refresh.md §10.3, and `docs/measurements/map-presentation.json`).
 
 | Step | State | Revision 3.1 |
 |---|---|---|
-| MP.0 DECISIONS entry | Not started | Also records the pins, the pip tag, the one state table, the drawer and the map's chrome, clusters and stacks, the style palette, the pin budgets, the zone borders, the flights zoomed in, and **the 11 px measure** (§25.2.3); proposed as D-047. Done with the refresh's UR.0 |
+| MP.0 DECISIONS entry | Done: D-047 (with the refresh's D-048) | Also records the pins, the pip tag, the one state table, the drawer and the map's chrome, clusters and stacks, the style palette, the pin budgets, the zone borders, the flights zoomed in, and **the 11 px measure** (§25.2.3); proposed as D-047. Done with the refresh's UR.0 |
 | MP.0b owner review | Done: D-041 (G, H and J by the owner; I and K architect defaults) | **MP.0b-3, merged with the refresh's UR.0b:** the owner reviews one sheet (`.cache/ui-refresh/rev2/sheets/owner-sheet.png`) with the decision sheets and the pin sheet, and answers P1 to P4 and the refresh's A, B, D, E and F, before MP.4a fixes the sizes |
-| MP.0c atlas interface | Largely delivered by ATL.3 and ATL.7 | Remaining, agreed with the atlas addendum: the base style (`MapStyle`) in the adapter's options and status; `BaseMapLabels` empty for the minimap; the uniform navy and the Zephras card per style; §12.3's criteria per style |
-| MP.1 bands, labels canvas, harness | Not started | Adds the pin extents and the pip tag, the cluster levels, stacks by spatial hash, the deferred hit index, the style palette (`data-map-style`), the draw order, the cluster split fade, and a harness mix at the new caps (300 pins and 1,720 other items) **with the `moveend` bookkeeping** |
-| MP.2 tokens | Not started (only the atlas's three tokens are in) | The §25.5 tokens and `--frl-map-drawer-width`. The art-sampling test covers both styles, the navy and the selection ring on its halo. Lands before the refresh's UR.1, which edits the same `tokens.css` and `tests/ui-tokens.test.ts` |
-| **MP.2b marks module** (new) | — | `src/map/marks.ts` (§25.2.2): paths, badges, the state table, the threshold constants; the `map/marks` rule in `tests/architecture.test.ts` and `tsconfig.pure.json`; the re-export in `src/app/map-exports.ts`; `marks.test.ts` (the state table's cases, no diamond, no triangle, colour only with pips and at 11 px or more). **Before the refresh's UR.2** |
-| MP.3 quest state, Available tab, spans | Not started | Unchanged. The model also feeds the drawer's counts. The tab's look is the refresh's (UR.6); the refresh's UR.3 follows MP.3, since both touch the derived view |
-| MP.4 glyphs and key | Not started | Replaced by MP.4a to MP.4c (below) |
-| MP.5a client tables | Built by the map-build team, not committed: 65 nodes, 286 flights, 14 transport paths, 30 LFG rows | None. The nodes' side flags drive the faction edge |
-| MP.5 dungeons | Not started | Entrances as pins |
-| MP.6 popover | Not started | Also opened from a search result and from stack and cluster lists; its buttons are the refresh's kit |
-| MP.7 labels and borders | Not started | The style palette; no base-map names on the minimap; **the `zone-borders` byproduct** (with the terrain tools' owner, `--check` and its budget line) drawn from 0.022 px/yd; the chip's keyline on the minimap |
-| MP.8, MP.9 network and transports | Not started | Style inks; stops as pins; **flights zoomed in only for the hovered or selected flight point and the route**, with the "All flights when zoomed in" row |
-| MP.10 faction overlay and fallback tint | Not started | The tint in the painted style only |
-| MP.11 services | Not started | Light pins with the house, book and bag |
-| MP.12 review | — | Joint with the refresh's UR.8: the MapGenie pin comparison, contrast sampling on the committed minimap tiles, a zoom sweep through the cluster splits, a Windows contrast theme, the shared entry-chunk ledger |
+| MP.0c atlas interface | Done: ATL.3 and ATL.7, then the atlas's MM.1 (`MapStyle` in the adapter's options and status, `data-map-style`, the sea per style) and MP.1 (`BaseMapLabels`, empty in the minimap style) | Remaining, agreed with the atlas addendum: the base style (`MapStyle`) in the adapter's options and status; `BaseMapLabels` empty for the minimap; the uniform navy and the Zephras card per style; §12.3's criteria per style |
+| MP.1 bands, labels canvas, harness | Built (ledger: +1.86 kB) | Adds the pin extents and the pip tag, the cluster levels, stacks by spatial hash, the deferred hit index, the style palette (`data-map-style`), the draw order, the cluster split fade, and a harness mix at the new caps (300 pins and 1,720 other items) **with the `moveend` bookkeeping** |
+| MP.2 tokens | Built (CSS only; the art-sampling test in `mp2ArtContrast`) | The §25.5 tokens and `--frl-map-drawer-width`. The art-sampling test covers both styles, the navy and the selection ring on its halo. Lands before the refresh's UR.1, which edits the same `tokens.css` and `tests/ui-tokens.test.ts` |
+| **MP.2b marks module** (new) | Built (`src/map/marks.ts`) | `src/map/marks.ts` (§25.2.2): paths, badges, the state table, the threshold constants; the `map/marks` rule in `tests/architecture.test.ts` and `tsconfig.pure.json`; the re-export in `src/app/map-exports.ts`; `marks.test.ts` (the state table's cases, no diamond, no triangle, colour only with pips and at 11 px or more). **Before the refresh's UR.2**. *As built after the final verification (2026-09-30):* the module is two files, `marks.ts` (the rows' glyphs, the state table, the colour rule, the badge slots, the cluster levels) and `marks-pins.ts` (the other glyphs, `MARK_GLYPHS`, the pin, pip-tag and badge geometry, the pins' colour and group rules, extents and targets), so the entry chunk carries only the first (ui-refresh.md §10.3) |
+| MP.3 quest state, Available tab, spans | Built (ledger: +1.60 kB) | Unchanged. The model also feeds the drawer's counts. The tab's look is the refresh's (UR.6); the refresh's UR.3 follows MP.3, since both touch the derived view |
+| MP.4 glyphs and key | Replaced | Replaced by MP.4a to MP.4c (below) |
+| MP.5a client tables | Built: 65 nodes, 286 flights, 14 transport paths, 30 LFG rows | None. The nodes' side flags drive the faction edge |
+| **MP.4a to MP.4c** pins, drawer, search (with the atlas's MM.7) | Built. Open: the pan at 4× is 18.2 to 19.7 ms, above 16 ms (`mp4a`); clusters are built in the layer builder, not the derived pipeline | Below the table |
+| MP.5 dungeons | Built (with MP.8 and MP.9) | Entrances as pins |
+| MP.6 popover | Built; not yet opened from a search result or from stack and cluster lists | Also opened from a search result and from stack and cluster lists; its buttons are the refresh's kit |
+| MP.7 labels and borders | Built: names, spans and the "Viewing" chip; every zone and city named at the fit-both view in both styles (the atlas's MM.9 gate). The `zone-borders` byproduct is not built | The style palette; no base-map names on the minimap; **the `zone-borders` byproduct** (with the terrain tools' owner, `--check` and its budget line) drawn from 0.022 px/yd; the chip's keyline on the minimap |
+| MP.8, MP.9 network and transports | Built | Style inks; stops as pins; **flights zoomed in only for the hovered or selected flight point and the route**, with the "All flights when zoomed in" row |
+| MP.10 faction overlay and fallback tint | Built (the tint's source images come from a `convert.ts --all` folder since the atlas's ATL.10) | The tint in the painted style only |
+| MP.11 services | Built | Light pins with the house, book and bag |
+| MP.12 review | Measurement part done 2026-09-28 (the zoom sweep at 1× and 4× and the band crossings in `map-atlas.json` `atl9mm8`; screenshots of every band in both styles and themes, `.cache/map-ui-build/contact-sheet-*.jpg` and `bench-compare.jpg`); the critique, the contrast sampling, the Windows contrast theme and the WoWF-QRP re-check are owed | Joint with the refresh's UR.8: the MapGenie pin comparison, contrast sampling on the committed minimap tiles, a zoom sweep through the cluster splits, a Windows contrast theme, the shared entry-chunk ledger |
 
 **MP.4 is replaced by three steps:**
 - **MP.4a, pins:**

@@ -20,6 +20,60 @@
   line-height: var(--frl-leading-tight, 16px);
 }
 
+/*
+ * The minimap style's palette (docs/research/map-presentation.md §25.4; map-atlas.md §8.7 item 9):
+ * the minimap is dark in both themes (median luminance 0.063 over the probe's samples), so on it
+ * the palette roles the adapter reads (style.ts `readMapPalette`: `--frl-map-<role>` first) point
+ * at the minimap ink set; the painted style keeps the theme's palette. The adapter sets
+ * `data-map-style` to the style of the picture shown and re-reads the palette when it changes.
+ * Pins are the same in both styles and both themes (--frl-map-pin, --frl-map-pin-glyph).
+ */
+.frl-map[data-map-style='minimap'] {
+  --frl-map-ink: var(--frl-map-minimap-ink);
+  --frl-map-ink-muted: var(--frl-map-minimap-ink-muted);
+  --frl-map-marker-edge: var(--frl-map-pin);
+  --frl-map-accent: var(--frl-map-minimap-route);
+  --frl-map-route: var(--frl-map-minimap-route);
+  --frl-map-flight: var(--frl-map-minimap-route);
+  --frl-map-highlight: var(--frl-map-minimap-route);
+  --frl-map-transport: var(--frl-map-minimap-ink-muted);
+  --frl-map-hearth: var(--frl-map-minimap-ink-muted);
+  --frl-map-proposal: var(--frl-map-minimap-ink);
+  /* A focused frame (after Go to zone) in the ink, not the route colour: the route colour marks only the route (review PR-11). */
+  --frl-map-frame-strong: var(--frl-map-minimap-ink);
+  --frl-map-frame-label: var(--frl-map-minimap-ink);
+  --frl-map-zone-outline: var(--frl-map-minimap-ink-muted);
+  --frl-map-coast: var(--frl-map-minimap-ink-muted);
+  --frl-map-label-ink: var(--frl-map-minimap-ink);
+  --frl-map-label-halo: var(--frl-map-minimap-halo);
+  --frl-map-frame-atlas-halo: var(--frl-map-sea-navy);
+  --frl-map-grid: rgb(242 242 242 / 0.1);
+  --frl-map-grid-label: var(--frl-map-minimap-ink-muted);
+  /* The faction overlay's hatching in its dark-theme value on the dark base (map-presentation.md §25.4). */
+  --frl-map-hatch: rgb(255 255 255 / 0.35);
+}
+
+/*
+ * The forced-colours probe (docs/research/map-presentation.md §25.2.9; review PR-04): the adapter
+ * reads the pin palette's system colours from its computed style while forced colours are active
+ * (body Canvas, keyline and glyph CanvasText, the selection ring Highlight). Forced colours keep
+ * the author's alpha, so the background is opaque, and the border has a style, or it computes to
+ * no Highlight. Out of sight and out of the accessibility tree (aria-hidden).
+ */
+.frl-map__probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  pointer-events: none;
+  color: CanvasText;
+  background-color: Canvas;
+  border: 1px solid Highlight;
+}
+
 .frl-map.leaflet-container:focus-visible {
   outline: var(--frl-focus-width, 2px) solid var(--frl-focus, #3a4fc4);
   outline-offset: calc(-1 * var(--frl-focus-width, 2px));
@@ -37,6 +91,63 @@
 .frl-map__art,
 .frl-map__relief {
   image-rendering: auto;
+}
+
+/*
+ * The atlas tiles and their underlay (docs/research/map-atlas.md §8.3). A tile element starts as a
+ * crop of a decoded ancestor (its inline background); its own image fades in over it once decoded,
+ * at once under reduced motion. The underlay's images sit at their level -5 pixel positions in one
+ * transformed container. The container's deep-sea background shows through sea keys (inline).
+ */
+.frl-map .leaflet-frl-underlay-pane,
+.frl-map .leaflet-frl-atlas-pane,
+.frl-map .leaflet-frl-tint-pane,
+.frl-map .leaflet-frl-labels-pane {
+  pointer-events: none;
+}
+
+.frl-atlas-underlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.frl-map .frl-atlas-underlay__img,
+.frl-map .frl-atlas-tile__img {
+  position: absolute;
+  display: block;
+  max-width: none;
+  max-height: none;
+  user-select: none;
+}
+
+.frl-map .frl-atlas-tile__img {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 150ms linear;
+}
+
+.frl-map .frl-atlas-tile__img--in {
+  opacity: 1;
+}
+
+.frl-map .frl-atlas--still .frl-atlas-tile__img,
+.frl-map .frl-atlas-tile__img--now {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frl-map .frl-atlas-tile__img {
+    transition: none;
+  }
+}
+
+/* During a wheel gesture the grid canvas is hidden; it is redrawn at the settle (map-atlas.md §8.4). */
+.frl-map--gesture .frl-map__grid {
+  visibility: hidden;
 }
 
 /* Zoom buttons */

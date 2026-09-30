@@ -338,7 +338,7 @@ flight-master vs TaxiNode cross-check (cited client values, D-022).
 ```ts
 interface MapAdapter {
   mount(el: HTMLElement): void; destroy(): void;
-  setSurface(surface: SurfaceId): void;         // 'world:0' | 'world:1' | 'world:2991' | ...
+  setSurface(surface: SurfaceId): void;         // 'atlas' | 'world:<mapId>' (instances, battlegrounds, Darkspear Islands)
   setViewport(v: Viewport): void; fitBounds(b: WorldBounds, opts?: FitOptions): void;
   setLayer(layer: LayerId, content: LayerContent): void;   // markers | polylines | frames | art
   toggleLayer(layer: LayerId, visible: boolean): void;
@@ -355,8 +355,9 @@ thousands of paths.
 
 ### 7.2 Leaflet implementation
 
-- `L.CRS.Simple`, one surface per world map, `latLng = (x, -y)` in yards. Zone frames and art
-  are rectangles in that space.
+- `L.CRS.Simple` in yards. A world surface keeps `latLng = (x, -y)`; the atlas surface (below)
+  places maps 0, 1 and 2991 by translation only, so one atlas unit is still one yard. Zone frames
+  and per-image art are rectangles in their world map's space.
 - Canvas renderer (`L.canvas`). **Level of detail:** raw spawn points only at zone zoom or for
   the selected/hovered quest; per-zone aggregate glyphs at continent zoom; a hard cap on drawn
   paths per surface. Labels on hover only.
@@ -370,20 +371,70 @@ thousands of paths.
     steps, proposal and selection on one canvas. Descriptors added: relief, outline
     (`zones` | `coast`), `FrameDescriptor.filled`, line styles `route-pending` and
     `route-fallback`.
-  - Painted art (D-033) is drawn one image at a time: the continent zoomed out; zoomed in, the
-    zone jumped to or the zone the view centre sits in. The relief is the backdrop elsewhere
-    (opacity 0.85 alone, 0.4 under art); zone frames lose their fill over art.
   - Art and terrain files load on demand through `createMapResources` (`infra/maps`): JSON files
     are checked against their manifest's SHA-256, images are drawn from their deployed URLs
-    (checked at build time only). A failure is shown in the map's status line; the map draws
-    what it has.
+    (checked at build time only). A failure is said in the Map layers drawer's notices (which
+    replaced the status line, D-047); the map draws what it has.
   - Walking paths: with the "Walking paths" toggle on, a walked leg follows
     `TravelModel.path()`; a leg still pending is drawn straight in short dashes, one with no path
     in dash-dot-dot. Pieces keep at most 256 vertices. The app's path feed
     (`app/route-paths.ts`) asks for at most 64 legs in the padded view per paths object and
     issues a new object at most every 250 ms.
-- A combined "overview" surface (both continents on one canvas) is deferred until after the MVP;
-  the surface abstraction keeps it possible.
+- **As built (the map rework: [research/map-atlas.md](research/map-atlas.md) steps ATL.0 to ATL.10
+  and MM.1 to MM.9, D-042, D-045, D-049; [research/map-presentation.md](research/map-presentation.md),
+  D-039, D-041, D-047; full detail in [MAPS.md](MAPS.md) §7).** It replaces the one-image-at-a-time
+  painted art of Milestone 3b and the deferred "overview" surface:
+  - **The atlas surface (on by default since ATL.10).** One surface, `atlas`, holds Kalimdor (1) and
+    the Eastern Kingdoms (0) in the compact layout and Zephras Isle (2991) as a captioned card at
+    the top of the sea between them ("not in position"; the client places it nowhere on the world
+    map). Placement is a translation per map in whole 1,024-yd tiles, from the committed 947 rows
+    and `src/geo/atlas-layout.ts` (`atlasPlacements`, `atlasHash`); a file-level rule in
+    `tests/architecture.test.ts` keeps atlas coordinates out of distances and saved data (D-017).
+    `world:0`, `world:1` and `world:2991` are retired; "Kalimdor" and "Eastern Kingdoms" are
+    presets that fit the atlas to a continent. Instances, battlegrounds and Darkspear Islands (2997,
+    a battleground in the client) keep their world surfaces. A geometry without both 947 rows has
+    no atlas: every world map keeps its world surface, and the drawer says why.
+  - **Clicks and views.** The partition (`seamE`, the inset rectangle) turns every atlas point into a
+    real `WorldPoint`, so `MapEvent` is unchanged; `MapView.visible` lists each placed map's part of
+    the view. Only the adapter's funnel and the tile descriptor see atlas coordinates.
+  - **Per-map builders.** The controller keeps one memoised `createMapLayers` per placed map in view
+    (sharing the route caches), shares each layer's budget across them in proportion to their
+    candidates (`partBudgets`, `shareCap`) and joins the parts by identity. Rides between the
+    continents are `connector` arcs (never measured); legs to the card or an instance keep their
+    transition glyph pairs.
+  - **Tiles in two styles.** The art layer on the atlas is one `tiles` descriptor: the band
+    `atlas-tiles:minimap` (the client's minimap textures with a navy sea, `public/maps/minimap/`,
+    the default style since MM.9) or `atlas-tiles:painted` (the painted atlas,
+    `public/maps/atlas/`). `AtlasTileLayer` (a `GridLayer`: sea keys create no element, virtual keys
+    draw their nearest stored ancestor, every tile starts as the crop of its nearest decoded
+    ancestor) lies over a never-pruned `AtlasUnderlay` at the index's `underlayLevel` (−6 minimap,
+    −5 painted); decoded keys are kept per band, and the band keeps 1 (minimap) or 2 (painted) rows
+    of tiles around the view. A style switch adds the new band above the old one, prunes the old
+    band's off-view tiles, and removes it once the new first view has decoded, or after 2 s. Each
+    index is fetched when its style is first shown and refused unless its `atlasHash` is the
+    surface's.
+  - **Style and fallbacks.** The style is a view setting kept per browser in the Map layers drawer's
+    record (§12.3), never project data. A style that cannot be drawn (its index missing or refused,
+    or every image of its first view failing, as in a build without the minimap pack) gives way to
+    the other, with the reason in the drawer's notices and the choice kept; with neither, the relief
+    is drawn per placement and Zephras Isle's painting on its card.
+  - **Gestures (on since ATL.10).** Our own `SmoothWheel` replaces Leaflet's wheel: every event
+    changes the zoom, one settle per gesture, the centre clamped every frame, `zoomSnap` 0. The grid
+    canvas is hidden during a gesture, the path canvas is re-rendered mid-gesture after half a level
+    of drift, canvases use the device pixel ratio (capped at 2), new paths are created at most 150
+    per animation frame, and the other band's spawn layers are pre-built in idle time near the band
+    edge. The notch and stream rates keep the design's starting values until ATL.9 calibrates them.
+  - **Per-image art** remains for the battleground and Darkspear Islands surfaces, for Zephras Isle's
+    card when the tiles cannot be used, and for a local set (§7.3). Since ATL.10 `public/maps/art/`
+    deploys only those five images (D-042 O5).
+  - **Panes**, bottom to top: `frl-relief` 240, `frl-underlay` 244, `frl-atlas` 245, `frl-art` 250,
+    `frl-tint` 255 (the presentation's zone fill), the grid 350, the path canvas 400, `frl-labels`
+    450 (names, level spans and step numbers on their own canvas).
+  - **The presentation layer** (map-presentation.md §25): zoom bands with hysteresis, pins drawn from
+    `src/map/marks.ts` with clusters when zoomed out, dungeon, flight, transport and service pins
+    from the client tables, the labels canvas, zone fills, the map popover, and the lazily loaded
+    Map layers drawer (the style control, categories with counts, search), which replaced the layer
+    panel, toolbar and status line.
 
 ### 7.3 Placeholder and local maps
 
@@ -401,7 +452,10 @@ emits it, and `audit-dist` fails if anything map-like appears (§16). `tools/map
 --activate` writes the manifest of the one active set. `infra/maps` probes
 `local-maps/maps.manifest.json` (one same-origin request, also in deployed builds) and treats a
 404, a non-JSON body (SPA fallback) or a frame mismatch as "no local set", falling back to the
-placeholder and showing both builds in the layer panel.
+placeholder and showing both builds in the Map layers drawer's notices. With a local set the atlas
+hides its tiles and draws the set's images one at a time through the placements (each continent's
+at the continent band, clipped at the seam; the zone being viewed at the zone band): not seamless,
+and dev and preview only.
 
 ## 8. Route model
 
@@ -546,18 +600,28 @@ values), so a `train` step is recognised as riding either by `skill: 'riding'` o
 `rules` also seeds a `TravelGraph`:
 
 - transports (`{ id, from, to, waitS, rideS, factions, basis }`) whose dock positions come from
-  dataset dock NPCs (zeppelin and dock masters) or user-entered locations, with assumed wait and
-  ride times;
-- taxi nodes identified by `TaxiNodeRef` (dataset flight masters by `npcFlags` FLIGHT_MASTER,
-  or a cited TaxiNodes id for new Forever nodes), with edges only where known;
+  user-entered locations, dataset dock NPCs (zeppelin and dock masters), or the committed client
+  taxi file's transport stops the seed was matched to (`pointFrom: 'inferred'`, with the matching
+  record), with assumed wait and ride times;
+- taxi nodes identified by `TaxiNodeRef` (dataset flight masters by `npcFlags` FLIGHT_MASTER, each
+  with the client `TaxiNodes` row it stands at; the file's rows no flight master stands at; cited
+  rows for new Forever nodes the file does not have), and taxi edges from the file's flights with
+  their path lengths;
 - instance entrance edges (zero wait) from the dungeon entrances in `zones.json`, so steps inside
   a dungeon's world map are reachable. An entrance with `frameVerified: false` (three at the pin,
   on changed frames QuestieDB's coordinate audit leaves unverified) seeds no edge
   (DATA_PROVENANCE §6.6; M2 review COORD-4).
 
-Without committed taxi data a leg's time is straight-line distance × `taxiDetourFactor` / taxi
-speed; the detour default is a cited aggregate client statistic (D-022, D-024). A local
-`taxi.local.json` (§7.3) replaces it with per-leg times on that machine.
+**Committed taxi data (D-039 B; OD-6 closed).** The client taxi file
+(`public/maps/client/taxi.json`, built by `tools/maps/client-tables.ts`, loaded and hash-checked by
+`src/infra/maps/client-tables.ts`) is read by the derived pipeline in its own chunk, once, lazily
+and never fatally. Once it has loaded, the pipeline seeds the TravelGraph with it
+(`projectTravelGraph(…, taxi)`) and gives the walker its flights as TIME-6's per-leg data
+(`taxiLegDataOf`, `EngineContext.localTaxi`), so deployed builds time flights from the client's
+path lengths, and walks the project again. While it loads, and for good if it fails (HTTP, hash,
+format), a leg's time is TIME-5: straight-line distance × `taxiDetourFactor` / taxi speed; the
+detour default is a cited aggregate client statistic (D-022, D-024). A developer's local
+extraction (`taxi.local.json`, §7.3) has the same shape; the app does not load it.
 
 **Travel model (D-028).** Walking and riding legs go through one seam, typed in
 `src/domain/travel.ts` (the full contract, with doc comments, is there):
@@ -597,11 +661,10 @@ the Milestone 3b design step, within the §14 budgets.
   assumptions)` gives every value with `from: 'project' | 'ruleset'`; a project value has basis
   `assumption`.
 - **TravelGraph** (`seedTravelGraph`): 7 cited transports, one edge per ordered pair of stops,
-  assumed wait and ride, factions unknown. None has a dock position yet (the dataset ships no dock
-  NPCs), so transports apply only where the user enters a dock. 5 new Forever taxi nodes from
-  cited `TaxiNodes` rows; no taxi edges (OD-6). **No entrance edges:** `zones.json` has no
-  instance world map ids yet, so no step inside an instance is reachable and no kill counts as a
-  dungeon kill until it does.
+  assumed wait and ride, factions unknown. 5 new Forever taxi nodes from cited `TaxiNodes` rows.
+  **No entrance edges:** `zones.json` has no instance world map ids yet, so no step inside an
+  instance is reachable and no kill counts as a dungeon kill until it does. (Superseded in part by
+  the committed taxi file, below.)
 - **Straight-line model:** `createStraightLineTravelModel(detour)` (`src/rules/straight-line.ts`):
   basis `assumption`, never pending, `unknown` across world maps.
 - **Navigation model:** `createNavigationTravelModel` (`src/app/navigation-model.ts`) reads the
@@ -662,10 +725,44 @@ the Milestone 3b design step, within the §14 budgets.
   `dungeon` or `raid` (KXP-5). User-entered docks on the project's transport steps position a
   seeded transport's dock when the transport has exactly one stop on that world map, and are part
   of the context key; on the real navmesh, with both docks positioned, Auberdine to Rut'theran
-  comes back as `same-map-transport`. Two stops on one map (Rut'theran and Auberdine, Menethil
-  and Southshore) cannot be matched yet, because `TRANSPORT_SEEDS` records no UiMap per stop
-  (NAV-08, partly fixed). There are still **no entrance edges** (ENG-01): a guard test fails once
+  comes back as `same-map-transport`. A user dock on a map where its transport has two stops
+  (Menethil and Southshore) still positions neither, because which stop it is would be a guess
+  (NAV-08, open: the committed file's inferred docks position every seeded stop, see below). There
+  are still **no entrance edges** (ENG-01): a guard test fails once
   `zones.json` gains instance map ids while the app still seeds none.
+
+**The committed client taxi file (map presentation steps MP.8 and MP.9, 2026-09-28; D-039 B):**
+
+- **Nodes.** Each dataset flight master takes the file's row nearest it on its world map within
+  `CLIENT_NODE_MATCH_YARDS` (50 yd, INFERRED, as TIME-6's rule): its `taxiNodeId`, the row's name
+  (so RXP `.fly Crossroads` matches "Crossroads, The Barrens") and its side flags (`clientSides`,
+  an INFERRED decode). At 1.60.1.70009, 60 of the 63 flight masters stand within 11.5 yd of a row;
+  Vesprystus and the two Moonglade druid flight masters, whose paths cost nothing, stand at none
+  (`report.client.unmatchedMasters`). The 5 rows no flight master stands at (the new Forever
+  nodes) are nodes of their own (`origin: 'client'`, key `taxi:<id>`), and replace the cited seeds
+  of the same ids, so a project's known flight paths keep their keys. A ref by `taxiNodeId` now
+  resolves to the flight master standing at the row.
+- **Edges.** The file's 286 flights, as which flights exist; their lengths are TIME-6's per-leg data
+  (`localTaxi`), not the graph's, and `report.client.edgeSource` says whether the edges are the
+  file's or the caller's (travel review TR-13).
+- **Docks (NAV-08).** Each seed names the client transport path its source cites (`clientPath`) and,
+  per stop, which of that path's stops it is (`clientStop`), matched by hand from the stops' world
+  maps and order (map-presentation.md §10). A dock takes that stop's position as `inferred`, with
+  its record ("client transport path 11167, stop 2 of 3"); a user dock or a dock NPC wins over it.
+  All 15 seeded docks are positioned. The same-map transport rule fires only between navmesh
+  components, so on the committed navmesh it applies to Rut'theran ↔ Auberdine; Menethil and
+  Southshore are one component (a swim across the water joins them), so it never fires there
+  (travel review TR-06; SIMULATION TIME-7). An inferred dock is a client berth in the water beside
+  its pier: walks to and from it count its swim as walking, without SIM-21 (TR-03, the fixer's
+  choice pending the architect's ruling). The file's other 7 transport paths (241, 285, 292, 301, 302,
+  303, 436) match no seed: their stops are drawn on the map as "service unknown" and never reach the
+  graph.
+- **Report.** `TravelGraphReport.client` records the build, the matched and client-only nodes, the
+  unmatched flight masters, the replaced cited seeds, the edges, the inferred docks and the unmatched
+  paths; null without the file.
+- **Instance membership** for the map (dungeon entrances, map-presentation.md §8) comes from the
+  committed dungeon table (`dungeons.json`, D-039 E) matched by hand to the dataset's dungeons
+  (`src/app/map-places.ts`); it seeds no entrance edge yet (ENG-01 stays open).
 
 ### 9.2 Engine walker (`src/engine`)
 
@@ -1441,6 +1538,14 @@ As built in Milestone 4:
 - **Imports:** imported projects, RXP ones included, are validated with `parseProject` before they
   are stored. Files are decoded as strict UTF-8.
 
+View settings kept per browser, not project data (not exported, not undone): the theme, the shell's
+panel sizes, collapse and map focus (`forever-route-lab:shell`), and the Map layers drawer's record
+(`forever-route-lab:map-layers`: the base map's style, the hidden rows, whether the drawer was left
+open, its collapsed groups; map-atlas.md §21.3, map-presentation.md §25.3.7). They are
+`localStorage` keys with every access guarded, read synchronously before the first render; the
+`settings` store is not used for them. The style defaults to the minimap (MM.9), and a fallback to
+the other style is never written.
+
 ### 12.4 Layout
 
 Dense desktop layout with an original visual system (no copied branding, icons or art):
@@ -1543,8 +1648,12 @@ Machine-independent CI gates (fail the build):
 | Each `public/data` file (gzip) | recorded baseline + 10%; total ≤ 1.2 MB |
 | Optimiser evaluations on fixed fixtures (`tests/optimizer-evaluations.test.ts`: 42 cases, the §11.7 fixtures, 10b, fixture 9's first 12 instances and the search-quality review's 4 adversarial instances; evaluations, layers, duplicates, dominated, rollouts, first improvement and a hash of the solutions, and each adversarial best equal to its stored model-oracle optimum; and the bench's `exact` blocks under `--check`) | recorded baseline in `docs/measurements/optimizer-m7.json`, exact |
 | `public/nav` (navmesh blocks, `map.bin`, connectors) | ≤ 7 MB total (target 5-6 MB; measured 5.44 MB); ≤ 300 kB per file; per-map baselines + 10% (D-030) |
-| `public/maps/art` | ≤ 12 MB total (measured 9.05 MB); per-file baselines + 10% (D-034) |
+| `public/maps/minimap` (the minimap style's tiles, index, manifest, NOTICE and pack pointer; the tiles come from the release pack, D-049 O14) | ≤ 60 MB total (measured 52.17 MB with the 6,647 tiles, 51.76 MB of them tiles); ≤ 32 kB per tile (largest 23.9 kB); per-level baselines + 10%; the four committed files within their baselines + 10% (D-049). Without the tiles the plain audit takes the budget from the manifest's records and warns; a partial set fails; the deploy audit requires every tile (§16) |
+| `public/maps/atlas` (the painted style's tiles) | ≤ 8.0 MB total (measured 6.95 MB, 795 files); ≤ 32 kB per tile (largest 20.5 kB); per-level baselines + 10% (D-042 O5) |
+| `public/maps/art` | ≤ 1.0 MB total (measured 689 kB: five images, the manifest and NOTICE); per-file baselines + 10% (D-042 O5, step ATL.10; superseded D-034 item 4's 12 MB, measured 9.05 MB before ATL.10) |
 | `public/maps/terrain` | ≤ 600 kB total (measured 445 kB); per-file baselines + 10% (D-034) |
+| `public/maps/client` (taxi graph, zone factions, dungeon tables) | ≤ 40 kB total (measured 34.5 kB); per-file baselines + 10% (D-039) |
+| `public/maps/tint` (the fallback zone tints) | ≤ 8 kB total (measured 4.33 kB); per-file baselines + 10% (map-presentation.md §12.4) |
 
 Time budgets, as Node benchmarks against stored baselines in `docs/measurements/` (fail on a
 >25% regression), and later a Playwright run with 4× CPU throttling:
@@ -1557,12 +1666,27 @@ Time budgets, as Node benchmarks against stored baselines in `docs/measurements/
 | Diff of two 10,000-step routes | ≤ 50 ms |
 | Autosave of a 10,000-step project (main thread) | ≤ 50 ms |
 | Map: moveend redraw at the LOD cap / one route edit applied | ≤ 16 ms / ≤ 8 ms |
+| Map: first view of the atlas at the fit view (918 × 700 panel, level −5), per style | ≤ 100 kB (MEASURED: minimap 13 tiles, 82,765 B and the index; painted 13 files, 92,892 B gzip with the index) |
+| Map (targets of map-atlas.md §9.2 and §24.5, measured by ATL.9 and MM.8 in both styles at 1× and 4× and on the owner's laptop; **not yet measured**): world fit to zone fit | ≤ 8 physical notches and ≤ 1.5 s of input; no wheel event without a zoom change; no pan-back at the bounds |
+| Map targets, continued: wheel gestures and pans | frame p95 ≤ 16.7 ms and p99 ≤ 33 ms at 4×; no long task over 50 ms |
+| Map targets, continued: band crossing | no frame over 16 ms at 1×; no long task over 50 ms at 4× |
+| Map targets, continued: holes, cold cache at 50 Mbit/s (a three-screen pan at the zone band; a zoom-out from −1 to the fit in one gesture; a jump 5,000 yd away at −2; preset to preset; a style switch) | 0 frames with bare container colour over kept land once the underlay has loaded; underlay ≤ 0.5 s after the first art |
+| Map targets, continued: hairline gaps | none between tiles over land at 20 fractional zooms between −5 and +1 |
+| Map targets, continued: decoded tiles (live tile images × 262,144 B), per style | ≤ 12 MB in view, ≤ 20 MB with the kept buffer, ≤ 26 MB for at most 2 s during a style switch; ≤ 40 tile elements in view |
+| Map targets, continued: land against sea at the fit view (map-atlas.md §9.2's method) | painted ≥ 2.5:1 (raster 2.65:1); minimap ≥ 2.0:1 (raster 2.09:1, D-049 O17) |
+| Map targets, continued: first art after the map chunk at 50 Mbit/s | ≤ 1.0 s |
 | Optimiser compile (analyse + compile on the main thread, after the walks and "computing paths"; straight-line and navigation models) | ≤ 30 ms |
 | Optimiser run's private walks (analysis and baseline re-walk) | each within the walk + validate budget (reported) |
 | RXP import of a typical guide (≤ 300 steps), main thread | ≤ 250 ms (measured about 100 ms for 150 steps); whole addon files (thousands of steps, about 1.3 s) move to a worker when a measured need arises |
 | Autosave IndexedDB put of a 10,000-step project | measured 35 ms median unthrottled; the Milestone 9 throttled run decides whether steps are stored in chunks (D-036) |
 | Optimiser, pool 100 quests (~300 actions), beam 256 | first improvement < 2 s from the weak and from the guide incumbent; worker heap < 64 MB; a search to 2,000,000 evaluations within its stored baseline + 25%; on eleven generated pools, the best from the weak incumbent within a median 3% and at most 7% of each pool's stored independent reference (`quality`, review M7Q Q-02; the nearest-neighbour tour is the search's own first seed, so it is reported, not gated) |
 | Navigation legs for a route section, in the nav worker (RC-07) | ceiling 16 s, with progress and cancel; measured 3.03 s for a realistic 116-point section, heap 60.9 MB; with the worker's fetch and SHA-256 (3b.6) 3.7-4.1 s, heap growth 64.7 MB after gc (peak 91-99 MB); the main thread never waits on it (straight-line fallback until legs arrive) |
+
+**Measured at the map rework's steps MM.9 and ATL.10 (2026-09-28),** `pnpm build` on the reference
+machine: the entry chunk and its static imports are 246.05 kB gzip of 250 kB (the map rework's and UI
+refresh's one ledger is ui-refresh.md §10.3); the lazy parts 50.10 kB, the derived pipeline 60.67 kB
+and the Leaflet chunk 73.39 kB; the map folders as in the first table, the minimap measured with
+every tile present. The map's time targets above wait for ATL.9 and MM.8.
 
 **Measured after the search-quality review (2026-09-27; review M7Q, D-044).**
 `tests/bench/optimizer.bench.ts --check docs/measurements/optimizer-m7.json --repeat 3 --runs 15`,
@@ -1680,14 +1804,34 @@ a cold class change although a bundle is within the budget.
   reaches `dist/`) against an SPDX allowlist: MIT, ISC, BSD-2-Clause, BSD-3-Clause, Apache-2.0,
   0BSD, Zlib, CC0-1.0, BlueOak-1.0.0. Anything else needs an exceptions entry and a decision.
 - `tools/build/audit-dist.ts` fails if `dist/` contains: `local-maps/` or any `maps.manifest.json`
-  marked local-only; images anywhere except `maps/art/` and `maps/terrain/`, and there only when
-  that folder ships its `NOTICE.md` and `manifest.json` and the manifest lists the image with a
+  marked local-only; images anywhere except the map folders `tools/build/dist-requirements.json`
+  lists (`maps/art/`, `maps/terrain/`, `maps/atlas/`, `maps/minimap/`; `maps/tint/` and
+  `maps/client/` hold data only), and there only when that folder ships its `NOTICE.md` and `manifest.json` and the manifest lists the image with a
   matching SHA-256; raw client files (`.blp .adt .wdt .wdl .wmo .m2 .skin .anim .db2` by extension,
   and ADT/WDT/WDL/WMO, M2, DB2 or BLTE content under any name); local paths; `.cache` references;
   `.lua` or source maps; files over budget (§14). It also fails if a required file is missing:
   `LICENSE.txt`, `third-party-notices.txt`, `data/NOTICE.md`, every data file the manifest lists,
   `maps/placeholder/geometry.placeholder.json` and `maps/placeholder/NOTICE.md`. CI additionally
   checks with `git ls-files --error-unmatch` that every runtime-fetched file is tracked.
+- **Tiled folders** (`maps/atlas/`, `maps/minimap/`; D-042, D-049): the audit's tiled mode budgets
+  the files under `t/` per level (baseline + 10%) with a 32 kB cap per tile, beside the folder total
+  and the committed files' own baselines.
+- **The minimap tiles are not in git** (D-049 O14). They ship in a release-asset tile pack (`NOTICE.md`,
+  `manifest.json`, then `t/`), which the committed pointer `public/maps/minimap/pack.json` pins by
+  size, SHA-256 and tree hash; `public/maps/minimap/t/` is gitignored, and a test fails if anything
+  under it is tracked. The folder's `dist-requirements.json` entry has an `external` prefix (`t/`),
+  so the audit has two modes:
+  - **plain** (`pnpm build`, and so `pnpm check`): with none of the tiles it passes, takes the budget
+    from the manifest's records and prints a warning (last, and on stderr) that a deploy build would
+    fail; with every tile it checks them as any tile; a partial set fails;
+  - **deploy** (`pnpm build:deploy`, the Pages build): `pnpm maps:minimap:fetch` first downloads the
+    pack (from `--from`, `MINIMAP_PACK_SOURCE`, `gh release download` or `.cache/minimap-pack/`),
+    verifies its SHA-256, that its NOTICE and manifest equal the committed ones and every tile against
+    the manifest, and installs the tiles; then the audit requires every listed tile.
+  The release that holds the pack is published only when the owner authorises pushing (OD-13).
+  Removal on request: delete the asset and the release, commit the removal of
+  `public/maps/minimap/`, redeploy Pages, and confirm that the index and tile URLs return 404
+  (map-atlas.md §23.3).
 - Deployable builds come from CI on a clean checkout; release builds refuse a dirty tree.
 
 Planned dependencies:

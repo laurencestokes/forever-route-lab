@@ -25,6 +25,10 @@ export interface XpBarProps {
   readonly unknownReason?: string | undefined;
   /** Accessible name of the bar. */
   readonly label?: string | undefined;
+  /** Where the level is read, shown small after it ("after step 12"; ui-refresh.md §8); null or omitted: nothing. */
+  readonly after?: string | null | undefined;
+  /** The level's tooltip (the active step's title); omitted: the bar's value in words. */
+  readonly levelTitle?: string | undefined;
   readonly className?: string | undefined;
 }
 
@@ -76,7 +80,7 @@ export function xpBarState(props: Pick<XpBarProps, 'level' | 'xp' | 'xpToNext' |
 
 /** Level and XP progress for the status bar, with the lower-bound and assumed states. */
 export function XpBar(props: XpBarProps) {
-  const { level, xpToNext, lowerBound, assumed = false, eraFallback = false, label = 'Projected level', className } = props;
+  const { level, xpToNext, lowerBound, assumed = false, eraFallback = false, label = 'Projected level', after = null, levelTitle, className } = props;
   const state = xpBarState(props);
   const percent = `${String(state.fraction * 100)}%`;
   const progressAttributes =
@@ -91,9 +95,10 @@ export function XpBar(props: XpBarProps) {
       title={state.valueText}
       data-state={lowerBound ? 'lower-bound' : state.kind}
     >
-      <span className="frl-xpbar__level frl-num" aria-hidden="true">
+      <span className="frl-xpbar__level frl-num" aria-hidden="true" title={levelTitle}>
         {lowerBound && <span className="frl-xpbar__bound">≥</span>}
         Lv {level ?? '?'}
+        {after !== null && <span className="frl-xpbar__after"> {after}</span>}
       </span>
       <div
         role="progressbar"

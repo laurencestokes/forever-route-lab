@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { indexJson, syntheticIndex } from '../../../tests/support/atlas-tiles';
 import { type Bytes, fakeServer, nodeSha256, readDirectory } from '../../../tests/support/fake-fetch';
 import { worldMapId } from '../../domain/ids';
 import { createMapResources } from './map-resources';
@@ -24,12 +25,16 @@ function site(): Map<string, Bytes> {
     const bytes = art.get(name);
     if (bytes !== undefined) files.set(name, bytes);
   }
+  const index = readDirectory('public/maps/atlas', 'maps/atlas/').get('maps/atlas/index.json');
+  if (index !== undefined) files.set('maps/atlas/index.json', index);
   for (const name of [...files.keys()]) if (name.endsWith('.png')) files.delete(name);
   return files;
 }
 
-const setup = (sha256: typeof nodeSha256 | null = nodeSha256) => {
-  const server = fakeServer(site());
+const COMMITTED_HASH = '748eef8d5584ac4e092fd5f625cdff76';
+
+const setup = (sha256: typeof nodeSha256 | null = nodeSha256, extra: ReadonlyMap<string, Bytes> = new Map()) => {
+  const server = fakeServer(new Map([...site(), ...extra]));
   const resources = createMapResources({ fetch: server.fetch, baseUrl: './', sha256 });
   const requested = (path: string) => server.requests.filter((request) => request.url === `./${path}`);
   return { server, resources, requested };
@@ -46,6 +51,53 @@ describe('createMapResources', () => {
     expect(s.requested('maps/art/manifest.json')).toEqual([{ url: './maps/art/manifest.json', cache: 'no-cache' }]);
     expect(s.requested('maps/terrain/manifest.json')).toHaveLength(1);
     expect(s.server.requests.some((request) => /\.(webp|png)$/.test(request.url))).toBe(false);
+  });
+
+  it('loads the committed atlas tile index once, revalidated, decoded, and never a tile (map-atlas.md §7.2)', async () => {
+    const s = setup();
+    const hash = '748eef8d5584ac4e092fd5f625cdff76';
+    const load = s.resources.atlas === undefined ? null : await s.resources.atlas(hash);
+    expect(load?.kind).toBe('loaded');
+    if (load?.kind !== 'loaded') return;
+    expect(load.file.index.hash).toBe(hash);
+    expect(load.file.urlTemplate).toBe('./maps/atlas/t/{z}/{x}/{y}.webp');
+    expect(load.file.index.levels.map((level) => level.z)).toEqual([-8, -7, -6, -5, -4, -3, -2, -1, 0]);
+    expect(await s.resources.atlas?.(hash)).toBe(load);
+    expect(s.requested('maps/atlas/index.json')).toEqual([{ url: './maps/atlas/index.json', cache: 'no-cache' }]);
+    expect(s.server.requests.some((request) => request.url.endsWith('.webp'))).toBe(false);
+  });
+
+  it('loads each style’s index from its own directory, once, and the painted one only when asked for (map-atlas.md §21.2)', async () => {
+    // A synthetic minimap index (the committed one comes with step MM.6).
+    const minimap = syntheticIndex({ style: 'minimap', hash: COMMITTED_HASH, stored: { [-8]: [[0, 0]], [-6]: [[0, 0]] } });
+    const s = setup(nodeSha256, new Map([['maps/minimap/index.json', encoder.encode(JSON.stringify(indexJson(minimap, 'minimap')))]]));
+    const load = await s.resources.atlas?.(COMMITTED_HASH, 'minimap');
+    expect(load?.kind).toBe('loaded');
+    if (load?.kind !== 'loaded') return;
+    expect([load.file.style, load.file.urlTemplate, load.file.index.baseLevel, load.file.index.underlayLevel]).toEqual(['minimap', './maps/minimap/t/{z}/{x}/{y}.webp', 0, -6]);
+    expect(await s.resources.atlas?.(COMMITTED_HASH, 'minimap')).toBe(load);
+    expect(s.requested('maps/minimap/index.json')).toHaveLength(1);
+    expect(s.requested('maps/atlas/index.json')).toEqual([]);
+    const painted = await s.resources.atlas?.(COMMITTED_HASH);
+    expect(painted?.kind === 'loaded' ? painted.file.style : null).toBe('painted');
+    expect(s.requested('maps/atlas/index.json')).toHaveLength(1);
+  });
+
+  it('says why the minimap style has no index: missing (a build without it) or another style’s', async () => {
+    const missing = await setup().resources.atlas?.(COMMITTED_HASH, 'minimap');
+    expect(missing).toMatchObject({ kind: 'failed' });
+    expect(missing?.kind === 'failed' ? missing.detail : '').toContain('maps/minimap/index.json');
+    const wrong = setup(nodeSha256, new Map([['maps/minimap/index.json', readDirectory('public/maps/atlas', 'maps/atlas/').get('maps/atlas/index.json') ?? new Uint8Array()]]));
+    const refused = await wrong.resources.atlas?.(COMMITTED_HASH, 'minimap');
+    expect(refused).toMatchObject({ kind: 'failed', reason: 'invalid' });
+    expect(refused?.kind === 'failed' ? refused.detail : '').toBe('maps/minimap/index.json: it is the painted style’s index, not the minimap style’s');
+  });
+
+  it('refuses the atlas tile index for other placements, saying why (map-atlas.md §8.6)', async () => {
+    const s = setup();
+    const load = await s.resources.atlas?.('fedcba9876543210fedcba9876543210');
+    expect(load).toMatchObject({ kind: 'failed', reason: 'invalid' });
+    expect(load?.kind === 'failed' ? load.detail : '').toContain('maps/atlas/index.json: its atlasHash 748eef8d5584… is not this build’s fedcba987654…');
   });
 
   it('verifies an arc file against the manifest’s SHA-256, decodes it, and loads it once', async () => {

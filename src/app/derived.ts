@@ -1,9 +1,12 @@
 import type { ProjectV1 } from '../domain';
-import type { StepId } from '../domain/ids';
+import type { QuestId, StepId } from '../domain/ids';
 import type { ValidationIssue } from '../domain/issues';
 import type { ReadonlyCharacterState, StepRecord } from '../engine/types';
 import type { EffectiveRules } from '../rules/precedence';
 import type { RouteMetrics, StepEstimate } from '../sim/estimate';
+import type { PlacesModel } from './map-places';
+import type { QuestStateModel } from './quest-state';
+import type { ZoneSpans } from './zone-levels';
 
 /**
  * Derived results (docs/ARCHITECTURE.md §12.1): what one engine walk per project revision gives the
@@ -104,14 +107,26 @@ export interface DerivedResults {
   /** Steps with at least one pending leg. */
   readonly pendingSteps: number;
   /**
-   * True when no number depends on a leg still being computed: no pending legs, and the navigation
-   * manifest is no longer being checked. Metrics shown as final must say they are pending otherwise
-   * (`provisionalNote`).
+   * True while the committed client taxi file is still loading (SIMULATION TIME-5, TIME-6): flights
+   * use the straight-line estimate, and a name only the file knows does not resolve yet, until the
+   * walk that follows its arrival.
+   */
+  readonly taxiPending: boolean;
+  /**
+   * True when no number depends on something still arriving: no pending legs, the navigation
+   * manifest no longer being checked, and the taxi file no longer loading (`taxiPending`). Metrics
+   * shown as final must say they are pending otherwise (`provisionalNote`).
    */
   readonly final: boolean;
   /** The first step this walk re-computed (the checkpoint it re-walked from). */
   readonly walkedFrom: number;
   readonly timing: DerivedTiming;
+  /**
+   * A route row's short form of an issue at a step whose first quest is `stepQuest` (review UI-01;
+   * `app/issue-short.ts`, in the pipeline's chunk); absent (results built elsewhere): the rows show
+   * the message.
+   */
+  readonly shortIssue?: (issue: ValidationIssue, stepQuest: QuestId | null) => string;
 }
 
 /** The character around the selection's focus step (route context, ARCHITECTURE §9.2). */
@@ -139,6 +154,25 @@ export interface DerivedState {
   readonly selected: SelectedStepState | null;
   readonly travel: TravelStatus;
   readonly paths: PathsProgress;
+  /**
+   * The quest state after the selection's focus step (map-presentation.md §7.1, §7.2; step MP.3):
+   * every quest open to the character classified with its reason, the Available tab's groups and
+   * the map's quest layers. Built by the pipeline in a task of its own after `selected` is
+   * published (so a selection change paints first), keyed by the walk and the step: it may name the
+   * previous step for a moment (`questState.stepId`). Null before the first walk, without a focus,
+   * or after a failure: the shell then shows the quests open by race and class, and says so.
+   */
+  readonly questState: QuestStateModel | null;
+  /** The zones' level spans for the character (§12.5), once per dataset view and character; null until the pipeline has built them. */
+  readonly zoneSpans: ZoneSpans | null;
+  /**
+   * The map's places (map-presentation.md §8 to §10; steps MP.5, MP.8, MP.9): dungeon entrances,
+   * flight points with their state after the focus step and the flight network, and transport stops,
+   * from the committed client tables (with how they loaded: the flights use TIME-6 once the taxi file
+   * has, TIME-5 while it loads or when it failed). Built with the quest state, in its task. Null (or
+   * absent) until the pipeline has built it.
+   */
+  readonly places?: PlacesModel | null;
 }
 
 /** What `computePaths` resolves to. */
@@ -211,6 +245,9 @@ export const INITIAL_DERIVED_STATE: DerivedState = {
   selected: null,
   travel: CHECKING_TRAVEL,
   paths: IDLE_PATHS,
+  questState: null,
+  zoneSpans: null,
+  places: null,
 };
 
 const STATE_KEYS = Object.keys({
@@ -220,6 +257,9 @@ const STATE_KEYS = Object.keys({
   selected: true,
   travel: true,
   paths: true,
+  questState: true,
+  zoneSpans: true,
+  places: true,
 } satisfies Record<keyof DerivedState, true>) as readonly (keyof DerivedState)[];
 
 export function createDerivedStore(initial: DerivedState = INITIAL_DERIVED_STATE): DerivedStoreHandle {
@@ -272,6 +312,12 @@ export const selectPathsProgress = (state: DerivedState): PathsProgress => state
 
 export const selectTravelStatus = (state: DerivedState): TravelStatus => state.travel;
 
+/** The quest state after the focus step, or null (no route state yet). */
+export const selectQuestState = (state: DerivedState | null): QuestStateModel | null => state?.questState ?? null;
+
+/** The zones' level spans, or null while they are not built. */
+export const selectZoneSpans = (state: DerivedState | null): ZoneSpans | null => state?.zoneSpans ?? null;
+
 /** Whether the results are for `revision` (the editor's): false while a re-walk after an edit is on its way. */
 export const isCurrent = (state: DerivedState, revision: number): boolean => state.results?.revision === revision;
 
@@ -306,6 +352,7 @@ export function provisionalNote(state: Pick<DerivedState, 'results' | 'travel' |
     return `Pending: ${legs} ${how}; ${results.pendingLegs === 1 ? 'its time uses' : 'their times use'} the straight-line estimate.`;
   }
   if (state.travel.model === 'checking') return 'Pending: checking for navigation data; times use the straight-line estimate.';
+  if (results.taxiPending) return 'Pending: loading the client taxi file; flight times use the straight-line estimate.';
   return null;
 }
 

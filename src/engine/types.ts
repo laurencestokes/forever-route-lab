@@ -173,7 +173,10 @@ export interface EngineContext {
   /** Transports, taxi nodes and instance entrances (`seedTravelGraph`). */
   readonly graph: TravelGraph;
   readonly zoneHints?: ZoneHintResolver;
-  /** Local per-leg taxi lengths (TIME-6, dev/preview only); null or absent uses TIME-5. */
+  /**
+   * Per-leg taxi lengths (TIME-6): the committed client taxi file (D-039 B, `taxiLegDataOf` in
+   * src/sim/taxi.ts) or a developer's local extraction of the same shape; null or absent uses TIME-5.
+   */
   readonly localTaxi?: LocalTaxiData | null;
   readonly acceptPolicy?: AcceptPolicy;
 }

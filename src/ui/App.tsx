@@ -2,21 +2,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorStore } from '../app';
 import type { DatasetSource } from '../app/dataset-source';
 import { cachedDatasetSource, datasetBaseView } from '../app/dataset-views';
-import type { StepId } from '../domain/ids';
+import type { StepId, WorldMapId } from '../domain/ids';
 import { createMapController, type MapEngineSetup } from '../app/map-exports';
-import { useEditor } from '../app/react';
+import { useDerivedStore, useEditor } from '../app/react';
 import { type ActiveRow, buildRouteView, mapStepLabel } from './app-model';
 import { AppSidePanel } from './app/AppSidePanel';
 import { AppStatusBar } from './app/AppStatusBar';
 import { AppTopBar } from './app/AppTopBar';
-import { LazyDialogFallback, loadSettingsDialog, preloadLazyParts, useLazy } from './app/lazy';
+import { LazyDialogFallback, loadAboutDialog, loadSettingsDialog, preloadLazyParts, useLazy, useLazyKept } from './app/lazy';
 import { AnnouncerContext, createAnnouncer, LiveRegion, useSelectionAnnouncements } from './app/LiveAnnouncer';
 import { MapPanel } from './app/MapPanel';
+import { type ProjectsDialogMode, ProjectsDialogHost } from './app/ProjectMenu';
+import { useProjectSession } from './app/ProjectMenuContext';
 import { createRouteActions } from './app/route-actions';
-import { RoutePanel } from './app/RoutePanel';
+import { type RowPrefs, RoutePanel } from './app/RoutePanel';
 import { selectCharacterClass, selectCustomQuests, selectFaction, selectImports, selectQuestOverrides, selectRoute, selectStartLevel } from './app/selectors';
 import { useGlobalShortcuts } from './app/useShortcuts';
-import { AboutDialog, AppShell } from './kit';
+import { browserStorage, type PrefsStorage, readShellPrefs, type ShellPrefs, writeShellPrefs } from './app/view-prefs';
+import { AppShell, PRODUCT_NAME } from './kit';
+import type { ShellLayout } from './shell/AppShell';
 import './App.css';
 
 /**
@@ -66,9 +70,14 @@ export interface AppProps {
   readonly version: string;
   /** Exact source commit, injected by release builds; null otherwise. */
   readonly sourceCommit: string | null;
+  /**
+   * Where the shell keeps its per-browser preferences (rows, panel widths, collapse, map focus;
+   * `view-prefs.ts`); default the browser's `localStorage`, null for none (kept for the page load).
+   */
+  readonly prefsStorage?: (() => PrefsStorage | null) | undefined;
 }
 
-export function App({ store, data, projectName, routeNotice = null, geometrySummary = null, map = null, version, sourceCommit }: AppProps) {
+export function App({ store, data, projectName, routeNotice = null, geometrySummary = null, map = null, version, sourceCommit, prefsStorage = browserStorage }: AppProps) {
   const source = useMemo(() => cachedDatasetSource(data), [data]);
   const route = useEditor(store, selectRoute);
   const imports = useEditor(store, selectImports);
@@ -87,12 +96,47 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [leftWidth, setLeftWidth] = useState<number | undefined>(undefined);
+  // The shell's per-browser preferences (ui-refresh.md §4.1, §4.3): read once, written on change.
+  const [prefs, setPrefs] = useState<ShellPrefs>(() => readShellPrefs(prefsStorage));
+  const prefsLoaded = useRef(false);
+  useEffect(() => {
+    if (!prefsLoaded.current) {
+      prefsLoaded.current = true;
+      return;
+    }
+    writeShellPrefs(prefsStorage, prefs);
+  }, [prefs, prefsStorage]);
+  const updatePrefs = useCallback((patch: Partial<ShellPrefs>) => {
+    setPrefs((was) => ({ ...was, ...patch }));
+  }, []);
+  const onLeftWidthChange = useCallback((leftWidth: number) => {
+    updatePrefs({ leftWidth });
+  }, [updatePrefs]);
+  const onRightWidthChange = useCallback((rightWidth: number) => {
+    updatePrefs({ rightWidth });
+  }, [updatePrefs]);
+  const toggleMapFocus = useCallback(() => {
+    setPrefs((was) => ({ ...was, mapFocus: !was.mapFocus }));
+  }, []);
+  const rowPrefs = useMemo<RowPrefs>(() => ({ density: prefs.density, topNumber: prefs.topNumber, column: prefs.column }), [prefs.density, prefs.topNumber, prefs.column]);
+  const layout = useMemo<ShellLayout>(
+    () => ({ leftCollapsed: prefs.leftCollapsed, rightCollapsed: prefs.rightCollapsed, mapFocus: prefs.mapFocus }),
+    [prefs.leftCollapsed, prefs.rightCollapsed, prefs.mapFocus],
+  );
+  // The Projects dialog (the route name's menu and the project bar's notices open it; a lazy part).
+  const session = useProjectSession();
+  const [projectsDialog, setProjectsDialog] = useState<ProjectsDialogMode | null>(null);
+  const closeProjects = useCallback(() => {
+    setProjectsDialog(null);
+  }, []);
   const searchRef = useRef<HTMLInputElement>(null);
   const routeRef = useRef<HTMLDivElement>(null);
 
   const [announcer] = useState(createAnnouncer);
+  // The map's quest layers read the quest state after the active step (map-presentation.md §7; MP.3).
+  const derivedStore = useDerivedStore();
   const settings = useLazy(loadSettingsDialog, settingsOpen);
+  const about = useLazyKept(loadAboutDialog, aboutOpen);
   useEffect(() => preloadLazyParts(), []);
   // One controller for the app's lifetime: the top bar's jump-to-zone and the map panel share it.
   const [mapController] = useState(() =>
@@ -106,14 +150,18 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
           resources: map.resources ?? null,
           paths: map.paths ?? null,
           describeStep: mapStepLabel,
+          atlas: map.atlas,
+          smoothWheel: map.smoothWheel,
+          mapStyle: map.mapStyle,
+          derived: derivedStore,
         }),
   );
   const mapWiring = useMemo(() => (map === null || mapController === null ? null : { setup: map, controller: mapController }), [map, mapController]);
   // World map names for the status bar's travel sentences ("Kalimdor", not "world map 1"): the
-  // map panel's surfaces, one per world map.
+  // controller's, which name every world map whichever surface shows it (the atlas shows several).
   const mapName = useMemo(() => {
-    const names = new Map((mapController?.surfaces ?? []).map((surface) => [surface.mapId as number, surface.name]));
-    return (mapId: number): string | null => names.get(mapId) ?? null;
+    const controller = mapController;
+    return (mapId: number): string | null => controller?.mapName(mapId as WorldMapId) ?? null;
   }, [mapController]);
   const geometry = map?.geometry ?? null;
   const actions = useMemo(() => createRouteActions(store, announcer.announce, { geometry }), [store, announcer, geometry]);
@@ -128,7 +176,7 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
   const focusList = useCallback(() => {
     routeRef.current?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
   }, []);
-  useGlobalShortcuts({ actions, focusSearch, enabled: !aboutOpen && !settingsOpen });
+  useGlobalShortcuts({ actions, focusSearch, toggleMapFocus, enabled: !aboutOpen && !settingsOpen && projectsDialog === null });
 
   // Hovering a route row highlights its step markers on the map.
   const onHoverSteps = useCallback(
@@ -163,7 +211,6 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
 
   const identity = dataset.identity;
   const placeholder = identity.dataRevision === 'placeholder';
-  const sample = routeNotice !== null;
 
   return (
     <AnnouncerContext.Provider value={announcer}>
@@ -173,8 +220,6 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
             store={store}
             dataset={dataset}
             projectName={projectName}
-            placeholder={placeholder || sample}
-            placeholderLabel={placeholder ? undefined : 'Sample'}
             search={search}
             onSearchChange={onSearchChange}
             onSearchSubmit={onSearchSubmit}
@@ -183,6 +228,7 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
             mapController={mapController}
             announce={announcer.announce}
             onOpenSettings={openSettings}
+            onOpenProjects={setProjectsDialog}
             geometry={geometry}
             data={source}
           />
@@ -201,9 +247,13 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
             containerRef={routeRef}
             onFocusList={focusList}
             onHoverSteps={onHoverSteps}
+            rowPrefs={rowPrefs}
+            onRowPrefsChange={updatePrefs}
+            onOpenProjects={setProjectsDialog}
+            announce={announcer.announce}
           />
         }
-        centre={<MapPanel store={store} view={view} activeRow={activeRow} map={mapWiring} geometry={geometrySummary} announce={announcer.announce} />}
+        centre={<MapPanel store={store} view={view} activeRow={activeRow} map={mapWiring} geometry={geometrySummary} announce={announcer.announce} dataset={dataset} actions={actions} />}
         right={
           <AppSidePanel
             store={store}
@@ -213,6 +263,7 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
             baseDataset={baseDataset}
             activeRow={activeRow}
             search={search}
+            onSearchChange={onSearchChange}
             actions={actions}
             mapController={mapController}
             announce={announcer.announce}
@@ -220,17 +271,27 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
           />
         }
         bottom={<AppStatusBar store={store} view={view} dataset={dataset} activeRow={activeRow} announce={announcer.announce} mapName={mapName} />}
-        leftWidth={leftWidth}
-        onLeftWidthChange={setLeftWidth}
+        leftWidth={prefs.leftWidth ?? undefined}
+        onLeftWidthChange={onLeftWidthChange}
+        rightWidth={prefs.rightWidth ?? undefined}
+        onRightWidthChange={onRightWidthChange}
+        layout={layout}
+        onLayoutChange={updatePrefs}
       />
-      <AboutDialog
-        open={aboutOpen}
-        onClose={closeAbout}
-        version={version}
-        sourceCommit={sourceCommit}
-        dataUpstreamCommit={placeholder || identity.upstreamCommit === 'none' ? null : identity.upstreamCommit}
-        dataIdentity={placeholder ? null : { dataRevision: identity.dataRevision, frameBuild: identity.frameBuild }}
-      />
+      {session !== null && <ProjectsDialogHost session={session} mode={projectsDialog} onClose={closeProjects} announce={announcer.announce} />}
+      {about.kind === 'ready' ? (
+        <about.value.AboutDialog
+          open={aboutOpen}
+          onClose={closeAbout}
+          version={version}
+          sourceCommit={sourceCommit}
+          dataUpstreamCommit={placeholder || identity.upstreamCommit === 'none' ? null : identity.upstreamCommit}
+          dataIdentity={placeholder ? null : { dataRevision: identity.dataRevision, frameBuild: identity.frameBuild }}
+          mapStyleShown={mapController?.getStatus().style.shown ?? null}
+        />
+      ) : (
+        aboutOpen && <LazyDialogFallback title={`About ${PRODUCT_NAME}`} state={about} onClose={closeAbout} />
+      )}
       {settings.kind === 'ready' ? (
         <settings.value.SettingsDialog open={settingsOpen} onClose={closeSettings} store={store} announce={announcer.announce} />
       ) : (

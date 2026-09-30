@@ -8,7 +8,9 @@
  *   `changed`, `skipped`);
  * - `frl:map:update-paths` — the canvas renderer's full update on `moveend`/`zoomend`: re-project
  *   every path and redraw;
- * - `frl:map:redraw` — one canvas redraw (the whole canvas or a dirty rectangle).
+ * - `frl:map:redraw` — one canvas redraw (the whole canvas or a dirty rectangle);
+ * - `frl:map:labels` — one draw of the labels canvas: label placement, step numbers and drawing
+ *   (map-presentation.md §5.5, §13; in the frame after a settled view, or after a renumbering).
  *
  * Start and end marks are cleared after each measure, and a name's measures are cleared once it
  * has `maxMeasuresPerName`, so a long session does not grow the timeline without bound.

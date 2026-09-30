@@ -17,10 +17,14 @@ afterEach(cleanup);
 
 const computing: SimulationStatusModel = { state: 'computing', done: 3, total: 8, detail: '3 of 8.' };
 
-function bar(currentStep: { number: number; total: number; title: string } | null = { number: 4, total: 55, title: 'Your Place In The World (1/2)' }) {
+function bar(
+  currentStep: { number: number; total: number; title: string } | null = { number: 4, total: 55, title: 'Your Place In The World (1/2)' },
+  questLog: { text: string; detail: string } | null = { text: '4 / 40', detail: 'In the quest log after step 4: 4 of 40 quests (capacity 40: client data).' },
+) {
   return render(
     <StatusBar
-      xp={{ level: 5, xp: 10, xpToNext: 100, lowerBound: false }}
+      xp={{ level: 5, xp: 10, xpToNext: 100, lowerBound: false, label: currentStep === null ? 'Level at the end of the route' : `Level after step ${String(currentStep.number)}` }}
+      questLog={questLog}
       currentStep={currentStep}
       duration={unknownReadout<number>('x')}
       xpPerHour={unknownReadout<number>('x')}
@@ -34,15 +38,27 @@ function bar(currentStep: { number: number; total: number; title: string } | nul
 }
 
 describe('status bar structure (UI-01)', () => {
-  it('keeps the Step label and number in one item and the title in its own, which gives way first', () => {
+  it('merges the level with the step, "Lv 5 after step 4", with the step\u2019s title as its tooltip (ui-refresh.md §8)', () => {
     const { container } = bar();
-    const step = container.querySelector('.frl-statusbar__step');
-    expect(step?.textContent).toBe('Step4/55');
-    const title = container.querySelector('.frl-statusbar__step-title');
-    expect(title?.parentElement).toBe(container.querySelector('.frl-statusbar'));
-    expect(title?.getAttribute('title')).toBe('Your Place In The World (1/2)');
+    const level = container.querySelector('.frl-xpbar__level');
+    expect(level?.textContent).toBe('Lv 5 after step 4');
+    expect(level?.querySelector('.frl-xpbar__after')?.textContent).toBe(' after step 4');
+    expect(level?.getAttribute('title')).toBe('Step 4 of 55: Your Place In The World (1/2)');
+    expect(container.querySelector('.frl-statusbar__step')).toBeNull();
+    expect(container.querySelector('.frl-statusbar__step-title')).toBeNull();
     cleanup();
-    expect(bar(null).container.querySelector('.frl-statusbar__step-title')).toBeNull();
+    expect(bar(null).container.querySelector('.frl-xpbar__level')?.textContent).toBe('Lv 5 at the end of the route');
+  });
+
+  it('says the quest log after the step, "In log 4 / 40", with its basis in words, and says nothing when not given', () => {
+    const { container } = bar();
+    const log = container.querySelector('.frl-statusbar__log');
+    expect(log?.textContent).toContain('In log');
+    expect(log?.textContent).toContain('4 / 40');
+    expect(log?.getAttribute('title')).toBe('In the quest log after step 4: 4 of 40 quests (capacity 40: client data).');
+    expect(log?.querySelector('.frl-visually-hidden')?.textContent).toBe('In the quest log after step 4: 4 of 40 quests (capacity 40: client data).');
+    cleanup();
+    expect(bar(undefined, null).container.querySelector('.frl-statusbar__log')).toBeNull();
   });
 
   it('keeps the badges’ key words in their own spans, so they can leave the view and still be spoken', () => {

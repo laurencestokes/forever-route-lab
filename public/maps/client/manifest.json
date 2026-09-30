@@ -1,0 +1,131 @@
+{
+  "_generated": {
+    "by": "tools/maps client-tables",
+    "notice": "NOTICE.md",
+    "edit": "do not edit; regenerate with pnpm tsx tools/maps/client-tables.ts (needs the pinned client at WOW_INSTALL)"
+  },
+  "schema": 1,
+  "kind": "client-tables",
+  "decision": "D-039 (B, C and E)",
+  "derivedFrom": "selected columns of World of Warcraft: Forever client DB2 tables, read-only through tools/casc; not game files",
+  "client": {
+    "product": "wow_classic_beta",
+    "version": "1.60.1.70009",
+    "buildKey": "05215079e3905ef5922ae0b03ffefb73"
+  },
+  "layouts": {
+    "wowdbdefs": {
+      "repository": "https://github.com/wowdev/WoWDBDefs",
+      "commit": "cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd"
+    },
+    "build": "1.60.1.70009"
+  },
+  "tool": {
+    "toolTreeHash": {
+      "tools/maps/client-tables.ts": "6121977442ab7ef5add20b4ee28c181c3c3dc58aeb07d9757eda5a06630359c5"
+    },
+    "treeMethod": "module closure of tools/maps/client-tables.ts (29 files, tools/terrain/lib/tool-tree.ts)"
+  },
+  "parameters": {
+    "positionQuantumYd": 1,
+    "flightMaps": [0, 1],
+    "shapeToleranceYd": 25,
+    "shapeMethod": "Douglas-Peucker on TaxiPathNode Loc[0] and Loc[1] (distance to the segment), then rounded to 1 yd",
+    "l3d": "sum of 3D segment lengths along TaxiPathNode Loc in NodeIndex order (SIMULATION TIME-6), rounded to 1 yd",
+    "inputHash": "SHA-256 over \"<FileDataID> <CKey>\\n\" lines, ascending by FileDataID, of the DB2 files the file is built from",
+    "budgetGzipBytes": 40000
+  },
+  "tables": [
+    { "table": "TaxiPathNode", "fileDataId": 1000437, "ckey": "a0cb567fad1c3ff443ebe2f62a6f28b7", "layoutHash": "FE362E70", "rows": 10778, "skippedRows": 0, "columns": ["PathID", "NodeIndex", "ContinentID", "Loc[0]", "Loc[1]", "Loc[2]", "Delay"] },
+    { "table": "TaxiPath", "fileDataId": 1067802, "ckey": "424148909dad392dd6d1717dea73313e", "layoutHash": "A303DE51", "rows": 328, "skippedRows": 0, "columns": ["ID", "FromTaxiNode", "ToTaxiNode", "Cost"] },
+    { "table": "TaxiNodes", "fileDataId": 1068100, "ckey": "c9c3e262b31185c308c501aa97408649", "layoutHash": "E7B597F0", "rows": 100, "skippedRows": 0, "columns": ["ID", "Name_lang", "ContinentID", "Pos[0]", "Pos[1]", "Flags"] },
+    { "table": "Map", "fileDataId": 1349477, "ckey": "c7f3134e35c4f8c8bfd736e0a4ed3046", "layoutHash": "D43AFAC3", "rows": 72, "skippedRows": 8, "columns": ["ID", "MapName_lang", "InstanceType"] },
+    { "table": "AreaTable", "fileDataId": 1353545, "ckey": "65ca0ed314f02647991a9cf56cf63513", "layoutHash": "9995B797", "rows": 1371, "skippedRows": 46, "columns": ["ID", "AreaName_lang", "ContinentID", "ParentAreaID", "FactionGroupMask", "Flags[0]"] },
+    { "table": "LFGDungeons", "fileDataId": 1361033, "ckey": "de3118a36f6b1be9bb4fe45af7185e68", "layoutHash": "34B02DE8", "rows": 71, "skippedRows": 5, "columns": ["ID", "Name_lang", "TypeID", "ContentTuningID"] },
+    { "table": "UiMapAssignment", "fileDataId": 1957219, "ckey": "6288c474b5d128c8f96eda7c0202ad9d", "layoutHash": "C9CC8DFB", "rows": 61, "skippedRows": 0, "columns": ["AreaID"] },
+    { "table": "ContentTuning", "fileDataId": 1962930, "ckey": "5c1c043ef65a1b42599b7cc895bfc34b", "layoutHash": "A3E13004", "rows": 100, "skippedRows": 0, "columns": ["ID", "MinLevelSquish", "MaxLevelSquish", "LfgMinLevel", "LfgMaxLevel"] }
+  ],
+  "files": [
+    {
+      "path": "taxi.json",
+      "kind": "taxi",
+      "bytes": 75182,
+      "sha256": "7eb109ce65f51088eed214566df64427bd674b3e45eb9a5ea8c1700ca2709bd5",
+      "tables": ["TaxiNodes", "TaxiPath", "TaxiPathNode"],
+      "inputHash": "52bf60c8489c93ca762ebde56ad3347979fcb44d17c8ae8a3b411205d04e6cbd",
+      "counts": {
+        "nodes": 65,
+        "flights": 286,
+        "pairs": 143,
+        "transports": 14,
+        "stops": 29,
+        "shapePoints": 6080,
+        "rawPathPoints": 9834,
+        "paidPaths": 288,
+        "excludedPaidPaths": [
+          { "pathId": 314, "reason": "its nodes are on maps 0 and 30" },
+          { "pathId": 383, "reason": "its nodes are on maps 0 and 30" }
+        ],
+        "unpaidPathsWithoutStops": [
+          101,
+          102,
+          253,
+          312,
+          313,
+          315,
+          316,
+          439,
+          472,
+          494,
+          495,
+          496,
+          9571,
+          9574,
+          9620,
+          9669,
+          10538,
+          10552,
+          10641,
+          11078,
+          11350,
+          11512,
+          11515,
+          11517,
+          11520,
+          11669
+        ]
+      }
+    },
+    {
+      "path": "zones.json",
+      "kind": "zones",
+      "bytes": 6463,
+      "sha256": "70991c838bae69a89c4e495d8d89a68917ac55c22760970bb4e8eb3cef520d4f",
+      "tables": ["AreaTable", "UiMapAssignment"],
+      "inputHash": "697f5b5174c8c81aee279e62e80c849aee079f984ef4497537767f1fac576646",
+      "counts": {
+        "zones": 54,
+        "factionGroupMask": {
+          "0": 37,
+          "2": 9,
+          "4": 8
+        },
+        "sanctuary": 1
+      }
+    },
+    {
+      "path": "dungeons.json",
+      "kind": "dungeons",
+      "bytes": 10831,
+      "sha256": "720fa5a22ca2e3d9ab43e47b9e7a714648bd00b1e42fc0ff03ace981984d94de",
+      "tables": ["LFGDungeons", "ContentTuning", "Map", "AreaTable"],
+      "inputHash": "3aef8ce9c12b024bac11928efb98debe0e4ece0528eaae767ea2712a6585ea58",
+      "counts": {
+        "lfgRows": 30,
+        "instanceMaps": 51,
+        "dungeonMaps": 38,
+        "raidMaps": 13
+      }
+    }
+  ]
+}

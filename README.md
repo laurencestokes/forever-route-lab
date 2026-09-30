@@ -74,23 +74,29 @@ assumptions", never "optimal".
   report of the quests it uses that are gone or whose objectives or prerequisites changed (for an
   imported file, what cannot be compared is marked unknown).
 
-- **A map of the route**: Leaflet behind the project's own adapter, one surface per world map
-  (Kalimdor, Eastern Kingdoms and the others the geometry has) with a switcher, pan and zoom.
-  It draws zone frames with their names, the route line split per world map (transport dashed,
-  flight dotted, hearthstone dash-dot) with a glyph where the route changes world map, step
-  markers (number and title on hover), the givers of the quests open to your character, the
-  objectives and turn-ins of the quest in focus, and your faction's flight masters. Fit the
-  route, focus the selected step, jump to a zone from the top bar or by clicking it zoomed out
-  (always close enough to show its quest points), and show or hide each layer. Clicking a step
-  marker selects the step; clicking a quest giver, or a flight master that starts quests, opens
-  them in Details; where several items share a point, a small list lets you pick one. Hovering a
-  route row highlights its marker.
-- **A map that says what it leaves out**: zoomed out, quest points fold into per-zone counts; the
-  layer panel counts, with their units, points it could not place (and why), points on other
-  world maps, quests that start from an item and quest NPCs with no spawn in the dataset, and its
-  key explains every glyph, line style and badge. With no local map set it says "Schematic map:
-  zone frames, not terrain": no game art ships. A local set of your own client's art is drawn on
-  your machine only, from bytes checked against its manifest, loading only the images in view.
+- **One seamless map of both continents**: Leaflet behind the project's own adapter. Kalimdor and
+  the Eastern Kingdoms sit side by side at one scale, with Zephras Isle, which the game does not
+  place on its world map, in a captioned box between them; "Kalimdor" and "Eastern Kingdoms" are
+  views of it, and instances and battlegrounds keep maps of their own. Two base-map styles, both
+  Blizzard Entertainment's artwork from the client (see "Data and maps"): the **minimap** (the
+  default: the client's minimap textures, one continuous picture at about a yard per pixel, with
+  the sea recoloured to one navy) and the **painted** map (the game's painted zone maps composed
+  into one picture). Choose in the Map layers drawer; the choice is kept in this browser. Tiles
+  load as you pan and zoom, over a coarser picture, so nothing flashes blank, and the wheel zooms
+  smoothly without dropping input.
+- **What the map draws**: zone names with the character's level spans, the route line (transport
+  dashed, flight dotted, hearthstone dash-dot; boats and zeppelins between the continents as arcs),
+  step markers with numbers, quest pins coloured by difficulty with pips (clustered when zoomed
+  out), turn-ins and objectives with their state after the selected step, dungeons, flight points
+  and the flight network, transport stops, innkeepers, trainers and vendors, and the zones' faction.
+  Fit the route, focus the selected step, jump to a zone, and click a pin for a pop-up with its
+  quests and actions (Accept, Turn in, Add flight from here, Open on Wowhead). The Map layers drawer
+  shows or hides each category, with counts, and searches the map.
+- **A map that says what it leaves out**: every row of the drawer counts, with its units, what it
+  could not place (and why) and what it does not draw, and its key explains every pin, line style
+  and badge. When the minimap tiles are not available it shows the painted map and says why; with
+  no tiles at all, the terrain relief. A local set of your own client's art is drawn on your
+  machine only, from bytes checked against its manifest.
 - **Keyboard first, map second**: everything the map does can also be done from the route list,
   the Available tab, Details and the top bar, and the map follows the route list's selection.
   Leaflet loads on demand in its own chunk, fetched while the data loads.
@@ -164,6 +170,48 @@ pnpm preview     # serve dist/ locally
 `third-party-notices.txt` next to the app, and the build fails if anything that must not ship
 (local map sets, source maps, raw Lua, local paths) reaches it.
 
+**The minimap tiles.** The minimap map style's tiles (about 52 MB) are not kept in git (D-049).
+The repository holds only their index, manifest, notice and `pack.json`, a pointer that pins a tile
+pack (a release asset) by SHA-256. To get them:
+
+```bash
+pnpm maps:minimap:fetch   # download the pack pack.json names, verify it and every tile, fill public/maps/minimap/t/
+```
+
+It checks the pack's SHA-256, that the pack's `NOTICE.md` and `manifest.json` are the committed
+ones, and every tile's size and SHA-256, and installs nothing if any check fails. It keeps the pack
+in `.cache/minimap-pack/`; `MINIMAP_PACK_SOURCE` (or `--from`) points it at another copy: a path, a
+`file:`, `https:` or `http:` URL, or `gh` for `gh release download`. By default it downloads the
+release's public address without a token, so while the repository (or the release) is private, use
+`MINIMAP_PACK_SOURCE=gh` with a signed-in GitHub CLI (in a workflow, `GH_TOKEN`). Without the tiles, `pnpm build` and
+`pnpm check` still pass, print a warning that the tiles are absent, and check the minimap budget
+from the manifest's records; the app then shows the painted style in place of the minimap (the
+default) and says why in the Map layers drawer. The deploy build fetches and requires them:
+
+```bash
+pnpm build:deploy   # maps:minimap:fetch, then the build with the dist/ audit in deploy mode (every tile required)
+```
+
+On a machine with the pinned client, `pnpm tsx tools/maps/minimap.ts` builds the tiles directly, and
+`pnpm maps:minimap:pack` assembles the pack from them (it must equal the one `pack.json` pins).
+Publishing the pack as a release is the owner's step; no command here uploads anything.
+
+**Trying it on another machine (laptop runbook).** To judge speed on a laptop, serve a production
+build over the network, not the dev server:
+
+```bash
+pnpm vite build            # or pnpm build, which also runs the notices and the dist/ audit
+pnpm vite preview --host   # then open http://<this machine's address>:4173 on the laptop
+```
+
+Over a network the dev server is slow for reasons unrelated to the app's own speed: it sends 239
+unbundled modules, about 20.8 MB, and runs React in development mode, where the production build
+sends 8 files, about 1.7 MB (measured with the map's performance harness,
+[docs/research/map-atlas.md](docs/research/map-atlas.md) §3.2). `--host` makes the preview server
+listen on every network interface, and the preview also serves your `local-maps/` set if you have
+one (D-018: local map files are never deployed), so use it only on a network you trust, and stop
+it when you are done.
+
 ## Architecture
 
 A few principles carry the design:
@@ -230,6 +278,9 @@ pnpm test:watch     # the same, watching
 pnpm licence:check  # shipped dependencies against the SPDX allowlist (also run by build)
 pnpm build          # vite build, licence gate, third-party notices, dist/ audit
 pnpm check          # typecheck, lint, test, data:validate (committed data, no clone needed), build
+pnpm maps:validate  # the committed map folders' offline checks (the minimap's M1-M11; tile checks skipped without the tiles)
+pnpm maps:minimap:fetch   # the minimap tiles from their release pack (see "Run it")
+pnpm build:deploy   # the Pages deploy build: fetch the pack, build, audit with every minimap tile required
 ```
 
 Tests are deterministic and sit next to the code they test (`*.test.ts`, `*.test.tsx`). Pure
@@ -270,17 +321,45 @@ coordinates on four zones: it holds no Forever-specific content yet. Every recor
 carries "Forever status: unknown", and Forever XP values are assumptions until someone enters
 observed ones.
 
-**Maps.** The painted world-map art in `public/maps/art/` is Blizzard Entertainment's
-(© Blizzard Entertainment, Inc.), extracted from the World of Warcraft: Forever client. It is
-committed and deployed with its own notice by the owner's decision D-033, which draws no legal
-conclusion. This project's licence grants no rights over it. The site stays non-commercial, and
-the art is removed promptly if Blizzard asks
-([public/maps/art/NOTICE.md](public/maps/art/NOTICE.md)). The terrain outlines and relief in
+**Maps.** Both base-map styles are Blizzard Entertainment's artwork (© Blizzard Entertainment,
+Inc.), extracted from the World of Warcraft: Forever client; they are not this project's work, and
+this project's licence grants no rights over them. They are published with their notices by the
+owner's decisions D-033 (the painted map art) and D-045 (the minimap textures, on D-033's terms),
+which draw no legal conclusion. D-033's terms apply to both: the site stays non-commercial, with no
+ads, paid features or sales; Blizzard's copyright and trademark notices accompany the art (the
+NOTICE files, this README and the About dialog, which names both notices and says which style is
+shown); the art is removed promptly if Blizzard asks
+([issues](https://github.com/laurencestokes/forever-route-lab/issues)); and the project never
+distributes hacks, cheats or similar content.
+
+The painted style is the game's painted zone maps composed into one map by this project's tool
+(`public/maps/atlas/`): each painting is masked to its zone with neighbours' colours blended, a few
+painted labels are hidden where a city plan or a duplicate would cut them, this project's own tint
+and sea colours fill what no painting shows, and the tiles are resampled and re-encoded as WebP;
+[public/maps/atlas/NOTICE.md](public/maps/atlas/NOTICE.md) lists each alteration. The painted
+images still drawn one at a time (the battlegrounds, Darkspear Islands and Zephras Isle) are in
+`public/maps/art/` ([public/maps/art/NOTICE.md](public/maps/art/NOTICE.md)).
+
+The minimap style's tiles are also Blizzard Entertainment's artwork (© Blizzard Entertainment,
+Inc.): the World of Warcraft: Forever client's minimap textures, which D-045 publishes on D-033's
+terms and D-049 builds, with no legal conclusion drawn. This project's tool alters them: the water
+is recoloured to one navy ramp, the void and edge strips are filled with the navy, the textures are
+resampled and joined into one map with Zephras Isle as a card out of position, and the tiles are
+re-encoded as WebP; [public/maps/minimap/NOTICE.md](public/maps/minimap/NOTICE.md) lists each
+alteration and what is kept as drawn. The tiles are never committed: they ship as a release asset
+that carries that notice first, and if Blizzard asks, the asset is deleted, the pointer removed, the
+site redeployed and the tile addresses confirmed gone (copies already downloaded cannot be
+recalled). Forever Route Lab is not affiliated with or endorsed by Blizzard Entertainment.
+
+The terrain outlines and relief in
 `public/maps/terrain/` (D-032) and the navigation data in `public/nav/` (D-028) are derived by
 this project from the same client, and each ships with its own notice. Map files you extract from
 your own client for local use stay in the gitignored `local-maps/` folder, which only the
 development server serves and which the build audit keeps out of `dist/`
-([docs/MAPS.md](docs/MAPS.md)).
+([docs/MAPS.md](docs/MAPS.md)). On every load the app asks for `local-maps/maps.manifest.json`
+once, to find such a set; where there is none (every deployed site) the browser's developer tools
+list that request as a failed "404 (Not Found)" resource. That is expected and harmless: the map
+then uses the committed geometry.
 
 **RestedXP guides.** Import and export follow the RestedXP custom-guide format from an independent
 behavioural specification ([docs/RXP.md](docs/RXP.md)). No RXPGuides code, guide text or data

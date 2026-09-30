@@ -27,7 +27,18 @@ export type IconName =
   | 'copy'
   | 'paste'
   | 'join'
-  | 'check';
+  | 'check'
+  | 'undo'
+  | 'redo'
+  | 'up'
+  | 'down'
+  | 'left'
+  | 'right'
+  | 'external'
+  | 'map-focus'
+  | 'minus'
+  | 'fit'
+  | 'target';
 
 const ICONS: Readonly<Record<IconName, ReactElement>> = {
   search: (
@@ -153,6 +164,46 @@ const ICONS: Readonly<Record<IconName, ReactElement>> = {
     </>
   ),
   check: <path d="M3.25 8.5 6.5 11.75l6.25-7" />,
+  // The UI refresh's icons (ui-refresh.md §7.1, UR.1): history, Move up and down, the panel handles'
+  // chevrons, an external link and map focus.
+  undo: (
+    <>
+      <path d="M5.5 3.75 3 6.25 5.5 8.75" />
+      <path d="M3.25 6.25h6.25a3.25 3.25 0 0 1 0 6.5H7" />
+    </>
+  ),
+  redo: (
+    <>
+      <path d="M10.5 3.75 13 6.25 10.5 8.75" />
+      <path d="M12.75 6.25H6.5a3.25 3.25 0 0 0 0 6.5H9" />
+    </>
+  ),
+  up: <path d="M8 13V3.5M4.5 7 8 3.5 11.5 7" />,
+  down: <path d="M8 3v9.5M4.5 9 8 12.5 11.5 9" />,
+  left: <path d="M9.75 4.5 6.25 8l3.5 3.5" />,
+  right: <path d="M6.25 4.5 9.75 8l-3.5 3.5" />,
+  external: (
+    <>
+      <path d="M12.5 9.25v3.25a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3.25" />
+      <path d="M9.25 2.5h4.25v4.25M13.5 2.5 7.75 8.25" />
+    </>
+  ),
+  'map-focus': <path d="M2.75 6.25V3.5a.75.75 0 0 1 .75-.75h2.75M9.75 2.75h2.75a.75.75 0 0 1 .75.75v2.75M13.25 9.75v2.75a.75.75 0 0 1-.75.75H9.75M6.25 13.25H3.5a.75.75 0 0 1-.75-.75V9.75" />,
+  // The map's floating view controls (map-presentation.md §25.3.0): zoom out, fit the route, focus the step.
+  minus: <path d="M3 8h10" />,
+  fit: (
+    <>
+      <path d="M2.75 5.5v-2.75h2.75M10.5 2.75h2.75v2.75M13.25 10.5v2.75H10.5M5.5 13.25H2.75V10.5" />
+      <path d="M5 10.5 7 8l2 1.5L11 6" />
+    </>
+  ),
+  target: (
+    <>
+      <circle cx="8" cy="8" r="4.25" />
+      <path d="M8 1.75v2M8 12.25v2M1.75 8h2M12.25 8h2" />
+      <circle cx="8" cy="8" r="0.75" />
+    </>
+  ),
 };
 
 export interface IconProps {

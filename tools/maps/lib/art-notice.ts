@@ -1,4 +1,5 @@
 import type { ParsedArtManifest } from './art-manifest';
+import { BLIZZARD_LEGAL_FAQ, REPOSITORY_URL } from './shared';
 import { wrap } from './notice';
 
 /**
@@ -8,9 +9,8 @@ import { wrap } from './notice';
  * non-affiliation and D-033's four project rules, and draws no legal conclusion.
  */
 
-/** Blizzard's Legal FAQ, the governing source D-033 records (checked 2026-09-26). */
-export const BLIZZARD_LEGAL_FAQ = 'https://www.blizzard.com/en-us/legal/c1ae32ac-7ff9-4ac3-a03b-fc04b8697010/blizzard-legal-faq';
-export const REPOSITORY_URL = 'https://github.com/laurencestokes/forever-route-lab';
+/** Blizzard's Legal FAQ and the repository's address live in `shared.ts`, which every notice reads. */
+export { BLIZZARD_LEGAL_FAQ, REPOSITORY_URL } from './shared';
 
 const bullet = (text: string): string => wrap(text, '- ', '  ');
 const numbered = (n: number, text: string): string => wrap(text, `${String(n)}. `, '   ');
@@ -41,11 +41,18 @@ export function artNoticeText(manifest: ParsedArtManifest): string {
     ),
     '## What these files are',
     wrap(
-      `${String(manifest.files.length)} WebP images of the World of Warcraft world map's painted art (${describeKinds(manifest)}), one per UiMap ` +
-        `that has art in the World of Warcraft: Forever client (\`${client.product}\` ${client.version}). Each is stitched from the client's ` +
-        `\`UiMapArtTile\` textures with every \`WorldMapOverlay\` explored-area piece drawn in, so it shows the fully explored map ` +
-        `(${String(tiles)} textures, ${String(overlays)} overlays in all). \`manifest.json\` lists every image with its SHA-256, pixel size, ` +
-        'UiMap, world rectangle and input hash.',
+      manifest.deployment === null
+        ? `${String(manifest.files.length)} WebP images of the World of Warcraft world map's painted art (${describeKinds(manifest)}), one per UiMap ` +
+            `that has art in the World of Warcraft: Forever client (\`${client.product}\` ${client.version}). Each is stitched from the client's ` +
+            `\`UiMapArtTile\` textures with every \`WorldMapOverlay\` explored-area piece drawn in, so it shows the fully explored map ` +
+            `(${String(tiles)} textures, ${String(overlays)} overlays in all). \`manifest.json\` lists every image with its SHA-256, pixel size, ` +
+            'UiMap, world rectangle and input hash.'
+        : `${String(manifest.files.length)} WebP images of the World of Warcraft world map's painted art (${describeKinds(manifest)}), of the ` +
+            `${String(manifest.sources.length)} UiMaps that have art in the World of Warcraft: Forever client (\`${client.product}\` ${client.version}). ` +
+            `${manifest.deployment.reason} Each image is stitched from the client's \`UiMapArtTile\` textures with every \`WorldMapOverlay\` ` +
+            `explored-area piece drawn in, so it shows the fully explored map (${String(tiles)} textures, ${String(overlays)} overlays in all). ` +
+            '`manifest.json` lists every image with its SHA-256, pixel size, UiMap, world rectangle and input hash, and keeps the pixel hash of ' +
+            'every composed UiMap\'s image (`sources`), deployed or not.',
     ),
     '## Owner of the artwork',
     [

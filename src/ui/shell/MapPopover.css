@@ -1,0 +1,115 @@
+/*
+ * The map popover (docs/research/map-presentation.md §14.2; docs/UI.md §9 rule 15; step MP.6): a
+ * non-modal panel beside the clicked point, over the map and over the floating controls while it is
+ * open (review PR-07: the zoom buttons drew over its footer), never taller than the room on its side
+ * (its body scrolls). Tokens only; its buttons are the kit's (ui-refresh.md §7: the likely action
+ * primary, the rest default, Open on Wowhead an external link).
+ */
+
+.frl-map-popover {
+  position: absolute;
+  z-index: 1160;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-width: calc(100% - 16px);
+  max-height: min(70%, 520px);
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius-lg);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-map-popover__head {
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+  padding: var(--frl-space-2) var(--frl-space-2) var(--frl-space-1) var(--frl-space-3);
+  border-bottom: 1px solid var(--frl-border);
+}
+
+.frl-map-popover__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--frl-text);
+  font-weight: var(--frl-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-map-popover__body {
+  /* A flex item keeps its content's height unless allowed to shrink: without this the body never scrolled (PR-07). */
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--frl-space-2) var(--frl-space-3) var(--frl-space-3);
+}
+
+.frl-map-popover__section + .frl-map-popover__section,
+.frl-map-popover__footer {
+  margin-top: var(--frl-space-2);
+  padding-top: var(--frl-space-2);
+  border-top: 1px solid var(--frl-border);
+}
+
+.frl-map-popover__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--frl-space-2);
+  margin: 0 0 2px;
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-map-popover__name {
+  min-width: 0;
+}
+
+.frl-map-popover__chips {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--frl-space-1);
+}
+
+.frl-map-popover__line {
+  margin: 0;
+  color: var(--frl-fg-muted);
+  line-height: 18px;
+}
+
+.frl-map-popover__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--frl-space-1) var(--frl-space-2);
+  margin: var(--frl-space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.frl-map-popover__action {
+  display: inline-flex;
+  align-items: center;
+}
+
+.frl-map-popover__link {
+  min-height: var(--frl-control-height-sm);
+  display: inline-flex;
+  align-items: center;
+}
+
+.frl-map-popover__caveat {
+  margin-left: var(--frl-space-1);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+}
+
+/* Forced colours: the panel keeps a visible edge (UI.md §9 rule 9). */
+@media (forced-colors: active) {
+  .frl-map-popover {
+    border-color: CanvasText;
+  }
+}

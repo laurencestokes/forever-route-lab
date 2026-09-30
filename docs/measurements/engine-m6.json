@@ -96,6 +96,20 @@
         "medianMs": 4.83,
         "probeMs": 40.65,
         "normalised": 4.75
+      },
+      "travelWalkCold": {
+        "$comment": "Review TR-11 (2026-09-30): fullWalkCold on the realistic route with a flight every 21st step (472, TIME-6 over the committed taxi file, every flight point of the side known) and a Rut'theran - Auberdine boat round trip every 500th (42 steps, inferred docks and berth walks): 10,514 steps. First baseline, stored under load (other processes busy; the same run put fullWalkWarm 25-28% over its baseline), so it is lenient; re-measure when calm.",
+        "steps": 10514,
+        "flights": 472,
+        "transports": 42,
+        "processMedians": [
+          23.11,
+          22.25,
+          19.6
+        ],
+        "medianMs": 22.25,
+        "probeMs": 41.07,
+        "normalised": 21.67
       }
     }
   },
@@ -761,6 +775,17 @@
           12.24,
           12.58
         ]
+      }
+    },
+    "taxiArrives": {
+      "$comment": "Review TR-11 (2026-09-30): the committed taxi file arriving on a live pipeline (the 10,000-step stress route, straight-line travel): the graph re-seeded with its nodes, flights and inferred docks, TIME-6 and the walk after it, published. median is sinceChangeMs; taskMs the whole synchronous task (under the 100 ms long-task rule). One tsx process of 21 runs, stored under load (classChange 67.9 ms in the same run), so it is lenient; re-measure when calm.",
+      "median": 42.89,
+      "min": 34.1,
+      "p90": 59.31,
+      "taskMs": {
+        "min": 33.65,
+        "median": 38.58,
+        "p90": 52.42
       }
     }
   }

@@ -6,7 +6,7 @@ import type { ThemePreference } from '../lib/theme';
 import { Button } from '../primitives/Button';
 import { Toolbar } from '../primitives/Toolbar';
 import { AboutDialog, DATA_LICENCE_CARVE_OUT } from './AboutDialog';
-import { AppShell, clampLeftWidth } from './AppShell';
+import { AppShell, clampLeftWidth, clampRightWidth, type ShellLayout } from './AppShell';
 import { MapPlaceholder } from './MapPlaceholder';
 import { TopBar, type TopBarProps } from './TopBar';
 
@@ -21,13 +21,16 @@ describe('AppShell', () => {
     expect(screen.queryByRole('separator')).toBeNull();
   });
 
-  it('clamps the route panel width to 320-380px', () => {
-    expect(clampLeftWidth(100)).toBe(320);
+  it('clamps both side panels to 300-460px (ui-refresh.md §4.1, §4.2)', () => {
+    expect(clampLeftWidth(100)).toBe(300);
     expect(clampLeftWidth(355.4)).toBe(355);
-    expect(clampLeftWidth(999)).toBe(380);
+    expect(clampLeftWidth(999)).toBe(460);
     expect(clampLeftWidth(Number.NaN)).toBe(340);
-    const { container } = render(<AppShell top={null} left={null} centre={null} right={null} bottom={null} leftWidth={500} />);
-    expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--frl-left-width')).toBe('380px');
+    expect(clampRightWidth(100)).toBe(300);
+    expect(clampRightWidth(999)).toBe(460);
+    const { container } = render(<AppShell top={null} left={null} centre={null} right={null} bottom={null} leftWidth={500} rightWidth={250} />);
+    expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--frl-left-width')).toBe('460px');
+    expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--frl-right-width')).toBe('300px');
   });
 
   it('resizes the route panel from the keyboard', () => {
@@ -43,9 +46,24 @@ describe('AppShell', () => {
     fireEvent.keyDown(splitter, { key: 'ArrowLeft', shiftKey: true });
     expect(splitter.getAttribute('aria-valuenow')).toBe('324');
     fireEvent.keyDown(splitter, { key: 'End' });
-    expect(splitter.getAttribute('aria-valuenow')).toBe('380');
+    expect(splitter.getAttribute('aria-valuenow')).toBe('460');
     fireEvent.keyDown(splitter, { key: 'Home' });
-    expect(splitter.getAttribute('aria-valuenow')).toBe('320');
+    expect(splitter.getAttribute('aria-valuenow')).toBe('300');
+  });
+
+  it('resizes the side panel from its own separator, where the arrows move the splitter (the left arrow widens it)', () => {
+    function Resizable() {
+      const [width, setWidth] = useState(340);
+      return <AppShell top={null} left={null} centre={null} right={null} bottom={null} rightWidth={width} onRightWidthChange={setWidth} />;
+    }
+    render(<Resizable />);
+    const splitter = screen.getByRole('separator', { name: 'Resize quests and details panel' });
+    fireEvent.keyDown(splitter, { key: 'ArrowLeft' });
+    expect(splitter.getAttribute('aria-valuenow')).toBe('344');
+    fireEvent.keyDown(splitter, { key: 'ArrowRight', shiftKey: true });
+    expect(splitter.getAttribute('aria-valuenow')).toBe('324');
+    fireEvent.keyDown(splitter, { key: 'End' });
+    expect(splitter.getAttribute('aria-valuenow')).toBe('460');
   });
 });
 
@@ -54,9 +72,7 @@ describe('TopBar', () => {
     const [theme, setTheme] = useState<ThemePreference>('system');
     return (
       <TopBar
-        projectName="Placeholder project"
-        routeName="Placeholder route"
-        placeholder
+        character={{ name: 'Orc Warrior', faction: 'Horde' }}
         search={{ value: '', onChange: vi.fn() }}
         zones={{ value: '', options: [{ value: 'z1', label: 'Placeholder zone' }], onJump: vi.fn() }}
         onImport={vi.fn()}
@@ -70,19 +86,17 @@ describe('TopBar', () => {
     );
   }
 
-  it('shows the product, the project with its Placeholder label, and the controls', () => {
+  it('shows the product, the search, "Go to zone or view", the character button and the controls', () => {
     render(<Bar />);
     const banner = screen.getByRole('banner');
     expect(banner.textContent).toContain('Forever Route Lab');
-    expect(banner.textContent).toContain('Placeholder project');
-    expect(within(banner).getByTitle('Placeholder project')).toBeDefined();
     expect(screen.getByRole('searchbox', { name: 'Search quests' })).toBeDefined();
-    expect(screen.getByRole('combobox', { name: 'Jump to zone' })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: 'Go to zone or view' })).toBeDefined();
     const toolbar = screen.getByRole('toolbar', { name: 'Project actions' });
     expect(within(toolbar).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual([
+      'Orc Warrior · Horde, settings',
       'Import',
       'Export',
-      'Settings',
       'System theme. Switch to light theme',
       'About Forever Route Lab',
     ]);
@@ -176,5 +190,124 @@ describe('AboutDialog', () => {
     render(<AboutDialog {...props} onClose={onClose} open sourceCommit={null} />);
     for (const button of screen.getAllByRole('button', { name: 'Close' })) fireEvent.click(button);
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('AppShell collapse and map focus (ui-refresh.md §4.3, §9.2)', () => {
+  function Collapsible({ initial = { leftCollapsed: false, rightCollapsed: false, mapFocus: false } }: { readonly initial?: ShellLayout }) {
+    const [layout, setLayout] = useState<ShellLayout>(initial);
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            setLayout((was) => ({ ...was, mapFocus: !was.mapFocus }));
+          }}
+        >
+          Outside toggle
+        </button>
+        <AppShell
+          top={<header>top</header>}
+          left={
+            <div role="listbox" aria-label="Route" tabIndex={0}>
+              list
+            </div>
+          }
+          centre={<p>map</p>}
+          right={
+            <div role="tablist" aria-label="Side">
+              <button type="button" role="tab" aria-selected="true">
+                Available
+              </button>
+            </div>
+          }
+          bottom={<p>bottom</p>}
+          leftWidth={340}
+          onLeftWidthChange={() => undefined}
+          rightWidth={340}
+          onRightWidthChange={() => undefined}
+          layout={layout}
+          onLayoutChange={(patch) => {
+            setLayout((was) => ({ ...was, ...patch }));
+          }}
+        />
+      </>
+    );
+  }
+  const main = () => screen.getByRole('main', { hidden: true });
+  const aside = () => screen.getByRole('complementary', { hidden: true });
+
+  it('hides a panel from its handle, moves focus to the handle that shows it again, and restores it into the panel', () => {
+    render(<Collapsible />);
+    const hide = screen.getByRole('button', { name: 'Hide the route panel' });
+    hide.focus();
+    fireEvent.click(hide);
+    expect(main().hidden).toBe(true);
+    const show = screen.getByRole('button', { name: 'Show the route panel' });
+    expect(document.activeElement).toBe(show);
+    fireEvent.click(show);
+    expect(main().hidden).toBe(false);
+    expect(document.activeElement).toBe(screen.getByRole('listbox', { name: 'Route' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the quests and details panel' }));
+    expect(aside().hidden).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Show the quests and details panel' }));
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Available' }));
+  });
+
+  it('puts each handle in the hidden panel’s place in the tab order', () => {
+    render(<Collapsible initial={{ leftCollapsed: true, rightCollapsed: true, mapFocus: false }} />);
+    const order = [...document.querySelectorAll('main, .frl-shell__handle, section, aside')].map((el) => el.getAttribute('aria-label') ?? el.tagName);
+    expect(order).toEqual(['Route editor', 'Show the route panel', 'Map', 'Show the quests and details panel', 'Quests and details']);
+  });
+
+  it('collapses a panel with Enter on its separator (the window splitter pattern)', () => {
+    render(<Collapsible />);
+    const separator = screen.getByRole('separator', { name: 'Resize route panel' });
+    expect(separator.getAttribute('aria-keyshortcuts')).toBe('Enter');
+    separator.focus();
+    fireEvent.keyDown(separator, { key: 'Enter' });
+    expect(main().hidden).toBe(true);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show the route panel' }));
+  });
+
+  it('hides both panels in map focus, keeps focus on its pressed toggle, and restores them as they were', () => {
+    render(<Collapsible initial={{ leftCollapsed: false, rightCollapsed: true, mapFocus: false }} />);
+    const toggle = screen.getByRole('button', { name: 'Map focus' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.getAttribute('aria-keyshortcuts')).toBe('Alt+M');
+    expect(toggle.closest('[aria-label="Map"]')).not.toBeNull();
+    fireEvent.click(toggle);
+    expect(main().hidden).toBe(true);
+    expect(aside().hidden).toBe(true);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(toggle);
+    fireEvent.click(toggle);
+    expect(main().hidden).toBe(false);
+    expect(aside().hidden).toBe(true);
+  });
+
+  it('moves focus out of a panel that map focus hides (Alt+M from inside it) to the Map focus toggle', () => {
+    render(<Collapsible />);
+    const list = screen.getByRole('listbox', { name: 'Route' });
+    list.focus();
+    // Alt+M changes the shell's state from outside its controls (a click here does not move focus).
+    fireEvent.click(screen.getByRole('button', { name: 'Outside toggle' }));
+    expect(main().hidden).toBe(true);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Map focus' }));
+  });
+
+  it('shows a hidden panel from map focus alone, ending map focus', () => {
+    render(<Collapsible initial={{ leftCollapsed: false, rightCollapsed: false, mapFocus: true }} />);
+    expect(main().hidden).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Show the route panel' }));
+    expect(main().hidden).toBe(false);
+    expect(aside().hidden).toBe(true);
+    expect(screen.getByRole('button', { name: 'Map focus' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('draws no handles and no Map focus without a layout handler', () => {
+    render(<AppShell top={null} left={null} centre={null} right={null} bottom={null} />);
+    expect(screen.queryByRole('button', { name: /route panel/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Map focus' })).toBeNull();
   });
 });

@@ -4,6 +4,8 @@ import type { EngineContext, TravelPair } from '../engine/types';
 import type { MapGeometry } from '../geo/types';
 import type { MatrixCache } from '../optimizer/types';
 import { createStraightLineTravelModel } from '../rules/straight-line';
+import type { CommittedTaxi } from '../rules/travel-graph';
+import { taxiLegDataOf } from '../sim/taxi';
 import type { ValidatorContext } from '../validate/validator';
 import { projectRules, projectTravelGraph, selectTravelModel, userDocksOf } from './derived-context';
 import { type DatasetSource, datasetViewInputOf } from './dataset-source';
@@ -107,6 +109,13 @@ export interface OptimizationHostInput {
   readonly geometry: MapGeometry;
   /** Navigation as the pipeline knows it (checking and unavailable both give the straight-line model). */
   readonly navigation: NavigationState;
+  /**
+   * The committed client taxi file once the pipeline has loaded it (D-039 B): the host seeds its
+   * TravelGraph with it and prices flights by TIME-6, as the pipeline's walk does. Null: TIME-5
+   * (the file is still loading or failed). Required, so a caller cannot forget it and price the
+   * route differently from the pipeline (review TR-12).
+   */
+  readonly taxi: CommittedTaxi | null;
 }
 
 /** The host for one revision of the project, from the inputs the derived pipeline walks with. */
@@ -116,12 +125,13 @@ export function createOptimizationHost(input: OptimizationHostInput): Optimizati
   const view = data.view(viewInput);
   const baseView = datasetBaseView(data, { faction: viewInput.faction, class: viewInput.class, questOverrides: viewInput.questOverrides });
   const rules = projectRules(project.rulesetId, project.assumptions);
-  const graph = projectTravelGraph(view, data.flightMasterIds, rules, userDocksOf(project.route.steps, geometry));
+  const taxi = input.taxi;
+  const graph = projectTravelGraph(view, data.flightMasterIds, rules, userDocksOf(project.route.steps, geometry), taxi);
   const selection = selectTravelModel({ navigation: input.navigation, detourFactor: rules.values.groundDetourFactor.value, graph, faction: project.character.faction, dataset: view, geometry });
   const navigation = selection.navigation;
   const runtime = input.navigation.kind === 'available' ? input.navigation.runtime : null;
   const travel = navigation === null ? selection.model : quietTravelModel(navigation, createStraightLineTravelModel(rules.values.groundDetourFactor.value));
-  const engine: EngineContext = { dataset: view, geometry, rules, travel, graph, zoneHints: selection.hints };
+  const engine: EngineContext = { dataset: view, geometry, rules, travel, graph, zoneHints: selection.hints, localTaxi: taxi === null ? null : taxiLegDataOf(taxi) };
   const validator: ValidatorContext = { dataset: view, rules, baseDataset: baseView, graph };
   return {
     revision: input.revision,

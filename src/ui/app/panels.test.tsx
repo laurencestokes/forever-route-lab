@@ -51,10 +51,13 @@ function renderCounted(node: ReactNode) {
 describe('panel slices (F13)', () => {
   it('does not re-render the quest list for selection changes or typing in a note', () => {
     const { store, dataset } = workspace();
-    const renders = renderCounted(<AvailableQuests store={store} dataset={dataset} search="" />);
-    const initial = renders.mock.calls.length;
     const [first, second] = store.getState().project.route.steps;
     if (first === undefined || second === undefined) throw new Error('steps missing');
+    // Accept says where the step goes: "at the end of the route" only while nothing is selected
+    // (review UI-08), so the list starts with a selection; moving it re-renders nothing.
+    store.select({ kind: 'single', id: first.id });
+    const renders = renderCounted(<AvailableQuests store={store} dataset={dataset} search="" />);
+    const initial = renders.mock.calls.length;
     act(() => {
       store.select({ kind: 'single', id: second.id });
       store.select({ kind: 'all' });
@@ -77,7 +80,6 @@ describe('panel slices (F13)', () => {
         store={store}
         dataset={dataset}
         projectName="Placeholder project"
-        placeholder
         search=""
         onSearchChange={vi.fn()}
         onSearchSubmit={vi.fn()}
@@ -107,12 +109,14 @@ describe('AvailableQuests', () => {
     const unreadable: QuestRecord = { ...quest, id: 990_001 as QuestId, name: 'Placeholder unreadable quest', races: -1 };
     const dataset = withQuests(base, [unreadable]);
     render(<AvailableQuests store={store} dataset={dataset} search="" />);
-    const open = screen.getByRole('list', { name: 'Quests' });
-    expect(within(open).queryByText('Placeholder unreadable quest')).toBeNull();
-    const unknown = screen.getByRole('list', { name: 'Quests with unknown availability' });
-    const item = within(unknown).getByRole('listitem');
-    expect(item.textContent).toContain('Placeholder unreadable quest');
-    expect(item.textContent).toContain(UNREADABLE_MASK_REASON);
+    // One grid: the open quests, then the heading "Unknown availability" and the quests under it.
+    const rows = within(screen.getByRole('grid', { name: 'Quests' })).getAllByRole('row');
+    const heading = rows.findIndex((row) => within(row).queryByRole('rowheader', { name: 'Race or class unknown, 1 quest' }) !== null);
+    expect(heading).toBeGreaterThan(0);
+    expect(rows.slice(0, heading).some((row) => row.textContent.includes('Placeholder unreadable quest'))).toBe(false);
+    const item = rows[heading + 1];
+    expect(item?.textContent).toContain('Placeholder unreadable quest');
+    expect(item?.textContent).toContain(UNREADABLE_MASK_REASON);
     expect(screen.getByText(/1 quest whose race or class mask cannot be read: whether they are open to Orc Warrior is unknown/)).toBeTruthy();
   });
 
@@ -120,7 +124,7 @@ describe('AvailableQuests', () => {
     const { store, dataset: base } = workspace();
     const unreadable: QuestRecord = { ...firstQuest(base), id: 990_001 as QuestId, name: 'Placeholder unreadable quest', races: -1 };
     render(<AvailableQuests store={store} dataset={withQuests(base, [unreadable])} search="nothing matches this" />);
-    expect(screen.queryByRole('list', { name: 'Quests with unknown availability' })).toBeNull();
+    expect(screen.queryByRole('rowheader', { name: 'Race or class unknown, 1 quest' })).toBeNull();
     expect(screen.getByText('No quests match “nothing matches this”.')).toBeTruthy();
   });
 });

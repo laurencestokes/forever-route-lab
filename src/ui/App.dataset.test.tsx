@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { fixturePrepared, fixtureView } from '../../tests/support/fixture-dataset';
 import { createEditorStore, type EditorStore, fixedClock } from '../app';
 import { preparedDatasetSource } from '../app/dataset-source';
@@ -12,6 +12,12 @@ import { App } from './App';
 import { PLACEHOLDER_DATA_NOTICE } from './app-model';
 import { AVAILABLE_PAGE_SIZE, AvailableQuests } from './app/AvailableQuests';
 import { formatInteger } from './kit';
+import { loadDetailsPanel } from './app/lazy';
+
+// The Details panel is a lazy part (ui-refresh.md UR.1a) that production builds preload when idle; so do these tests.
+beforeAll(async () => {
+  await loadDetailsPanel();
+});
 
 afterEach(cleanup);
 
@@ -40,16 +46,15 @@ const sidePanel = () => screen.getByRole('complementary', { name: 'Quests and de
 const tab = (name: RegExp) => within(sidePanel()).getByRole('tab', { name });
 
 describe('App over the real dataset (fixture slice) with the sample route', () => {
-  it('labels the route as an auto-generated sample, not placeholder data', () => {
+  it('labels the route as an auto-generated sample, not placeholder data, in the route panel\u2019s header', () => {
     setup();
-    const banner = screen.getByRole('note');
-    expect(banner.textContent).toContain(SAMPLE_ROUTE_NOTICE);
-    expect(banner.textContent).not.toContain(PLACEHOLDER_DATA_NOTICE);
-    const top = document.querySelector('.frl-topbar');
-    expect(top?.textContent).toContain('Sample project');
-    expect(top?.textContent).toContain('Sample: Durotar start (auto-generated)');
-    expect(top?.textContent).toContain(SAMPLE_ROUTE_NAME);
-    expect(within(top as HTMLElement).getByTitle('Sample project')).toBeTruthy();
+    const editor = screen.getByRole('main', { name: 'Route editor' });
+    expect(editor.textContent).toContain(SAMPLE_ROUTE_NOTICE);
+    expect(editor.textContent).not.toContain(PLACEHOLDER_DATA_NOTICE);
+    // The route's name heads the panel (ui-refresh.md §4.1), with the Sample tag; the top bar has no crumb.
+    expect(within(editor).getByRole('heading', { level: 2, name: SAMPLE_ROUTE_NAME })).toBeTruthy();
+    expect(within(editor).getByTitle('Sample route')).toBeTruthy();
+    expect(document.querySelector('.frl-topbar')?.textContent).not.toContain(SAMPLE_ROUTE_NAME);
   });
 
   it('shows the data badge with the short revision and the full identity as its tooltip', () => {
@@ -77,15 +82,15 @@ describe('App over the real dataset (fixture slice) with the sample route', () =
     expect(quest?.textContent).toContain('Forever status: unknown');
   });
 
-  it('shows the geometry in use in the layer list of the map panel', () => {
+  it('shows the geometry in use in the key of the Map layers drawer', async () => {
     setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Layers' }));
-    expect(screen.getByText(`Geometry loaded: ${GEOMETRY}.`)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Map layers' }));
+    expect(await screen.findByText(`Geometry loaded: ${GEOMETRY}.`)).toBeTruthy();
   });
 
   it('lists the quests open to the character, with a count and no placeholder tag, and follows a character change', () => {
     const store = setup();
-    const aside = () => within(sidePanel()).getByText(/^\d[\d,]* open$/).textContent;
+    const aside = () => within(sidePanel()).getByText(/^\d[\d,]* open to your Orc Warrior$|^\d[\d,]* open to your Human Warrior$/).textContent;
     const horde = aside();
     expect(within(sidePanel()).queryByTitle('Placeholder quest data')).toBeNull();
     const project = store.getState().project;
@@ -122,9 +127,11 @@ describe('AvailableQuests with thousands of quests', () => {
     const store = createEditorStore({ project, ids: sequentialIdSource(1000), clock: fixedClock(NOW) });
     const dataset = withManyQuests(fixtureView(), 250);
     const { rerender } = render(<AvailableQuests store={store} dataset={dataset} search="" />);
-    const items = () => within(screen.getByRole('list', { name: 'Quests' })).getAllByRole('listitem');
+    const items = () => within(screen.getByRole('grid', { name: 'Quests' }))
+        .getAllByRole('row')
+        .filter((row) => row.classList.contains('frl-quest-item'));
     expect(items()).toHaveLength(AVAILABLE_PAGE_SIZE);
-    const open = Number((screen.getByText(/^\d[\d,]* open$/).textContent ?? '').replace(/[^\d]/g, ''));
+    const open = Number((screen.getByText(/^\d[\d,]* open to your Orc Warrior$/).textContent ?? '').replace(/[^\d]/g, ''));
     expect(open).toBeGreaterThan(250);
     expect(screen.getByText(new RegExp(`^Showing 100 of ${formatInteger(open)} quests open to Orc Warrior, by level \\(or required level, when higher\\) and then id\\.`))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Show 100 more' }));
@@ -143,7 +150,9 @@ describe('AvailableQuests with thousands of quests', () => {
     const store = createEditorStore({ project, ids: sequentialIdSource(1000), clock: fixedClock(NOW) });
     const dataset = withManyQuests(fixtureView(), 250);
     const { rerender } = render(<AvailableQuests store={store} dataset={dataset} search="" />);
-    const items = () => within(screen.getByRole('list', { name: 'Quests' })).getAllByRole('listitem');
+    const items = () => within(screen.getByRole('grid', { name: 'Quests' }))
+        .getAllByRole('row')
+        .filter((row) => row.classList.contains('frl-quest-item'));
     fireEvent.click(screen.getByRole('button', { name: 'Show 100 more' }));
     fireEvent.click(screen.getByRole('button', { name: 'Show 100 more' }));
     expect(items()).toHaveLength(3 * AVAILABLE_PAGE_SIZE);
@@ -167,9 +176,10 @@ describe('AvailableQuests with thousands of quests', () => {
     const all = [...base.quests(), ale].sort((a, b) => a.id - b.id);
     const dataset: DatasetView = { ...base, quests: () => all, quest: (id) => (id === ale.id ? ale : base.quest(id)) };
     render(<AvailableQuests store={store} dataset={dataset} search="" />);
-    const rows = within(screen.getByRole('list', { name: 'Quests' }))
-      .getAllByRole('listitem')
-      .map((item) => item.textContent ?? '');
+    const rows = within(screen.getByRole('grid', { name: 'Quests' }))
+        .getAllByRole('row')
+        .filter((row) => row.classList.contains('frl-quest-item'))
+      .map((item) => item.textContent);
     const index = rows.findIndex((row) => row.includes("Rocknot's Ale"));
     // Sorted with the level-42 quests, not with its quest level 1 (before, it came before Cutting Teeth, level 2).
     expect(index).toBeGreaterThan(rows.findIndex((row) => row.includes('Cutting Teeth')));

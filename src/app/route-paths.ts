@@ -5,7 +5,7 @@ import type { TravelEndpoint } from '../domain/travel';
 import type { ZoneHintResolver } from '../engine/types';
 import { resolve } from '../geo/resolve';
 import type { MapGeometry } from '../geo/types';
-import type { MapView, RouteLeg, RoutePathsInput } from '../map/adapter';
+import { viewBoundsOn, viewMapIds, type MapView, type RouteLeg, type RoutePathsInput } from '../map/adapter';
 import { isWalkable, navLegRequest, type NavLegRequest } from './navigation-legs';
 import type { NavigationTravelModel } from './navigation-model';
 import type { NavigationRuntime } from './navigation-runtime';
@@ -22,8 +22,10 @@ import type { EditorStore } from './store';
  *   An answer is copied from the model's small path LRU when it arrives, so the LRU evicting it
  *   later changes nothing, and a decided leg is never asked again while it stays the same leg (same
  *   steps, same points). Records of legs no longer drawn are dropped.
- * - **Only legs being drawn ask for a path.** A leg on another world map than the one shown gets
- *   no answer (it is not drawn there). A leg on the shown map whose path is not known is requested
+ * - **Only legs being drawn ask for a path.** A leg on a world map the view does not build gets
+ *   no answer (it is not drawn there): on a world surface, any map but the one shown; on the atlas
+ *   (docs/research/map-atlas.md §8.2), any map but the active ones (`MapView.visible`), each in view
+ *   by its own rectangle. A leg on the shown map whose path is not known is requested
  *   from the worker only when it lies in the view (padded) or when the map has few legs, at most
  *   `maxRequests` per paths object, and once (the path cache never records a path already asked),
  *   so a 10,000-step route never floods the worker, and more legs in view than the 256-path LRU
@@ -162,9 +164,12 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
   }
 
   function inView(leg: RouteLeg): boolean {
-    const bounds = view?.bounds ?? null;
-    if (bounds === null || bounds === undefined) return true;
-    if (bounds.mapId !== leg.from.mapId) return false;
+    if (view === null) return true;
+    const own = view.bounds ?? null;
+    if (own === null) return true;
+    // The view in the leg's map's yards: the view's own rectangle, or on the atlas the leg's map's entry.
+    const bounds = viewBoundsOn(view, leg.from.mapId);
+    if (bounds === null) return false;
     const padX = (bounds.xMax - bounds.xMin) * padding;
     const padY = (bounds.yMax - bounds.yMin) * padding;
     const xMin = Math.min(leg.from.x, leg.to.x);
@@ -228,9 +233,12 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
     if (p.input.pending && p.asked > 0 && ![...p.waiting].some(holdsPending)) scheduleIssue();
   }
 
+  /** The world maps whose legs the view draws (the atlas's active maps, else the view's map). */
+  let drawnMaps: ReadonlySet<number> = new Set();
+
   function pathOf(p: Pass, leg: RouteLeg): readonly WorldPoint[] | null {
     const m = model;
-    if (m === null || view === null || leg.from.mapId !== view.mapId || leg.to.mapId !== leg.from.mapId) return null;
+    if (m === null || view === null || !drawnMaps.has(leg.from.mapId) || leg.to.mapId !== leg.from.mapId) return null;
     if (!p.checking) {
       p.checking = true;
       timers.set(() => {
@@ -324,11 +332,13 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
     },
     setView(next) {
       const previous = view;
+      const before = drawnMaps;
       view = next;
+      drawnMaps = new Set(next === null ? [] : viewMapIds(next));
       if (next === null || pass === null) return;
-      if (previous === null ? pass.asked > 0 : previous.mapId !== next.mapId) {
-        // Another world map (or legs asked before there was a view): they were never asked with
-        // this object on the map now shown.
+      if (previous === null ? pass.asked > 0 : [...drawnMaps].some((mapId) => !before.has(mapId))) {
+        // Another world map drawn (or legs asked before there was a view): its legs were never
+        // asked with this object.
         scheduleIssue();
         return;
       }

@@ -18,7 +18,11 @@ export interface IconButtonProps
   /** Makes the button a toggle (`aria-pressed`). */
   readonly pressed?: boolean | undefined;
   readonly size?: ControlSize | undefined;
-  readonly variant?: 'ghost' | 'secondary' | undefined;
+  /**
+   * `ghost` (no fill or edge until hover) or `tile` (the default button's look: the tile fill and a
+   * strong edge; ui-refresh.md §7.1). `secondary` is an alias of `tile`, as `Button`'s is of `default`.
+   */
+  readonly variant?: 'ghost' | 'tile' | 'secondary' | undefined;
 }
 
 /**
@@ -48,7 +52,7 @@ export function IconButton({
       title={shortcut === undefined ? label : `${label} (${shortcut})`}
       className={cx(
         'frl-icon-button',
-        `frl-icon-button--${variant}`,
+        `frl-icon-button--${variant === 'secondary' ? 'tile' : variant}`,
         `frl-icon-button--${size}`,
         pressed === true && 'is-pressed',
         className,

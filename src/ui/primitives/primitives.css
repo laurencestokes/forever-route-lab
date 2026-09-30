@@ -1,6 +1,8 @@
 /* Primitives: buttons, icon buttons, fields, toolbar, badges. Naming: frl-<block>__<element>--<modifier>. */
 
 /* Button ----------------------------------------------------------------------------------- */
+/* The kit of docs/research/ui-refresh.md §7.1 (D-048): the default is a visibly filled tile with a
+   3:1 edge that strengthens to the muted ink on hover; `secondary` draws as `default` (its alias). */
 .frl-button {
   display: inline-flex;
   align-items: center;
@@ -9,8 +11,8 @@
   height: var(--frl-control-height);
   padding: 0 10px;
   border: 1px solid var(--frl-border-strong);
-  border-radius: var(--frl-radius);
-  background: var(--frl-surface);
+  border-radius: var(--frl-radius-control);
+  background: var(--frl-tile);
   color: var(--frl-fg);
   font-size: var(--frl-text);
   font-weight: var(--frl-weight-medium);
@@ -22,7 +24,8 @@
 }
 
 .frl-button:hover:not(:disabled, [aria-disabled='true']) {
-  background: var(--frl-surface-hover);
+  border-color: var(--frl-fg-muted);
+  background: var(--frl-tile-hover);
 }
 
 .frl-button--sm {
@@ -35,6 +38,7 @@
   border-color: var(--frl-accent);
   background: var(--frl-accent);
   color: var(--frl-accent-fg);
+  font-weight: var(--frl-weight-bold);
 }
 
 .frl-button--primary:hover:not(:disabled, [aria-disabled='true']) {
@@ -42,9 +46,72 @@
   background: var(--frl-accent-hover);
 }
 
+/* Destructive: the error hue's text and edge on the surface (a loss of data, the error's meaning). */
+.frl-button--danger {
+  border-color: var(--frl-danger);
+  background: transparent;
+  color: var(--frl-danger);
+}
+
+.frl-button--danger:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--frl-danger);
+  background: var(--frl-danger-bg-hover);
+}
+
 .frl-button--ghost {
   border-color: transparent;
   background: transparent;
+}
+
+.frl-button--ghost:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: transparent;
+  background: var(--frl-surface-hover);
+}
+
+/* An inline action drawn as a link: accent text, underlined, no box. */
+.frl-button--link {
+  display: inline;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--frl-radius-sm);
+  background: none;
+  color: var(--frl-accent);
+  font-weight: var(--frl-weight-regular);
+  line-height: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  white-space: normal;
+}
+
+.frl-button--link:hover:not(:disabled, [aria-disabled='true']) {
+  border: 0;
+  background: none;
+  color: var(--frl-accent-hover);
+}
+
+.frl-button--link.frl-button--sm {
+  height: auto;
+  padding: 0;
+}
+
+/* Pressed (a toggle, aria-pressed) and expanded (a disclosure, aria-expanded): the selection tint,
+   accent text in bold and a doubled accent edge, so the state is not only a change of fill. */
+.frl-button[aria-pressed='true'],
+.frl-button[aria-expanded='true'] {
+  border-color: var(--frl-accent);
+  background: var(--frl-selection-bg);
+  box-shadow: inset 0 0 0 1px var(--frl-accent);
+  color: var(--frl-accent);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-button[aria-pressed='true']:hover:not(:disabled, [aria-disabled='true']),
+.frl-button[aria-expanded='true']:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--frl-accent);
+  background: var(--frl-selection-bg);
 }
 
 /* Unavailable: the disabled attribute, or aria-disabled for controls that must keep focus (a
@@ -54,13 +121,17 @@
   cursor: default;
   border-color: var(--frl-border);
   background: transparent;
+  box-shadow: none;
   color: var(--frl-fg-disabled);
+  font-weight: var(--frl-weight-medium);
 }
 
 /* A ghost button has no edge when enabled, so it gains none when disabled: an unavailable
    control must not look more like a button than an available one. */
 .frl-button--ghost:disabled,
-.frl-button--ghost[aria-disabled='true'] {
+.frl-button--ghost[aria-disabled='true'],
+.frl-button--link:disabled,
+.frl-button--link[aria-disabled='true'] {
   border-color: transparent;
 }
 
@@ -73,7 +144,7 @@
   height: var(--frl-control-height);
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--frl-radius);
+  border-radius: var(--frl-radius-control);
   background: transparent;
   color: var(--frl-fg-muted);
   transition:
@@ -86,9 +157,10 @@
   height: var(--frl-control-height-sm);
 }
 
-.frl-icon-button--secondary {
+/* The default button's look on an icon button. */
+.frl-icon-button--tile {
   border-color: var(--frl-border-strong);
-  background: var(--frl-surface);
+  background: var(--frl-tile);
 }
 
 .frl-icon-button:hover:not(:disabled, [aria-disabled='true']) {
@@ -96,8 +168,19 @@
   color: var(--frl-fg);
 }
 
-.frl-icon-button.is-pressed {
+.frl-icon-button--tile:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--frl-fg-muted);
+  background: var(--frl-tile-hover);
+}
+
+/* Pressed (Map focus, Lock): the pressed text button's look, the selection tint, accent ink and a
+   doubled accent edge (inset), in both the ghost and the tile variants, so the state is not only a
+   change of fill (fix UI-09; ui-refresh.md §9.6, UI.md §9 rule 13). */
+.frl-icon-button.is-pressed,
+.frl-icon-button.is-pressed:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--frl-accent);
   background: var(--frl-selection-bg);
+  box-shadow: inset 0 0 0 1px var(--frl-accent);
   color: var(--frl-accent);
 }
 
@@ -107,17 +190,141 @@
   color: var(--frl-fg-disabled);
 }
 
-/* Forced colours drop the pressed background: mark a pressed toggle with a Highlight edge, and
-   disabled controls in the system's disabled colour. */
+.frl-icon-button--tile:disabled,
+.frl-icon-button--tile[aria-disabled='true'] {
+  border-color: var(--frl-border);
+  background: transparent;
+}
+
+/* External link ---------------------------------------------------------------------------- */
+.frl-external-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--frl-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.frl-external-link:hover {
+  color: var(--frl-accent-hover);
+}
+
+.frl-external-link__glyph {
+  flex: none;
+}
+
+/* Segmented control ------------------------------------------------------------------------ */
+.frl-segmented {
+  display: inline-flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius-control);
+  overflow: hidden;
+  background: var(--frl-tile);
+}
+
+/* Each option is a 24px target of its own (WCAG 2.5.8 without the spacing exception; fix UI-14),
+   so the small control is 26px with its edge. */
+.frl-segmented__option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: var(--frl-control-height-sm);
+  padding: 0 10px;
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.frl-segmented--md .frl-segmented__option {
+  height: calc(var(--frl-control-height) - 2px);
+  font-size: var(--frl-text);
+}
+
+.frl-segmented__option + .frl-segmented__option {
+  border-left: 1px solid var(--frl-border-strong);
+}
+
+.frl-segmented__option:hover:not(.is-checked, .is-unavailable) {
+  background: var(--frl-tile-hover);
+}
+
+/* The radio stays in the page (focusable, arrow keys), drawn by its label. */
+.frl-segmented__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.frl-segmented__option.is-checked {
+  background: var(--frl-selection-bg);
+  box-shadow: inset 0 -2px 0 var(--frl-accent);
+  color: var(--frl-accent);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-segmented__option:has(.frl-segmented__input:focus-visible) {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: -3px;
+}
+
+.frl-segmented__option.is-unavailable {
+  cursor: default;
+  color: var(--frl-fg-disabled);
+}
+
+/* Forced colours drop backgrounds and box shadows: a pressed toggle, an expanded disclosure and the
+   checked segment get a Highlight edge, the one primary a 2px edge, and disabled controls the
+   system's disabled colour. */
 @media (forced-colors: active) {
   .frl-icon-button.is-pressed {
     border-color: Highlight;
+    box-shadow: none;
+    outline: 1px solid Highlight;
+    outline-offset: -3px;
+  }
+
+  /* The one primary per context keeps standing out: a 2px edge (the padding gives the pixel back). */
+  .frl-button--primary {
+    border-width: 2px;
+    padding: 0 9px;
+  }
+
+  .frl-button--primary.frl-button--sm {
+    padding: 0 7px;
+  }
+
+  .frl-button[aria-pressed='true'],
+  .frl-button[aria-expanded='true'] {
+    border: 2px solid Highlight;
+    padding: 0 9px;
+  }
+
+  .frl-button--sm[aria-pressed='true'],
+  .frl-button--sm[aria-expanded='true'] {
+    padding: 0 7px;
+  }
+
+  .frl-segmented__option.is-checked {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 
   .frl-button:disabled,
   .frl-button[aria-disabled='true'],
   .frl-icon-button:disabled,
-  .frl-icon-button[aria-disabled='true'] {
+  .frl-icon-button[aria-disabled='true'],
+  .frl-segmented__option.is-unavailable {
     color: GrayText;
   }
 }
@@ -221,6 +428,49 @@
 
 .frl-input input[aria-invalid='true'] {
   border-color: var(--frl-severity-error);
+}
+
+/* Search field ----------------------------------------------------------------------------- */
+.frl-search {
+  flex: 1 1 auto;
+}
+
+.frl-search__box input {
+  border-radius: var(--frl-radius-control);
+}
+
+/* Room for the clear button, and no second clear button from the browser. */
+.frl-search__box.has-value input {
+  padding-right: 28px;
+}
+
+.frl-search__box input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.frl-search__clear {
+  position: absolute;
+  right: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--frl-control-height) - 6px);
+  height: calc(var(--frl-control-height) - 6px);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--frl-radius);
+  background: transparent;
+  color: var(--frl-fg-muted);
+}
+
+.frl-input--sm .frl-search__clear {
+  width: calc(var(--frl-control-height-sm) - 6px);
+  height: calc(var(--frl-control-height-sm) - 6px);
+}
+
+.frl-search__clear:hover {
+  background: var(--frl-surface-hover);
+  color: var(--frl-fg);
 }
 
 /* Checkbox --------------------------------------------------------------------------------- */

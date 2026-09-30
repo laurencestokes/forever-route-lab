@@ -257,3 +257,84 @@ export function drawGlyph(ctx: GlyphCanvas, x: number, y: number, spec: GlyphSpe
   drawBadges(ctx, x, y, spec);
   drawStack(ctx, x, y, spec);
 }
+
+// =============================================================================================
+// The difficulty chip's canvas twin (docs/research/map-presentation.md §12.5, §13.4; step MP.7)
+
+/** The twin's colours: the difficulty tokens only (the well, the unlit pip, the five difficulty colours), and the keyline round the well. */
+export interface ChipInk {
+  /** `--frl-difficulty-well` (equal to `--frl-map-pin`, which a token test asserts). */
+  readonly well: string;
+  /** `--frl-difficulty-pip-off`. */
+  readonly pipOff: string;
+  /** `--frl-difficulty-*`: the lit pips and the level text of that difficulty. */
+  readonly difficulty: Readonly<Record<ChipDifficulty, string>>;
+  /** The light keyline outside the well (the pins' keyline, `--frl-map-pin-glyph`), so the chip reads on a dark base (§25.4). */
+  readonly keyline: string;
+  readonly font: string;
+}
+
+export type ChipDifficulty = 'trivial' | 'standard' | 'difficult' | 'verydifficult' | 'impossible';
+
+/** The part of a 2D context the twin uses (the labels canvas's too). */
+export type ChipCanvas = Pick<
+  GlyphCanvas,
+  'globalAlpha' | 'fillStyle' | 'strokeStyle' | 'lineWidth' | 'font' | 'textAlign' | 'textBaseline' | 'beginPath' | 'rect' | 'fill' | 'stroke' | 'fillText' | 'setLineDash'
+>;
+
+/** 1 (trivial) to 5 (impossible) lit pips: `DifficultyLabel`'s `DIFFICULTY_RANK`, repeated here (map/leaflet may not import ui). */
+export const CHIP_PIPS_LIT: Readonly<Record<ChipDifficulty, number>> = { trivial: 1, standard: 2, difficult: 3, verydifficult: 4, impossible: 5 };
+
+/** The twin's geometry in CSS pixels: `DifficultyLabel`'s pips (2 px bars, 1 px gaps, 2 to 10 px), in a 12 px well. */
+export const CHIP = { height: 12, padLeft: 3, padRight: 3, pipWidth: 2, pipGap: 1, pipStep: 2, gap: 3, fontSize: 9, keyline: 1, dash: [2, 1.5] } as const;
+
+/** The twin's width for its level text: the pips, the gap and the text, with the padding. */
+export function chipWidth(levelText: string, measure: (text: string, font: string) => number, family: string): number {
+  const pips = 5 * CHIP.pipWidth + 4 * CHIP.pipGap;
+  return CHIP.padLeft + pips + CHIP.gap + measure(levelText, `700 ${String(CHIP.fontSize)}px ${family}`) + CHIP.padRight;
+}
+
+/**
+ * Draws the difficulty chip's twin with its left edge at `x`, centred on `y`: a dark well with a
+ * keyline (dashed when the character's level is a lower bound, as the chip's edge is), five pips
+ * (the rating's lit in its difficulty colour, the others unlit) and the level in the same colour.
+ * Colour is never the only cue: the pips' count says it too, and the hover and key say it in words.
+ * Returns the width drawn. It reads nothing but `ink`.
+ */
+export function drawDifficultyChip(
+  ctx: ChipCanvas,
+  x: number,
+  y: number,
+  chip: { readonly key: ChipDifficulty; readonly levelText: string; readonly lowerBound: boolean },
+  ink: ChipInk,
+  measure: (text: string, font: string) => number,
+): number {
+  const width = chipWidth(chip.levelText, measure, ink.font);
+  const top = y - CHIP.height / 2;
+  const colour = ink.difficulty[chip.key];
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  ctx.rect(x, top, width, CHIP.height);
+  ctx.fillStyle = ink.well;
+  ctx.fill();
+  ctx.lineWidth = CHIP.keyline;
+  ctx.strokeStyle = ink.keyline;
+  ctx.setLineDash(chip.lowerBound ? [...CHIP.dash] : NO_DASH);
+  ctx.stroke();
+  ctx.setLineDash(NO_DASH);
+  const lit = CHIP_PIPS_LIT[chip.key];
+  const bottom = top + CHIP.height - 1;
+  for (let pip = 1; pip <= 5; pip += 1) {
+    const height = pip * CHIP.pipStep;
+    ctx.beginPath();
+    ctx.rect(x + CHIP.padLeft + (pip - 1) * (CHIP.pipWidth + CHIP.pipGap), bottom - height, CHIP.pipWidth, height);
+    ctx.fillStyle = pip <= lit ? colour : ink.pipOff;
+    ctx.fill();
+  }
+  ctx.font = `700 ${String(CHIP.fontSize)}px ${ink.font}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = colour;
+  ctx.fillText(chip.levelText, x + CHIP.padLeft + 5 * CHIP.pipWidth + 4 * CHIP.pipGap + CHIP.gap, y + 0.5);
+  return width;
+}

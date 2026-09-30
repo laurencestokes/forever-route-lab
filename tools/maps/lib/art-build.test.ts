@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { parseGeometryFile } from '../../../src/geo/geometry';
 import type { MapGeometry } from '../../../src/geo/types';
 import { readImageHeader } from '../../../src/infra/maps/image-header';
+import { gzipSize } from '../../build/lib/audit';
 import { REPO_ROOT } from '../../build/lib/fs';
 import { inputHash } from '../../casc/input-hash';
 import { artBounds, buildArtSet, type ArtBuild } from './art-build';
@@ -11,7 +12,7 @@ import { committedArtChecks } from './art-checks';
 import { ART_DIR, parseArtManifest } from './art-manifest';
 import { artNoticeText } from './art-notice';
 import { fakeCkey, syntheticArtWorld } from './art-test-support';
-import { CLIENT_PIN, GEOMETRY_FILE, PLACEHOLDER_DIR } from './constants';
+import { ART_BUDGET_GZIP_BYTES, CLIENT_PIN, DEPLOYED_ART_REASON, DEPLOYED_ART_UIMAPS, GEOMETRY_FILE, PLACEHOLDER_DIR } from './constants';
 import { decodeToRgba, DEFAULT_WEBP, encoderIdentity } from './encode';
 import { lfBytes, sha256Hex } from './hash';
 import { rasterSha256 } from './raster';
@@ -133,6 +134,62 @@ describe('building the art set in memory', () => {
       expect(failing()).toEqual(['A1', 'A2', 'A3', 'A4', 'A5']);
     });
 
+    it('A5 counts the files of subfolders too (map-atlas.md §7.5), and A2 reports them as unlisted', () => {
+      const before = committedArtChecks(dir, syntheticPlaceholder()).gzipBytes ?? 0;
+      writeFile(dir, 'sub/deeper/stray.bin', Buffer.alloc(5000, 7));
+      const after = committedArtChecks(dir, syntheticPlaceholder());
+      expect((after.gzipBytes ?? 0) - before).toBe(gzipSize(Buffer.alloc(5000, 7)));
+      expect(after.checks.find((c) => c.id === 'A2')?.problems).toContain('sub: in the folder but not in the manifest');
+    });
+
+    it('keeps a sources record for every composed UiMap, deployed or not, matching its file', () => {
+      const manifest = parseArtManifest(JSON.parse(build.manifestText) as unknown).manifest;
+      expect(manifest?.sources.map((s) => [s.uiMapId, s.layer])).toEqual([
+        [947, 0],
+        [1411, 0],
+      ]);
+      const durotar = manifest?.sources.find((s) => s.uiMapId === 1411);
+      expect(durotar?.pixelsSha256).toBe(build.files[1]?.entry.pixelsSha256);
+      expect(durotar?.overlaysSha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(manifest?.sources.find((s) => s.uiMapId === 947)?.overlaysSha256).toBeNull();
+      const broken = JSON.parse(build.manifestText) as { sources: { pixelsSha256: string }[] };
+      const first = broken.sources[1];
+      if (first !== undefined) first.pixelsSha256 = '0'.repeat(64);
+      expect(parseArtManifest(broken).errors).toContain('1411.webp: its sources record disagrees with its pixelsSha256 or inputHash');
+    });
+
+    it('deploys only the listed UiMaps (D-042 O5; ATL.10), keeping every composed UiMap\'s sources record, and A4 accepts the others as composed', async () => {
+      const deployed = await buildArtSet(source, { ...options, deploy: { uiMaps: [1411], reason: 'Only Durotar, for this test.' } });
+      expect(deployed.files.map((f) => f.entry.path)).toEqual(['1411.webp']);
+      // The deployed image is byte for byte the one the full build writes.
+      expect(deployed.files[0]?.bytes.equals(build.files[1]?.bytes ?? Buffer.alloc(0))).toBe(true);
+      const manifest = parseArtManifest(JSON.parse(deployed.manifestText) as unknown);
+      expect(manifest.errors).toEqual([]);
+      expect(manifest.manifest?.deployment).toEqual({ uiMaps: [1411], reason: 'Only Durotar, for this test.' });
+      expect(manifest.manifest?.sources.map((s) => s.uiMapId)).toEqual([947, 1411]);
+      const notice = deployed.noticeText.replace(/\s+/g, ' ');
+      expect(notice).toContain('1 WebP images of the World of Warcraft world map\'s painted art (1 zone or city map), of the 2 UiMaps that have art');
+      expect(notice).toContain('Only Durotar, for this test.');
+      // A listed UiMap that is not written, or a written one that is not listed, is refused.
+      const edited = JSON.parse(deployed.manifestText) as { deployment: { uiMaps: number[] } };
+      edited.deployment.uiMaps = [947, 1411];
+      expect(parseArtManifest(edited).errors.join('\n')).toMatch(/files must be exactly the images of deployment\.uiMaps that were composed \(947, 1411\), not 1411/);
+      // On disk: A4 counts 947 as composed but not deployed; with an expected list, the manifest must deploy exactly it.
+      rmSync(join(dir, '947.webp'));
+      writeFile(dir, '1411.webp', deployed.files[0]?.bytes ?? '');
+      writeFile(dir, 'manifest.json', deployed.manifestText);
+      writeFile(dir, 'NOTICE.md', deployed.noticeText);
+      const a4 = (expected: readonly number[] | null): readonly string[] => committedArtChecks(dir, syntheticPlaceholder(), expected).checks.find((c) => c.id === 'A4')?.problems ?? [];
+      expect(a4(null)).toEqual(['1411.webp: 10 × 6, the UiMap\'s art is 1002 × 668']);
+      expect(a4([1411]).filter((p) => p.includes('deploy'))).toEqual([]);
+      expect(a4([947, 1411])).toContain('the manifest deploys UiMaps 1411; D-042 O5 deploys 947, 1411');
+      // The full build (no deployment) is refused where a deployment is expected.
+      writeFile(dir, 'manifest.json', build.manifestText);
+      expect(committedArtChecks(dir, syntheticPlaceholder(), [1411]).checks.find((c) => c.id === 'A4')?.problems).toContain(
+        'the manifest deploys every composed image; D-042 O5 deploys only UiMaps 1411 (regenerate with convert.ts)',
+      );
+    });
+
     it('refuses a manifest from another build', () => {
       const manifest = JSON.parse(build.manifestText) as { client: { version: string } };
       manifest.client.version = '1.60.1.69999';
@@ -171,12 +228,16 @@ describe('parseArtManifest', () => {
 });
 
 describe('the committed art (public/maps/art)', () => {
-  it('passes A1-A5 against the committed placeholder', () => {
+  it('passes A1-A5 against the committed placeholder: five images since ATL.10 (D-042 O5), every composed UiMap\'s sources kept, within 1.0 MB', () => {
     const geometry = parseGeometryFile(JSON.parse(lfBytes(readFileSync(join(REPO_ROOT, PLACEHOLDER_DIR, GEOMETRY_FILE))).toString('utf8')) as unknown);
     if (!geometry.ok) throw new Error(geometry.errors.join('; '));
-    const report = committedArtChecks(join(REPO_ROOT, ART_DIR), geometry.geometry);
+    const report = committedArtChecks(join(REPO_ROOT, ART_DIR), geometry.geometry, DEPLOYED_ART_UIMAPS);
     expect(report.checks.map((c) => [c.id, c.problems, c.skipped])).toEqual(['A1', 'A2', 'A3', 'A4', 'A5'].map((id) => [id, [], null]));
-    expect(report.manifest?.files).toHaveLength(60);
-    expect(report.gzipBytes).toBeLessThanOrEqual(12_000_000);
+    expect(report.manifest?.files.map((f) => f.uiMapId)).toEqual([1459, 1460, 1461, 2521, 2524]);
+    expect(report.manifest?.deployment).toEqual({ uiMaps: [1459, 1460, 1461, 2521, 2524], reason: DEPLOYED_ART_REASON });
+    // The atlas build checks its client rasters against these (map-atlas.md §7.5 T5): all 60 composed UiMaps.
+    expect(report.manifest?.sources).toHaveLength(60);
+    expect(ART_BUDGET_GZIP_BYTES).toBe(1_000_000);
+    expect(report.gzipBytes).toBeLessThanOrEqual(ART_BUDGET_GZIP_BYTES);
   });
 });

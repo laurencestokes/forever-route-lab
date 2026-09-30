@@ -1,27 +1,37 @@
-import { memo, useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from 'react';
+import { memo, useContext, useId, useLayoutEffect, useState, type ReactNode, type Ref, type RefObject } from 'react';
 import { cx } from '../lib/cx';
-import { Badge, VisuallyHidden } from '../primitives/Badge';
+import { VisuallyHidden } from '../primitives/Badge';
 import { Button } from '../primitives/Button';
 import type { IconName } from '../primitives/Icon';
 import { IconButton } from '../primitives/IconButton';
-import { Select, type SelectOption } from '../primitives/Select';
 import { Toolbar } from '../primitives/Toolbar';
-import { MapGlyph, MapLegend, type MapGlyphKind } from './MapLegend';
+import { MapFocusContext } from './AppShell';
 import './MapFrame.css';
 
 /**
- * The map panel's frame (docs/UI.md §12): a toolbar (surface switcher, map commands, the layer
- * panel toggle and the "schematic map" notice), the stage the map engine mounts into, the layer
- * panel and the map key beside it, a status line, and the list of items at a clicked point where
- * several share it. Presentational: the caller owns the engine and passes a ref to the stage's host
- * element, which the engine fills with its own (focusable) surface.
+ * The map panel's frame (docs/UI.md §12; docs/research/map-presentation.md §25.3.0, §25.3.1; D-047;
+ * step MP.4b): the stage the map engine mounts into, taking the whole map region, with its controls
+ * floating on it, MapGenie's way:
+ * - top left, **Map layers**, the drawer's disclosure (`aria-expanded`, `aria-controls`), just right
+ *   of the drawer while it is open;
+ * - top right, **Map focus** (the shell's toggle, claimed from `MapFocusContext`);
+ * - bottom right, the **Map view** toolbar: Zoom in and Zoom out, then Fit route and Focus step
+ *   (one toolbar, arrow keys inside);
+ * - bottom left, the **caption**: what the map shows (the art's notice), the route note and the
+ *   pointer's text, on a backplate, never a live region (UI.md §9 rule 12).
  *
- * The map is supplementary (UI.md §9 rule 12): every command here is a button, select or checkbox
- * with a name, and everything the map does can also be done from the route list, the Available
- * tab or Details.
+ * The **Map layers drawer** (300 px, `--frl-map-drawer-width`) docks on the stage's left where the
+ * map region is 900 px or more (`useMapRegionDocking`), and lies over the stage's left edge below
+ * that (a container query does the layout). Its content is the caller's (a lazy part). There is no
+ * toolbar row and no status line any more: the map takes the region (review UO-02).
+ *
+ * The map is supplementary (UI.md §9 rule 12): every control here is a button with a name, and
+ * everything the map does can also be done from the route list, the Available tab or Details.
+ * Keyboard order in the region: Map layers, the drawer (when open), the map surface, Map focus, the
+ * Map view toolbar.
  */
 
-/** One map command in the toolbar. */
+/** One map command in the Map view toolbar. */
 export interface MapCommand {
   readonly id: string;
   readonly label: string;
@@ -31,79 +41,9 @@ export interface MapCommand {
   /** Why it cannot be used now; it then renders aria-disabled with this as its description. */
   readonly unavailable: string | null;
   readonly onRun: () => void;
+  /** The toolbar group it belongs to: zoom (first), or the view commands (second). */
+  readonly group?: 'zoom' | 'view' | undefined;
 }
-
-/** One row of the layer panel. */
-export interface MapLayerRow {
-  readonly id: string;
-  readonly label: string;
-  /** The layer's glyph or line style as the map draws it (the key's), or null for none. */
-  readonly glyph?: MapGlyphKind | null | undefined;
-  readonly visible: boolean;
-  /** Why the layer cannot be shown here: the checkbox is disabled and the reason is shown. */
-  readonly unavailable: string | null;
-  /** What is drawn now, for example `"49 drawn"`; null for nothing to say. */
-  readonly count: string | null;
-  /** Honest notes: what is left out and why. */
-  readonly notes: readonly string[];
-}
-
-export interface LayerPanelProps {
-  readonly layers: readonly MapLayerRow[];
-  readonly onToggle: (id: string, visible: boolean) => void;
-  /** Lines under the layers (the geometry in use). */
-  readonly footer?: readonly string[] | undefined;
-  readonly id?: string | undefined;
-}
-
-/** The layer list: one checkbox per layer with its glyph, its count and its notes; unavailable layers say why. */
-export const LayerPanel = memo(function LayerPanel({ layers, onToggle, footer = [], id }: LayerPanelProps) {
-  const baseId = useId();
-  return (
-    <fieldset className="frl-layers" id={id}>
-      <legend className="frl-layers__title">Layers</legend>
-      <ul className="frl-layers__list">
-        {layers.map((layer) => {
-          const noteId = `${baseId}-${layer.id}`;
-          const described = layer.unavailable !== null || layer.notes.length > 0;
-          return (
-            <li key={layer.id} className={cx('frl-layers__row', layer.unavailable !== null && 'is-unavailable')}>
-              <label className="frl-layers__label">
-                <input
-                  type="checkbox"
-                  checked={layer.unavailable === null && layer.visible}
-                  disabled={layer.unavailable !== null}
-                  aria-describedby={described ? noteId : undefined}
-                  onChange={(event) => {
-                    onToggle(layer.id, event.currentTarget.checked);
-                  }}
-                />
-                {layer.glyph !== undefined && layer.glyph !== null && <MapGlyph kind={layer.glyph} className="frl-layers__glyph" />}
-                <span className="frl-layers__name">{layer.label}</span>
-                {layer.count !== null && <span className="frl-layers__count frl-num">{layer.count}</span>}
-              </label>
-              {described && (
-                <ul className="frl-layers__notes" id={noteId}>
-                  {layer.unavailable !== null && <li>{layer.unavailable}</li>}
-                  {layer.notes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      {footer.length > 0 && (
-        <div className="frl-layers__footer">
-          {footer.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-        </div>
-      )}
-    </fieldset>
-  );
-});
 
 /** Where the map engine is: loading its chunk, ready, failed to load (with a retry), or not available at all. */
 export type MapEngineState =
@@ -112,137 +52,10 @@ export type MapEngineState =
   | { readonly kind: 'failed'; readonly message: string; readonly onRetry: () => void }
   | { readonly kind: 'unavailable'; readonly message: string };
 
-/**
- * Several items at one clicked point (a merged marker, MAPS.md §7.3): listed near the point so the
- * user picks one. Keyboard: focus moves to the first item; arrow keys move between items; Escape
- * closes and returns focus to the map.
- */
-export interface MapChoiceProps {
-  /** `6 steps here`. */
-  readonly title: string;
-  /** What picking does: `Choose one to select its step.` */
-  readonly hint: string;
-  readonly options: readonly string[];
-  /** `Select all 6 steps`; null for no such action. */
-  readonly allLabel: string | null;
-  /** The point in stage pixels, with the stage's size; null to place the list at the top left. */
-  readonly at: { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null;
-  readonly onChoose: (index: number) => void;
-  readonly onAll: () => void;
-  readonly onDismiss: () => void;
-}
+/** The map region's width from which the drawer docks beside the stage (§25.3.1). */
+export const DRAWER_DOCK_MIN_PX = 900;
 
-/** The list's width in pixels (MapFrame.css), for keeping it inside the stage. */
-export const MAP_CHOICE_WIDTH = 260;
-
-/** Where the list goes: beside the point, inside the stage, above the point in the lower half. */
-export function mapChoicePosition(at: MapChoiceProps['at']): CSSProperties {
-  if (at === null) return { left: 8, top: 8 };
-  const left = Math.max(8, Math.min(at.x + 12, at.width - MAP_CHOICE_WIDTH - 8));
-  return at.y <= at.height / 2 ? { left, top: Math.max(8, at.y + 12) } : { left, bottom: Math.max(8, at.height - at.y + 12) };
-}
-
-function MapChoiceList({ choice, returnFocus }: { readonly choice: MapChoiceProps; readonly returnFocus: () => void }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const baseId = useId();
-  const { onDismiss } = choice;
-  useEffect(() => {
-    rootRef.current?.querySelector<HTMLButtonElement>('.frl-mapchoice__option')?.focus();
-  }, [choice.title, choice.options]);
-  useEffect(() => {
-    const root = rootRef.current;
-    const doc = root?.ownerDocument;
-    if (root === null || doc === undefined) return undefined;
-    const onPointerDown = (event: Event) => {
-      if (event.target instanceof Node && !root.contains(event.target)) onDismiss();
-    };
-    doc.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      doc.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [onDismiss]);
-  const close = (then: () => void) => {
-    then();
-    returnFocus();
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      close(onDismiss);
-      return;
-    }
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return;
-    const buttons = [...(rootRef.current?.querySelectorAll<HTMLButtonElement>('.frl-mapchoice__option, .frl-mapchoice__all') ?? [])];
-    if (buttons.length === 0) return;
-    event.preventDefault();
-    const current = buttons.findIndex((button) => button === event.target);
-    const last = buttons.length - 1;
-    const next =
-      event.key === 'Home' ? 0 : event.key === 'End' ? last : event.key === 'ArrowDown' ? (current < 0 ? 0 : Math.min(last, current + 1)) : Math.max(0, current - 1);
-    buttons[next]?.focus();
-  };
-  return (
-    <div
-      ref={rootRef}
-      className="frl-mapchoice"
-      role="dialog"
-      aria-labelledby={`${baseId}-title`}
-      aria-describedby={`${baseId}-hint`}
-      style={mapChoicePosition(choice.at)}
-      onKeyDown={onKeyDown}
-    >
-      <div className="frl-mapchoice__head">
-        <p id={`${baseId}-title`} className="frl-mapchoice__title">
-          {choice.title}
-        </p>
-        <IconButton
-          icon="close"
-          size="sm"
-          label="Close"
-          onClick={() => {
-            close(onDismiss);
-          }}
-        />
-      </div>
-      <p id={`${baseId}-hint`} className="frl-mapchoice__hint">
-        {choice.hint}
-      </p>
-      <ul className="frl-mapchoice__list">
-        {choice.options.map((label, index) => (
-          // Items can repeat their text (two spawns of one giver); the position keeps keys unique.
-          <li key={`${String(index)}:${label}`}>
-            <button
-              type="button"
-              className="frl-mapchoice__option"
-              onClick={() => {
-                close(() => {
-                  choice.onChoose(index);
-                });
-              }}
-            >
-              {label}
-            </button>
-          </li>
-        ))}
-      </ul>
-      {choice.allLabel !== null && (
-        <Button
-          size="sm"
-          variant="secondary"
-          className="frl-mapchoice__all"
-          onClick={() => {
-            close(choice.onAll);
-          }}
-        >
-          {choice.allLabel}
-        </Button>
-      )}
-    </div>
-  );
-}
-
-/** "Pointer on: …", the status line's hover text; nothing for null. */
+/** "Pointer on: …", the caption's hover text; nothing for null. */
 export function MapHoverText({ text }: { readonly text: string | null }) {
   if (text === null) return null;
   return (
@@ -253,37 +66,79 @@ export function MapHoverText({ text }: { readonly text: string | null }) {
   );
 }
 
+/**
+ * Whether the map region is wide enough for the drawer to dock (§25.3.1: 900 px or more), from the
+ * element's width as a `ResizeObserver` reports it (the container query lays the drawer out; this is
+ * for the behaviour that depends on it: the default open state and Escape). `initial` until measured.
+ */
+export function useMapRegionDocking(ref: RefObject<HTMLElement | null>, initial = false): boolean {
+  const [docked, setDocked] = useState(initial);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element === null) return undefined;
+    const measure = (width: number): void => {
+      if (width > 0) setDocked(width >= DRAWER_DOCK_MIN_PX);
+    };
+    measure(element.getBoundingClientRect().width || element.clientWidth);
+    const Observer = element.ownerDocument.defaultView?.ResizeObserver;
+    if (Observer === undefined) return undefined;
+    const observer = new Observer((entries) => {
+      const entry = entries[entries.length - 1];
+      if (entry !== undefined) measure(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, [ref]);
+  return docked;
+}
+
+/** The drawer's place in the frame (§25.3.1): its id (the toggle's `aria-controls`), whether it is open and docked, and its content. */
+export interface MapDrawerFrameProps {
+  readonly id: string;
+  readonly open: boolean;
+  readonly docked: boolean;
+  readonly onToggle: () => void;
+  /** The drawer (a lazy part), or its stand-in while it loads. */
+  readonly content: ReactNode;
+}
+
 export interface MapFrameProps {
-  /** The surface switcher: one option per world map. */
-  readonly surface: {
-    readonly value: string;
-    readonly options: readonly SelectOption[];
-    readonly onChange: (value: string) => void;
-  };
+  readonly drawer: MapDrawerFrameProps;
+  /** The Map view toolbar's commands, in order: the zoom group, then the view group. */
   readonly commands: readonly MapCommand[];
-  readonly layersOpen: boolean;
-  readonly onLayersOpenChange: (open: boolean) => void;
-  readonly layers: LayerPanelProps;
-  /** What kind of map this is, always visible (MAPS.md §8.1): "Schematic map: zone frames, not terrain". */
+  /** What kind of map this is, always visible (MAPS.md §8.1; D-033 rule 2): "Painted map art © Blizzard Entertainment". */
   readonly notice: string;
-  /** The notice's short form, shown instead of it in a narrow panel ("Schematic"); without one the notice always shows in full. */
+  /** The notice's short form, shown instead of it in a narrow map ("Art © Blizzard"). */
   readonly noticeShort?: string | undefined;
   readonly engine: MapEngineState;
   /** The element the engine mounts into. */
   readonly stageRef: Ref<HTMLDivElement>;
+  /** The map region (for its width: `useMapRegionDocking`). */
+  readonly regionRef?: Ref<HTMLDivElement> | undefined;
   /** Id of the instructions paragraph, for the engine surface's `aria-describedby`. */
   readonly instructionsId: string;
   /** Read with the map surface: the notice, the map's name and how to use it. */
   readonly instructions: string;
-  /** One-line summaries under the map (the route on this surface). */
-  readonly status: readonly string[];
+  /** The caption's lines (a pick in progress, the route on this map, what the map cannot follow). */
+  readonly caption: readonly string[];
   /**
    * What the pointer is over: its text (null for nothing), or an element that renders
    * `MapHoverText` itself, so a hover re-renders only that element (M3 review PERF-14).
    */
   readonly hover: ReactNode;
-  /** Items at a clicked point to choose from; null for none. */
-  readonly choice?: MapChoiceProps | null | undefined;
+  /**
+   * The map popover (map-presentation.md §14.2; step MP.6), a lazy part the map panel renders when a
+   * click opens it; null for none. It is placed inside the stage, beside the clicked point.
+   */
+  readonly popover?: ReactNode;
+  /**
+   * The "Viewing" chip (map-presentation.md §13.5; step MP.7): from the zone band, the zone at the
+   * view centre with its span and `DifficultyLabel`, at the stage's top left beside Map layers. It is
+   * DOM, so it is in the accessibility tree and shows the difficulty colours through the chip itself.
+   */
+  readonly viewing?: ReactNode;
   readonly className?: string | undefined;
 }
 
@@ -318,110 +173,120 @@ function EngineCard({ engine }: { readonly engine: MapEngineState }): ReactNode 
   }
 }
 
+/** The shell's Map focus toggle, drawn here once claimed (so it sits between the map surface and the toolbar in the tab order). */
+function MapFocusToggle() {
+  const slot = useContext(MapFocusContext);
+  const claim = slot?.claim;
+  useLayoutEffect(() => (claim === undefined ? undefined : claim()), [claim]);
+  if (slot === null || !slot.claimed) return null;
+  return slot.toggle;
+}
+
 export const MapFrame = memo(function MapFrame({
-  surface,
+  drawer,
   commands,
-  layersOpen,
-  onLayersOpenChange,
-  layers,
   notice,
   noticeShort,
   engine,
   stageRef,
+  regionRef,
   instructionsId,
   instructions,
-  status,
+  caption,
   hover,
-  choice = null,
+  popover = null,
+  viewing = null,
   className,
 }: MapFrameProps) {
   const baseId = useId();
-  const layersId = `${baseId}-layers`;
   const reasonId = (command: MapCommand) => `${baseId}-${command.id}-reason`;
   const usable = engine.kind === 'ready';
-  const stageBoxRef = useRef<HTMLDivElement>(null);
-  /** Back to the engine's surface (the host's first child) after the choice list closes. */
-  const returnFocus = () => {
-    const surfaceEl = stageBoxRef.current?.querySelector('.frl-mapframe__host')?.firstElementChild;
-    if (surfaceEl instanceof HTMLElement) surfaceEl.focus();
-  };
+  const zoom = commands.filter((command) => command.group === 'zoom');
+  const view = commands.filter((command) => command.group !== 'zoom');
+  const commandButton = (command: MapCommand) =>
+    command.icon === undefined ? (
+      <Button
+        key={command.id}
+        size="md"
+        className="frl-mapframe__command"
+        title={command.unavailable === null ? command.title : `${command.title}: ${command.unavailable}`}
+        aria-disabled={command.unavailable === null ? undefined : true}
+        aria-describedby={command.unavailable === null ? undefined : reasonId(command)}
+        onClick={() => {
+          if (command.unavailable === null) command.onRun();
+        }}
+      >
+        {command.label}
+      </Button>
+    ) : (
+      <IconButton
+        key={command.id}
+        icon={command.icon}
+        label={command.label}
+        variant="tile"
+        className="frl-mapframe__command"
+        aria-disabled={command.unavailable === null ? undefined : true}
+        aria-describedby={command.unavailable === null ? undefined : reasonId(command)}
+        onClick={() => {
+          if (command.unavailable === null) command.onRun();
+        }}
+      />
+    );
   return (
-    <div className={cx('frl-mapframe', layersOpen && 'is-layers-open', className)}>
-      <div className="frl-mapframe__bar">
-        <Select
-          label="Map surface"
-          hideLabel
-          size="sm"
-          className="frl-mapframe__surface"
-          value={surface.value}
-          options={surface.options}
-          disabled={surface.options.length === 0}
-          onChange={surface.onChange}
+    <div className={cx('frl-mapframe', drawer.open && 'is-drawer-open', drawer.docked ? 'is-docked' : 'is-over', className)} ref={regionRef}>
+      <div className="frl-mapframe__region">
+        {/* A disclosure (§25.3.8: `aria-expanded`, not `aria-pressed`), drawn with the kit's pressed look while open. */}
+        <IconButton
+          icon="layers"
+          label="Map layers"
+          variant="tile"
+          className={cx('frl-mapframe__layers-toggle', drawer.open && 'is-pressed')}
+          aria-expanded={drawer.open}
+          aria-controls={drawer.open ? drawer.id : undefined}
+          onClick={drawer.onToggle}
         />
-        <Toolbar label="Map commands" className="frl-mapframe__commands">
-          {commands.map((command) => (
-            <Button
-              key={command.id}
-              size="sm"
-              variant="ghost"
-              icon={command.icon}
-              title={command.unavailable === null ? command.title : `${command.title}: ${command.unavailable}`}
-              aria-disabled={command.unavailable === null ? undefined : true}
-              aria-describedby={command.unavailable === null ? undefined : reasonId(command)}
-              onClick={() => {
-                if (command.unavailable === null) command.onRun();
-              }}
-            >
-              {command.label}
-            </Button>
-          ))}
-          <IconButton
-            icon="layers"
-            size="sm"
-            label="Layers"
-            pressed={layersOpen}
-            aria-controls={layersOpen ? layersId : undefined}
-            onClick={() => {
-              onLayersOpenChange(!layersOpen);
-            }}
-          />
-        </Toolbar>
-        {commands.map((command) =>
-          command.unavailable === null ? null : (
-            <span key={command.id} id={reasonId(command)} hidden>
-              {command.unavailable}
-            </span>
-          ),
+        {drawer.open && (
+          <div className="frl-mapframe__drawer" id={drawer.id}>
+            {drawer.content}
+          </div>
         )}
-        <span className="frl-mapframe__spacer" />
-        <Badge className={cx('frl-mapframe__notice', noticeShort !== undefined && 'has-short')} title={notice}>
-          <span className="frl-mapframe__notice-long">{notice}</span>
-          {noticeShort !== undefined && <span className="frl-mapframe__notice-short">{noticeShort}</span>}
-        </Badge>
-      </div>
-      <div className="frl-mapframe__body">
-        <div className="frl-mapframe__stage" ref={stageBoxRef}>
+        <div className="frl-mapframe__stage">
           <div className={cx('frl-mapframe__host', !usable && 'is-idle')} ref={stageRef} />
           <EngineCard engine={engine} />
-          {usable && choice !== null && <MapChoiceList choice={choice} returnFocus={returnFocus} />}
+          {usable && viewing !== null && <div className="frl-mapframe__viewing">{viewing}</div>}
+          {usable && popover}
           <p id={instructionsId} className="frl-visually-hidden">
             {instructions}
           </p>
-        </div>
-        {layersOpen && (
-          <div className="frl-mapframe__side">
-            <LayerPanel {...layers} id={layersId} />
-            <MapLegend />
+          <div className="frl-mapframe__focus">
+            <MapFocusToggle />
           </div>
-        )}
-      </div>
-      <div className="frl-mapframe__status">
-        {status.map((line) => (
-          <span key={line} className="frl-mapframe__status-item">
-            {line}
-          </span>
-        ))}
-        {typeof hover === 'string' || hover === null || hover === undefined ? <MapHoverText text={typeof hover === 'string' ? hover : null} /> : hover}
+          <div className="frl-mapframe__view">
+            <Toolbar label="Map view" className="frl-mapframe__toolbar">
+              {zoom.length > 0 && <span className="frl-mapframe__group">{zoom.map(commandButton)}</span>}
+              {view.length > 0 && <span className="frl-mapframe__group">{view.map(commandButton)}</span>}
+            </Toolbar>
+            {commands.map((command) =>
+              command.unavailable === null ? null : (
+                <span key={command.id} id={reasonId(command)} hidden>
+                  {command.unavailable}
+                </span>
+              ),
+            )}
+          </div>
+          <div className="frl-mapframe__caption">
+            <p className={cx('frl-mapframe__notice', noticeShort !== undefined && 'has-short')} title={notice}>
+              <span className="frl-mapframe__notice-long">{notice}</span>
+              {noticeShort !== undefined && <span className="frl-mapframe__notice-short">{noticeShort}</span>}
+            </p>
+            {caption.map((line) => (
+              <p key={line} className="frl-mapframe__caption-line">
+                {line}
+              </p>
+            ))}
+            {typeof hover === 'string' || hover === null || hover === undefined ? <MapHoverText text={typeof hover === 'string' ? hover : null} /> : hover}
+          </div>
+        </div>
       </div>
     </div>
   );

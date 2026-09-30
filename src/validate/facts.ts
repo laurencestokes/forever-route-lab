@@ -10,8 +10,8 @@ import { countText, createIssue, durationText, listText, type QuestNames, questL
  * Simulation facts to issues (docs/SIMULATION.md §7.7; D-037: `src/sim` and the engine record
  * facts, only `src/validate` owns codes). Each `SimFact` kind maps to one SIM code, or to
  * `VAL030-objectives-incidental` or `VAL030-objectives-carried` (TIME-11, D-040); `pending-leg` is
- * counted into the route-level SIM-22, and `mob-level-assumed` (KXP-4) and `position-unknown`
- * (TIME-2) are not issues. The travel warnings of one step (SIM-17..21) are merged per kind, so a
+ * counted into the route-level SIM-22, and `mob-level-assumed` (KXP-4), `position-unknown`
+ * (TIME-2) and `transport-ride` (TIME-7, which Details words) are not issues. The travel warnings of one step (SIM-17..21) are merged per kind, so a
  * step that walks several legs through the same passage says so once.
  */
 
@@ -138,6 +138,15 @@ export function factIssues(stepId: StepId, facts: readonly SimFact[], state: Rea
         out.push(createIssue('SIM007-flight-unknown-path', stepId, null, { end: fact.end, node: fact.node }, { endText: END_TEXT[fact.end], nodeText: name === null ? fact.node : `${name} (${fact.node})` }));
       }
         break;
+      case 'flight-no-known-journey':
+        out.push(createIssue('SIM007-flight-unknown-path-journey', stepId, null, null, null));
+        break;
+      case 'flight-faction':
+      {
+        const name = context.taxiName?.(fact.node) ?? null;
+        out.push(createIssue('SIM024-flight-faction', stepId, null, { end: fact.end, node: fact.node }, { endText: END_TEXT[fact.end], nodeText: name === null ? fact.node : `${name} (${fact.node})` }));
+      }
+        break;
       case 'flight-unresolved':
         out.push(createIssue('SIM008-flight-unresolved', stepId, null, { end: fact.end, reason: fact.reason }, { endText: END_TEXT[fact.end], reasonText: FLIGHT_REASON_TEXT[fact.reason] }));
         break;
@@ -219,6 +228,7 @@ export function factIssues(stepId: StepId, facts: readonly SimFact[], state: Rea
       case 'mob-level-assumed':
       case 'position-unknown':
       case 'objectives-before-accept':
+      case 'transport-ride':
         break;
     }
   }

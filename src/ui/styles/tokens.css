@@ -10,7 +10,8 @@
  * and dark token names differ; a theme block redefines a theme-independent token; a difficulty
  * token differs from DIFFICULTY_COLORS (src/rules/difficulty.ts); a documented foreground and
  * background pair falls below WCAG AA (4.5:1 text, 3:1 edges, rings, bars, meters and hatching);
- * a reserved hue comes too close to another signal's; or --frl-row-height is not ROUTE_ROW_HEIGHT.
+ * a reserved hue comes too close to another signal's; a neutral surface stops reading as neutral;
+ * or --frl-row-height is not ROUTE_ROW_HEIGHT.
  * Drawing a new foreground on a new background means adding the pair there (docs/UI.md §9).
  */
 
@@ -39,11 +40,14 @@
 
   /* Density and fixed heights --------------------------------------------------------------- */
   --frl-row-height: 28px;
-  --frl-control-height: 26px;
-  --frl-control-height-sm: 22px;
+  /* Two-line route rows, the default density (ui-refresh.md §6.1; D-048 A). */
+  --frl-row-height-two-line: 40px;
+  /* 28 and 24px: WCAG 2.2 target size (2.5.8) without relying on spacing (ui-refresh.md §7.1). */
+  --frl-control-height: 28px;
+  --frl-control-height-sm: 24px;
   --frl-topbar-height: 44px;
   --frl-statusbar-height: 32px;
-  --frl-tab-height: 32px;
+  --frl-tab-height: 36px;
   --frl-panel-header-height: 32px;
 
   /* Layout ---------------------------------------------------------------------------------- */
@@ -55,6 +59,12 @@
   --frl-radius-sm: 3px;
   --frl-radius: 4px;
   --frl-radius-lg: 8px;
+  /* Buttons, segmented controls and search fields (ui-refresh.md §7.1). */
+  --frl-radius-control: 6px;
+
+  /* Quest and step marks in rows and lists (ui-refresh.md §5.1): 22px, 18px in one-line rows. */
+  --frl-mark-size: 22px;
+  --frl-mark-size-compact: 18px;
   --frl-focus-width: 2px;
 
   /* Motion (reduced to zero under prefers-reduced-motion, see base.css) --------------------- */
@@ -84,24 +94,77 @@
   /* Not difficulties: the unlit pip and the neutral used when difficulty is unknown. */
   --frl-difficulty-pip-off: #2a3039;
   --frl-difficulty-unknown: #c9ced6;
+
+  /*
+   * The atlas (docs/research/map-atlas.md §6.2, §8.8; D-042 O3): the painted-water sea the tiles are
+   * composed with, deep offshore and at the coast, the same in both themes because the tiles are.
+   * Frames and captions drawn over the tiles (the Zephras Isle card, the city cards) take
+   * --frl-map-frame-atlas, 3:1 or more on both sea colours (captions carry a deep-sea halo).
+   */
+  --frl-map-sea-deep: #3d3729;
+  --frl-map-sea-coast: #837658;
+  --frl-map-frame-atlas: #e8dfc8;
+
+  /*
+   * The minimap style's sea (docs/research/map-atlas.md §19.3; D-045 item 4, D-049 O12): one even
+   * navy, at least 25 degrees of hue from the provenance cyan and 15 (CIEDE2000) from both cyan
+   * tokens (map-presentation.md §25.5). The tiles are recoloured to it; the container and the
+   * Zephras Isle card's caption halo take it too.
+   */
+  --frl-map-sea-navy: #0d1b30;
+
+  /*
+   * Map pins (docs/research/map-presentation.md §25.2.1, §25.5; D-047), the same in both themes and
+   * both map styles: a dark body with a light keyline (the light family, services, swaps the two),
+   * so one of the two reaches 4.09:1 or more against any base colour. --frl-map-pin equals
+   * --frl-difficulty-well, so every difficulty colour keeps its chip contrast on a pin and its pip
+   * tag. Glyph paths and the state table are src/map/marks.ts.
+   */
+  --frl-map-pin: #101216;
+  --frl-map-pin-glyph: #f2f2f2;
+
+  /*
+   * The minimap style's ink set (§25.4, §25.5): its base is dark in both themes, so the map's
+   * stylesheet points the palette roles at these (src/map/leaflet/map.css, data-map-style).
+   * Labels and borders in the ink, network lines and other log quests' marks in the muted ink, text,
+   * lines and the selection ring on the halo, the route line and the selection ring in the route
+   * colour (the dark theme's accent).
+   */
+  --frl-map-minimap-ink: #f2f2f2;
+  --frl-map-minimap-ink-muted: #c8cdd4;
+  --frl-map-minimap-halo: rgb(13 13 13 / 0.85);
+  --frl-map-minimap-route: #8ea2ff;
+
+  /* The Map layers drawer (map-presentation.md §25.3.1). */
+  --frl-map-drawer-width: 300px;
 }
 
-/* Light theme (default) ------------------------------------------------------------------------ */
+/*
+ * Light theme (default) ------------------------------------------------------------------------
+ * The neutrals are warm (D-048 E; docs/research/ui-refresh.md §9.5): low saturation, never parchment
+ * or gold, so the difficulty colours still sit on near-neutral ground. The accent, severity,
+ * difficulty and provenance colours are unchanged. The tile is the default button's fill; the later
+ * band (--frl-surface-later) is drawn under the route steps after the selection (D-048 B);
+ * --frl-danger is the error hue on purpose (destructive and error share one meaning).
+ */
 :root,
 [data-theme='light'] {
   color-scheme: light;
 
-  --frl-bg: #dfe3e9;
-  --frl-surface: #ffffff;
-  --frl-surface-raised: #f5f6f8;
-  --frl-surface-hover: #eceff3;
-  --frl-surface-sunken: #e9ecf0;
-  --frl-border: #d5dae1;
-  --frl-border-strong: #737d8b;
-  --frl-fg: #14181e;
-  --frl-fg-muted: #4b5563;
-  --frl-fg-subtle: #5f6978;
-  --frl-fg-disabled: #9aa2ad;
+  --frl-bg: #e3ded5;
+  --frl-surface: #fdfcfa;
+  --frl-surface-raised: #f6f4f0;
+  --frl-surface-hover: #eeebe5;
+  --frl-surface-sunken: #ebe7e0;
+  --frl-surface-later: #ebe7e0;
+  --frl-border: #dcd6cc;
+  --frl-border-strong: #777064;
+  --frl-fg: #1b1916;
+  --frl-fg-muted: #4f4a42;
+  --frl-fg-subtle: #635d53;
+  --frl-fg-disabled: #a39c90;
+  --frl-tile: #e2ddd4;
+  --frl-tile-hover: #d8d2c7;
   --frl-accent: #3a4fc4;
   --frl-accent-hover: #2e40a8;
   --frl-accent-fg: #ffffff;
@@ -112,16 +175,21 @@
   --frl-severity-error: #b0157f;
   --frl-severity-warning: #7a3fc2;
   --frl-severity-info: #2560b0;
+  --frl-danger: #b0157f;
+  --frl-danger-bg-hover: #fbe9f3;
   --frl-forever: #006d7d;
   --frl-forever-bg: #e0f3f6;
-  --frl-assumed: #5f6978;
-  --frl-xp-track: #dde2ea;
+  --frl-assumed: #635d53;
+  --frl-xp-track: #e2ddd4;
   --frl-xp-fill: #3a4fc4;
+  --frl-xp-tick: rgb(255 255 255 / 0.6);
   --frl-xp-hatch: rgb(58 79 196 / 0.35);
   --frl-unknown-hatch: #737d8b;
   --frl-placeholder-stripe: rgb(20 24 30 / 0.06);
   --frl-map-grid: rgb(20 24 30 / 0.08);
   --frl-map-frame: #6b7482;
+  --frl-map-label-halo: rgb(255 255 255 / 0.85);
+  --frl-map-hatch: rgb(0 0 0 / 0.35);
   --frl-overlay: rgb(15 18 24 / 0.45);
   --frl-shadow: 0 1px 2px rgb(15 18 24 / 0.08), 0 4px 16px rgb(15 18 24 / 0.12);
   --frl-difficulty-well-border: #101216;
@@ -132,17 +200,20 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --frl-bg: #0b0d11;
-    --frl-surface: #151920;
-    --frl-surface-raised: #1b2029;
-    --frl-surface-hover: #232a35;
-    --frl-surface-sunken: #11151b;
-    --frl-border: #2a313c;
-    --frl-border-strong: #707c8e;
-    --frl-fg: #e5e8ed;
-    --frl-fg-muted: #a7b0bd;
-    --frl-fg-subtle: #8d97a5;
-    --frl-fg-disabled: #58616e;
+    --frl-bg: #0f0e0c;
+    --frl-surface: #1a1815;
+    --frl-surface-raised: #201e1a;
+    --frl-surface-hover: #2a2722;
+    --frl-surface-sunken: #141210;
+    --frl-surface-later: #11100d;
+    --frl-border: #35312a;
+    --frl-border-strong: #827a6d;
+    --frl-fg: #ebe7e0;
+    --frl-fg-muted: #b4ac9f;
+    --frl-fg-subtle: #9c9487;
+    --frl-fg-disabled: #5f584e;
+    --frl-tile: #2d2a24;
+    --frl-tile-hover: #36322b;
     --frl-accent: #8ea2ff;
     --frl-accent-hover: #a9b8ff;
     --frl-accent-fg: #0d1014;
@@ -153,16 +224,21 @@
     --frl-severity-error: #ff7ac8;
     --frl-severity-warning: #c3a2ff;
     --frl-severity-info: #7fb0ff;
+    --frl-danger: #ff7ac8;
+    --frl-danger-bg-hover: #3b1731;
     --frl-forever: #3ccfe0;
     --frl-forever-bg: #0f2f35;
-    --frl-assumed: #a7b0bd;
-    --frl-xp-track: #262d38;
+    --frl-assumed: #b4ac9f;
+    --frl-xp-track: #2d2a24;
     --frl-xp-fill: #8ea2ff;
+    --frl-xp-tick: rgb(11 13 17 / 0.6);
     --frl-xp-hatch: rgb(142 162 255 / 0.35);
     --frl-unknown-hatch: #707c8e;
     --frl-placeholder-stripe: rgb(229 232 237 / 0.05);
     --frl-map-grid: rgb(229 232 237 / 0.07);
     --frl-map-frame: #7a8699;
+    --frl-map-label-halo: rgb(13 13 13 / 0.85);
+    --frl-map-hatch: rgb(255 255 255 / 0.35);
     --frl-overlay: rgb(0 0 0 / 0.6);
     --frl-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.5);
     --frl-difficulty-well-border: #3a4350;
@@ -173,17 +249,20 @@
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --frl-bg: #0b0d11;
-  --frl-surface: #151920;
-  --frl-surface-raised: #1b2029;
-  --frl-surface-hover: #232a35;
-  --frl-surface-sunken: #11151b;
-  --frl-border: #2a313c;
-  --frl-border-strong: #707c8e;
-  --frl-fg: #e5e8ed;
-  --frl-fg-muted: #a7b0bd;
-  --frl-fg-subtle: #8d97a5;
-  --frl-fg-disabled: #58616e;
+  --frl-bg: #0f0e0c;
+  --frl-surface: #1a1815;
+  --frl-surface-raised: #201e1a;
+  --frl-surface-hover: #2a2722;
+  --frl-surface-sunken: #141210;
+  --frl-surface-later: #11100d;
+  --frl-border: #35312a;
+  --frl-border-strong: #827a6d;
+  --frl-fg: #ebe7e0;
+  --frl-fg-muted: #b4ac9f;
+  --frl-fg-subtle: #9c9487;
+  --frl-fg-disabled: #5f584e;
+  --frl-tile: #2d2a24;
+  --frl-tile-hover: #36322b;
   --frl-accent: #8ea2ff;
   --frl-accent-hover: #a9b8ff;
   --frl-accent-fg: #0d1014;
@@ -194,16 +273,21 @@
   --frl-severity-error: #ff7ac8;
   --frl-severity-warning: #c3a2ff;
   --frl-severity-info: #7fb0ff;
+  --frl-danger: #ff7ac8;
+  --frl-danger-bg-hover: #3b1731;
   --frl-forever: #3ccfe0;
   --frl-forever-bg: #0f2f35;
-  --frl-assumed: #a7b0bd;
-  --frl-xp-track: #262d38;
+  --frl-assumed: #b4ac9f;
+  --frl-xp-track: #2d2a24;
   --frl-xp-fill: #8ea2ff;
+  --frl-xp-tick: rgb(11 13 17 / 0.6);
   --frl-xp-hatch: rgb(142 162 255 / 0.35);
   --frl-unknown-hatch: #707c8e;
   --frl-placeholder-stripe: rgb(229 232 237 / 0.05);
   --frl-map-grid: rgb(229 232 237 / 0.07);
   --frl-map-frame: #7a8699;
+  --frl-map-label-halo: rgb(13 13 13 / 0.85);
+  --frl-map-hatch: rgb(255 255 255 / 0.35);
   --frl-overlay: rgb(0 0 0 / 0.6);
   --frl-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.5);
   --frl-difficulty-well-border: #3a4350;

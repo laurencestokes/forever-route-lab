@@ -1,0 +1,13 @@
+{
+  "_generated": {
+    "by": "tools/maps/tints.ts",
+    "notice": "NOTICE.md",
+    "edit": "Do not edit: run pnpm maps:tints --art <dir>"
+  },
+  "schema": 1,
+  "kind": "zone-tints-manifest",
+  "files": [
+    { "path": "tints.json", "sha256": "7cd054944a1fbb46fc6b203f6d1bdabb5f2a250a5d8025651e7d151e4111698e", "zones": 53 },
+    { "path": "NOTICE.md", "sha256": "9fd3dec40c7e75d270133a4b0fa62474cd3f357e6846680492d8608a63687e17" }
+  ]
+}

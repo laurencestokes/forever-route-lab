@@ -36,6 +36,11 @@ export interface StatusBarProps {
   /** The simulation's state (`SimulationStatus`: computing paths, straight-line travel), before the optimiser. */
   readonly simulation?: ReactNode;
   readonly optimizer: OptimizerStatus;
+  /**
+   * The quest log after the active step (ui-refresh.md §8): `4 / 40`, `≥4 / 40` when the log before
+   * the route is not fully known, or `?`, with its basis in words; omitted: not shown.
+   */
+  readonly questLog?: { readonly text: string; readonly detail: string } | null | undefined;
   /** Dataset identity, e.g. `{ label: 'b6f5b07', detail: 'dataRevision …', placeholder: false }`. */
   readonly data: { readonly label: string; readonly detail: string; readonly placeholder: boolean };
   /** Active ruleset, e.g. `{ label: 'forever-beta', detail: '…', eraFallback: true }`. */
@@ -99,14 +104,21 @@ function OptimizerItem({ status }: { status: OptimizerStatus }) {
   );
 }
 
+/** "after step 12" from the bar's name ("Level after step 12"), or null for a name that says no place. */
+function levelPlace(label: string | undefined): string | null {
+  return label?.startsWith('Level ') === true ? label.slice('Level '.length) : null;
+}
+
 /**
- * The bottom bar: projected level and XP, the active step, the route's duration, XP and XP per
- * hour (the summary holds the rest of the route metrics), the simulation's state, the optimiser
- * state, and the data and ruleset identities (ARCHITECTURE §12.4).
+ * The bottom bar (ui-refresh.md §8): "Lv 4 after step 12" and the XP bar (the level merges with the
+ * active step, whose title is the level's tooltip), the route's duration, XP and XP per hour (the
+ * summary holds the rest of the route metrics), the quest log after the step, the simulation's
+ * state, the optimiser state, and the data and ruleset identities (ARCHITECTURE §12.4).
  */
 export function StatusBar({
   xp,
   currentStep,
+  questLog = null,
   duration,
   xpPerHour,
   xpGained,
@@ -119,23 +131,12 @@ export function StatusBar({
 }: StatusBarProps) {
   return (
     <section className="frl-statusbar" aria-label="Route status">
-      <XpBar {...xp} className="frl-statusbar__xp" />
-      <span className="frl-statusbar__sep" aria-hidden="true" />
-      {/* The label and number never shrink; the title is its own item, the first to give way (UI-01). */}
-      <Item label="Step" className="frl-statusbar__step" title={currentStep === null ? 'No active step' : currentStep.title}>
-        {currentStep === null ? (
-          <span className="frl-statusbar__none">none</span>
-        ) : (
-          <span className="frl-num">
-            {formatInteger(currentStep.number)}/{formatInteger(currentStep.total)}
-          </span>
-        )}
-      </Item>
-      {currentStep !== null && (
-        <span className="frl-statusbar__step-title" title={currentStep.title}>
-          {currentStep.title}
-        </span>
-      )}
+      <XpBar
+        {...xp}
+        after={levelPlace(xp.label)}
+        levelTitle={currentStep === null ? 'No active step' : `Step ${formatInteger(currentStep.number)} of ${formatInteger(currentStep.total)}: ${currentStep.title}`}
+        className="frl-statusbar__xp"
+      />
       <span className="frl-statusbar__sep" aria-hidden="true" />
       <Item label="Time" title="The route's duration">
         <ReadoutValue readout={duration} format={formatDuration} formatLong={formatDurationLong} pending={provisional} />
@@ -153,6 +154,14 @@ export function StatusBar({
           pending={provisional}
         />
       </Item>
+      {questLog !== null && (
+        <Item label="In log" className="frl-statusbar__log" title={questLog.detail}>
+          <span className="frl-num" aria-hidden="true">
+            {questLog.text}
+          </span>
+          <span className="frl-visually-hidden">{questLog.detail}</span>
+        </Item>
+      )}
       {summary}
       <span className="frl-statusbar__sep" aria-hidden="true" />
       {simulation}

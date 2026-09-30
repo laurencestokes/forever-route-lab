@@ -18,13 +18,30 @@ export const NON_AFFILIATION =
   `${PRODUCT_NAME} is not affiliated with or endorsed by Blizzard Entertainment, the Questie project or RestedXP. World of Warcraft is a trademark of Blizzard Entertainment, Inc.`;
 
 /**
- * The painted map art's notice (D-033 rules 1-3; public/maps/art/NOTICE.md has the full text):
- * Blizzard Entertainment owns the artwork, the project is not affiliated with or endorsed by it,
- * the site is non-commercial, and the art is removed on request. It states facts and the project's
- * rules; it draws no legal conclusion.
+ * The map art's notice (D-033 rules 1-3, which D-045 applies to the minimap; the full texts are
+ * public/maps/minimap/NOTICE.md, public/maps/atlas/NOTICE.md and public/maps/art/NOTICE.md). It
+ * covers both base maps, the minimap (the default) and the painted map: Blizzard Entertainment owns
+ * the artwork, the project is not affiliated with or endorsed by it, the site is non-commercial, and
+ * the art is removed on request. It states facts and the project's rules; it draws no legal
+ * conclusion (fix MD-04).
  */
 export const MAP_ART_NOTICE =
-  'The painted world-map art shown on the map is Blizzard Entertainment’s artwork (© Blizzard Entertainment, Inc.), extracted from the World of Warcraft: Forever client. It is not this project’s work, and this project’s licence grants no rights over it. This project is not affiliated with or endorsed by Blizzard Entertainment. The site is non-commercial: no ads, paid features or sales. The art will be removed promptly if Blizzard Entertainment asks.';
+  'The map art (the minimap and the painted map) is Blizzard Entertainment’s artwork (© Blizzard Entertainment, Inc.), extracted from the World of Warcraft: Forever client. It is not this project’s work, and this project’s licence grants no rights over it. This project is not affiliated with or endorsed by Blizzard Entertainment. The site is non-commercial: no ads, paid features or sales. The art will be removed promptly if Blizzard Entertainment asks.';
+
+/**
+ * The seamless atlas's two base maps (docs/research/map-atlas.md §21.6; D-033 rule 2; step MM.7):
+ * both are Blizzard Entertainment's artwork, each with its own notice (public/maps/minimap/NOTICE.md,
+ * public/maps/atlas/NOTICE.md). Facts only; no legal conclusion.
+ */
+export const BASE_MAPS_NOTICE =
+  'The seamless map has two base maps, both Blizzard Entertainment’s artwork from the same client: the minimap (the client’s minimap textures, the sea recoloured to one navy and the maps drawn as one) and the painted map (the painted zone maps, composed into one atlas). Each has its own notice.';
+
+/** Which base map the atlas shows now, for the About dialog and the key (§21.6). */
+export function baseMapShownText(shown: 'minimap' | 'painted' | null): string {
+  if (shown === 'minimap') return 'Shown now: the minimap.';
+  if (shown === 'painted') return 'Shown now: the painted map.';
+  return 'Shown now: neither (the tiles are loading or could not be used, or a separate map is shown).';
+}
 
 /** The terrain byproducts' line (D-032; public/maps/terrain/NOTICE.md). */
 export const TERRAIN_DATA_NOTICE =
@@ -52,6 +69,8 @@ export interface AboutDialogProps {
   readonly dataIdentity?: { readonly dataRevision: string; readonly frameBuild: string } | null | undefined;
   readonly copyright?: string | undefined;
   readonly repositoryUrl?: string | undefined;
+  /** The base map the seamless atlas shows now (step MM.7); null or omitted when it shows neither. */
+  readonly mapStyleShown?: 'minimap' | 'painted' | null | undefined;
   /** Links to the notices shipped next to the app (relative to the page). */
   readonly links?: {
     readonly licence: string;
@@ -61,6 +80,10 @@ export interface AboutDialogProps {
     readonly mapArtNotice?: string | undefined;
     /** The deployed terrain data notice (default `maps/terrain/NOTICE.md`). */
     readonly terrainNotice?: string | undefined;
+    /** The minimap tiles' notice (default `maps/minimap/NOTICE.md`). */
+    readonly minimapNotice?: string | undefined;
+    /** The painted atlas tiles' notice (default `maps/atlas/NOTICE.md`). */
+    readonly atlasNotice?: string | undefined;
   } | undefined;
 }
 
@@ -70,6 +93,8 @@ const DEFAULT_LINKS = {
   dataNotice: 'data/NOTICE.md',
   mapArtNotice: 'maps/art/NOTICE.md',
   terrainNotice: 'maps/terrain/NOTICE.md',
+  minimapNotice: 'maps/minimap/NOTICE.md',
+  atlasNotice: 'maps/atlas/NOTICE.md',
 } as const;
 
 /**
@@ -88,6 +113,7 @@ export function AboutDialog({
   copyright = DEFAULT_COPYRIGHT,
   repositoryUrl = REPOSITORY_URL,
   links = DEFAULT_LINKS,
+  mapStyleShown = null,
 }: AboutDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   /** Whether the current press began on the backdrop (the dialog element itself). */
@@ -239,6 +265,11 @@ export function AboutDialog({
               <p>{MAP_ART_NOTICE}</p>
               <p>{TERRAIN_DATA_NOTICE}</p>
               <p>
+                {BASE_MAPS_NOTICE} {baseMapShownText(mapStyleShown)}
+              </p>
+              <p>
+                <a href={links.minimapNotice ?? DEFAULT_LINKS.minimapNotice}>Minimap notice</a> ·{' '}
+                <a href={links.atlasNotice ?? DEFAULT_LINKS.atlasNotice}>Painted map notice</a> ·{' '}
                 <a href={links.mapArtNotice ?? DEFAULT_LINKS.mapArtNotice}>Map art notice</a> ·{' '}
                 <a href={links.terrainNotice ?? DEFAULT_LINKS.terrainNotice}>Terrain data notice</a>
               </p>

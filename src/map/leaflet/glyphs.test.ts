@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MarkerBadge } from '../adapter';
-import { drawGlyph, type GlyphCanvas } from './glyphs';
+import { CHIP, CHIP_PIPS_LIT, chipWidth, drawDifficultyChip, drawGlyph, type ChipInk, type GlyphCanvas } from './glyphs';
 import { DEFAULT_MAP_PALETTE, glyphExtent, type GlyphShape, type GlyphSpec } from './style';
 
 interface Call {
@@ -180,5 +180,53 @@ describe('drawGlyph', () => {
     // The dash is reset after the ring, so later paths are solid.
     const dashes = calls.filter((call) => call.name === 'setLineDash').map((call) => JSON.stringify(call.args));
     expect(dashes.at(-1)).toBe('[[]]');
+  });
+});
+
+describe('the difficulty chip twin (map-presentation.md §12.5, §13.4; step MP.7)', () => {
+  const ink: ChipInk = {
+    well: 'well',
+    pipOff: 'off',
+    difficulty: { trivial: 'grey', standard: 'green', difficult: 'yellow', verydifficult: 'orange', impossible: 'red' },
+    keyline: 'keyline',
+    font: 'sans-serif',
+  };
+  const measure = (text: string): number => text.length * 5;
+  const colours = (calls: readonly Call[]): readonly unknown[] =>
+    calls.flatMap((call) => {
+      const state = call.args[call.args.length - 1] as { fillStyle?: unknown; strokeStyle?: unknown } | undefined;
+      if (call.name === 'fill' || call.name === 'fillText') return [state?.fillStyle];
+      if (call.name === 'stroke') return [state?.strokeStyle];
+      return [];
+    });
+
+  it('draws the well, five pips (the rating’s lit in its colour, as DifficultyLabel’s rank) and the level in the same colour', () => {
+    for (const key of ['trivial', 'standard', 'difficult', 'verydifficult', 'impossible'] as const) {
+      const { ctx, calls } = recorder();
+      const width = drawDifficultyChip(ctx, 10, 20, { key, levelText: '18', lowerBound: false }, ink, measure);
+      expect(width).toBe(chipWidth('18', measure, 'sans-serif'));
+      const fills = calls.filter((call) => call.name === 'fill').map((call) => (call.args[0] as { fillStyle: unknown }).fillStyle);
+      // The well, then five pips.
+      expect(fills[0]).toBe('well');
+      expect(fills.slice(1).filter((fill) => fill === ink.difficulty[key])).toHaveLength(CHIP_PIPS_LIT[key]);
+      expect(fills.slice(1).filter((fill) => fill === 'off')).toHaveLength(5 - CHIP_PIPS_LIT[key]);
+      const text = calls.find((call) => call.name === 'fillText');
+      expect(text?.args[0]).toBe('18');
+      expect((text?.args[3] as { fillStyle: unknown }).fillStyle).toBe(ink.difficulty[key]);
+    }
+    expect(CHIP_PIPS_LIT).toEqual({ trivial: 1, standard: 2, difficult: 3, verydifficult: 4, impossible: 5 });
+  });
+
+  it('reads nothing but its ink (the difficulty tokens and the keyline), and dashes its edge for a lower-bound level', () => {
+    const { ctx, calls } = recorder();
+    drawDifficultyChip(ctx, 0, 0, { key: 'standard', levelText: '7', lowerBound: true }, ink, measure);
+    const allowed = new Set<unknown>([ink.well, ink.pipOff, ink.keyline, ...Object.values(ink.difficulty)]);
+    expect(colours(calls).every((colour) => allowed.has(colour))).toBe(true);
+    const dashes = calls.filter((call) => call.name === 'setLineDash').map((call) => call.args[0] as number[]);
+    expect(dashes[0]).toEqual([...CHIP.dash]);
+    expect(dashes.at(-1)).toEqual([]);
+    const { ctx: solid, calls: solidCalls } = recorder();
+    drawDifficultyChip(solid, 0, 0, { key: 'standard', levelText: '7', lowerBound: false }, ink, measure);
+    expect(solidCalls.filter((call) => call.name === 'setLineDash').every((call) => (call.args[0] as number[]).length === 0)).toBe(true);
   });
 });

@@ -83,6 +83,12 @@ export interface PreparedDataset {
   readonly zones: readonly ZoneInfo[];
   readonly zoneById: ReadonlyMap<UiMapId, ZoneInfo>;
   readonly spawnStats: SpawnStats;
+  /**
+   * `zones.json` and each faction's dungeon table (its whole-entry replacements laid on the
+   * faction-invariant one), as loaded: the map's dungeon entrances read them (`datasetDungeons`,
+   * map-presentation.md §8.2), converted only where they are drawn.
+   */
+  readonly dungeonTables: { readonly zones: ZonesTable; readonly byFaction: Readonly<Record<Faction, DungeonTable>> };
 }
 
 const EMPTY_SPAWNS: readonly SpawnPoint[] = [];
@@ -250,6 +256,10 @@ export function prepareDataset(files: DatasetFiles, identity: DatasetIdentity, g
     zones: zoneList,
     zoneById: new Map(zoneList.map((z) => [z.uiMapId, z])),
     spawnStats: statsOf([...npcSpawns.values(), ...objectSpawns.values()]),
+    dungeonTables: {
+      zones,
+      byFaction: { Alliance: { ...zones.dungeons, ...overlays.faction.Alliance.dungeons }, Horde: { ...zones.dungeons, ...overlays.faction.Horde.dungeons } },
+    },
   };
 }
 

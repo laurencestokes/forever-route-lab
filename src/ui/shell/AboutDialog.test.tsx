@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AboutDialog, DATA_LICENCE_CARVE_OUT, MAP_ART_NOTICE, TERRAIN_DATA_NOTICE } from './AboutDialog';
+import { AboutDialog, BASE_MAPS_NOTICE, DATA_LICENCE_CARVE_OUT, MAP_ART_NOTICE, TERRAIN_DATA_NOTICE } from './AboutDialog';
 
 afterEach(cleanup);
 
@@ -53,9 +53,30 @@ describe('AboutDialog map art notice (D-033)', () => {
     expect(MAP_ART_NOTICE).toContain('not affiliated with or endorsed by Blizzard Entertainment');
     expect(MAP_ART_NOTICE).toContain('non-commercial');
     expect(MAP_ART_NOTICE).toContain('removed promptly if Blizzard Entertainment asks');
+    // MD-04: the notice covers both base maps, the minimap (the default) as well as the painted map.
+    expect(MAP_ART_NOTICE).toMatch(/^The map art \(the minimap and the painted map\) is Blizzard Entertainment’s artwork \(© Blizzard Entertainment, Inc\.\)/);
+    expect(MAP_ART_NOTICE).toContain('this project’s licence grants no rights over it');
+    expect(MAP_ART_NOTICE).not.toContain('painted world-map art');
+    expect(within(dialog).getByRole('link', { name: 'Minimap notice' }).getAttribute('href')).toBe('maps/minimap/NOTICE.md');
+    expect(within(dialog).getByRole('link', { name: 'Painted map notice' }).getAttribute('href')).toBe('maps/atlas/NOTICE.md');
     expect(within(dialog).getByRole('heading', { name: 'Map art' })).toBeTruthy();
     expect(within(dialog).getByRole('link', { name: 'Map art notice' }).getAttribute('href')).toBe('maps/art/NOTICE.md');
     expect(within(dialog).getByRole('link', { name: 'Terrain data notice' }).getAttribute('href')).toBe('maps/terrain/NOTICE.md');
+  });
+
+  it('names both base maps’ notices and says which one the map shows (map-atlas.md §21.6; step MM.7)', () => {
+    render(<AboutDialog open onClose={vi.fn()} version="0.1.0" sourceCommit={null} dataUpstreamCommit={null} mapStyleShown="minimap" />);
+    const dialog = screen.getByRole('dialog', { name: 'About Forever Route Lab' });
+    expect(dialog.textContent).toContain(BASE_MAPS_NOTICE);
+    expect(dialog.textContent).toContain('Shown now: the minimap.');
+    expect(within(dialog).getByRole('link', { name: 'Minimap notice' }).getAttribute('href')).toBe('maps/minimap/NOTICE.md');
+    expect(within(dialog).getByRole('link', { name: 'Painted map notice' }).getAttribute('href')).toBe('maps/atlas/NOTICE.md');
+    cleanup();
+    render(<AboutDialog open onClose={vi.fn()} version="0.1.0" sourceCommit={null} dataUpstreamCommit={null} mapStyleShown="painted" />);
+    expect(screen.getByRole('dialog', { name: 'About Forever Route Lab' }).textContent).toContain('Shown now: the painted map.');
+    cleanup();
+    render(<AboutDialog open onClose={vi.fn()} version="0.1.0" sourceCommit={null} dataUpstreamCommit={null} />);
+    expect(screen.getByRole('dialog', { name: 'About Forever Route Lab' }).textContent).toContain('Shown now: neither');
   });
 });
 

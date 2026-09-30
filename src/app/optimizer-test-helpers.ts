@@ -93,7 +93,7 @@ export function appRequest(made: AppScenario, revision: number, targetXp: 'keep-
 }
 
 export function appHost(made: AppScenario, navigation: NavigationState = { kind: 'unavailable', reason: 'test' }, revision = 1): OptimizationHost {
-  return createOptimizationHost({ project: made.project, revision, data: made.data, geometry: fixtureGeometry(), navigation });
+  return createOptimizationHost({ project: made.project, revision, data: made.data, geometry: fixtureGeometry(), navigation, taxi: null });
 }
 
 /** A run's walker and baseline (the analysis and baseline walks on the straight-line model), as `startOptimization` makes them. */

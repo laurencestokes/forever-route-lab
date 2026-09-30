@@ -1,11 +1,24 @@
 /**
  * Fixed-row-height virtualisation and list keyboard handling, as pure functions (ARCHITECTURE
- * §12.4: one-line rows, in-house index-based virtualisation). RouteList.tsx is a thin shell over
- * these; the tests exercise them directly.
+ * §12.4: fixed-height rows of one or two lines, in-house index-based virtualisation). RouteList.tsx
+ * is a thin shell over these; the tests exercise them directly.
  */
 
-/** Route rows are one line each: 28px, matching `--frl-row-height` in tokens.css. */
+/** One-line route rows (the compact View choice): 28px, matching `--frl-row-height` in tokens.css. */
 export const ROUTE_ROW_HEIGHT = 28;
+
+/** Two-line route rows (the default, D-048 A): 40px, matching `--frl-row-height-two-line` in tokens.css. */
+export const ROUTE_ROW_HEIGHT_TWO_LINE = 40;
+
+/** The route list's row density (docs/research/ui-refresh.md §6): every row of a list has the same height. */
+export type RowDensity = 'two-line' | 'one-line';
+
+export const ROW_DENSITIES: readonly RowDensity[] = ['two-line', 'one-line'];
+
+/** The fixed row height of a density: one height for the window, drag, auto-scroll and paging. */
+export function routeRowHeight(density: RowDensity): number {
+  return density === 'one-line' ? ROUTE_ROW_HEIGHT : ROUTE_ROW_HEIGHT_TWO_LINE;
+}
 
 /** Rows rendered beyond each edge of the viewport so fast scrolling does not show gaps. */
 export const DEFAULT_OVERSCAN = 8;

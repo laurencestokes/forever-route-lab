@@ -16,8 +16,11 @@ import {
   checkMapFolders,
   checkNavBudget,
   checkRequiredFiles,
+  checkTiledBudget,
   formatAuditReport,
+  formatAuditWarnings,
   gzipSize,
+  packTreeHash,
   parseDistRequirements,
   removeBuildManifest,
   resolveRequiredFiles,
@@ -25,7 +28,8 @@ import {
   type MapFolder,
   type NavBudget,
 } from './lib/audit';
-import { REPO_ROOT } from './lib/fs';
+import { packAssetName, packTag, tilesTreeHash } from '../maps/lib/minimap-pack';
+import { listFiles, REPO_ROOT } from './lib/fs';
 import { globToRegExp, matchesAnyGlob } from './lib/glob';
 
 let workspace = '';
@@ -516,6 +520,291 @@ describe('map folders: the one image allowlist (D-032, D-033)', () => {
     const unrecorded = auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [art] } });
     expect(new Set(unrecorded.violations.map((v) => v.rule))).toEqual(new Set(['art-budget']));
   });
+
+  it('gates the client tables’ folder (JSON only) and names its decision in the budget message (D-039)', () => {
+    const taxi = '{"schema":1}\n';
+    const client: MapFolder = { name: 'client', dir: 'maps/client', source: 'public/maps/client', reason: 'D-039', decision: 'D-039', totalGzipBudgetBytes: 40_000, baselineTolerance: 0.1, baselines: {} };
+    writeFiles(repoRoot, { 'public/maps/client/manifest.json': '{}' });
+    writeFiles(distDir, {
+      ...cleanDist(),
+      'maps/client/NOTICE.md': 'Blizzard Entertainment',
+      'maps/client/taxi.json': taxi,
+      'maps/client/manifest.json': JSON.stringify({ files: [{ path: 'taxi.json', sha256: sha(taxi) }] }),
+    });
+    const baselines = Object.fromEntries(['NOTICE.md', 'taxi.json', 'manifest.json'].map((f) => [`maps/client/${f}`, gzipSize(readFileSync(join(distDir, 'maps', 'client', f)))]));
+    expect(auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [{ ...client, baselines }] } }).violations).toEqual([]);
+    const over = auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [{ ...client, baselines, totalGzipBudgetBytes: 10 }] } });
+    expect(over.violations.map((v) => v.message)).toEqual([expect.stringMatching(/^maps\/client\/ totals .* over the 10 B budget \(D-039\)$/) as unknown]);
+  });
+});
+
+describe('the atlas tile pyramid (tiled mode, D-042 O5)', () => {
+  const atlas: MapFolder = {
+    name: 'atlas',
+    dir: 'maps/atlas',
+    source: 'public/maps/atlas',
+    reason: 'D-042',
+    decision: 'D-042 O5',
+    totalGzipBudgetBytes: 8_000_000,
+    baselineTolerance: 0.1,
+    baselines: {},
+    tiled: { prefix: 't/', perFileGzipCapBytes: 32_000, levelBaselines: {} },
+  };
+  const sha = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+  // incompressible bytes (SHA-256 in counter mode), so a tile's gzip size is about its length
+  const tile = (n: number, seed: number): Uint8Array => {
+    const parts: Buffer[] = [];
+    for (let i = 0; parts.length * 32 < n; i += 1) parts.push(createHash('sha256').update(`${String(seed)}:${String(i)}`).digest());
+    return Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.concat(parts).subarray(0, n)]);
+  };
+  const files = (): Record<string, string | Uint8Array> => {
+    const t1 = tile(500, 1);
+    const t2 = tile(700, 2);
+    const t3 = tile(40_000, 3);
+    const index = `{"schema":1}${'\n'}`;
+    return {
+      'maps/atlas/t/-2/1/1.webp': t1,
+      'maps/atlas/t/-2/2/1.webp': t2,
+      'maps/atlas/t/0/5/9.webp': t3,
+      'maps/atlas/index.json': index,
+      'maps/atlas/NOTICE.md': 'Blizzard Entertainment',
+      'maps/atlas/manifest.json': JSON.stringify({ files: [
+        { path: 'index.json', sha256: sha(index) },
+        { path: 't/-2/1/1.webp', sha256: sha(t1) },
+        { path: 't/-2/2/1.webp', sha256: sha(t2) },
+        { path: 't/0/5/9.webp', sha256: sha(t3) },
+      ] }),
+    };
+  };
+
+  it('allows the tiles its manifest lists, in subfolders, and gates each level, each tile and the other files', () => {
+    writeFiles(distDir, { ...cleanDist(), ...files() });
+    writeFiles(repoRoot, { 'public/maps/atlas/manifest.json': '{}' });
+    const listed = checkMapFolders(distDir, listFiles(distDir), [atlas], repoRoot);
+    expect(listed.violations).toEqual([]);
+    expect([...listed.allowedImages].filter((f) => f.endsWith('.webp')).sort()).toEqual(['maps/atlas/t/-2/1/1.webp', 'maps/atlas/t/-2/2/1.webp', 'maps/atlas/t/0/5/9.webp']);
+    const where = { prefix: 'maps/atlas/', section: 'mapFolders "atlas"', rule: 'atlas-budget', why: 'D-042 O5' };
+    const inside = listFiles(distDir).filter((f) => f.startsWith('maps/atlas/'));
+    const size = (f: string): number => gzipSize(readFileSync(join(distDir, f)));
+    const others = Object.fromEntries(['index.json', 'NOTICE.md', 'manifest.json'].map((f) => [`maps/atlas/${f}`, size(`maps/atlas/${f}`)]));
+    const levels = { '-2': size('maps/atlas/t/-2/1/1.webp') + size('maps/atlas/t/-2/2/1.webp'), '0': size('maps/atlas/t/0/5/9.webp') };
+    // the level-0 tile is over the 32 kB per-tile cap
+    const capped = checkTiledBudget(distDir, inside, where, { ...atlas, baselines: others }, { ...(atlas.tiled ?? { prefix: 't/', perFileGzipCapBytes: 0, levelBaselines: {} }), levelBaselines: levels }, true);
+    expect(rulesOf(capped.violations)).toEqual(['atlas-budget maps/atlas/t/0/5/9.webp']);
+    const tiled = { prefix: 't/', perFileGzipCapBytes: 64_000, levelBaselines: levels };
+    expect(checkTiledBudget(distDir, inside, where, { ...atlas, baselines: others }, tiled, true).violations).toEqual([]);
+    // a level over its baseline + 10 %, a level without a baseline, a file without one, and the total
+    const tight = checkTiledBudget(distDir, inside, where, { ...atlas, baselines: {}, totalGzipBudgetBytes: 100 }, { ...tiled, levelBaselines: { '-2': 100 } }, true);
+    expect(rulesOf(tight.violations)).toEqual([
+      'atlas-budget maps/atlas/NOTICE.md',
+      'atlas-budget maps/atlas/index.json',
+      'atlas-budget maps/atlas/manifest.json',
+      'atlas-budget maps/atlas/t/-2',
+      'atlas-budget maps/atlas/t/0',
+      'atlas-budget (build)',
+    ]);
+    expect(tight.report.totalGzipBytes).toBe(inside.reduce((sum, f) => sum + size(f), 0));
+    const whole = auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [{ ...atlas, baselines: others, tiled }] } });
+    expect(whole.violations).toEqual([]);
+  });
+
+  it('reads the tiled section of dist-requirements.json and refuses a malformed one', () => {
+    const entry = { name: 'atlas', dir: 'maps/atlas', source: 'public/maps/atlas', reason: 'D-042', totalGzipBudgetBytes: 8_000_000, baselineTolerance: 0.1, baselines: {} };
+    const parsed = parseDistRequirements({ ...requirements, mapFolders: [{ ...entry, tiled: { prefix: 't/', perFileGzipCapBytes: 32_000, levelBaselines: { '-8': 1, '0': 2 } } }] });
+    expect(parsed.mapFolders[0]?.tiled).toEqual({ prefix: 't/', perFileGzipCapBytes: 32_000, levelBaselines: { '-8': 1, '0': 2 } });
+    expect(() => parseDistRequirements({ ...requirements, mapFolders: [{ ...entry, tiled: { prefix: '../', perFileGzipCapBytes: 1, levelBaselines: {} } }] })).toThrow(/tiled needs a plain "prefix"/);
+    expect(() => parseDistRequirements({ ...requirements, mapFolders: [{ ...entry, tiled: { prefix: 't/', perFileGzipCapBytes: 1, levelBaselines: { two: 1 } } }] })).toThrow(/is not a level/);
+  });
+});
+
+describe('a map folder whose tiles come from a release-asset pack (external, D-049 O14)', () => {
+  const minimap: MapFolder = {
+    name: 'minimap',
+    dir: 'maps/minimap',
+    source: 'public/maps/minimap',
+    reason: 'D-049',
+    decision: 'D-049',
+    totalGzipBudgetBytes: 60_000_000,
+    baselineTolerance: 0.1,
+    baselines: {},
+    tiled: { prefix: 't/', perFileGzipCapBytes: 32_000, levelBaselines: { '0': 10_000, '-1': 5_000 } },
+    external: { prefix: 't/', pointer: 'pack.json' },
+  };
+  const sha = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+  const t1 = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(40, 1)]);
+  const t2 = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(40, 2)]);
+  const index = '{"schema":1}\n';
+  const tiles = [
+    { path: 't/0/0/0.webp', sha256: sha(t1) },
+    { path: 't/0/1/0.webp', sha256: sha(t2) },
+  ];
+  /** A pointer named as the pack tool names it (tree hash and pack SHA-256), with `over` applied last. */
+  const pointer = (over: Readonly<Record<string, unknown>> = {}): string => {
+    const treeHash = typeof over['treeHash'] === 'string' ? over['treeHash'] : tilesTreeHash(tiles);
+    const sha256 = typeof over['sha256'] === 'string' ? over['sha256'] : sha('pack');
+    const client = typeof over['client'] === 'string' ? over['client'] : '1.0';
+    return `${JSON.stringify({ asset: packAssetName(treeHash, sha256), tag: packTag(client, treeHash, sha256), bytes: 10_240, sha256, treeHash, client, contents: ['NOTICE.md', 'manifest.json', 't/'], ...over })}\n`;
+  };
+  const levels = (over: Readonly<Record<string, unknown>> = {}): unknown[] => [
+    { z: -1, stored: 0, gzipBytes: 0, largestGzipBytes: 0 },
+    { z: 0, stored: 2, gzipBytes: 9_000, largestGzipBytes: 4_600, ...over },
+  ];
+  const committed = (manifest: Readonly<Record<string, unknown>> = {}): Record<string, string | Uint8Array> => ({
+    'maps/minimap/index.json': index,
+    'maps/minimap/NOTICE.md': 'Blizzard Entertainment',
+    'maps/minimap/pack.json': pointer(),
+    'maps/minimap/manifest.json': JSON.stringify({ levels: levels(), files: [{ path: 'index.json', sha256: sha(index) }, ...tiles], ...manifest }),
+  });
+  const withBaselines = (): MapFolder => ({
+    ...minimap,
+    baselines: Object.fromEntries(['index.json', 'NOTICE.md', 'manifest.json', 'pack.json'].map((f) => [`maps/minimap/${f}`, gzipSize(readFileSync(join(distDir, 'maps', 'minimap', f)))])),
+  });
+
+  it("the pointer's tree hash is the tile tool's (tools/maps/lib/minimap-pack.ts)", () => {
+    expect(packTreeHash(tiles)).toBe(tilesTreeHash(tiles));
+    expect(packTreeHash([...tiles].reverse())).toBe(packTreeHash(tiles));
+  });
+
+  it('plain mode: passes without the pack and warns loudly; fails on a partial set; deploy mode fails without the tiles and passes with them', () => {
+    writeFiles(repoRoot, { 'public/maps/minimap/manifest.json': '{}' });
+    writeFiles(distDir, { ...cleanDist(), ...committed() });
+    const none = checkMapFolders(distDir, listFiles(distDir), [minimap], repoRoot);
+    expect(none.violations).toEqual([]);
+    expect(none.notes).toEqual([expect.stringMatching(/^minimap: 0 of 2 files under maps\/minimap\/t\/ present; the pack is not fetched \(pnpm maps:minimap:fetch .*maps\/minimap\/pack\.json names\).*a deploy build \(pnpm build:deploy\) would fail$/) as unknown]);
+    expect(none.recorded.get('minimap')).toEqual([
+      { level: '-1', files: 0, gzipBytes: 0, largestGzipBytes: 0 },
+      { level: '0', files: 2, gzipBytes: 9_000, largestGzipBytes: 4_600 },
+    ]);
+    // the whole plain audit passes, with the budget from the manifest's records, and prints the warning banner
+    const plain = auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [withBaselines()] } });
+    expect(plain.violations).toEqual([]);
+    expect(plain.mode).toBe('plain');
+    const report = plain.mapFolders.find((f) => f.name === 'minimap');
+    expect(report?.recorded).toEqual({ files: 2, gzipBytes: 9_000 });
+    expect(report?.totalGzipBytes).toBe(9_000 + (report?.files ?? []).reduce((sum, f) => sum + f.gzipBytes, 0));
+    expect(formatAuditReport(plain)).toMatch(/^dist audit \(plain mode\)/);
+    expect(formatAuditReport(plain)).toMatch(/2 tiles not present, 9\.00 kB gzip as the manifest records them/);
+    expect(formatAuditReport(plain)).toMatch(/\nWARNING: minimap: 0 of 2 files/);
+    expect(formatAuditWarnings(plain).split('\n')).toEqual(['='.repeat(100), expect.stringMatching(/^WARNING \(dist audit\): minimap: 0 of 2 files/) as unknown, '='.repeat(100)]);
+    // the deploy audit requires the pack
+    const deployNone = auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [withBaselines()] }, deploy: true });
+    expect(rulesOf(deployNone.violations)).toEqual(['map-folder maps/minimap/t/0/0/0.webp', 'map-folder maps/minimap/t/0/1/0.webp']);
+    expect(deployNone.violations.map((v) => v.message)).toEqual([
+      'minimap: listed in maps/minimap/manifest.json but missing (a deploy build needs the whole pack)',
+      'minimap: listed in maps/minimap/manifest.json but missing (a deploy build needs the whole pack)',
+    ]);
+    expect(deployNone.notes).toEqual([]);
+    expect(formatAuditReport(deployNone)).toMatch(/^dist audit \(deploy mode: every map-folder pack file required\)/);
+    // a partial set fails in the plain audit too
+    writeFiles(distDir, { 'maps/minimap/t/0/0/0.webp': t1 });
+    const partial = checkMapFolders(distDir, listFiles(distDir), [minimap], repoRoot);
+    expect(partial.violations.map((v) => v.message)).toEqual(['minimap: listed in maps/minimap/manifest.json but missing (a partial set of the pack)']);
+    expect(partial.recorded.size).toBe(0);
+    // every tile: both modes pass, measured from the files
+    writeFiles(distDir, { 'maps/minimap/t/0/1/0.webp': t2 });
+    const whole = checkMapFolders(distDir, listFiles(distDir), [minimap], repoRoot, { deploy: true });
+    expect(whole.violations).toEqual([]);
+    expect(whole.notes).toEqual([]);
+    expect([...whole.allowedImages].filter((f) => f.endsWith('.webp')).sort()).toEqual(['maps/minimap/t/0/0/0.webp', 'maps/minimap/t/0/1/0.webp']);
+    for (const deploy of [false, true]) {
+      const full = auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [withBaselines()] }, deploy });
+      expect(full.violations).toEqual([]);
+      expect(full.notes).toEqual([]);
+      expect(full.mapFolders.find((f) => f.name === 'minimap')?.recorded).toBeUndefined();
+    }
+    // a tampered tile fails in both modes
+    writeFiles(distDir, { 'maps/minimap/t/0/1/0.webp': t1 });
+    expect(rulesOf(checkMapFolders(distDir, listFiles(distDir), [minimap], repoRoot, { deploy: true }).violations)).toEqual(['map-folder maps/minimap/t/0/1/0.webp']);
+    // the pointer must ship
+    rmSync(join(distDir, 'maps/minimap/pack.json'));
+    expect(rulesOf(checkMapFolders(distDir, listFiles(distDir), [minimap], repoRoot).violations)).toEqual(['map-folder maps/minimap/pack.json', 'map-folder maps/minimap/t/0/1/0.webp']);
+  });
+
+  it('counts thousands of missing pack files in one violation instead of one per file', () => {
+    writeFiles(repoRoot, { 'public/maps/minimap/manifest.json': '{}' });
+    const many = Array.from({ length: 25 }, (_, i) => ({ path: `t/0/${String(i)}/0.webp`, sha256: sha(String(i)) }));
+    writeFiles(distDir, {
+      ...cleanDist(),
+      ...committed({ files: [{ path: 'index.json', sha256: sha(index) }, ...many] }),
+      'maps/minimap/pack.json': pointer({ treeHash: tilesTreeHash(many) }),
+    });
+    const deploy = checkMapFolders(distDir, listFiles(distDir), [minimap], repoRoot, { deploy: true });
+    expect(deploy.violations.map((v) => `${v.path ?? ''}: ${v.message}`)).toEqual([
+      'maps/minimap/t/: minimap: 25 of the 25 files maps/minimap/manifest.json lists under maps/minimap/t/ are missing (a deploy build needs the whole pack; first maps/minimap/t/0/0/0.webp); run pnpm maps:minimap:fetch',
+    ]);
+  });
+
+  it("without the pack, budgets the folder from the manifest's level records: level baseline, per-tile cap and total", () => {
+    writeFiles(repoRoot, { 'public/maps/minimap/manifest.json': '{}' });
+    const run = (over: Readonly<Record<string, unknown>>, folder: Partial<MapFolder> = {}): readonly string[] => {
+      writeFiles(distDir, { ...cleanDist(), ...committed({ levels: levels(over) }) });
+      return auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [{ ...withBaselines(), ...folder }] } }).violations.map((v) => `${v.rule} ${v.path ?? '(build)'}: ${v.message}`);
+    };
+    expect(run({})).toEqual([]);
+    expect(run({ gzipBytes: 11_001 })).toEqual([expect.stringMatching(/^minimap-budget maps\/minimap\/t\/0: level 0: 11\.00 kB gzip exceeds its baseline 10\.00 kB \+ 10%$/) as unknown]);
+    expect(run({ largestGzipBytes: 32_001 })).toEqual([expect.stringMatching(/^minimap-budget maps\/minimap\/t\/0: level 0: its largest tile is 32\.00 kB gzip in the manifest's records, over the 32\.00 kB per-tile cap \(D-049\)$/) as unknown]);
+    expect(run({}, { totalGzipBudgetBytes: 9_500 })).toEqual([expect.stringMatching(/^minimap-budget \(build\): maps\/minimap\/ totals .* gzip \(its tiles as the manifest records them\), over the 9\.50 kB budget \(D-049\)$/) as unknown]);
+    // records that do not cover the listed tiles, or no records at all, fail
+    expect(run({ stored: 3 })).toEqual(["map-folder maps/minimap/manifest.json: minimap: the manifest's levels[] record 3 stored tiles, its files[] list 2"]);
+    writeFiles(distDir, { ...cleanDist(), ...committed({ levels: undefined }) });
+    expect(auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [withBaselines()] } }).violations.map((v) => v.message)).toEqual(['minimap: the manifest has no levels[] records to budget the pack by']);
+  });
+
+  it("the pointer must name the pack and carry the tree hash of the manifest's tiles", () => {
+    writeFiles(repoRoot, { 'public/maps/minimap/manifest.json': '{}' });
+    const messages = (text: string): readonly string[] => {
+      writeFiles(distDir, { ...cleanDist(), ...committed(), 'maps/minimap/pack.json': text });
+      return checkMapFolders(distDir, listFiles(distDir), [minimap], repoRoot).violations.map((v) => `${v.path ?? ''}: ${v.message}`);
+    };
+    expect(messages(pointer())).toEqual([]);
+    expect(messages(pointer({ treeHash: sha('another tile set') }))).toEqual([expect.stringMatching(/^maps\/minimap\/pack\.json: minimap: the pointer's treeHash is not the tree hash of the 2 files the manifest lists under maps\/minimap\/t\//) as unknown]);
+    expect(messages(pointer({ sha256: '0' }))).toEqual(['maps/minimap/pack.json: minimap: the pack pointer needs asset, tag, bytes, a 64-hex sha256 and a 64-hex treeHash']);
+    // MD-06: the audit applies the pack tool's name rules (readCommittedPack's and M7's), not the shape alone
+    const good = JSON.parse(pointer()) as { asset: string; tag: string };
+    expect(messages(pointer({ asset: 'anything.tar', tag: 'x' }))).toEqual([
+      `maps/minimap/pack.json: minimap: the pack pointer: the asset must be named ${good.asset} (minimap-tiles-<tree hash 12>-<pack SHA-256 12>.tar)`,
+      `maps/minimap/pack.json: minimap: the pack pointer: the release tag must be ${good.tag} (minimap-<client version>-<tree hash 12>-<pack SHA-256 12>)`,
+    ]);
+    expect(messages(pointer({ contents: undefined }))).toEqual(['maps/minimap/pack.json: minimap: the pack pointer: the contents must be NOTICE.md, manifest.json, t/']);
+    // the critic's pointer: SHA-256 all zeros, 1 byte, any name and tag, client "nope", no contents
+    expect(messages(pointer({ sha256: '0'.repeat(64), bytes: 1, asset: 'anything.tar', tag: 'x', client: 'nope', contents: undefined }))).toEqual([
+      'maps/minimap/pack.json: minimap: the pack pointer: the pointer needs a 64-hex treeHash, a 64-hex sha256 and a dotted client version',
+    ]);
+    expect(messages('{')).toEqual([expect.stringMatching(/^maps\/minimap\/pack\.json: minimap: cannot read the pack pointer/) as unknown]);
+  });
+
+  it('a folder without a pack (the painted atlas) is checked the same in both modes', () => {
+    const painted: MapFolder = {
+      name: 'atlas',
+      dir: 'maps/atlas',
+      source: 'public/maps/atlas',
+      reason: 'D-042',
+      decision: 'D-042 O5',
+      totalGzipBudgetBytes: 8_000_000,
+      baselineTolerance: 0.1,
+      baselines: {},
+      tiled: { prefix: 't/', perFileGzipCapBytes: 32_000, levelBaselines: {} },
+    };
+    writeFiles(repoRoot, { 'public/maps/atlas/manifest.json': '{}' });
+    writeFiles(distDir, {
+      ...cleanDist(),
+      'maps/atlas/NOTICE.md': 'Blizzard Entertainment',
+      'maps/atlas/manifest.json': JSON.stringify({ files: tiles }),
+      'maps/atlas/t/0/0/0.webp': t1,
+    });
+    for (const deploy of [false, true]) {
+      const result = checkMapFolders(distDir, listFiles(distDir), [painted], repoRoot, { deploy });
+      expect(result.violations.map((v) => v.message)).toEqual(['atlas: listed in maps/atlas/manifest.json but missing']);
+      expect(result.notes).toEqual([]);
+      expect(result.recorded.size).toBe(0);
+    }
+  });
+
+  it('reads the external section of dist-requirements.json and refuses a malformed one', () => {
+    const entry = { name: 'minimap', dir: 'maps/minimap', source: 'public/maps/minimap', reason: 'D-049', totalGzipBudgetBytes: 60_000_000, baselineTolerance: 0.1, baselines: {} };
+    expect(parseDistRequirements({ ...requirements, mapFolders: [{ ...entry, external: { prefix: 't/', pointer: 'pack.json' } }] }).mapFolders[0]?.external).toEqual({ prefix: 't/', pointer: 'pack.json' });
+    expect(() => parseDistRequirements({ ...requirements, mapFolders: [{ ...entry, external: { prefix: 't/', pointer: '../pack.json' } }] })).toThrow(/external needs/);
+  });
 });
 
 describe('nav budget (D-030)', () => {
@@ -555,27 +844,49 @@ describe('nav budget (D-030)', () => {
 });
 
 describe('dist-requirements.json', () => {
-  it('the committed file configures the art, terrain and nav budgets, and records a baseline for every committed map-folder file', () => {
+  it('the committed file configures the art, terrain, tint, client-table, atlas, minimap and nav budgets, and records a baseline for every committed map-folder file', () => {
     const parsed = parseDistRequirements(JSON.parse(readFileSync(join(REPO_ROOT, 'tools', 'build', 'dist-requirements.json'), 'utf8')) as unknown);
     expect(parsed.mapFolders.map((f) => [f.name, f.dir, f.source, f.totalGzipBudgetBytes])).toEqual([
-      ['art', 'maps/art', 'public/maps/art', 12_000_000],
+      ['art', 'maps/art', 'public/maps/art', 1_000_000],
       ['terrain', 'maps/terrain', 'public/maps/terrain', 600_000],
+      ['tint', 'maps/tint', 'public/maps/tint', 8_000],
+      ['client', 'maps/client', 'public/maps/client', 40_000],
+      ['atlas', 'maps/atlas', 'public/maps/atlas', 8_000_000],
+      ['minimap', 'maps/minimap', 'public/maps/minimap', 60_000_000],
     ]);
+    // D-049 O14: the minimap's tiles come from the release pack, which pack.json names
+    expect(parsed.mapFolders.find((f) => f.name === 'minimap')?.external).toEqual({ prefix: 't/', pointer: 'pack.json' });
+    // D-042 O5: the atlas is budgeted per level, with a 32 kB cap per tile
+    expect(parsed.mapFolders.find((f) => f.name === 'atlas')?.tiled).toMatchObject({ prefix: 't/', perFileGzipCapBytes: 32_000 });
+    // map-presentation.md §16: the client tables' budget is D-039's, and messages say so.
+    expect(parsed.mapFolders.find((f) => f.name === 'client')?.decision).toBe('D-039');
+    // D-042 O5 (map-atlas.md §7.6, step ATL.10): the art budget is 1.0 MB, and its messages cite D-042.
+    expect(parsed.mapFolders.find((f) => f.name === 'art')?.decision).toBe('D-042');
     expect(parsed.nav).toMatchObject({ dir: 'nav', totalGzipBudgetBytes: 7_000_000, perFileGzipCapBytes: 300_000, targetGzipBytes: { min: 5_000_000, max: 6_000_000 } });
     expect(Object.keys(parsed.nav?.mapBaselines ?? {})).toEqual(['0', '1']);
     for (const folder of parsed.mapFolders) {
       const source = join(REPO_ROOT, folder.source);
       if (!existsSync(source)) continue;
       const committed: string[] = [];
+      // a pack's files (the minimap tiles, D-049 O14) are gitignored, never committed: not walked
+      const externalDir = folder.external === undefined ? null : join(source, folder.external.prefix.replace(/\/$/, ''));
       const walk = (dir: string, prefix: string): void => {
         for (const name of readdirSync(dir)) {
           const p = join(dir, name);
+          if (p === externalDir) continue;
           if (statSync(p).isDirectory()) walk(p, `${prefix}${name}/`);
           else committed.push(`${folder.dir}/${prefix}${name}`);
         }
       };
       walk(source, '');
-      expect(Object.keys(folder.baselines).sort()).toEqual(committed.sort());
+      // a tiled folder (the atlas) records its tiles per level, its other files one by one
+      const tilePrefix = folder.tiled === undefined ? null : `${folder.dir}/${folder.tiled.prefix}`;
+      const perFile = committed.filter((path) => tilePrefix === null || !path.startsWith(tilePrefix));
+      expect(Object.keys(folder.baselines).sort()).toEqual(perFile.sort());
+      if (tilePrefix !== null && folder.external === undefined) {
+        const levels = new Set(committed.filter((path) => path.startsWith(tilePrefix)).map((path) => path.slice(tilePrefix.length).split('/')[0]));
+        expect(Object.keys(folder.tiled?.levelBaselines ?? {}).sort()).toEqual([...levels].sort());
+      }
       const total = committed.reduce((sum, path) => sum + gzipSize(readFileSync(join(source, path.slice(folder.dir.length + 1)))), 0);
       expect(total).toBeLessThanOrEqual(folder.totalGzipBudgetBytes);
     }
@@ -599,5 +910,8 @@ describe('dist-requirements.json', () => {
     expect(() => parseDistRequirements({ ...requirements, required: 'index.html' })).toThrow(/required must be an array/);
     expect(() => parseDistRequirements({ ...requirements, allowedImages: [{ glob: '*.png' }] })).toThrow(/non-empty "reason"/);
     expect(() => parseDistRequirements({ ...requirements, entryChunkGzipBudgetBytes: -1 })).toThrow(/non-negative/);
+    const folder = { name: 'client', dir: 'maps/client', source: 'public/maps/client', reason: 'D-039', totalGzipBudgetBytes: 40_000, baselineTolerance: 0.1, baselines: {} };
+    expect(() => parseDistRequirements({ ...requirements, mapFolders: [{ ...folder, decision: '' }] })).toThrow(/decision must be a non-empty string/);
+    expect(parseDistRequirements({ ...requirements, mapFolders: [folder] }).mapFolders[0]?.decision).toBeUndefined();
   });
 });

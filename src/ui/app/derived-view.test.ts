@@ -5,6 +5,7 @@ import { mapTestWorkspace } from '../../app/map-test-helpers';
 import { questDifficultyAt, sequentialIdSource } from '../../app/shell-support';
 import type { QuestId } from '../../domain/ids';
 import type { SimFact } from '../../sim/facts';
+import { createIssueShortener, shortIssueText } from '../../app/issue-short';
 import { buildRouteView, NOT_SIMULATED } from '../app-model';
 import type { StepRowModel } from '../route/rows';
 import { derivedResults, issue, known, readyState, unknownValue } from './derived-test-helpers';
@@ -12,12 +13,20 @@ import { sameResultsView } from './selectors';
 import {
   carriedWorkSentence,
   COUNTING_LEGS_DETAIL,
+  createGroupDeriver,
   createRowDeriver,
   fractionalLevel,
+  isDoubtCode,
+  lineTwoOf,
+  questLogCountOf,
+  questLogWords,
+  rowMarkOf,
+  worstIssue,
   mapWords,
   noResultsReason,
   objectiveWorkSentence,
   routeMetricsView,
+  transportSentence,
   sameRowSource,
   sameSimulationStatus,
   SIMULATION_LOADING,
@@ -57,9 +66,14 @@ function derive(state: Parameters<typeof createRowDeriver>[2], index: number, ro
 }
 
 describe('rows without results', () => {
-  it('keep their own "not simulated" values without a derived store', () => {
-    expect(createRowDeriver(view, ws.dataset, null)).toBeUndefined();
-    expect(rowOf(1).row.projectedLevel.unknownReason).toBe(NOT_SIMULATED);
+  it('keep their own "not simulated" values without a derived store, and get line 2 only', () => {
+    const row = derive(null, 1);
+    expect(row.projectedLevel.unknownReason).toBe(NOT_SIMULATED);
+    expect(row.detail).not.toBeNull();
+    // Before the walk nothing is known at the step: an accept is "not sure", a turn-in's readiness unknown.
+    expect(row.mark).toBe('uncertain');
+    expect(derive(null, 4).mark).toBe('record-unknown');
+    expect(derive(null, 0).mark).toBeNull();
   });
 
   it('say the simulation is loading, or why it failed, never 0', () => {
@@ -185,6 +199,36 @@ describe('rows with results', () => {
     expect(row.quest?.uncertain).toBe(true);
     // Step 2 starts at level 2, known.
     expect(derive(state, 2).quest).toMatchObject({ difficulty: questDifficultyAt(2, 1, 1), uncertain: false });
+  });
+
+  it('draw the quest mark from the step’s issues, name the worst one, and mark a level-up', () => {
+    // Step 2 (accept Cull) has an error: locked, and line 2 names it; step 1 is available.
+    const locked = derive(state, 2);
+    expect(locked.mark).toBe('locked');
+    expect(locked.issue).toEqual({ severity: 'error', message: 'Cull needs level 3.' });
+    // With the pipeline's shortener (UI-01), line 2's form drops the step's own quest.
+    expect(derive(readyState({ ...results, shortIssue: createIssueShortener(ws.dataset) }), 2).issue).toEqual({ severity: 'error', message: 'Cull needs level 3.', short: 'Needs level 3' });
+    expect(derive(state, 1).mark).toBe('available');
+    expect(derive(state, 1).issue).toBeNull();
+    // Level 1 → 2 after step 1, 2 → 5 after step 2: both cross whole levels; step 3 stays at 5.
+    expect(derive(state, 1).levelUp).toBe(2);
+    expect(locked.levelUp).toBe(5);
+    expect(derive(state, 3).levelUp).toBeNull();
+  });
+
+  it('keep line 2 per dataset view and step, so a route edit formats nothing and a new view starts afresh (review UR-10)', () => {
+    const step = steps[1];
+    if (step === undefined) throw new Error('no step');
+    const words = lineTwoOf(ws.dataset, step);
+    // The place's label and point ("Kaltunk · Durotar 43.3, 68.5"); the test route's points have no label.
+    expect(words).toBe('World map 1: X 0, Y -4000 yd');
+    expect(lineTwoOf(ws.dataset, { ...step, location: step.location === null ? null : { ...step.location, label: 'Kaltunk' } })).toBe('Kaltunk · World map 1: X 0, Y -4000 yd');
+    expect(lineTwoOf(ws.dataset, step)).toBe(words);
+    const other = ws.data.view({ faction: 'Horde', class: 'WARRIOR', customQuests: [], questOverrides: {} });
+    expect(lineTwoOf(other, step)).toBe(words);
+    expect(derive(state, 1).detail).toBe(words);
+    // A travel step's title names the destination: its line 2 is its time.
+    expect(derive(state, 5).detail).toBeNull();
   });
 
   it('look steps up by id while the walk lags an edit, and say a new step is not walked yet', () => {
@@ -443,6 +487,30 @@ describe('carried objective work (D-040)', () => {
     expect(objectiveWorkSentence([{ kind: 'pending-leg' }])).toBeNull();
   });
 
+  it('says in Details which transport a step rode and where its docks come from, with the client record (TIME-7, MP-R32; TR-02)', () => {
+    const ride = (pointFrom: 'inferred' | 'user', berthWalk: boolean): SimFact => ({
+      kind: 'transport-ride',
+      transportId: 'stormwind-auberdine',
+      edgeId: 'stormwind-auberdine:0>1',
+      name: 'Stormwind Harbor – Auberdine ship',
+      docks: [
+        { end: 'departure', name: 'Auberdine', pointFrom, record: pointFrom === 'inferred' ? 'client transport path 11616, stop 1 of 2' : null },
+        { end: 'arrival', name: 'Stormwind Harbor', pointFrom: 'inferred', record: 'client transport path 11616, stop 2 of 2' },
+      ],
+      berthWalk,
+    });
+    expect(transportSentence([ride('inferred', true)])).toBe(
+      'Stormwind Harbor – Auberdine ship: from Auberdine, dock position inferred from client transport path 11616, stop 1 of 2; to Stormwind Harbor, dock position inferred from client transport path 11616, stop 2 of 2; wait and ride times assumed; the walk to or from a berth counts the swim beside the pier as walking (assumed)',
+    );
+    expect(transportSentence([ride('user', false)])).toBe(
+      'Stormwind Harbor – Auberdine ship: from Auberdine, at the dock you entered; to Stormwind Harbor, dock position inferred from client transport path 11616, stop 2 of 2; wait and ride times assumed',
+    );
+    expect(transportSentence([{ kind: 'pending-leg' }])).toBeNull();
+    const results = derivedResults(project, { steps: [{ facts: [ride('inferred', true)] }, {}] });
+    const numbers = stepNumbersOf(readyState(results), view, steps[0]?.id ?? null);
+    expect(numbers.kind === 'known' ? numbers.value.transport : null).toBe(transportSentence([ride('inferred', true)]));
+  });
+
   it('gives Details the sentence, and the summary a note counting the turn-ins that carry work', () => {
     const results = derivedResults(project, { steps: [{}, { facts: [carried([0])] }, { facts: [carried([1, 2])] }] });
     const numbers = stepNumbersOf(readyState(results), view, steps[1]?.id ?? null);
@@ -456,5 +524,93 @@ describe('carried objective work (D-040)', () => {
       '1 turn-in includes the time and kill XP of objectives no Complete step finishes, but not the travel to them, so the route may take longer.',
     );
     expect(routeMetricsView(readyState(derivedResults(project)), null).notes.some((line) => line.includes('turn-in'))).toBe(false);
+  });
+});
+
+describe('quest marks at a step (ui-refresh.md §5.2)', () => {
+  const at = (code: string, severity: 'error' | 'warning' | 'info') => issue(code, severity, null, code);
+
+  it('lock on an error, doubt on an uncertain or unverifiable code, and keep a carried turn-in ready', () => {
+    expect(rowMarkOf('accept', [])).toBe('available');
+    expect(rowMarkOf('turnin', [])).toBe('ready');
+    expect(rowMarkOf('accept', [at('VAL004-min-level', 'error')])).toBe('locked');
+    expect(rowMarkOf('accept', [at('VAL004-min-level-uncertain', 'warning')])).toBe('uncertain');
+    expect(rowMarkOf('accept', [at('VAL008-prequest-single-unverifiable', 'warning')])).toBe('uncertain');
+    expect(rowMarkOf('turnin', [at('VAL030-carried-objectives', 'warning')])).toBe('ready');
+    expect(rowMarkOf('complete', [at('VAL004-min-level', 'error')])).toBeNull();
+    expect(isDoubtCode('VAL013-breadcrumb-target-unavailable')).toBe(true);
+    expect(isDoubtCode('VAL021-previous-chain-active')).toBe(true);
+    expect(isDoubtCode('LINT003-low-value')).toBe(false);
+  });
+
+  it('name the worst issue: an error before a warning before an info, the first of each', () => {
+    expect(worstIssue([at('A', 'info'), at('B', 'warning'), at('C', 'warning')])).toEqual({ severity: 'warning', message: 'B' });
+    expect(worstIssue([at('A', 'info'), at('B', 'error')])).toEqual({ severity: 'error', message: 'B' });
+    // With the results' shortener, line 2's short form comes with it (UI-01).
+    expect(worstIssue([at('B', 'error')], (issue) => `short ${issue.message}`)).toEqual({ severity: 'error', message: 'B', short: 'short B' });
+    expect(worstIssue([])).toBeNull();
+  });
+
+  it('give line 2 a short form that drops the step’s own quest, which line 1 names (UI-01)', () => {
+    const quests = { quest: (id: number) => (id === 2383 ? { name: 'Simple Parchment' } : id === 788 ? { name: 'Cutting Teeth' } : undefined) } as never;
+    const short = (message: string, questId: number | null = 2383) => shortIssueText({ message, questId: questId as never }, quests);
+    expect(short('Simple Parchment (2383) needs one of these quests turned in first: Cutting Teeth (788).')).toBe('Needs Cutting Teeth turned in first');
+    expect(short('Simple Parchment (2383) is already in the quest log.')).toBe('Already in the quest log');
+    expect(short('Simple Parchment (2383) needs level 3; the character is level 2.')).toBe('Needs level 3; the character is level 2');
+    expect(short('Cutting Teeth (788) is turned in, but no step finishes objective 1: the time and kill XP of that work are added to the turn-in, without the travel to it. Add a Complete step where the work is done.', 788)).toBe(
+      'No step finishes objective 1',
+    );
+    expect(short('Cutting Teeth (788) is turned in, but no step finishes objective 1; assumed completed along the way.', 788)).toBe('No step finishes objective 1; assumed done on the way');
+    // A message about another quest, or with no quest, keeps its words (ids dropped).
+    expect(short('The quest log is full (40 of 40), so Simple Parchment (2383) cannot be accepted.')).toBe('The quest log is full (40 of 40), so Simple Parchment cannot be accepted');
+    expect(short('Route-level note.', null)).toBe('Route-level note');
+    // The gate: the first 20 characters of line 2 are never the row's own title.
+    for (const message of ['Simple Parchment (2383) needs one of these quests turned in first: Cutting Teeth (788).', 'Simple Parchment (2383) has failed, so it cannot be turned in.']) {
+      expect(short(message).slice(0, 20).startsWith('Simple Parchment')).toBe(false);
+    }
+  });
+});
+
+describe('group headers', () => {
+  it('get the level after their first and last steps from the walk, the same object while it reads the same', () => {
+    const results = derivedResults(project, { steps: [{}, { level: 2 }, { level: 3 }, { level: 4 }] });
+    const group = { type: 'group' as const, key: 'g', label: 'Guide, step 1', stepCount: 3, imported: true, levelSpan: null };
+    const spanView = { ...view, rowSteps: [[steps[1]?.id, steps[2]?.id, steps[3]?.id].filter((id) => id !== undefined)] };
+    const derive = createGroupDeriver(spanView, readyState(results));
+    if (derive === undefined) throw new Error('no deriver');
+    const first = derive(group, 0);
+    expect(first.levelSpan?.from.value).toBeCloseTo(2, 0);
+    expect(first.levelSpan?.to.value).toBeCloseTo(4, 0);
+    expect(derive(group, 0)).toBe(first);
+    expect(createGroupDeriver(spanView, null)).toBeUndefined();
+  });
+});
+
+describe('the quest log after the active step (ui-refresh.md §5.5, §8)', () => {
+  const count = { stepId: steps[1]?.id ?? ('s' as never), size: 4, capacity: 40, capacityBasis: 'client-data' as const, capacityFrom: 'ruleset' as const };
+
+  it('says the count against the capacity with its basis, a lower bound while the log before the route is unknown', () => {
+    expect(questLogWords(count, 12, 'fresh', '')).toEqual({
+      text: '4 / 40',
+      detail: 'In the quest log after step 12: 4 of 40 quests (capacity 40: client data).',
+      badge: '4',
+      badgeLabel: '4 quests after step 12',
+    });
+    const unknown = questLogWords(count, 12, 'unknown', '');
+    expect(unknown.text).toBe('≥4 / 40');
+    expect(unknown.badgeLabel).toBe('at least 4 quests after step 12');
+    expect(unknown.detail).toContain('there may be more');
+    expect(questLogWords({ ...count, capacityFrom: 'project' }, 12, 'fresh', '').detail).toContain('capacity 40: your project’s value');
+  });
+
+  it('never claims an empty log without a walked step', () => {
+    expect(questLogWords(null, null, 'fresh', 'select a step to see the quest log after it')).toEqual({
+      text: '?',
+      detail: 'Quest log unknown: select a step to see the quest log after it.',
+      badge: null,
+      badgeLabel: null,
+    });
+    expect(questLogCountOf(null)).toBeNull();
+    expect(questLogCountOf(INITIAL_DERIVED_STATE)).toBeNull();
   });
 });

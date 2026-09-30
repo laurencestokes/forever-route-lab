@@ -1,12 +1,16 @@
 import type { WorldMapId } from '../../domain/ids';
+import type { MapStyle } from '../../map/adapter';
 import { sha256Hex, type Sha256Digest } from '../hash';
 import { decodeUtf8, type FetchLike, joinUrl } from '../http';
 import { ART_MANIFEST_PATH, parseArtManifest, type ArtManifest } from './art-manifest';
+import type * as AtlasIndexModule from './atlas-index';
+import type { AtlasIndexFile } from './atlas-index';
 import { parseTerrainArcs, parseTerrainManifest, TERRAIN_MANIFEST_PATH, type TerrainArcKind, type TerrainArcs, type TerrainManifest } from './terrain';
 
 /**
- * The committed map resources at runtime (D-032, D-033; terrain-navigation.md §13): the painted
- * art's manifest, the terrain manifest and the terrain arc files. Loaded lazily, when the map
+ * The committed map resources at runtime (D-032, D-033, D-042; terrain-navigation.md §13,
+ * map-atlas.md §7.2): the painted art's manifest, the atlas tile index, the terrain manifest and the
+ * terrain arc files. Loaded lazily, when the map
  * first asks for them, never during startup, and never fatally: every call resolves (it never
  * rejects) to the content or to a `failed` result that says why, and the map then draws what it
  * has (the relief without the art, the zone frames without either) and shows the reason.
@@ -34,10 +38,31 @@ export type MapResourceFailure = { readonly kind: 'failed'; readonly reason: 'un
 export type ArtManifestLoad = { readonly kind: 'loaded'; readonly manifest: ArtManifest } | MapResourceFailure;
 export type TerrainManifestLoad = { readonly kind: 'loaded'; readonly manifest: TerrainManifest } | MapResourceFailure;
 export type TerrainArcsLoad = { readonly kind: 'loaded'; readonly arcs: TerrainArcs } | MapResourceFailure;
+export type AtlasIndexLoad = { readonly kind: 'loaded'; readonly file: AtlasIndexFile } | MapResourceFailure;
+
+/** The painted atlas's tile index (map-atlas.md §7.2), relative to the app's base. */
+export const ATLAS_INDEX_PATH = 'maps/atlas/index.json';
+/** The minimap style's tile index (map-atlas.md §18.4, §21.1), relative to the app's base. */
+export const MINIMAP_INDEX_PATH = 'maps/minimap/index.json';
+/** Each style's index (the parser, loaded with it, has the same directories as `ATLAS_STYLE_DIRS`). */
+const INDEX_PATHS: Readonly<Record<MapStyle, string>> = { painted: ATLAS_INDEX_PATH, minimap: MINIMAP_INDEX_PATH };
+/** Where the deployed atlas's notice is (D-033 rule 2; D-042 O11: it lists the alterations), relative to the app's base. */
+export const ATLAS_NOTICE_PATH = 'maps/atlas/NOTICE.md';
+/** The minimap tiles' notice (map-atlas.md §18.8; D-045, D-049 O14), deployed with the minimap index. */
+export const MINIMAP_NOTICE_PATH = 'maps/minimap/NOTICE.md';
 
 export interface MapResources {
   /** The committed art manifest (once; memoised). */
   art(): Promise<ArtManifestLoad>;
+  /**
+   * One style's tile index (default `painted`; map-atlas.md §21.1, §21.2), shape-checked, decoded
+   * and checked against `expectedHash`, the atlas surface's `atlasHash`: an index composed for other
+   * placements, or another style's, is `invalid` (§7.2, §8.6). Once per style and hash; memoised, so
+   * a style's index is fetched only when that style is first shown. Its parser is its own chunk,
+   * loaded with the index. Optional, so a test double may leave it out: the atlas then draws as with
+   * the index refused.
+   */
+  atlas?(expectedHash: string, style?: MapStyle): Promise<AtlasIndexLoad>;
   /** The terrain manifest (once; memoised). */
   terrain(): Promise<TerrainManifestLoad>;
   /** One world map's zone-outline or coastline arcs, verified and decoded (once per file; memoised). */
@@ -96,6 +121,7 @@ export function createMapResources(opts: MapResourcesOptions): MapResources {
   }
 
   const artMemo = memo<ArtManifestLoad>();
+  const atlasMemo = memo<AtlasIndexLoad>();
   const terrainMemo = memo<TerrainManifestLoad>();
   const arcsMemo = memo<TerrainArcsLoad>();
 
@@ -127,6 +153,26 @@ export function createMapResources(opts: MapResourcesOptions): MapResources {
 
   return {
     art: () => artMemo(ART_MANIFEST_PATH, () => manifest(ART_MANIFEST_PATH, parseArtManifest)),
+    atlas: (expectedHash, style = 'painted') => {
+      const path = INDEX_PATHS[style];
+      return atlasMemo(`${path}#${expectedHash}`, async () => {
+        const fetched = await get(path, 'no-cache');
+        if (fetched.kind === 'failed') return fetched;
+        const json = parseJson(fetched.bytes);
+        if (json === undefined) return invalid(`${path} is not JSON`);
+        // The parser stays out of the entry chunk: it loads with the index, when the atlas first mounts.
+        let parser: typeof AtlasIndexModule;
+        try {
+          parser = await import('./atlas-index');
+        } catch (error) {
+          return unavailable(`${path}: its reader could not be loaded (${error instanceof Error ? error.message : String(error)})`);
+        }
+        const file = parser.parseAtlasIndex(json, opts.baseUrl, style);
+        if (typeof file === 'string') return invalid(`${path}: ${file}`);
+        const refusal = parser.atlasIndexRefusal(file, expectedHash);
+        return refusal === null ? { kind: 'loaded', file } : invalid(`${path}: ${refusal}`);
+      });
+    },
     terrain,
     arcs: (mapId, kind) => arcsMemo(`${String(mapId)}/${kind}`, () => loadArcs(mapId, kind)),
   };

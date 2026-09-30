@@ -5,11 +5,17 @@ import type { WorldPoint } from '../domain/points';
 import { effectiveRules } from './precedence';
 import { FOREVER_BETA } from './ruleset';
 import {
+  CLIENT_NODE_MATCH_YARDS,
+  type CommittedTaxi,
   type DungeonEntrances,
   entrancesOf,
+  factionsOfSides,
+  inferredBerths,
+  inferredDock,
   findTaxiNodes,
   instanceKindOf,
   isFlightMaster,
+  isInferredBerth,
   isInstanceMap,
   nearestEntrance,
   nearestTaxiNode,
@@ -17,6 +23,8 @@ import {
   resolveTaxiNodeRef,
   sameMapTransports,
   seedTravelGraph,
+  taxiNodeByKey,
+  taxiNodeOpenTo,
   type TravelGraphSource,
   transportEdges,
   transportsBetweenMaps,
@@ -301,5 +309,139 @@ describe('seedTravelGraph: instance entrance edges (TIME-7, COORD-4)', () => {
     );
     expect(raid.entrances[0]?.raid).toBe(true);
     expect(instanceKindOf(raid, raidMap)).toBe('raid');
+  });
+});
+
+describe('seedTravelGraph: the committed client taxi file (D-039 B; TIME-6, TIME-7)', () => {
+  // A file in the committed shape. Nodes 7, 8 and 9, the flights and path 11391's stops are
+  // invented for the test; the other transport stops (paths 11616, 293 and 241) and row 3203
+  // (Rog'mar) are the committed D-039 B file's values (public/maps/client/taxi.json, build
+  // 1.60.1.70009), as the cited seed for row 3203 is.
+  const TAXI: CommittedTaxi = {
+    build: 'test-build',
+    nodes: [
+      { id: 7, name: 'Vale Post, Test Vale', point: at(KALIMDOR, 104, 97), alliance: false, horde: true }, // Vale Keeper stands 5 yd away
+      { id: 8, name: 'Ridge Post, Test Ridge', point: at(KALIMDOR, 400, 160), alliance: true, horde: false }, // 60 yd from Ridge Keeper: another node
+      { id: 9, name: 'Open Post', point: at(EK, 500, 500), alliance: false, horde: false },
+      { id: 3203, name: "Rog'mar, Riverglades", point: at(EK, -7924, -4783), alliance: false, horde: true }, // a cited seed's row
+    ],
+    flights: [
+      { pathId: 100, from: 7, to: 8, l3dYards: 1200 },
+      { pathId: 101, from: 8, to: 7, l3dYards: 1250 },
+      { pathId: 102, from: 9, to: 3203, l3dYards: 900 },
+    ],
+    transports: [
+      { pathId: 11616, maps: [KALIMDOR, EK], stops: [{ point: at(KALIMDOR, 6548, 942), delaySeconds: 60 }, { point: at(EK, -8654, 1344), delaySeconds: 60 }] },
+      { pathId: 293, maps: [KALIMDOR], stops: [{ point: at(KALIMDOR, 8532, 1024), delaySeconds: 60 }, { point: at(KALIMDOR, 6594, 760), delaySeconds: 60 }] },
+      // The seeds cite no service for this path: its stops never reach the graph.
+      { pathId: 241, maps: [KALIMDOR, EK], stops: [{ point: at(KALIMDOR, -1006, -3842), delaySeconds: 60 }, { point: at(EK, -14278, 583), delaySeconds: 60 }] },
+      // Stops on the wrong map for the seed are never taken.
+      { pathId: 11391, maps: [EK], stops: [{ point: at(EK, 1, 1), delaySeconds: 60 }, { point: at(EK, 2, 2), delaySeconds: 60 }] },
+    ],
+  };
+  const graph = seedTravelGraph(source(FIXTURE), rules, { taxi: TAXI });
+
+  it('gives each flight master the row it stands at (within 50 yd, INFERRED) and makes the others nodes of their own', () => {
+    expect(CLIENT_NODE_MATCH_YARDS).toBe(50);
+    expect(taxiNodeByKey(graph, 'npc:10')).toMatchObject({
+      taxiNodeId: 7,
+      names: ['Vale Keeper', 'Durotar', 'Vale Post, Test Vale'],
+      point: at(KALIMDOR, 100, 100),
+      factions: ['Horde'],
+      clientSides: { alliance: false, horde: true },
+      origin: 'dataset',
+    });
+    // 60 yd away: not matched, so the row is a node of its own.
+    expect(taxiNodeByKey(graph, 'npc:20')).toMatchObject({ taxiNodeId: null });
+    expect(graph.taxiNodes.filter((node) => node.origin === 'client').map((node) => [node.key, node.factions])).toEqual([
+      ['taxi:8', ['Alliance']],
+      ['taxi:9', null],
+      ['taxi:3203', ['Horde']],
+    ]);
+    // The cited seed with a row in the file is replaced by it; the others stay.
+    expect(graph.taxiNodes.filter((node) => node.origin === 'cited').map((node) => node.taxiNodeId)).toEqual([559, 3242, 3275, 3276]);
+    expect(factionsOfSides({ alliance: true, horde: true })).toEqual(['Alliance', 'Horde']);
+  });
+
+  it('resolves a ref by the TaxiNodes id to the flight master standing at it', () => {
+    expect(resolveTaxiNodeRef(graph, { npcId: null, taxiNodeId: 7, name: null })).toMatchObject({ kind: 'node', node: { key: 'npc:10' } });
+    expect(resolveTaxiNodeRef(graph, { npcId: null, taxiNodeId: 3203, name: null })).toMatchObject({ kind: 'node', node: { key: 'taxi:3203', origin: 'client' } });
+    expect(findTaxiNodes(graph, 'vale post').map((node) => node.key)).toEqual(['npc:10']);
+  });
+
+  it("takes the file's flights as the taxi edges (which flights exist; TIME-6's lengths are the per-leg data's), and says which set it used", () => {
+    expect(graph.taxiEdges).toEqual([
+      { from: 'npc:10', to: 'taxi:8' },
+      { from: 'taxi:8', to: 'npc:10' },
+      { from: 'taxi:9', to: 'taxi:3203' },
+    ]);
+    // Legs given by the caller replace them, and the report counts those (TR-13).
+    const replaced = seedTravelGraph(source(FIXTURE), rules, { taxi: TAXI, taxiEdges: [] });
+    expect(replaced.taxiEdges).toEqual([]);
+    expect(replaced.report.client).toMatchObject({ edges: 0, edgeSource: 'caller' });
+  });
+
+  it('positions the seeded docks from the stops they were matched to, with the record (inferred), and never from another map', () => {
+    const edge = transportEdges(graph, 'stormwind-auberdine:0>1')[0];
+    expect(edge?.from).toEqual({
+      stop: 0,
+      name: 'Auberdine',
+      mapId: KALIMDOR,
+      point: at(KALIMDOR, 6548, 942),
+      pointFrom: 'inferred',
+      npcId: null,
+      record: 'client transport path 11616, stop 1 of 2',
+    });
+    expect(edge?.to).toMatchObject({ point: at(EK, -8654, 1344), pointFrom: 'inferred', record: 'client transport path 11616, stop 2 of 2' });
+    // Rut'theran ↔ Auberdine: both docks on Kalimdor, so the navigation model may use it (NAV-08).
+    expect(sameMapTransports(graph, KALIMDOR).map((candidate) => candidate.id)).toEqual(['rutheran-auberdine:0>1', 'rutheran-auberdine:1>0']);
+    // Path 11391's stops are both on the Eastern Kingdoms here: the Tanaris stop is not taken from it; the Riverglades one is.
+    expect(transportEdges(graph, 'steamwheedle-powderfuse:0>1')[0]?.from).toMatchObject({ point: null, pointFrom: null });
+    expect(transportEdges(graph, 'steamwheedle-powderfuse:0>1')[0]?.to).toMatchObject({ point: at(EK, 2, 2), pointFrom: 'inferred' });
+    expect(inferredDock(TRANSPORT_SEEDS[0] as TransportSeed, 1, null)).toBeNull();
+  });
+
+  it('lets a user dock win over an inferred one', () => {
+    const withUser = seedTravelGraph(source(FIXTURE), rules, { taxi: TAXI, userDocks: [{ transportId: 'stormwind-auberdine', stop: 0, point: at(KALIMDOR, 6500, 900) }] });
+    expect(transportEdges(withUser, 'stormwind-auberdine:0>1')[0]?.from).toMatchObject({ point: at(KALIMDOR, 6500, 900), pointFrom: 'user' });
+    expect(withUser.report.client?.inferredDocks).toBe(4);
+  });
+
+  it("gives a matched flight master its row's sides as its factions, the one source of the engine and the map (TR-08)", () => {
+    const rows = (alliance: boolean, horde: boolean): CommittedTaxi => ({ ...TAXI, nodes: TAXI.nodes.map((row) => (row.id === 7 ? { ...row, alliance, horde } : row)) });
+    // Vale Keeper is Horde in the dataset; a row that names a side wins, one that names none does not.
+    expect(taxiNodeByKey(seedTravelGraph(source(FIXTURE), rules, { taxi: rows(true, false) }), 'npc:10')?.factions).toEqual(['Alliance']);
+    expect(taxiNodeByKey(seedTravelGraph(source(FIXTURE), rules, { taxi: rows(false, false) }), 'npc:10')?.factions).toEqual(['Horde']);
+    const vale = taxiNodeByKey(graph, 'npc:10');
+    expect(vale !== undefined && taxiNodeOpenTo(vale, 'Horde')).toBe(true);
+    expect(vale !== undefined && taxiNodeOpenTo(vale, 'Alliance')).toBe(false);
+    const open = taxiNodeByKey(graph, 'taxi:9');
+    expect(open !== undefined && taxiNodeOpenTo(open, 'Alliance')).toBe(true); // no side named: unknown, open
+  });
+
+  it('lists the inferred docks as berths (TIME-7), and never a user dock', () => {
+    expect(inferredBerths(graph)).toEqual([at(KALIMDOR, 6548, 942), at(EK, -8654, 1344), at(EK, 2, 2), at(KALIMDOR, 8532, 1024), at(KALIMDOR, 6594, 760)]);
+    expect(isInferredBerth(graph, at(KALIMDOR, 6548, 942))).toBe(true);
+    expect(isInferredBerth(graph, at(KALIMDOR, 6548, 943))).toBe(false);
+    expect(isInferredBerth(graph, at(EK, 6548, 942))).toBe(false);
+    const withUser = seedTravelGraph(source(FIXTURE), rules, { taxi: TAXI, userDocks: [{ transportId: 'stormwind-auberdine', stop: 0, point: at(KALIMDOR, 6500, 900) }] });
+    expect(isInferredBerth(withUser, at(KALIMDOR, 6500, 900))).toBe(false);
+    expect(isInferredBerth(withUser, at(KALIMDOR, 6548, 942))).toBe(false);
+    expect(inferredBerths(seedTravelGraph(source(FIXTURE), rules))).toEqual([]);
+  });
+
+  it('reports what it made of the file', () => {
+    expect(graph.report.client).toEqual({
+      build: 'test-build',
+      matchedNodes: 1,
+      clientNodes: 3,
+      unmatchedMasters: [20],
+      citedReplaced: [3203],
+      edges: 3,
+      edgeSource: 'file',
+      inferredDocks: 5,
+      unmatchedPaths: [241],
+    });
+    expect(seedTravelGraph(source(FIXTURE), rules).report.client).toBeNull();
   });
 });

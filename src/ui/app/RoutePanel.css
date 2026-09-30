@@ -1,0 +1,327 @@
+/*
+ * The route panel (docs/research/ui-refresh.md §4.1): a 36px header (the route name, which opens
+ * the Projects menu; the Sample tag; View; Undo and Redo), a meta line, the list, the step toolbar
+ * and the Add footer. Tokens only.
+ */
+
+.frl-app-route {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.frl-app-route__head {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 6px 0 12px;
+  background: var(--frl-surface-raised);
+}
+
+/* The heading takes the button's -6px (the button's edge lines up with the rows' text); on the button
+   the margin shrank the heading's own width by 6px, so a name that fitted was cut (review UI-07). */
+.frl-app-route__name {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0 0 0 -6px;
+  font-size: var(--frl-text-lg);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-app-route__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-app-route__spacer {
+  flex: 1 1 auto;
+}
+
+.frl-app-route__head > .frl-placeholder-tag,
+.frl-app-route__history {
+  flex: none;
+}
+
+.frl-app-route__meta {
+  position: relative;
+  flex: none;
+  padding: 3px 12px 6px;
+  border-bottom: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  line-height: 16px;
+}
+
+.frl-app-route__meta p {
+  margin: 0;
+}
+
+.frl-app-route__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The step toolbar under the list: one tab stop. It wraps rather than clipping in a narrow panel. */
+.frl-app-route__toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: 34px;
+  padding: var(--frl-space-half) var(--frl-space-2);
+  border-top: 1px solid var(--frl-border);
+  background: var(--frl-surface);
+}
+
+.frl-app-route__toolbar > .frl-toolbar {
+  flex-wrap: wrap;
+  row-gap: var(--frl-space-half);
+}
+
+/* The Add footer: a small-caps caption naming the place, then six buttons on one line (two at 288px). */
+.frl-app-route__add {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 8px 7px 12px;
+  border-top: 1px solid var(--frl-border);
+  background: var(--frl-surface-raised);
+}
+
+.frl-app-route__add-caption {
+  margin: 0;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-variant-caps: all-small-caps;
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.04em;
+  line-height: 14px;
+}
+
+.frl-app-route__add-buttons.frl-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.frl-app-route__add-buttons .frl-button {
+  padding: 0 8px;
+}
+
+/* The route name's Projects menu (a WAI-ARIA menu button). -------------------------------------- */
+.frl-projects-menu {
+  display: flex;
+  min-width: 0;
+}
+
+.frl-projects-menu__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--frl-control-height);
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--frl-radius-control);
+  background: transparent;
+  color: var(--frl-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.frl-projects-menu__button:hover,
+.frl-projects-menu__button[aria-expanded='true'] {
+  border-color: var(--frl-border-strong);
+  background: var(--frl-surface-hover);
+}
+
+.frl-projects-menu__button :where(svg) {
+  flex: none;
+  color: var(--frl-fg-muted);
+}
+
+.frl-projects-menu__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-projects-menu__popup,
+.frl-view__popup {
+  position: absolute;
+  z-index: var(--frl-z-popover);
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius-lg);
+  background: var(--frl-surface);
+  box-shadow: var(--frl-shadow);
+  color: var(--frl-fg);
+  font-size: var(--frl-text);
+  font-weight: var(--frl-weight-regular);
+}
+
+.frl-projects-menu__popup {
+  top: 38px;
+  left: 8px;
+  width: min(270px, calc(100% - 16px));
+  padding: 6px 0;
+}
+
+.frl-projects-menu__caption {
+  padding: 4px 12px;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-variant-caps: all-small-caps;
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.04em;
+}
+
+.frl-projects-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.frl-projects-menu__item:hover,
+.frl-projects-menu__item:focus {
+  background: var(--frl-selection-bg);
+  box-shadow: inset 3px 0 0 var(--frl-selection-bar);
+}
+
+.frl-projects-menu__item:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: calc(-1 * var(--frl-focus-width));
+}
+
+.frl-projects-menu__item.is-current {
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-projects-menu__item.is-danger {
+  color: var(--frl-danger);
+}
+
+.frl-projects-menu__item[aria-disabled='true'] {
+  color: var(--frl-fg-disabled);
+  cursor: default;
+}
+
+.frl-projects-menu__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-projects-menu__meta {
+  flex: none;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-regular);
+}
+
+.frl-projects-menu__separator {
+  margin: 6px 0;
+  border-top: 1px solid var(--frl-border);
+}
+
+/* View: the rows' choices and the key (a non-modal disclosure). ---------------------------------- */
+/* The popup is placed in the header (the panel's width), not under the View button: right-aligned
+   to the button, a 300px popup started 22px left of the window at the default 340px panel (fix
+   UI-03, QA-07). It now keeps a 6px gutter inside the panel at every width from 300 to 460px. */
+.frl-view {
+  flex: none;
+}
+
+.frl-view__popup {
+  top: 38px;
+  right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(300px, calc(100% - 12px));
+  max-width: calc(100% - 12px);
+  padding: 10px 12px;
+  font-size: var(--frl-text-sm);
+}
+
+.frl-view__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.frl-view__caption {
+  margin: 0;
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-variant-caps: all-small-caps;
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.04em;
+}
+
+.frl-view__column.frl-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.frl-view__key {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  color: var(--frl-fg-muted);
+  line-height: 16px;
+  list-style: none;
+}
+
+.frl-view__key li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.frl-view__glyph {
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-bold);
+}
+
+/* The later band's swatch: its colour and an edge, so it is seen on either panel. */
+.frl-view__band {
+  display: inline-block;
+  width: 22px;
+  height: 12px;
+  border: 1px solid var(--frl-border-strong);
+  background: var(--frl-surface-later);
+}
+
+@media (forced-colors: active) {
+  .frl-projects-menu__item:focus,
+  .frl-projects-menu__item:hover {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .frl-projects-menu__button[aria-expanded='true'] {
+    border: 2px solid Highlight;
+  }
+}

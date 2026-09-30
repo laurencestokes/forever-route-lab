@@ -12,6 +12,12 @@ edited Part I only where the style switch touches it (§0.2). **Revision 3.1** r
 does not need the tiles, a release pack that carries its notice, a memory budget, and the minimap default
 held until the presentation's names exist.
 
+**Build state (2026-09-28):** ATL.0–ATL.8, MM.0–MM.7, and ATL.10 with MM.9 are built in the working
+tree, not committed: the atlas is on by default with the minimap style, and `public/maps/art/` keeps
+five images. ATL.9/MM.8 ran on 2026-09-28 on the reference desktop (`docs/measurements/map-atlas.json`,
+`atl9mm8`); the owner's laptop trace is still owed, and ATL.11's edits are in part; the State columns
+of §11 and §25 give each step.
+
 Part I (§0–§15) is revision 2: it answers the owner's map feedback of 2026-09-26 (§1) and his two
 benchmarks, WoWF-QRP and MapGenie. Revision 1 was the synthesis of three competing designs (A
 fidelity-first, B performance-first, C minimal-change) and two judges' reports; revision 2 resolved
@@ -349,6 +355,12 @@ green. Line numbers are as read on 2026-09-26; each step re-reads them. Architec
 - The art and terrain layers are committed with Milestone 6 and 3b.6. D-038 keeps the one-image
   rendering only until the atlas replaces it. Another team is building the Milestone 6 UI in the
   working tree; this design's steps start after it has landed (§11).
+- **2026-09-28:** Part II's MM.1–MM.7, the presentation's MP.0c–MP.11 and the refresh's UR.1a–UR.6
+  are built (not committed); then **ATL.10 and MM.9**: the atlas and the smooth wheel are the
+  controller's defaults (the `?atlas` and `?smooth-wheel` switches are gone), `world:0`, `world:1` and
+  `world:2991` are retired, the minimap is the default style, and `convert.ts` deploys only 2521,
+  2524 and 1459–1461 (689 kB of the 1.0 MB `art` budget). They were built before ATL.9/MM.8's
+  measurements, which remain owed.
 - **Revision 3.1:** decisions now run to D-048 (D-045 the minimap base, D-046 the WoWF-QRP-style UI,
   D-047 the presentation's pins and drawer, D-048 the UI refresh), so Part II's record is proposed as
   D-049. The drawer of D-047 holds the style switch and replaces the status line (§21).
@@ -1149,20 +1161,20 @@ for the presentation's labels canvas (MP.1) and names (MP.7), because the minima
 then ATL.10 may switch the atlas on with the painted style as the default. "Every step ends green on
 `pnpm check`" holds without the minimap tiles (§23.4).
 
-| Step | Files | Tests and gates | Budgets | Depends on |
-|---|---|---|---|---|
-| ATL.0 Quick win | `src/map/leaflet/LeafletMapAdapter.ts` (`wheelPxPerZoomLevel` 60, `zoomDelta` 1); README laptop runbook | **Gate: an adapter unit test that the map is created with these two options** (deterministic). The u2 harness figure (−6 → −2) is recorded in `docs/measurements/`; an alarm, not a gate, above 25 notches (measured 21–22; today 43–46) | map-edit bench within baseline + 25 % | M6 UI landed |
-| ATL.1 Decisions | DECISIONS D-042; STATUS owner rows; the MP.0c text in both designs | review of the texts | – | owner answers to O1–O11 (defaults otherwise) |
-| ATL.2 Geo | `src/geo/atlas-layout.ts`, `src/geo/atlas.ts` + tests; the architecture test's file-level rule | offsets for both layouts; inset corner; `seamE`; 10,000 seeded round trips per placement **within 10⁻⁹ yd, and exact after 0.1-yd rounding**; whole-yard round trips exact; card at least 1,000 yd from every map's land (measured 1,529 yd); null without both rows; `atlasHash` pinned; the modules of §8.1 cannot import the files for values | – | ATL.1 |
-| ATL.3 Transforms through placements | `src/map/leaflet/transform.ts`, the adapter funnel, identity for world surfaces | every existing transform and adapter test unchanged; atlas round trips; partition | map-edit bench + 25 % | ATL.2 |
-| ATL.4 Per-map builders | `src/app/map-controller.ts`, `map-model.ts`, `route-paths.ts`; `src/map/adapter.ts` | golden: one-map output identical; two-map join; cap split; memo by part identity | map-edit two-builder case ≤ 8 ms; `map-paths.bench --budget` | ATL.3 |
-| ATL.5 Atlas surface behind `atlas: false` | `src/map/layers.ts` (`atlasSurfaceOf`), `ConnectorDescriptor` and its drawing, switcher, status, legend (inset note); relief, outlines and frames translated; per-image art translated as interim art | new adapter, layer and controller tests; glyph pairs for the inset and instances | – | ATL.4 |
-| ATL.6 Tool and tiles | `tools/maps/atlas.ts`, `tools/maps/lib/atlas-*.ts`, `tools/maps/inputs/atlas-labels.json`; `convert.ts` keeps `sources` records (lossless and overlay hashes) for every UiMap it composes; `public/maps/atlas/` | synthetic-raster tests (masks, painted-ground fallback, label rules, mirror fill, reductions, sparse rule, sea keys, index); client-gated double build byte-identical; `--check`; the detector's recall raised on Dun Morogh and re-measured on a hand-checked sample; `--review` signed off by the owner; T1–T9; A5 recursion; audit tiled mode | `atlas` ≤ 8.0 MB, ≤ 32 kB per file, per level + 10 % | ATL.2; O3, O6, O10, O11 |
-| ATL.7 Runtime tiles | `src/map/leaflet/atlas-tile-layer.ts`, `atlas-underlay.ts`, `src/infra/maps/atlas-index.ts`, `TileBandDescriptor`, `resolveTile` | jsdom: a key not in the index makes no request; **a sea key creates no element; a fine key over a level −2 sea key is sea; a virtual key resolves its nearest stored ancestor**; a stored key starts as its nearest decoded ancestor's crop; the underlay holds every level −5 key and one transform per zoom event; hash mismatch falls back with a status; reduced motion disables fades | first view ≤ 100 kB | ATL.5, ATL.6 |
-| ATL.8 Gestures and speed (behind `smoothWheel: false`) | `src/map/leaflet/smooth-wheel.ts`; grid hidden during gestures; mid-gesture refresh; canvas pixel ratio; chunked markers; idle pre-build | fake-rAF tests: no dropped input, 0.5 per 100 px, notch and stream rates apart, line and page modes, `ctrlKey` ×2, one `moveend` per gesture, **centre clamped every frame (no pan-back)**, reduced motion; grid hidden between `_moveStart` and `_moveEnd` | §9.2 | ATL.7 |
-| ATL.9 Measure and review | the u2 harness against the production build at 1× and 4× with both switches on; **the owner's laptop trace (integrated GPU)**; calibrate `R_notch` and `R_stream`; the cold-cache hole cases, hairline-gap and contrast checks; the level-crossing luminance check (§6.3); the owner's contact-sheet and live review; WoWF-QRP re-checked read-only (MapGenie only if the owner approves a visit); `docs/measurements/map-atlas.json`; ARCHITECTURE §14 rows | §9.2 gates | – | ATL.8 |
-| ATL.10 On by default; prune art | options on; `world:0`, `world:1`, `world:2991` retired; presets; the tests of code-impact §4 updated deliberately; `convert.ts` deploys only 2521, 2524, 1459–1461 | dist audit; art manifest checks | `art` ≤ 1.0 MB | ATL.9 green; O5; for the minimap as default, MM.9's MP.1 and MP.7 |
-| ATL.11 Edits elsewhere | the documents of §13 | review | – | ATL.10 |
+| Step | Files | Tests and gates | Budgets | Depends on | State |
+|---|---|---|---|---|---|
+| ATL.0 Quick win | `src/map/leaflet/LeafletMapAdapter.ts` (`wheelPxPerZoomLevel` 60, `zoomDelta` 1); README laptop runbook | **Gate: an adapter unit test that the map is created with these two options** (deterministic). The u2 harness figure (−6 → −2) is recorded in `docs/measurements/`; an alarm, not a gate, above 25 notches (measured 21–22; today 43–46) | map-edit bench within baseline + 25 % | M6 UI landed | Built: 22 notches for −6 → −2 (was 46) |
+| ATL.1 Decisions | DECISIONS D-042; STATUS owner rows; the MP.0c text in both designs | review of the texts | – | owner answers to O1–O11 (defaults otherwise) | Done: D-042 |
+| ATL.2 Geo | `src/geo/atlas-layout.ts`, `src/geo/atlas.ts` + tests; the architecture test's file-level rule | offsets for both layouts; inset corner; `seamE`; 10,000 seeded round trips per placement **within 10⁻⁹ yd, and exact after 0.1-yd rounding**; whole-yard round trips exact; card at least 1,000 yd from every map's land (measured 1,529 yd); null without both rows; `atlasHash` pinned; the modules of §8.1 cannot import the files for values | – | ATL.1 | Built |
+| ATL.3 Transforms through placements | `src/map/leaflet/transform.ts`, the adapter funnel, identity for world surfaces | every existing transform and adapter test unchanged; atlas round trips; partition | map-edit bench + 25 % | ATL.2 | Built |
+| ATL.4 Per-map builders | `src/app/map-controller.ts`, `map-model.ts`, `route-paths.ts`; `src/map/adapter.ts` | golden: one-map output identical; two-map join; cap split; memo by part identity | map-edit two-builder case ≤ 8 ms; `map-paths.bench --budget` | ATL.3 | Built |
+| ATL.5 Atlas surface behind `atlas: false` | `src/map/layers.ts` (`atlasSurfaceOf`), `ConnectorDescriptor` and its drawing, switcher, status, legend (inset note); relief, outlines and frames translated; per-image art translated as interim art | new adapter, layer and controller tests; glyph pairs for the inset and instances | – | ATL.4 | Built |
+| ATL.6 Tool and tiles | `tools/maps/atlas.ts`, `tools/maps/lib/atlas-*.ts`, `tools/maps/inputs/atlas-labels.json`; `convert.ts` keeps `sources` records (lossless and overlay hashes) for every UiMap it composes; `public/maps/atlas/` | synthetic-raster tests (masks, painted-ground fallback, label rules, mirror fill, reductions, sparse rule, sea keys, index); client-gated double build byte-identical; `--check`; the detector's recall raised on Dun Morogh and re-measured on a hand-checked sample; `--review` signed off by the owner; T1–T9; A5 recursion; audit tiled mode | `atlas` ≤ 8.0 MB, ≤ 32 kB per file, per level + 10 % | ATL.2; O3, O6, O10, O11 | Built: 792 tiles, 6.95 MB; the owner's sheet sign-off (O8) and the 11-label list are owed |
+| ATL.7 Runtime tiles | `src/map/leaflet/atlas-tile-layer.ts`, `atlas-underlay.ts`, `src/infra/maps/atlas-index.ts`, `TileBandDescriptor`, `resolveTile` | jsdom: a key not in the index makes no request; **a sea key creates no element; a fine key over a level −2 sea key is sea; a virtual key resolves its nearest stored ancestor**; a stored key starts as its nearest decoded ancestor's crop; the underlay holds every level −5 key and one transform per zoom event; hash mismatch falls back with a status; reduced motion disables fades | first view ≤ 100 kB | ATL.5, ATL.6 | Built |
+| ATL.8 Gestures and speed (behind `smoothWheel: false`) | `src/map/leaflet/smooth-wheel.ts`; grid hidden during gestures; mid-gesture refresh; canvas pixel ratio; chunked markers; idle pre-build | fake-rAF tests: no dropped input, 0.5 per 100 px, notch and stream rates apart, line and page modes, `ctrlKey` ×2, one `moveend` per gesture, **centre clamped every frame (no pan-back)**, reduced motion; grid hidden between `_moveStart` and `_moveEnd` | §9.2 | ATL.7 | Built |
+| ATL.9 Measure and review | the u2 harness against the production build at 1× and 4× with both switches on; **the owner's laptop trace (integrated GPU)**; calibrate `R_notch` and `R_stream`; the cold-cache hole cases, hairline-gap and contrast checks; the level-crossing luminance check (§6.3); the owner's contact-sheet and live review; WoWF-QRP re-checked read-only (MapGenie only if the owner approves a visit); `docs/measurements/map-atlas.json`; ARCHITECTURE §14 rows | §9.2 gates | – | ATL.8 | Measured 2026-09-28 on the desktop, both styles, 1× and 4× (`map-atlas.json` `atl9mm8`): the wheel trip, pan-back, holes, hairlines, contrast, memory and first art (at 1×) pass; the 4× long tasks at a gesture's settle and at band crossings (52–76 ms) and one 27.9 ms painted crossing frame at 1× fail. `R_notch` and `R_stream` kept at 200. **Owed:** the laptop trace and a physical notch, the owner's review |
+| ATL.10 On by default; prune art | options on; `world:0`, `world:1`, `world:2991` retired; presets; the tests of code-impact §4 updated deliberately; `convert.ts` deploys only 2521, 2524, 1459–1461 | dist audit; art manifest checks | `art` ≤ 1.0 MB | ATL.9 green; O5; for the minimap as default, MM.9's MP.1 and MP.7 | Built 2026-09-28, ahead of ATL.9: the atlas and the smooth wheel on by default, `world:0`, `world:1` and `world:2991` retired, `convert.ts` deploys five images (689 kB of 1.0 MB) |
+| ATL.11 Edits elsewhere | the documents of §13 | review | – | ATL.10 | In part (2026-09-28): ARCHITECTURE §7, §12.3, §14 and §16, MAPS, coordinates.md §12, §14.1 and C1, UI.md §12, THIRD_PARTY_NOTICES, the README, tools/maps/README.md. Owed: DECISIONS, STATUS, ARCHITECTURE §4 and §17, map-presentation.md §5.1 and §18 |
 
 ---
 
@@ -1624,11 +1636,16 @@ tiles at grid (0,0)–(2,0), which lie outside the atlas extent (E < 0) and are 
 (north sides of tiles 20_45 to 20_47 and the east side of 20_47, north-east of Azshara) carry a
 **skirt**: one chunk (32 texels, 33 yd) of flat rgb(71, 72, 44) and rgb(77, 74, 46) ground with sea
 behind it, which would draw as an olive line in the sea (`<mm>/img/staircase-kalimdor-ne.jpg`). **Rule
-(an alteration, listed):** on a side facing an absent ADT, a chunk-wide strip whose texels take at
-most three distinct colours, whose chunks have no liquid, and behind which the next chunk row is at
-least 90 % wet in the liquid grid is void (navy). The rule is designed from the census and the texels;
-neither prototype build applies it, so `b5` still shows the olive line, and "exactly those 4 sides" is
-an ESTIMATE until MM.3 builds the rule and M10 records the count.
+(an alteration, listed; as built in MM.3):** on a side facing an absent ADT, the outermost chunk row
+(32 texels) is void (navy) when at least half of its texels lie on dry quads, the three commonest
+colours cover at least 90 % of those dry texels, and the next chunk row inward is at least 90 % wet in
+the liquid grid (`minimap-params.ts` `skirtMinDryShare`, `skirtTopColours`, `skirtTopShare`,
+`skirtNextWetShare`). Revision 3.1 worded it as "at most three distinct colours, whose chunks have no
+liquid"; the four strips hold 4 to 9 colours, three of which cover 92–98 % of their dry texels, and
+their chunk row's inner quad row is wet (the ground ends 28 texels in), so the build fits the wording
+to the texels it was written from (`minimap-recolour.ts` `edgeSkirts`; MM.4 deviation 2; review
+finding MD-08). The built census (M10) records exactly those 4 sides; the prototypes did not apply the
+rule, so the owner's sign-off of the built sheets (`edge-skirts.png`, §18.10) is still owed (MD-09).
 
 ### 18.7 Determinism and `--check`
 
@@ -1663,8 +1680,10 @@ from a prototype without these records and was a lower bound, MM-11):
   relief agreement, the seam steps by both measures with the worst edges, the feathered edges, the
   black-texel components over 64 texels, the edge skirts;
 - per level: stored and sea counts, bytes; per file: path, bytes, SHA-256 (the dist audit's list);
-- the pack: file name, bytes, SHA-256, the tiles' tree hash and its contents (`NOTICE.md`,
-  `manifest.json`, `t/`);
+- the pack: the tiles' tree hash and its contents (`NOTICE.md`, `manifest.json`, `t/`). As built, the
+  pack's bytes, SHA-256, file name and tag are **not** here: the pack holds the manifest, so the
+  manifest cannot hold the pack's hash, and the name and tag carry that hash (§23.3); `pack.json`
+  records them (review findings MD-02, MD-08);
 - **the list of alterations** (below).
 
 **`NOTICE.md`**, regenerated from the manifest and checked by M1: Blizzard Entertainment's artwork
@@ -1672,9 +1691,11 @@ from a prototype without these records and was a lower bound, MM-11):
 pinned build; not affiliated with or endorsed by Blizzard; non-commercial; removed promptly on
 request; the project never distributes hacks or cheats. **The alterations**, each named:
 1. water recoloured onto a navy ramp (the colour weight and a gate from terrain-derived liquid data,
-   D-032; the family field; dry texels never brightened; the family feather, the edge feather, the corner
-   term and the navy floor across tile edges); coloured water (bright ponds, the violet river), lava,
-   slime and swamp water keep their colours;
+   D-032; the family field; dry texels never brightened, though water-coloured dry ground within about
+   8 yd of water may be darkened or shifted toward the navy, with the census's counts per map in the
+   NOTICE, MD-05; the family feather, the edge feather, the corner term and the navy floor across tile
+   edges); coloured water (bright ponds, the violet river), lava, slime and swamp water keep their
+   colours;
 2. the void (Zephras Isle's black background and the area beyond the tiles) filled with the navy,
    the dark haze connected to it re-composited over the navy, and the 4 edge skirts treated as void;
 3. resampled from 1.0417 to 1 yd per pixel (Lanczos-3) and reduced to coarser levels;
@@ -2187,7 +2208,7 @@ line, D-047).
 | Case | What the map draws | Message |
 |---|---|---|
 | Minimap index missing or refused (`atlasHash` differs) | The painted style | "Minimap tiles unavailable: <why>; showing the painted map" |
-| Minimap tiles missing (a clone or build without the pack, §23.3) | The index loads but the first tile fails: the painted style | "Minimap tiles not downloaded (run `pnpm maps:minimap:fetch`)"; a deploy build cannot lack them (§24.3) |
+| Minimap tiles missing (a clone or build without the pack, §23.3) | The index loads but every image of the first view fails (a first view over the sea is decided by the underlay's images): the painted style | "Minimap tiles not downloaded (run `pnpm maps:minimap:fetch`)"; a deploy build cannot lack them (§24.3), so there (built with `--mode deploy`) the same failure is the network's and reads "Minimap tiles could not be loaded; showing the painted map" (review MD-03, MR-05) |
 | AVIF chosen and not supported | The painted style | "This browser cannot show the minimap tiles (AVIF)" |
 | Both indices refused | Part I §8.6's "art off" mode | as now |
 
@@ -2236,7 +2257,8 @@ minimap. The atlas's part is the interface:
 - **Order (MM-05)**: because the minimap draws no names, it becomes the default (MM.9) only after the
   presentation's labels canvas (MP.1) and its zone, continent and city labels (MP.7) are built; until
   then the atlas stays on the painted style by default, and the minimap is reachable through the style
-  switch for review.
+  switch for review. **Done 2026-09-28 (MM.9):** with MP.1 and MP.7 built, the minimap is the default;
+  MP.7's acceptance test places all 50 zone and city names at the fit-both view in the minimap style too.
 - These are requests to the presentation design (§13's list); map-presentation.md revision 3 is
   being written by another team, and this design does not edit it.
 
@@ -2274,19 +2296,25 @@ a release, nor bandwidth usage".
 
 - **In `main`** (`public/maps/minimap/`, allowlisted in `.gitignore` like `public/maps/atlas/`):
   `index.json`, `manifest.json` (every tile's path, bytes and SHA-256), `NOTICE.md` and `pack.json`,
-  the pointer: `{ asset, tag, bytes, sha256, treeHash, client }`. `public/maps/minimap/t/` is
+  the pointer: `{ asset, tag, bytes, sha256, treeHash, client, contents }` (`contents` is
+  `["NOTICE.md", "manifest.json", "t/"]`). `public/maps/minimap/t/` is
   gitignored, and a test fails if any file under it is tracked.
-- **The pack** (MM-06): `minimap-tiles-<treeHash 12>.tar`, the tool's deterministic tar of
+- **The pack** (MM-06): `minimap-tiles-<treeHash 12>-<pack SHA-256 12>.tar`, the tool's deterministic tar of
   **`NOTICE.md`, `manifest.json` and `t/`**, in that order, so a copy downloaded from the release carries
   Blizzard's notice, the non-affiliation statement and the list of alterations (D-033 rule 2). MEASURED on
   a tar of `b5` made with the system `tar` (`<r31>/index5.ts`): 58,183,680 B, headers and padding of 6,671
   files included; WebP does not compress further (52,206,634 B gzip-6). It is attached to a GitHub release
-  tagged `minimap-<client version>-<treeHash 12>` (for the `b5` prototype,
-  `minimap-1.60.1.70009-583ac6d8831e`), whose **release text is the NOTICE** (the tool writes it with the
-  pack). One pack per tile set, **never replaced**: a new build is a new tag. Publishing the release is the
-  owner's step (OD-13: nothing is pushed until he says so).
-- **Local development**: `pnpm maps:minimap:fetch` downloads the asset `pack.json` names (with `gh`
-  or the release URL), checks its SHA-256 and every tile's against the manifest, checks that the pack's
+  tagged `minimap-<client version>-<treeHash 12>-<pack SHA-256 12>`, whose **release text is the NOTICE**
+  (the tool writes it with the pack). One release per pack, **never replaced**: a new pack is a new tag.
+  Revision 3.1 named the pack and tag by the tree hash alone (for the `b5` prototype,
+  `minimap-1.60.1.70009-583ac6d8831e`), but the pack also holds the manifest, whose tool hash, Node and
+  platform change without the tiles changing: three builds of one tile set had different bytes under one
+  name (review finding MD-02). The pack's own SHA-256 in the name and tag makes a new pack always a new
+  release, and `readCommittedPack`, M7 and the dist audit refuse any other name. Publishing the release is
+  the owner's step (OD-13: nothing is pushed until he says so).
+- **Local development**: `pnpm maps:minimap:fetch` downloads the asset `pack.json` names (with `gh`,
+  or the release's public URL, which it fetches without a token: while the repository is private,
+  `MINIMAP_PACK_SOURCE=gh` with `GH_TOKEN` in the workflow; MD-11), checks its SHA-256 and every tile's against the manifest, checks that the pack's
   `NOTICE.md` and `manifest.json` equal the committed ones, and extracts `t/` into
   `public/maps/minimap/t/`; on the machine with the client, `tools/maps/minimap.ts` writes the same
   folder directly. Without either, `pnpm check` still passes (§23.4) and the app falls back to the
@@ -2316,8 +2344,11 @@ a release, nor bandwidth usage".
 ### 23.4 `--check`, CI and the dist audit without the client
 
 - **CI cannot rebuild the tiles** (it has no client), exactly as for `nav:check`, `convert.ts --check`
-  and `atlas.ts --check`. `minimap.ts --check` is a manual gate on the owner's machine, recorded in
-  STATUS with the pack's tree hash, and required before a new pack is published.
+  and `atlas.ts --check`. `minimap.ts --check --pack` is a manual gate on the owner's machine, recorded
+  in STATUS with the pack's tree hash and SHA-256, and required before a new pack is published and
+  before a commit that changes any module in the tool's closure (review finding MD-01): the manifest
+  records that closure's hash, so such an edit makes the committed manifest, NOTICE, pointer and pack
+  ones the committed tool would not write. `maps:validate` MT fails until the tool is rerun.
 - **`pnpm check` never needs the tiles** (MM-04). It runs `pnpm build`, whose dist audit runs in its plain
   mode: the minimap folder's index, manifest, NOTICE and pointer must ship and agree; tiles that are
   present must match the manifest; if none is present the audit prints one loud line ("minimap: 0 of
@@ -2399,14 +2430,17 @@ The painted `atlas` and `art` entries are unchanged by Part II. State this in MM
 | M4 | The sources: 1,796 minimap and 1,796 root-ADT rows at this build, unique FDIDs, 32-hex CKeys, maps exactly 0, 1 and 2991 (no phase map); the counts per map equal the recorded ones | no |
 | M5 | Budgets from the manifest's bytes (total, per level, per tile); with the tiles, from the files | no |
 | M6 | Every tile's bytes and SHA-256; each a 256 px still WebP (or AVIF); nothing unlisted under `t/` | yes |
-| M7 | The pointer: the pack's name matches its tree hash; with the pack present, its SHA-256 and that its `NOTICE.md` and `manifest.json` equal the committed ones; the tree hash equals the hash over the manifest's files | the pack |
+| M7 | The pointer: the pack's name and tag carry its tree hash and SHA-256 (MD-02); with the pack present, its SHA-256 and that its `NOTICE.md` and `manifest.json` equal the committed ones; the tree hash equals the hash over the manifest's files | the pack |
 | M8 | Relief agreement, re-derived offline at level −2 over the committed relief (maps 0 and 1): the share of water cells, land cells and **shore land cells** (land within 2 cells of water; MM-02) whose pixels lie on the navy ramp (hue 213–216°, within the ramp's luma), against the manifest's census within a tolerance MM.4 calibrates on the real build; Zephras Isle reported as not checked | yes |
 | M9 | No sea key at any level covers a committed relief land cell (a misplacement or a mask error would); MEASURED on `b5`: 0 at every level on both maps (`<r31>/m9.ts`) | no |
 | M10 | The manifest's parameters equal `minimap-params.ts`, and its census (both seam measures, texture, inversions, dry texels, shore cells, skirts, black components) is present and within the §19.5 gates | no |
 | **M11** | **The independent seam measure** (§19.5) re-derived from the tiles at levels −1 to −3, with the relief's water class as the wet mask, equals the manifest's relief-mask copy of that census within ±2 edges per level and map (the tool records both masks' results) | yes |
 
+| MT | The manifest's `tool.toolTreeHash` equals the checkout's closure of `tools/maps/minimap.ts` (review finding MD-01); `--skip-tool-tree` skips it for local work and tests only, as for `data:validate` and `nav:validate` | no |
+
 `art-build.test.ts` and the new `minimap-build.test.ts` pin M1–M11 on a synthetic folder, each shown
-failing on a tampered copy, as T1–T9 are today.
+failing on a tampered copy, as T1–T9 are today. `--skip-minimap-tiles` skips M6, M8 and M11 even with the
+tiles present (the command-line test's run; `minimap-files.test.ts` runs them, MD-07).
 
 ### 24.5 Decoded-tile memory (MM-09)
 
@@ -2442,18 +2476,18 @@ styles (MM.8), and ATL.10 switches the atlas on with the minimap as the default 
 presentation's names exist** (MP.1, MP.7). Every step ends green on `pnpm check` and `maps:validate`
 **without the minimap tiles** (§23.4), and nothing is the default until ATL.9 passes.
 
-| Step | Files | Tests and gates | Budgets | Depends on |
-|---|---|---|---|---|
-| MM.0 Decisions | DECISIONS (Part II's record, proposed as **D-049**: D-047 and D-048 are taken); STATUS owner rows O12–O20 and the step order below | review of the texts | – | owner answers (defaults otherwise) |
-| MM.1 Runtime for two styles | `src/map/adapter.ts` (`MapStyle`, band id per style, `keepBuffer` in the band), `src/infra/maps/atlas-index.ts` (`dir`, extension), `map-resources.ts` (an index per style), `src/map/leaflet/atlas-decoded.ts` and `LeafletMapAdapter.ts` (decoded tiles per band, the hold-until-idle swap with the old buffer pruned), `atlas-tile-layer.ts` (`keepBuffer` from the band), `src/app/map-controller.ts` | jsdom: a `baseLevel` 0 index with `underlayLevel` −6 accepted and every key stored or sea; a style switch shows no bare container frame; no tile starts from the other style's key; the old band's off-view tiles are removed at the switch; the sea colour follows the band; the painted index is not fetched until shown | first view ≤ 100 kB per style | ATL.8 |
-| MM.2 Tool inputs | `tools/maps/minimap.ts`, `lib/minimap-inputs.ts`, `minimap-decode.ts`, `minimap-liquid.ts`, `minimap-params.ts` | synthetic WDT and BLP fixtures (`test-support.ts`); refusal on non-DXT1, alpha, size, missing or encrypted files; the relief-equality refusal; client-gated: counts 736/988/72 and the relief equality | – | MM.0 |
-| MM.3 Recolour | `lib/minimap-recolour.ts`, `minimap-seams.ts`, `minimap-census.ts` | synthetic rasters: each family to the navy; **a lake whose b − g straddles 10 comes out without a contour** (the field); shallows to the ramp; warm and grey kept; the luma cap keeps bright ponds and the hue window the violet river; lava and slime kept; the gate's reach (4.2 and 8.3 yd); **a dry texel never brightens, before and after the feathers**; the family feather; the edge feather removes a synthetic step, including a 10-row river, and fades out along the edge; **the corner term makes four tiles meet**; the navy floor; void flood and **haze flood** (haze wider than 64 texels composited); the edge-skirt rule applied to exactly the 4 sides; each census gate failing on a crafted raster; client-gated: the census of §19.5 within ± 10 % of each figure, and the contact sheets | – | MM.2 |
-| MM.4 Stitch, pyramid, outputs | `lib/minimap-stitch.ts`, `minimap-keys.ts`, `minimap-manifest.ts`, `minimap-notice.ts`, `minimap-pack.ts`, `minimap-checks.ts`, `minimap-review.ts`; the shared `atlas-index.ts` and `atlas-pyramid.ts` generalised | periodic weights equal direct ones; partition at the seam and card edges; reductions exact; sea keys; no flat non-sea tile; **the tar holds `NOTICE.md`, `manifest.json`, `t/` in that order** and is byte-identical; the independent seam census on levels −1 to −3 with both masks; client-gated double build byte-identical and `--check`; M1–M11 each failing on a tampered folder | `minimap` ≤ 60 MB, ≤ 32 kB per tile, per level + 10 % | MM.3 |
-| MM.5 Owner review | `--review` contact sheets at 1:1, 2:1 and 3:1 of native pixels (§18.10); the format sheets magnified bilinearly (§20.3) | the owner signs off (O18) and answers O12, O17 and O20 | – | MM.4 |
-| MM.6 Hosting and gates | `public/maps/minimap/` (index, manifest, NOTICE, pointer); `.gitignore` (allowlist the folder, ignore `t/`); `tools/maps/minimap-fetch.ts` and `maps:minimap:fetch`; `tools/maps/validate.ts` (M1–M11); `tools/build/dist-requirements.json` (`external`), `tools/build/lib/audit.ts` (plain and deploy modes), `audit-dist.ts --deploy`, `package.json` `build:deploy`, their tests; the release with the NOTICE as its text (the owner publishes it) | a test that nothing under `t/` is tracked; fetch refuses a wrong SHA-256 or a pack whose NOTICE or manifest differs; **`pnpm check` passes on a clone without the tiles and prints the warning; the plain audit fails on a partial set; the deploy audit fails without the tiles and passes with them** | as MM.4 | MM.5; OD-13 for publishing |
-| MM.7 Style control and labels hook | the drawer's style switch (map-presentation MP.4b), persistence, About and legend text naming both NOTICEs, `data-map-style`; the §22 requests delivered to the presentation | component tests: persistence, fallback when unavailable, announcement; UI tokens: the navy against `--frl-map-frame` ≥ 3:1 | – | MM.1, MM.6, MP.4b |
-| MM.8 Measure (ATL.9 with both styles) | ATL.9 as Part I §11, run in each style: laptop trace, holes, hairlines, decode, the style switch (no bare frame), contrast (§24.1), **decoded-tile memory (§24.5) in view, with the kept buffer and during the hold** | §9.2 gates in each style; ≥ 2.0:1 by Part I's method in the minimap style; §24.5's three budgets | – | MM.7, ATL.8 |
-| MM.9 On by default, edits elsewhere | ATL.10 with `minimap` the default; §13's documents | dist audit in deploy mode; the fit-both view shows every levelling zone's name in the minimap style (MP.7's test run on the minimap); review | all | **MM.8, MP.1, MP.7** |
+| Step | Files | Tests and gates | Budgets | Depends on | State |
+|---|---|---|---|---|---|
+| MM.0 Decisions | DECISIONS (Part II's record, proposed as **D-049**: D-047 and D-048 are taken); STATUS owner rows O12–O20 and the step order below | review of the texts | – | owner answers (defaults otherwise) | Done: D-049 |
+| MM.1 Runtime for two styles | `src/map/adapter.ts` (`MapStyle`, band id per style, `keepBuffer` in the band), `src/infra/maps/atlas-index.ts` (`dir`, extension), `map-resources.ts` (an index per style), `src/map/leaflet/atlas-decoded.ts` and `LeafletMapAdapter.ts` (decoded tiles per band, the hold-until-idle swap with the old buffer pruned), `atlas-tile-layer.ts` (`keepBuffer` from the band), `src/app/map-controller.ts` | jsdom: a `baseLevel` 0 index with `underlayLevel` −6 accepted and every key stored or sea; a style switch shows no bare container frame; no tile starts from the other style's key; the old band's off-view tiles are removed at the switch; the sea colour follows the band; the painted index is not fetched until shown | first view ≤ 100 kB per style | ATL.8 | Built |
+| MM.2 Tool inputs | `tools/maps/minimap.ts`, `lib/minimap-inputs.ts`, `minimap-decode.ts`, `minimap-liquid.ts`, `minimap-params.ts` | synthetic WDT and BLP fixtures (`test-support.ts`); refusal on non-DXT1, alpha, size, missing or encrypted files; the relief-equality refusal; client-gated: counts 736/988/72 and the relief equality | – | MM.0 | Built |
+| MM.3 Recolour | `lib/minimap-recolour.ts`, `minimap-seams.ts`, `minimap-census.ts` | synthetic rasters: each family to the navy; **a lake whose b − g straddles 10 comes out without a contour** (the field); shallows to the ramp; warm and grey kept; the luma cap keeps bright ponds and the hue window the violet river; lava and slime kept; the gate's reach (4.2 and 8.3 yd); **a dry texel never brightens, before and after the feathers**; the family feather; the edge feather removes a synthetic step, including a 10-row river, and fades out along the edge; **the corner term makes four tiles meet**; the navy floor; void flood and **haze flood** (haze wider than 64 texels composited); the edge-skirt rule applied to exactly the 4 sides; each census gate failing on a crafted raster; client-gated: the census of §19.5 within ± 10 % of each figure, and the contact sheets | – | MM.2 | Built: the §19.5 gates pass |
+| MM.4 Stitch, pyramid, outputs | `lib/minimap-stitch.ts`, `minimap-keys.ts`, `minimap-manifest.ts`, `minimap-notice.ts`, `minimap-pack.ts`, `minimap-checks.ts`, `minimap-review.ts`; the shared `atlas-index.ts` and `atlas-pyramid.ts` generalised | periodic weights equal direct ones; partition at the seam and card edges; reductions exact; sea keys; no flat non-sea tile; **the tar holds `NOTICE.md`, `manifest.json`, `t/` in that order** and is byte-identical; the independent seam census on levels −1 to −3 with both masks; client-gated double build byte-identical and `--check`; M1–M11 each failing on a tampered folder | `minimap` ≤ 60 MB, ≤ 32 kB per tile, per level + 10 % | MM.3 | Built: 6,647 tiles, 51.76 MB; two builds byte-identical |
+| MM.5 Owner review | `--review` contact sheets at 1:1, 2:1 and 3:1 of native pixels (§18.10); the format sheets magnified bilinearly (§20.3) | the owner signs off (O18) and answers O12, O17 and O20 | – | MM.4 | The owner signed off the revision 3.1 sheets (D-049 O18); the built tiles' sheets (`.cache/map-ui-build/minimap-sheets/`) await his look |
+| MM.6 Hosting and gates | `public/maps/minimap/` (index, manifest, NOTICE, pointer); `.gitignore` (allowlist the folder, ignore `t/`); `tools/maps/minimap-fetch.ts` and `maps:minimap:fetch`; `tools/maps/validate.ts` (M1–M11); `tools/build/dist-requirements.json` (`external`), `tools/build/lib/audit.ts` (plain and deploy modes), `audit-dist.ts --deploy`, `package.json` `build:deploy`, their tests; the release with the NOTICE as its text (the owner publishes it) | a test that nothing under `t/` is tracked; fetch refuses a wrong SHA-256 or a pack whose NOTICE or manifest differs; **`pnpm check` passes on a clone without the tiles and prints the warning; the plain audit fails on a partial set; the deploy audit fails without the tiles and passes with them** | as MM.4 | MM.5; OD-13 for publishing | Built; the release waits for OD-13 |
+| MM.7 Style control and labels hook | the drawer's style switch (map-presentation MP.4b), persistence, About and legend text naming both NOTICEs, `data-map-style`; the §22 requests delivered to the presentation | component tests: persistence, fallback when unavailable, announcement; UI tokens: the navy against `--frl-map-frame` ≥ 3:1 | – | MM.1, MM.6, MP.4b | Built (with MP.4b) |
+| MM.8 Measure (ATL.9 with both styles) | ATL.9 as Part I §11, run in each style: laptop trace, holes, hairlines, decode, the style switch (no bare frame), contrast (§24.1), **decoded-tile memory (§24.5) in view, with the kept buffer and during the hold** | §9.2 gates in each style; ≥ 2.0:1 by Part I's method in the minimap style; §24.5's three budgets | – | MM.7, ATL.8 | Measured with ATL.9, 2026-09-28 (`atl9mm8`): §24.5's three budgets pass in both styles (in view ≤ 6.0 MB, all live ≤ 14.4 MB, a switch ≤ 13.4 MB held 184–359 ms); minimap contrast 2.03:1; no hole frame in either style or at the switch. The laptop trace is owed. **Re-run 2026-09-30 after the review fixes** (`atl9mm8Final`): the band-crossing and sweep gates now pass at 4× (no long task), the three memory budgets, holes (0 frames in 20 cases), hairlines and contrast pass; still failing: first art at 4× (1.61–2.34 s; review MR-07), the first-view bytes of the route-fit view (§24.2; review MR-06), the 10,000-step pans' p99 at 4× (48.7 ms), and one frame of about 21 ms per style at a 1× wheel crossing (the game client was running; to re-run) |
+| MM.9 On by default, edits elsewhere | ATL.10 with `minimap` the default; §13's documents | dist audit in deploy mode; the fit-both view shows every levelling zone's name in the minimap style (MP.7's test run on the minimap); review | all | **MM.8, MP.1, MP.7** | Built 2026-09-28, ahead of MM.8: the minimap the default; MP.7's test passes in the minimap style (50 of 50 names at the fit-both view and at 0.022 px/yd); the deploy-mode audit passes; review owed |
 
 ---
 

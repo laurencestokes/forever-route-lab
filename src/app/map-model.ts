@@ -18,7 +18,9 @@ import type {
 import { isFullUiRectangle, resolvePoint, type MapGeometry } from '../geo';
 import {
   boundsOfPoints,
+  isAtlasSurface,
   surfaceIdOf,
+  surfaceMapIds,
   type PointGroupInput,
   type PointSubject,
   type RouteInput,
@@ -184,9 +186,10 @@ function eventSpawn(point: PublishedPoint, geometry: MapGeometry): SpawnPoint {
 /**
  * Where the focused quests' objectives are done (MAPS §7.4): kill and kill-credit targets, objects
  * to use, the NPCs and objects an objective item drops from, and event areas (QuestieDB
- * `triggerEnd`). Groups are labelled `<target> · <what> for <quest>`.
+ * `triggerEnd`). Groups are labelled `<target> · <what> for <quest>`. `only` keeps the objectives
+ * it accepts (by quest and 0-based index): the log's open ones (src/app/quest-state.ts).
  */
-export function objectiveModel(dataset: DatasetView, geometry: MapGeometry, questIds: readonly QuestId[]): QuestPointsModel {
+export function objectiveModel(dataset: DatasetView, geometry: MapGeometry, questIds: readonly QuestId[], only?: (questId: QuestId, index: number) => boolean): QuestPointsModel {
   const groups: PointGroupInput[] = [];
   let missingQuests = 0;
   let noPosition = 0;
@@ -210,6 +213,7 @@ export function objectiveModel(dataset: DatasetView, geometry: MapGeometry, ques
     }
     const name = quest.name;
     quest.objectives.forEach((objective, index) => {
+      if (only !== undefined && !only(questId, index)) return;
       switch (objective.kind) {
         case 'kill': {
           const ref = { kind: 'npc', id: objective.npcId } as const;
@@ -514,9 +518,15 @@ export function routeBoundsOn(route: RouteInput, mapId: WorldMapId): WorldBounds
   return boundsOfPoints(mapId, placedPoints(route));
 }
 
-/** The first surface the route reaches, or null when no step is placed. */
+/** The first world surface the route reaches, or null when no step is placed (`firstRouteMap` for any kind of surface). */
 export function firstRouteSurface(route: RouteInput): SurfaceId | null {
-  for (const step of route.steps) if (step.placement.kind === 'point') return surfaceIdOf(step.placement.world.mapId);
+  const mapId = firstRouteMap(route);
+  return mapId === null ? null : surfaceIdOf(mapId);
+}
+
+/** The world map of the route's first placed step, or null when no step is placed. */
+export function firstRouteMap(route: RouteInput): WorldMapId | null {
+  for (const step of route.steps) if (step.placement.kind === 'point') return step.placement.world.mapId;
   return null;
 }
 
@@ -544,9 +554,9 @@ export function legUnknownAt(route: RouteInput, index: number): boolean {
   return false;
 }
 
-/** Steps placed on world maps none of `surfaces` shows (a world-form location on MapID 36, say). */
+/** Steps placed on world maps none of `surfaces` shows (a world-form location on MapID 36, say); the atlas shows every map it places. */
 export function stepsWithoutSurface(summary: RouteMapSummary, surfaces: readonly SurfaceInfo[]): number {
-  const shown = new Set<number>(surfaces.map((surface) => surface.mapId));
+  const shown = new Set<number>(surfaces.flatMap((surface) => surfaceMapIds(surface)));
   return summary.maps.reduce((sum, entry) => sum + (shown.has(entry.mapId) ? 0 : entry.steps), 0);
 }
 
@@ -576,17 +586,23 @@ export interface ZoneGroup {
 const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
- * The zones jump-to-zone offers, grouped by surface (in the surfaces' order) and sorted by name:
- * every UiMap with one full-rectangle zone row (AreaID > 0) on a surface's world map. A name that
- * repeats within a group gets its UiMap id.
+ * The zones jump-to-zone offers, grouped by world map (in the surfaces' order; the atlas's maps in
+ * placement order, each its own group on the atlas surface) and sorted by name: every UiMap with
+ * one full-rectangle zone row (AreaID > 0) on the group's world map. A name that repeats within a
+ * group gets its UiMap id.
  */
 export function zoneGroups(geometry: MapGeometry, surfaces: readonly SurfaceInfo[]): readonly ZoneGroup[] {
   const groups: ZoneGroup[] = [];
-  for (const surface of surfaces) {
+  const maps = surfaces.flatMap((surface) =>
+    isAtlasSurface(surface)
+      ? surface.members.map((member) => ({ surface: surface.id, mapId: member.mapId, label: member.name }))
+      : [{ surface: surface.id, mapId: surface.mapId, label: surface.name }],
+  );
+  for (const entry of maps) {
     const zones: { readonly uiMapId: UiMapId; readonly name: string }[] = [];
     for (const map of geometry.maps.values()) {
       const [row] = map.assignments;
-      if (map.assignments.length !== 1 || row === undefined || row.mapId !== surface.mapId || row.areaId <= 0 || !isFullUiRectangle(row)) continue;
+      if (map.assignments.length !== 1 || row === undefined || row.mapId !== entry.mapId || row.areaId <= 0 || !isFullUiRectangle(row)) continue;
       zones.push({ uiMapId: map.uiMapId, name: map.name });
     }
     if (zones.length === 0) continue;
@@ -595,9 +611,27 @@ export function zoneGroups(geometry: MapGeometry, surfaces: readonly SurfaceInfo
     const options = zones
       .map((zone) => ({ uiMapId: zone.uiMapId, label: (counts.get(zone.name) ?? 0) > 1 ? `${zone.name} (UiMap ${String(zone.uiMapId)})` : zone.name }))
       .sort((a, b) => compareStrings(a.label, b.label) || a.uiMapId - b.uiMapId);
-    groups.push({ surface: surface.id, label: surface.name, zones: options });
+    groups.push({ surface: entry.surface, label: entry.label, zones: options });
   }
   return groups;
+}
+
+/**
+ * Whether the dataset has a quest giver or turn-in with a spawn on world map `mapId` (for the
+ * atlas's inset note, map-atlas.md §5.5: "no quest data yet" is said only while it is true).
+ */
+export function mapHasQuestPoints(dataset: DatasetView, mapId: WorldMapId): boolean {
+  const checked = new Set<string>();
+  for (const quest of dataset.quests()) {
+    for (const ref of [...quest.starters, ...quest.finishers]) {
+      if (ref.kind === 'item') continue;
+      const key = refKey(ref);
+      if (checked.has(key)) continue;
+      checked.add(key);
+      if (dataset.spawns(ref).some((spawn) => spawn.world?.mapId === mapId)) return true;
+    }
+  }
+  return false;
 }
 
 // =============================================================================================

@@ -120,7 +120,7 @@ describe('SidePanel', () => {
         questLog={<p>quest log content</p>}
         details={<p>details content</p>}
         validation={<p>validation content</p>}
-        counts={{ available: 42, questLog: { used: 12, capacity: 20 }, validation: { error: 2, warning: 1, info: 0 } }}
+        counts={{ available: 42, questLog: { badge: '12', badgeLabel: '12 quests after step 4' }, validation: { error: 2, warning: 1, info: 0 } }}
       />
     );
   }
@@ -128,9 +128,11 @@ describe('SidePanel', () => {
   it('has the four tabs in order with counts spoken in words', () => {
     render(<Panel />);
     const names = screen.getAllByRole('tab').map((t) => t.getAttribute('aria-label') ?? t.textContent);
-    expect(names).toEqual(['Available (42 available)', 'Quest log (12 of 20 quests)', 'Details', 'Validation (2 errors, 1 warning)']);
+    // Each name starts with the tab's visible label (WCAG 2.5.3; review UR-11).
+    expect(names).toEqual(['Available, 42 available', 'Quest log, 12 quests after step 4', 'Details', 'Validation, 2 errors, 1 warning']);
+    expect(screen.getByRole('tab', { name: 'Quest log, 12 quests after step 4' }).textContent).toBe('Quest log12');
     // The visual badge shows the worst severity's icon and the total.
-    const validation = screen.getByRole('tab', { name: 'Validation (2 errors, 1 warning)' });
+    const validation = screen.getByRole('tab', { name: 'Validation, 2 errors, 1 warning' });
     expect(validation.textContent).toBe('Validation3');
     expect(validation.querySelector('[data-severity="error"]')).not.toBeNull();
   });

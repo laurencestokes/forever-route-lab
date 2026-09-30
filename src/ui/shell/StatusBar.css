@@ -54,17 +54,6 @@
   min-width: 0;
 }
 
-/* The active step: its label and number never shrink (UI-01); the title after it is its own flex
-   item, and the first thing in the bar to give way. */
-.frl-statusbar__step-title {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 260px;
-  overflow: hidden;
-  margin-left: calc(-1 * var(--frl-space-3) + 5px);
-  text-overflow: ellipsis;
-}
-
 .frl-statusbar__none {
   color: var(--frl-fg-subtle);
 }
@@ -272,15 +261,8 @@
     white-space: nowrap;
   }
 
-  .frl-statusbar__step-title {
-    max-width: 200px;
-  }
-}
-
-/* A shorter XP track; the step title leaves the bar (the active row and the Step item's tooltip
-   name the step). */
-@media (max-width: 1100px) {
-  .frl-statusbar__step-title {
+  /* "In log" hides with the badges' key words (the route summary and the Quest log tab have it). */
+  .frl-statusbar__log {
     display: none;
   }
 }
@@ -305,10 +287,18 @@
   gap: 6px;
 }
 
+/* "Lv 4 after step 12": the level in 15px bold, where it is read in 12px muted (ui-refresh.md §8). */
 .frl-xpbar__level {
   min-width: 42px;
-  font-size: var(--frl-text);
+  font-size: var(--frl-text-lg);
   font-weight: var(--frl-weight-bold);
+  white-space: nowrap;
+}
+
+.frl-xpbar__after {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-regular);
 }
 
 .frl-xpbar__bound {
@@ -318,12 +308,21 @@
 
 .frl-xpbar__track {
   position: relative;
-  width: 160px;
-  height: 10px;
+  width: 200px;
+  height: 12px;
   overflow: hidden;
   border: 1px solid var(--frl-border-strong);
-  border-radius: 5px;
+  border-radius: 6px;
   background: var(--frl-xp-track);
+}
+
+/* 20 ticks, one every 5% (decorative: the numbers carry the value; not drawn under forced colours). */
+.frl-xpbar__track::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to right, transparent 0 calc(5% - 1px), var(--frl-xp-tick) calc(5% - 1px) 5%);
+  pointer-events: none;
 }
 
 .frl-xpbar__fill {
@@ -434,6 +433,10 @@
 
   .frl-xpbar__marker {
     background: CanvasText;
+  }
+
+  .frl-xpbar__track::after {
+    display: none;
   }
 }
 

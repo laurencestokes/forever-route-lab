@@ -7,7 +7,10 @@ export interface TabDefinition<Id extends string> {
   readonly label: string;
   /** Visual extra after the label (a count). Hidden from assistive technology; see `badgeLabel`. */
   readonly badge?: ReactNode;
-  /** The badge in words; the tab's accessible name becomes `'Validation (2 errors, 1 warning)'`. */
+  /**
+   * The badge in words; the tab's accessible name becomes `'Validation, 2 errors, 1 warning'` and
+   * `'Quest log, 4 quests after step 12'`, starting with the visible label (WCAG 2.5.3).
+   */
   readonly badgeLabel?: string | undefined;
   readonly disabled?: boolean | undefined;
 }
@@ -97,7 +100,7 @@ export function Tabs<Id extends string>({ label, tabs, selectedId, onSelect, chi
               role="tab"
               id={tabDomId(tab.id)}
               aria-selected={selected}
-              aria-label={tab.badgeLabel === undefined ? undefined : `${tab.label} (${tab.badgeLabel})`}
+              aria-label={tab.badgeLabel === undefined ? undefined : `${tab.label}, ${tab.badgeLabel}`}
               aria-controls={panelDomId}
               tabIndex={selected ? 0 : -1}
               disabled={tab.disabled === true}

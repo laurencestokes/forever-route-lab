@@ -1,18 +1,26 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createEditorStore, type EditorStore, fixedClock } from '../app';
 import { staticDatasetSource } from '../app/dataset-source';
 import { createPlaceholderWorkspace, PLACEHOLDER_PROJECT_NAME } from '../app/placeholder-project';
 import { sequentialIdSource } from '../app/shell-support';
 import { App } from './App';
-import { ESTIMATE_LEGEND_SPOKEN, NOT_SIMULATED, PLACEHOLDER_DATA_NOTICE } from './app-model';
+import { NOT_SIMULATED, PLACEHOLDER_DATA_NOTICE } from './app-model';
 import { NO_MAP_FOR_ZONES, NOT_YET } from './app/AppTopBar';
 import { SELECTION_ANNOUNCE_DELAY_MS } from './app/LiveAnnouncer';
+import { loadDetailsPanel } from './app/lazy';
+
+// The Details panel is a lazy part (ui-refresh.md UR.1a) that production builds preload when idle; so do these tests.
+beforeAll(async () => {
+  await loadDetailsPanel();
+});
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  // The shell's choices are kept per browser (view-prefs.ts): each test starts from the defaults.
+  localStorage.clear();
 });
 
 const NOW = '2026-09-25T12:00:00.000Z';
@@ -29,7 +37,9 @@ const list = () => screen.getByRole('listbox');
 const option = (name: RegExp) => within(list()).getByRole('option', { name });
 const sidePanel = () => screen.getByRole('complementary', { name: 'Quests and details' });
 const tab = (name: RegExp) => within(sidePanel()).getByRole('tab', { name });
-const routeActions = () => within(screen.getByRole('toolbar', { name: 'Route actions' }));
+const routeActions = () => within(screen.getByRole('toolbar', { name: 'Selected steps' }));
+/** The Add footer, named for where new steps go ("Add after step 12"). */
+const addFooter = () => within(screen.getByRole('toolbar', { name: /^Add / }));
 const history = () => within(screen.getByRole('toolbar', { name: 'History' }));
 const liveRegion = (): HTMLElement => {
   const region = document.querySelector<HTMLElement>('.frl-app-live');
@@ -46,26 +56,36 @@ const pressGlobal = (key: string, init: KeyboardEventInit = {}) => {
 
 /** A key pressed on an element inside the route editor that is not the list (a toolbar button). */
 const pressInEditor = (key: string, init: KeyboardEventInit = {}) => {
-  fireEvent.keyDown(routeActions().getByRole('button', { name: 'Note' }), { key, ...init });
+  fireEvent.keyDown(addFooter().getByRole('button', { name: 'Note' }), { key, ...init });
 };
 
 const isUnavailable = (element: HTMLElement) => element.getAttribute('aria-disabled') === 'true';
 
 describe('App over the Milestone 1 placeholder data (editing behaviour)', () => {
-  it('says plainly that the data is a placeholder, with one visible key to the marks on numbers', () => {
+  it('says plainly that the data is a placeholder, and keeps the key to the marks in View', () => {
     setup();
-    const banner = screen.getByRole('note');
-    expect(banner.textContent).toContain(PLACEHOLDER_DATA_NOTICE);
-    const marks = banner.querySelector('.frl-app-banner__marks');
-    expect(marks?.getAttribute('aria-hidden')).toBe('true');
-    expect(marks?.textContent).toContain('? unknown');
-    expect(marks?.querySelector('[data-state="pending"]')).not.toBeNull();
-    expect(banner.textContent).toContain(ESTIMATE_LEGEND_SPOKEN);
-    // The rows' estimate column is a labelled choice beside the key.
-    expect(within(banner).getByRole('combobox', { name: 'Rows show' })).toBeTruthy();
+    const editor = within(screen.getByRole('main', { name: 'Route editor' }));
+    // The header tags the data; the meta line says it in words (ui-refresh.md §4.1).
+    expect(editor.getByTitle('Placeholder data')).toBeTruthy();
+    expect(editor.getByText(PLACEHOLDER_DATA_NOTICE)).toBeTruthy();
+    expect(editor.getByText(/^\d+ steps · Orc Warrior from level 1$/)).toBeTruthy();
+    // View is a disclosure: the rows' density, their numbers, and the key that replaced the banner's.
+    const view = editor.getByRole('button', { name: 'View' });
+    expect(view.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(view);
+    expect(view.getAttribute('aria-expanded')).toBe('true');
+    const panel = within(editor.getByRole('group', { name: 'View' }));
+    expect(panel.getByRole('radio', { name: 'Two lines' })).toHaveProperty('checked', true);
+    expect(panel.getByRole('radio', { name: 'XP gained' })).toHaveProperty('checked', true);
+    expect(panel.getByText(/unknown, with the reason in its tooltip/)).toBeTruthy();
+    fireEvent.click(panel.getByRole('radio', { name: 'One line' }));
+    expect(list().querySelector('.frl-row--one-line')).not.toBeNull();
+    expect(within(editor.getByRole('group', { name: 'View' })).getByRole('combobox', { name: 'Rows show' })).toBeTruthy();
+    fireEvent.keyDown(editor.getByRole('group', { name: 'View' }), { key: 'Escape' });
+    expect(view.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(view);
     const status = screen.getByRole('region', { name: 'Route status' });
     expect(status.textContent).toContain('Data placeholder');
-    expect(document.querySelector('.frl-topbar')?.textContent).toContain('Placeholder project');
   });
 
   it('has the product name as the page heading', () => {
@@ -190,14 +210,15 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
     expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Search quests' }));
   });
 
-  it('inserts note, travel and grind steps after the selection', () => {
+  it('inserts note, travel and grind steps after the selection, from the Add footer that names the place', () => {
     const { store, stepCount } = setup();
     fireEvent.click(option(/^1\. Note/));
-    fireEvent.click(routeActions().getByRole('button', { name: 'Travel' }));
-    expect(option(/^2\. Travel: Travel to an unknown place/)).toBeTruthy();
-    fireEvent.click(routeActions().getByRole('button', { name: 'Grind' }));
-    expect(option(/^3\. Grind: For 15m 00s/)).toBeTruthy();
-    fireEvent.click(routeActions().getByRole('button', { name: 'Note' }));
+    expect(screen.getByRole('toolbar', { name: 'Add after step 1' })).toBeTruthy();
+    fireEvent.click(addFooter().getByRole('button', { name: 'Travel' }));
+    expect(option(/^2\. Travel: to an unknown place/)).toBeTruthy();
+    fireEvent.click(addFooter().getByRole('button', { name: 'Grind' }));
+    expect(option(/^3\. Grind: for 15m 00s/)).toBeTruthy();
+    fireEvent.click(addFooter().getByRole('button', { name: 'Note' }));
     expect(stepCount()).toBe(43);
     // The new note opens in Details, where its text can be edited.
     const text = within(sidePanel()).getByRole('textbox', { name: 'Text' });
@@ -208,18 +229,20 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
 
   it('marks undo and redo unavailable from the history, keeping them focusable', () => {
     setup();
-    const undo = history().getByRole('button', { name: 'Undo' });
+    const undo = history().getByRole('button', { name: 'Nothing to undo' });
     expect(isUnavailable(undo)).toBe(true);
     expect(undo.hasAttribute('disabled')).toBe(false);
     fireEvent.click(option(/^1\. Note/));
     fireEvent.keyDown(list(), { key: 'Delete' });
     expect(isUnavailable(undo)).toBe(false);
+    expect(undo.getAttribute('aria-label')).toBe('Undo Delete steps');
+    expect(undo.getAttribute('aria-keyshortcuts')).toBe('Control+Z');
     undo.focus();
     fireEvent.click(undo);
     // The last entry is undone: Undo is unavailable again but keeps focus (F-03).
     expect(isUnavailable(undo)).toBe(true);
     expect(document.activeElement).toBe(undo);
-    expect(isUnavailable(history().getByRole('button', { name: 'Redo' }))).toBe(false);
+    expect(isUnavailable(history().getByRole('button', { name: 'Redo Delete steps' }))).toBe(false);
   });
 
   it('keeps focus in the route list after the toolbar deletes the last selected step', () => {
@@ -252,7 +275,7 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
     act(() => {
       store.acquireLock('proposal');
     });
-    const note = routeActions().getByRole('button', { name: 'Note' });
+    const note = addFooter().getByRole('button', { name: 'Note' });
     expect(isUnavailable(note)).toBe(true);
     fireEvent.click(note);
     fireEvent.click(option(/^1\. Note/));
@@ -268,21 +291,23 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
 
   it('lists placeholder quests open to the character and filters them by search', () => {
     setup();
-    const quests = () => within(within(sidePanel()).getByRole('list', { name: 'Quests' })).getAllByRole('listitem');
+    const quests = () => within(within(sidePanel()).getByRole('grid', { name: 'Quests' })).getAllByRole('row').filter((row) => row.classList.contains('frl-quest-item'));
     expect(quests()).toHaveLength(7);
     expect(within(sidePanel()).getByText('1 quest not shown: not open to Orc Warrior.')).toBeTruthy();
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search quests' }), { target: { value: 'second zone' } });
     expect(quests()).toHaveLength(1);
   });
 
-  it('never claims "no issues" before the route is checked; the quest log arrives in Milestone 6', async () => {
+  it('never claims "no issues" or an empty quest log before the route is checked', async () => {
     setup();
     expect(tab(/^Validation/).textContent).toBe('Validation');
     fireEvent.click(tab(/^Validation/));
     expect(await within(sidePanel()).findByText('Not checked yet')).toBeTruthy();
     expect(within(sidePanel()).getByText(new RegExp(`^${NOT_SIMULATED}\\. No issues are reported`))).toBeTruthy();
     fireEvent.click(tab(/^Quest log/));
-    expect(within(sidePanel()).getByText('The quest log arrives in Milestone 6')).toBeTruthy();
+    expect(tab(/^Quest log/).textContent).toBe('Quest log');
+    expect(await within(sidePanel()).findByText('Not checked yet')).toBeTruthy();
+    expect(within(sidePanel()).getByText(`${NOT_SIMULATED}.`)).toBeTruthy();
   });
 
   it('changes the theme through the store', () => {
@@ -295,7 +320,7 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
     setup();
     const toolbar = within(screen.getByRole('toolbar', { name: 'Project actions' }));
     // Settings opens its dialog (Milestone 4); import and export need project storage, which this shell has none of.
-    expect(isUnavailable(toolbar.getByRole('button', { name: 'Settings' }))).toBe(false);
+    expect(isUnavailable(toolbar.getByRole('button', { name: 'Orc Warrior · Horde, settings' }))).toBe(false);
     const expected = { Import: NOT_YET.import, Export: NOT_YET.export } as const;
     for (const [name, reason] of Object.entries(expected)) {
       const button = toolbar.getByRole('button', { name });
@@ -306,7 +331,7 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
       fireEvent.click(button);
     }
     // This shell has no map (no geometry was given), so jump-to-zone says so.
-    const go = screen.getByRole('button', { name: 'Go to zone' });
+    const go = screen.getByRole('button', { name: 'Go to the chosen zone or view' });
     expect(isUnavailable(go)).toBe(true);
     expect(document.getElementById(go.getAttribute('aria-describedby') ?? '')?.textContent).toBe(NO_MAP_FOR_ZONES);
     // No notice appears anywhere: the reasons are descriptions, not messages.
@@ -334,8 +359,8 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
     fireEvent.keyDown(list(), { key: 'l' });
     expect(announced()).toBe('1 step locked.');
     fireEvent.keyDown(list(), { key: 'd', ctrlKey: true });
-    expect(announced()).toBe('1 step duplicated: the copies are step 5.');
-    fireEvent.click(routeActions().getByRole('button', { name: 'Travel' }));
+    expect(announced()).toBe('1 step duplicated: the copy is step 5.');
+    fireEvent.click(addFooter().getByRole('button', { name: 'Travel' }));
     expect(announced()).toBe('Travel inserted as step 6.');
   });
 
@@ -376,6 +401,29 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
       vi.advanceTimersByTime(SELECTION_ANNOUNCE_DELAY_MS);
     });
     expect(liveRegion().textContent).toBe('1 step selected');
+  });
+
+  it('toggles map focus with Alt+M anywhere outside a text field, and keeps the choice per browser (ui-refresh.md §4.3)', () => {
+    setup();
+    const editor = () => document.querySelector('main') as HTMLElement;
+    pressGlobal('m', { altKey: true, code: 'KeyM' });
+    expect(editor().hidden).toBe(true);
+    expect((document.querySelector('aside') as HTMLElement).hidden).toBe(true);
+    expect(screen.getByRole('button', { name: 'Map focus' }).getAttribute('aria-pressed')).toBe('true');
+    expect(JSON.parse(localStorage.getItem('forever-route-lab:shell') ?? '{}')).toMatchObject({ mapFocus: true });
+    // In a text field Alt+M is the field's.
+    fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Search quests' }), { key: 'µ', altKey: true, code: 'KeyM' });
+    expect(editor().hidden).toBe(true);
+    pressGlobal('µ', { altKey: true, code: 'KeyM' });
+    expect(editor().hidden).toBe(false);
+    cleanup();
+    // A new visit starts from what was kept: here, the route panel collapsed from its handle.
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the route panel' }));
+    cleanup();
+    setup();
+    expect((document.querySelector('main') as HTMLElement).hidden).toBe(true);
+    expect(screen.getByRole('button', { name: 'Show the route panel' })).toBeTruthy();
   });
 
   it('opens and closes the About dialog, which says the data is a placeholder', () => {

@@ -16,7 +16,17 @@ import {
   StatusBar,
 } from '../kit';
 import type { Readout } from '../lib/readout';
-import { type MapNameOf, routeMetricsView, sameSimulationStatus, simulationStatusOf, xpBarAt } from './derived-view';
+import {
+  type MapNameOf,
+  noResultsReason,
+  questLogCountOf,
+  questLogWords,
+  routeMetricsView,
+  sameQuestLogCount,
+  sameSimulationStatus,
+  simulationStatusOf,
+  xpBarAt,
+} from './derived-view';
 import type { Announce } from './LiveAnnouncer';
 import { sameResultsView, selectCharacter, selectDerived, selectRevision, selectRulesetId, useActiveTarget } from './selectors';
 
@@ -96,7 +106,12 @@ export const AppStatusBar = memo(function AppStatusBar({ store, view, dataset, a
   const rulesetId = useEditor(store, selectRulesetId);
   const revision = useEditor(store, selectRevision);
   const derived = useDerivedSelector(selectDerived, sameResultsView);
+  const logCount = useDerivedSelector(questLogCountOf, sameQuestLogCount);
   const identity = dataset.identity;
+  const logStep = logCount === null ? null : (view.numberOfStep.get(logCount.stepId) ?? null);
+  const noResults = noResultsReason(derived);
+  const logWhy = derived === null || derived.results === null ? `${noResults.charAt(0).toLowerCase()}${noResults.slice(1)}` : 'select a step to see the quest log after it';
+  const questLog = questLogWords(logCount, logStep, character.priorHistory, logWhy);
 
   const metrics = useMemo(() => routeMetricsView(derived, revision, mapName), [derived, revision, mapName]);
   const activeId = active.step?.id ?? null;
@@ -128,6 +143,7 @@ export const AppStatusBar = memo(function AppStatusBar({ store, view, dataset, a
       xpGained={metrics.xpGained}
       xpPerHour={metrics.xpPerHour}
       provisional={metrics.provisional}
+      questLog={questLog}
       summary={<RouteSummary rows={rows} notes={metrics.notes} parameters={metrics.parameters} />}
       simulation={<AppSimulationStatus announce={announce} mapName={mapName} />}
       optimizer={OPTIMIZER}

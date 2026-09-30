@@ -6,8 +6,11 @@ import {
   duplicateSelected,
   type EditorStore,
   insertGrind,
+  insertHearth as insertHearthCommand,
   insertNote,
+  insertTrain as insertTrainCommand,
   insertTravel,
+  insertVendor,
   joinSelectedSections,
   type MoveTarget,
   moveSelected,
@@ -47,6 +50,14 @@ export interface RouteActions {
   readonly insertNote: () => void;
   readonly insertTravel: () => void;
   readonly insertGrind: () => void;
+  /** Inserts a hearthstone use after the selection (the Add footer's Hearth; the walk knows the bind point). */
+  readonly insertHearth: () => void;
+  /** Inserts a train step with nothing set after the selection (the Add footer's Train); Details sets it. */
+  readonly insertTrain: () => void;
+  /** Inserts a vendor step with nothing set after the selection (the Add footer's Buy); Details sets it. */
+  readonly insertBuy: () => void;
+  /** Inserts the step an insert command makes after the selection, announced as the other inserts are (the map popover's actions, MP.6). */
+  readonly insertCommand: (command: Command) => void;
   /** Cuts the steps (default: the selection) to the clipboard. True when something was cut. */
   readonly cutSteps: (ids?: ReadonlySet<StepId>) => boolean;
   /** Copies the steps (default: the selection) to the clipboard; allowed while editing is locked. */
@@ -134,7 +145,9 @@ export function createRouteActions(store: EditorStore, announce: Announce, optio
       run(duplicateSelected(ids), (before, after) => {
         const copies = newSteps(before, after);
         const where = positionsText(after, new Set(copies.map((s) => s.id)));
-        return `${plural(copies.length, 'step')} duplicated${where === null ? '' : `: the copies are ${where}`}.`;
+        // One copy is "the copy is step 5", several "the copies are steps 4 to 5" (fix QA-23).
+        const lead = copies.length === 1 ? 'the copy is' : 'the copies are';
+        return `${plural(copies.length, 'step')} duplicated${where === null ? '' : `: ${lead} ${where}`}.`;
       });
     },
 
@@ -166,6 +179,16 @@ export function createRouteActions(store: EditorStore, announce: Announce, optio
     insertGrind: () => {
       insert(insertGrind({ until: { kind: 'duration', seconds: DEFAULT_GRIND_SECONDS } }));
     },
+    insertHearth: () => {
+      insert(insertHearthCommand('use'));
+    },
+    insertTrain: () => {
+      insert(insertTrainCommand());
+    },
+    insertBuy: () => {
+      insert(insertVendor());
+    },
+    insertCommand: insert,
 
     cutSteps: (ids) =>
       run(cutSelected(ids), (before, after) => `${plural(before.length - after.length, 'step')} cut. Paste with Ctrl+V; ${UNDO_HINT.charAt(0).toLowerCase()}${UNDO_HINT.slice(1)}`),

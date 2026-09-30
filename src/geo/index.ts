@@ -9,6 +9,7 @@ export * from './distance';
 export * from './era';
 export * from './frame';
 export * from './geometry';
+export * from './groups';
 export * from './resolve';
 export * from './transforms';
 export * from './types';

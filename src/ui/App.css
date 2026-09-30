@@ -1,95 +1,5 @@
 /* Composition styles for src/ui/App.tsx: layout glue between kit components. Tokens only. */
 
-/* Route panel: header, placeholder banner, toolbar, then the list takes the rest. */
-.frl-app-route {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.frl-app-route__toolbar {
-  display: flex;
-  flex: none;
-  align-items: center;
-  min-height: var(--frl-panel-header-height);
-  padding: var(--frl-space-half) var(--frl-space-1);
-  border-bottom: 1px solid var(--frl-border);
-  background: var(--frl-surface);
-}
-
-/* The route actions wrap onto a second line in a narrow route panel rather than being clipped. */
-.frl-app-route__toolbar > .frl-toolbar {
-  flex-wrap: wrap;
-  row-gap: var(--frl-space-half);
-}
-
-.frl-app-route__list {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/*
- * The banner above the route: the "Placeholder data" line while placeholder data is loaded, and the
- * one visible key to every "?" in rows and the status bar.
- */
-.frl-app-banner {
-  /* Contains the legend's visually hidden spoken form. */
-  position: relative;
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  gap: var(--frl-space-half);
-  padding: var(--frl-space-1) var(--frl-space-3);
-  border-bottom: 1px dashed var(--frl-border-strong);
-  background: repeating-linear-gradient(-45deg, var(--frl-placeholder-stripe) 0 4px, transparent 4px 8px);
-  color: var(--frl-fg);
-  font-size: var(--frl-text-sm);
-  line-height: var(--frl-leading-tight);
-}
-
-.frl-app-banner__line {
-  display: flex;
-  align-items: center;
-  gap: var(--frl-space-2);
-}
-
-/* The key to the marks on numbers, and the choice of the rows' estimate column beside it. */
-.frl-app-banner__legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--frl-space-1) var(--frl-space-2);
-  color: var(--frl-fg-muted);
-}
-
-.frl-app-banner__marks {
-  display: inline-flex;
-  flex-wrap: wrap;
-  column-gap: var(--frl-space-2);
-}
-
-.frl-app-banner__marks > span {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-}
-
-.frl-app-banner__mark {
-  margin: 0 2px 0 0;
-  vertical-align: baseline;
-}
-
-.frl-app-banner__column.frl-field {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--frl-space-1);
-  white-space: nowrap;
-}
-
 /* Side-panel content. */
 .frl-app-hint {
   color: var(--frl-fg-subtle);
@@ -143,4 +53,46 @@
 .frl-app-quests {
   margin: 0 calc(-1 * var(--frl-space-3));
   list-style: none;
+}
+
+/* The Available tab (ui-refresh.md §5.4): the filter row, then the summary line with New custom quest. */
+.frl-available__filters {
+  display: flex;
+  gap: var(--frl-space-2);
+  padding: var(--frl-space-2) 0 var(--frl-space-1);
+}
+
+.frl-available__search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.frl-available__view {
+  flex: 0 1 150px;
+  min-width: 110px;
+}
+
+.frl-available__view .frl-select {
+  width: 100%;
+}
+
+.frl-available__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-2);
+  padding: var(--frl-space-1) 0 var(--frl-space-2);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+}
+
+/* The Available tab's zone groups (map-presentation.md §14.4, step MP.3; ui-refresh.md §5.4 restyles them in UR.6). */
+.frl-app-quest-group__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--frl-space-1);
+  padding: var(--frl-space-2) 0 var(--frl-space-1);
+  font-size: var(--frl-text-sm);
+  font-weight: 600;
 }

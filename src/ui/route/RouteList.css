@@ -1,4 +1,9 @@
-/* Route list and rows. Every row is exactly --frl-row-height (28px) tall and one line. */
+/*
+ * Route list and rows. Every row of a list has one height (the virtualiser relies on it): 40px
+ * two-line rows (--frl-row-height-two-line, the default, D-048 A) or 28px one-line rows
+ * (--frl-row-height, the compact View choice). Rows have no background at rest, so the band under
+ * the later steps (D-048 B) shows through them; hover and selection keep their own.
+ */
 
 .frl-routelist {
   position: relative;
@@ -11,6 +16,9 @@
   container: frl-routelist / inline-size;
 }
 
+/* Contained (PERF-11, UR.3): its size comes from the panel, never from the 400,000px canvas, so a
+   change elsewhere in the route panel (the Add footer's caption on every selection change) does not
+   lay out the rows again, and nothing inside it lays out the panel. */
 .frl-routelist__viewport {
   position: relative;
   flex: 1 1 auto;
@@ -18,6 +26,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  contain: strict;
 }
 
 /* The active row carries the focus ring while the list has focus; the list itself shows one
@@ -31,9 +40,46 @@
   outline-offset: calc(-1 * var(--frl-focus-width));
 }
 
+/* Its own stacking context, so the later band (z-index -1) sits under the rows and over nothing else.
+   --frl-number-digits: the route's longest step number, which the list sets (the number column's width). */
 .frl-routelist__canvas {
+  --frl-number-digits: 2;
   position: relative;
   width: 100%;
+  isolation: isolate;
+}
+
+/* The steps after the selection: one element under their rows, from the boundary to the end
+   (D-048 B). Decorative: the insertion line and "Add after step 12" say the boundary. */
+.frl-routelist__later {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: -1;
+  background: var(--frl-surface-later);
+  pointer-events: none;
+}
+
+/* Where new steps go: a 2px dashed line at the boundary after the selection, with a caret at the
+   left edge (ui-refresh.md §6.4). Nothing is written into a row. */
+.frl-routelist__insert {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  height: 0;
+  margin-top: -1px;
+  border-top: 2px dashed var(--frl-drop-indicator);
+  pointer-events: none;
+}
+
+.frl-routelist__insert::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -6px;
+  border: 5px solid transparent;
+  border-left: 7px solid var(--frl-drop-indicator);
 }
 
 .frl-routelist__drop {
@@ -78,9 +124,11 @@
 
 /* Rows --------------------------------------------------------------------------------------- */
 .frl-row {
-  --frl-row-bg: var(--frl-surface);
+  --frl-row-bg: transparent;
   --frl-row-bar: transparent;
   position: absolute;
+  /* Each row's size is fixed (its height, the list's width): a row that changes lays out alone. */
+  contain: strict;
   left: 0;
   right: 0;
   display: flex;
@@ -101,6 +149,13 @@
   user-select: none;
 }
 
+.frl-row--two-line {
+  gap: 0;
+  height: var(--frl-row-height-two-line);
+  padding-right: 8px;
+  line-height: normal;
+}
+
 .frl-row:hover {
   --frl-row-bg: var(--frl-surface-hover);
 }
@@ -119,56 +174,135 @@
   opacity: 0.45;
 }
 
-.frl-row__handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 16px;
-  height: 100%;
-  color: var(--frl-fg-subtle);
-  cursor: grab;
-  opacity: 0;
-  touch-action: none;
-}
-
-.frl-row__handle--none {
-  cursor: default;
-}
-
-.frl-row:hover .frl-row__handle,
-.frl-row.is-active .frl-row__handle {
-  opacity: 1;
-}
-
-.frl-row__handle--none,
-.frl-row:hover .frl-row__handle--none {
-  opacity: 0;
-}
-
 /* Step row ----------------------------------------------------------------------------------- */
+
+/* The number is also the drag handle (the grip icon went, ui-refresh.md §6.1). Its width follows
+   the route's longest number (--frl-number-digits, set by the list). */
 .frl-steprow__number {
   flex: none;
-  min-width: 26px;
+  width: calc(var(--frl-number-digits) * 0.62em + 6px);
   color: var(--frl-fg-subtle);
-  font-size: var(--frl-text-sm);
+  font-size: var(--frl-text-xs);
   text-align: right;
 }
 
-.frl-steprow__glyph {
+.frl-row--one-line .frl-steprow__number {
+  font-size: var(--frl-text-sm);
+}
+
+.frl-steprow__number.is-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.frl-steprow__mark {
   flex: none;
 }
 
-.frl-steprow__title {
+.frl-steprow__markbox {
+  display: flex;
+  flex: none;
+  margin: 0 8px 0 6px;
+}
+
+.frl-steprow__text {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.frl-steprow__line1,
+.frl-steprow__line2 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.frl-steprow__line1 {
+  height: 18px;
+}
+
+.frl-steprow__line2 {
+  height: 16px;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-steprow__title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--frl-weight-medium);
+  text-overflow: ellipsis;
+}
+
+.frl-row--one-line .frl-steprow__title {
+  flex: 1 1 auto;
+  font-weight: var(--frl-weight-regular);
+}
+
+.frl-steprow__verb {
+  color: var(--frl-fg-muted);
+  font-weight: var(--frl-weight-regular);
+}
+
+.frl-steprow__chain {
+  flex: none;
+  color: var(--frl-fg-subtle);
+}
+
+.frl-steprow__detail {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-regular);
+  text-overflow: ellipsis;
+}
+
+/* Line 2's short place (review UI-01): the NPC gives way first (to a few letters and an ellipsis), so
+   the zone shows whole beside the chip and the row actions at a 340px panel; the coordinates are in
+   the tooltip and the row's name. */
+.frl-steprow__detail.is-place {
+  display: flex;
+  align-items: baseline;
+  text-overflow: clip;
+}
+
+.frl-steprow__lead {
+  flex: 0 1000 auto;
+  min-width: 2.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.frl-steprow__sep {
+  flex: none;
+  white-space: pre;
+}
+
+.frl-steprow__zone {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.frl-steprow__detail {
-  color: var(--frl-fg-subtle);
-  font-size: var(--frl-text-sm);
+.frl-steprow__travel-time {
+  position: relative;
+  padding-left: 12px;
+}
+
+.frl-steprow__travel-time .frl-steprow__pending {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  margin: -5px 0 0;
 }
 
 .frl-steprow[data-step-kind='note'] .frl-steprow__title {
@@ -177,8 +311,14 @@
 }
 
 .frl-steprow__provenance,
-.frl-steprow__difficulty {
+.frl-steprow__difficulty,
+.frl-steprow__locked {
   flex: none;
+}
+
+.frl-steprow__locked {
+  display: inline-flex;
+  color: var(--frl-fg-muted);
 }
 
 .frl-steprow__issues {
@@ -190,24 +330,55 @@
   font-weight: var(--frl-weight-bold);
 }
 
-.frl-steprow__issues[data-severity='error'] {
+/* Line 2's worst issue: its shape, its colour and its words (the fix is one Enter away, in Details). */
+.frl-steprow__issue {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.frl-steprow__issue-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.frl-steprow__issue :where(svg) {
+  flex: none;
+}
+
+.frl-steprow__issues[data-severity='error'],
+.frl-steprow__issue[data-severity='error'] {
   color: var(--frl-severity-error);
 }
 
-.frl-steprow__issues[data-severity='warning'] {
+.frl-steprow__issues[data-severity='warning'],
+.frl-steprow__issue[data-severity='warning'] {
   color: var(--frl-severity-warning);
 }
 
-.frl-steprow__issues[data-severity='info'] {
+.frl-steprow__issues[data-severity='info'],
+.frl-steprow__issue[data-severity='info'] {
   color: var(--frl-severity-info);
 }
 
 /*
- * The estimate column (level after, XP gained or step time): numbers align on the right edge, the
- * assumed marker hangs in a fixed 10px gutter after them and, in the step-time column only (level
- * and XP never wait for walking paths, UI-12), the pending hourglass in a 12px gutter before them,
- * so every row's number lines up whatever marks it carries.
+ * The estimates: numbers align on the right edge, the assumed marker hangs in a fixed 10px gutter
+ * after them and, beside a step time only (level and XP never wait for walking paths, UI-12), the
+ * pending hourglass in a 12px gutter before them, so every row's number lines up whatever marks it
+ * carries. Two-line rows: the top number (XP gained or the step time) over the level after.
  */
+.frl-steprow__estimates {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 52px;
+  margin-left: 6px;
+  font-size: var(--frl-text-sm);
+}
+
 .frl-steprow__estimate {
   position: relative;
   display: inline-flex;
@@ -219,9 +390,28 @@
   font-size: var(--frl-text-sm);
 }
 
+.frl-steprow__estimates .frl-steprow__estimate {
+  min-width: 0;
+}
+
+.frl-steprow__top {
+  height: 18px;
+  line-height: 18px;
+  color: var(--frl-fg);
+}
+
+.frl-steprow__bottom {
+  height: 16px;
+  line-height: 16px;
+}
+
 .frl-steprow__estimate[data-column='time'] {
   min-width: 58px;
   padding-left: 12px;
+}
+
+.frl-steprow__estimates .frl-steprow__estimate[data-column='time'] {
+  min-width: 0;
 }
 
 .frl-steprow__estimate .frl-assumed {
@@ -239,9 +429,72 @@
   margin: -5px 0 0;
 }
 
+/* XP gained: a gain in bold; a known zero muted and regular (review UO-14). */
+.frl-steprow__top .frl-steprow__xp {
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-steprow__xp.is-zero,
+.frl-steprow__top .frl-steprow__xp.is-zero {
+  color: var(--frl-fg-muted);
+  font-weight: var(--frl-weight-regular);
+}
+
+/* A level-up: "↑" and the level in bold, in the body ink (ui-refresh.md §5.3). */
+.frl-steprow__level.is-up {
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-bold);
+}
+
 /* A step time that waits for its walking path reads as provisional: italic, beside the hourglass. */
-.frl-steprow.is-pending .frl-steprow__estimate[data-column='time'] .frl-readout__value {
+.frl-steprow.is-pending .frl-steprow__estimate[data-column='time'] .frl-readout__value,
+.frl-steprow.is-pending .frl-steprow__travel-time .frl-readout__value {
   font-style: italic;
+}
+
+/* Row actions (duplicate, delete, lock) ------------------------------------------------------ */
+
+/* Two-line rows (D-048 F): on every row, muted, at the right end of line 2, on the row's own
+   background (the surface, the hover, the selection or the later band showing through a row at
+   rest), never over a fade. Line 2's words end before them, so nothing runs under them. */
+.frl-row--two-line .frl-steprow__actions {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 4px;
+  background: var(--frl-row-bg);
+}
+
+.frl-row--two-line .frl-row__action {
+  width: 20px;
+  height: 16px;
+  color: var(--frl-fg-subtle);
+}
+
+.frl-row--two-line:hover .frl-row__action,
+.frl-row--two-line.is-active .frl-row__action {
+  color: var(--frl-fg-muted);
+}
+
+.frl-row--two-line .frl-row__action.is-pressed {
+  color: var(--frl-fg);
+}
+
+/* One-line rows: duplicate and delete in the flow after the title, collapsed until hover or active;
+   the lock at the end, shown on hover, when active, or while locked. The title gives way. */
+.frl-row--one-line .frl-steprow__actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  width: 0;
+  overflow: hidden;
+  transition: width var(--frl-duration-fast) var(--frl-ease);
+}
+
+.frl-row--one-line:hover .frl-steprow__actions,
+.frl-row--one-line.is-active .frl-steprow__actions {
+  width: 44px;
 }
 
 .frl-steprow__lock {
@@ -267,22 +520,6 @@
   color: var(--frl-fg);
 }
 
-/* Duplicate and delete: in the flow after the title, collapsed until hover or active. The title
-   gives way; nothing else is covered. */
-.frl-steprow__actions {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  width: 0;
-  overflow: hidden;
-  transition: width var(--frl-duration-fast) var(--frl-ease);
-}
-
-.frl-row:hover .frl-steprow__actions,
-.frl-row.is-active .frl-steprow__actions {
-  width: 44px;
-}
-
 /* In-row affordances (duplicate, delete, lock): pointer-only spans, not buttons. The row is an
    option with presentational children, so they are hidden from assistive technology and never
    take focus; every action also has a list key and a toolbar button (docs/UI.md §8). */
@@ -299,7 +536,8 @@
   transition: color var(--frl-duration-fast) var(--frl-ease);
 }
 
-.frl-row__action:hover {
+.frl-row__action:hover,
+.frl-row--two-line .frl-row__action:hover {
   color: var(--frl-fg);
 }
 
@@ -309,24 +547,29 @@
   cursor: default;
 }
 
-/* A narrow list (the route panel at its 280px minimum, UI-18): the rows keep their title readable.
-   The issue marker keeps its shape and drops its count (the tooltip and the row's name say the
-   counts), the estimate column takes only the room its number needs, and the gaps tighten. */
+/* A narrow list (the route panel at its minimum, UI-18): the rows keep their title readable. The
+   issue marker keeps its shape and drops its count (the tooltip and the row's name say the counts),
+   the estimate column takes only the room its number needs, and the gaps tighten. */
 @container frl-routelist (width < 320px) {
   .frl-row {
     gap: 4px;
+  }
+
+  .frl-row--two-line {
+    gap: 0;
   }
 
   .frl-steprow__issues .frl-num {
     display: none;
   }
 
-  .frl-steprow__estimate {
+  .frl-row--one-line .frl-steprow__estimate,
+  .frl-row--one-line .frl-steprow__estimate[data-column='time'] {
     min-width: 0;
   }
 
-  .frl-steprow__estimate[data-column='time'] {
-    min-width: 0;
+  .frl-steprow__markbox {
+    margin: 0 6px 0 4px;
   }
 }
 
@@ -338,22 +581,69 @@
   font-weight: var(--frl-weight-bold);
 }
 
-.frl-grouprow__label {
+.frl-grouprow__handle {
+  flex: none;
+  align-self: stretch;
+  width: 26px;
+}
+
+.frl-row--two-line .frl-grouprow__handle {
+  width: calc(var(--frl-number-digits) * 0.62em + 42px);
+}
+
+.frl-grouprow__handle.is-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.frl-grouprow__text {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.frl-grouprow__label {
   min-width: 0;
   overflow: hidden;
-  padding-left: 32px;
   text-overflow: ellipsis;
 }
 
-.frl-grouprow__count {
+.frl-row--two-line .frl-grouprow__label {
+  height: 18px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.02em;
+  line-height: 18px;
+}
+
+.frl-grouprow__meta {
+  height: 16px;
+  overflow: hidden;
+  color: var(--frl-fg-subtle);
+  font-weight: var(--frl-weight-regular);
+  line-height: 16px;
+  text-overflow: ellipsis;
+}
+
+.frl-grouprow__count,
+.frl-grouprow__span {
   flex: none;
   color: var(--frl-fg-subtle);
   font-weight: var(--frl-weight-regular);
 }
 
+.frl-row--two-line .frl-grouprow__span {
+  width: 52px;
+  margin-left: 6px;
+  padding-right: 10px;
+  text-align: right;
+}
+
 /* Forced colours drop box shadows and author backgrounds: the selection bar becomes a system
-   Highlight strip, and the drop line is drawn in Highlight. The focus ring (an outline) stays. */
+   Highlight strip, the insertion and drop lines are drawn in Highlight, the later band is not drawn
+   (decorative; the insertion line stays), and the row actions sit on Canvas. The focus ring (an
+   outline) stays. */
 @media (forced-colors: active) {
   .frl-row.is-selected::before {
     content: '';
@@ -371,6 +661,22 @@
 
   .frl-routelist__drop::before {
     border-color: Highlight;
+    background: Canvas;
+  }
+
+  .frl-routelist__insert {
+    border-top-color: Highlight;
+  }
+
+  .frl-routelist__insert::before {
+    border-left-color: Highlight;
+  }
+
+  .frl-routelist__later {
+    display: none;
+  }
+
+  .frl-row--two-line .frl-steprow__actions {
     background: Canvas;
   }
 }

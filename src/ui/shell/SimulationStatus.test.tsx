@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { knownReadout } from '../lib/readout';
 import { PENDING_TRAVEL_TEXT, PendingMarker } from '../markers/PendingMarker';
 import { ReadoutValue } from '../markers/ReadoutValue';
-import { IssueList } from './PanelContent';
+import { IssueList } from './DetailParts';
 import { RouteSummary } from './RouteSummary';
 import { COUNTING_LEGS_TEXT, PATHS_READY_TEXT, SimulationStatus, type SimulationStatusModel, simulationStatusText } from './SimulationStatus';
 

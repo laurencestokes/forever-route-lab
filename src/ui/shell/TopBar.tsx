@@ -1,8 +1,7 @@
 import { useId, useState, type KeyboardEvent, type Ref } from 'react';
 import { THEME_LABELS, nextThemePreference, type ThemePreference } from '../lib/theme';
-import { PlaceholderTag } from '../primitives/Badge';
 import { Button } from '../primitives/Button';
-import type { IconName } from '../primitives/Icon';
+import { Icon, type IconName } from '../primitives/Icon';
 import { IconButton } from '../primitives/IconButton';
 import { Select, type SelectOption, type SelectOptionGroup } from '../primitives/Select';
 import { TextInput } from '../primitives/TextInput';
@@ -40,13 +39,16 @@ export interface TopBarZones {
   readonly unavailableReason?: string | null | undefined;
 }
 
+/** The character the route is for, as the character button says it ("Orc Warrior", "Horde"). */
+export interface TopBarCharacter {
+  readonly name: string;
+  /** The faction in words: faction is shown by words only, never by a colour. */
+  readonly faction: string;
+}
+
 export interface TopBarProps {
-  readonly projectName: string;
-  readonly routeName: string;
-  /** The open project is sample content: shows the "Placeholder" label beside its name. */
-  readonly placeholder?: boolean | undefined;
-  /** The label's word when `placeholder` is set ("Placeholder" by default; "Sample" for the generated sample). */
-  readonly placeholderLabel?: string | undefined;
+  /** The character button's words (D-048 D): it opens Settings. */
+  readonly character: TopBarCharacter;
   readonly search: {
     readonly value: string;
     readonly onChange: (value: string) => void;
@@ -89,15 +91,16 @@ export function BrandMark() {
 const ACTION_TITLES: Readonly<Record<TopBarAction, string>> = {
   import: 'Import a project or RXP guide',
   export: 'Export the project or an RXP guide',
-  settings: 'Character, route profile, assumptions and ruleset',
+  settings: 'Settings: character, route profile, assumptions and ruleset',
 };
 
 const ACTIONS: readonly TopBarAction[] = ['import', 'export', 'settings'];
 
 /**
- * The zone chooser: a native select and a Go button. The choice stays local until it is
- * committed, so arrowing through the closed select (which fires `change` in Chromium on Windows)
- * never jumps the map and never snaps back to the placeholder.
+ * "Go to zone or view…" (ui-refresh.md §8): a native select (the atlas's views first, then the
+ * zones) and a Go button. The choice stays local until it is committed, so arrowing through the
+ * closed select (which fires `change` in Chromium on Windows) never jumps the map and never snaps
+ * back to the placeholder.
  */
 function ZoneJump({ zones }: { readonly zones: TopBarZones }) {
   const reasonId = useId();
@@ -122,20 +125,20 @@ function ZoneJump({ zones }: { readonly zones: TopBarZones }) {
   return (
     <span className="frl-topbar__zone" onKeyDown={onKeyDown}>
       <Select
-        label="Jump to zone"
+        label="Go to zone or view"
         hideLabel
         className="frl-topbar__zone-select"
-        placeholder="Jump to zone…"
+        placeholder="Go to zone or view…"
         value={draft}
         options={zones.options}
         onChange={setDraft}
       />
       <Button
         className="frl-topbar__zone-go"
-        aria-label="Go to zone"
+        aria-label="Go to the chosen zone or view"
         aria-disabled={reason === null ? undefined : true}
         aria-describedby={reason === null ? undefined : reasonId}
-        title={reason === null ? 'Jump to the chosen zone (Enter)' : `Jump to zone: ${reason}`}
+        title={reason === null ? 'Show the chosen zone or view on the map (Enter)' : `Go to zone or view: ${reason}`}
         onClick={jump}
       >
         Go
@@ -150,14 +153,12 @@ function ZoneJump({ zones }: { readonly zones: TopBarZones }) {
 }
 
 /**
- * The top bar: product (the page's h1), project and route name, quest search, jump to zone, and
- * the Import, Export, Settings, Theme and About actions (ARCHITECTURE §12.4).
+ * The top bar (ui-refresh.md §8): the product (the page's h1), quest search, "Go to zone or view…",
+ * the character button that opens Settings (D-048 D), and Import, Export, Theme and About (ARCHITECTURE
+ * §12.4). The route's name and the Projects menu live in the route panel's header (§4.1).
  */
 export function TopBar({
-  projectName,
-  routeName,
-  placeholder = false,
-  placeholderLabel,
+  character,
   search,
   zones,
   onImport,
@@ -186,18 +187,6 @@ export function TopBar({
         <BrandMark />
         <h1 className="frl-brand__name">{PRODUCT_NAME}</h1>
       </div>
-      <span className="frl-topbar__sep" aria-hidden="true" />
-      <span className="frl-topbar__project" title={`${projectName} › ${routeName}`}>
-        <span className="frl-topbar__project-name">{projectName}</span>
-        <span className="frl-topbar__crumb" aria-hidden="true">
-          ›
-        </span>
-        <span className="frl-topbar__route-name">
-          <span className="frl-visually-hidden">Route: </span>
-          {routeName}
-        </span>
-        {placeholder && <PlaceholderTag what="project" label={placeholderLabel} />}
-      </span>
       <span className="frl-topbar__spacer" />
       <div role="search" className="frl-topbar__search">
         <TextInput
@@ -215,16 +204,24 @@ export function TopBar({
       </div>
       <ZoneJump zones={zones} />
       <Toolbar label="Project actions" className="frl-topbar__actions">
-        <Button variant="ghost" icon="import" {...actionProps('import')}>
+        <Button
+          className="frl-topbar__character"
+          aria-label={`${character.name} · ${character.faction}, settings`}
+          {...actionProps('settings')}
+        >
+          <Icon name="settings" size={16} />
+          <span className="frl-topbar__character-words" aria-hidden="true">
+            <b className="frl-topbar__character-name">{character.name}</b>
+            <span className="frl-topbar__character-faction"> · {character.faction}</span>
+          </span>
+        </Button>
+        <Button icon="import" {...actionProps('import')}>
           <span className="frl-topbar__button-label">Import</span>
         </Button>
-        <Button variant="ghost" icon="export" {...actionProps('export')}>
+        <Button icon="export" {...actionProps('export')}>
           <span className="frl-topbar__button-label">Export</span>
         </Button>
         <ToolbarSeparator />
-        <Button variant="ghost" icon="settings" {...actionProps('settings')}>
-          <span className="frl-topbar__button-label">Settings</span>
-        </Button>
         <IconButton
           icon={THEME_ICONS[theme]}
           label={`${THEME_LABELS[theme]}. Switch to ${THEME_LABELS[next].toLowerCase()}`}

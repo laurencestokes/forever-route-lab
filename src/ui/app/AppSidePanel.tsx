@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { EditorStore } from '../../app';
+import { type EditorStore, openQuestsInDetails } from '../../app';
 import type { MapController } from '../../app/map-exports';
 import { deleteCustomQuest } from '../../app/project-commands';
 import { useDerivedSelector, useEditor } from '../../app/react';
@@ -7,15 +7,15 @@ import type { DatasetView } from '../../domain/dataset';
 import type { QuestId } from '../../domain/ids';
 import type { Route } from '../../domain/route';
 import { type ActiveRow, panelTabOf, rightTabOf, type RouteView } from '../app-model';
-import { Button, EmptyState, PanelSection, SidePanel } from '../kit';
+import { Button, PanelSection, SidePanel } from '../kit';
 import { AvailableQuests } from './AvailableQuests';
 import type { CustomQuestEdit, CustomQuestEditorClose } from './CustomQuestEditor';
-import { loadCustomQuestEditor, loadValidationPanel, useLazy } from './lazy';
+import { questLogCountOf, questLogWords, sameQuestLogCount } from './derived-view';
+import { loadCustomQuestEditor, loadDetailsPanel, loadQuestLogPanel, loadValidationPanel, useLazy } from './lazy';
 import type { Announce } from './LiveAnnouncer';
 import type { QuestActions } from './QuestDetails';
 import type { RouteActions } from './route-actions';
-import { sameCounts, selectEditingLocked, selectIssueCounts, selectRightTab } from './selectors';
-import { DETAILS_LOCKED, DetailsPanel } from './StepDetails';
+import { DETAILS_LOCKED, sameCounts, selectCharacter, selectEditingLocked, selectIssueCounts, selectRightTab } from './selectors';
 
 export interface AppSidePanelProps {
   readonly store: EditorStore;
@@ -26,18 +26,14 @@ export interface AppSidePanelProps {
   readonly baseDataset?: DatasetView | undefined;
   readonly activeRow: ActiveRow | null;
   readonly search: string;
+  /** The Available tab's filter edits the quest search (one text, two fields); omitted: the tab has no filter field. */
+  readonly onSearchChange?: ((value: string) => void) | undefined;
   readonly actions: RouteActions;
   /** For "Pick on map" in Details; null or omitted without a map. */
   readonly mapController?: MapController | null | undefined;
   readonly announce?: Announce | undefined;
   readonly onFocusList: () => void;
 }
-
-const QUEST_LOG = (
-  <EmptyState title="The quest log arrives in Milestone 6" placeholder>
-    <p>It shows the quests in the log at the active step, which needs the route walker and simulation.</p>
-  </EmptyState>
-);
 
 
 const quiet: Announce = () => undefined;
@@ -75,6 +71,7 @@ export const AppSidePanel = memo(function AppSidePanel({
   baseDataset,
   activeRow,
   search,
+  onSearchChange,
   actions,
   mapController = null,
   announce = quiet,
@@ -84,9 +81,23 @@ export const AppSidePanel = memo(function AppSidePanel({
   const editingLocked = useEditor(store, selectEditingLocked);
   // Unknown (null) until the route is checked, so the tab never claims "no issues" early.
   const issueCounts = useDerivedSelector(selectIssueCounts, sameCounts);
-  const counts = useMemo(() => ({ available: null, questLog: null, validation: issueCounts }), [issueCounts]);
+  // The Quest log tab's count after the active step ("Quest log, 4 quests after step 12"; review UR-11).
+  const logCount = useDerivedSelector(questLogCountOf, sameQuestLogCount);
+  const priorHistory = useEditor(store, selectCharacter).priorHistory;
+  const logStep = logCount === null ? null : (view.numberOfStep.get(logCount.stepId) ?? null);
+  const logWords = logCount === null ? null : questLogWords(logCount, logStep, priorHistory, '');
+  const logBadge = logWords?.badge ?? null;
+  const logLabel = logWords?.badgeLabel ?? null;
+  const counts = useMemo(
+    () => ({ available: null, questLog: logBadge === null || logLabel === null ? null : { badge: logBadge, badgeLabel: logLabel }, validation: issueCounts }),
+    [issueCounts, logBadge, logLabel],
+  );
+  // The Quest log tab loads on first use, with the other lazy parts (ui-refresh.md §5.5).
+  const questLogCode = useLazy(loadQuestLogPanel, rightTab === 'context');
   // The validation panel loads on first use (lazy.tsx), with the issue-code registry.
   const validationCode = useLazy(loadValidationPanel, rightTab === 'validation');
+  // So does the Details panel (ui-refresh.md §10.3, UR.1a); production builds preload it when idle.
+  const detailsCode = useLazy(loadDetailsPanel, rightTab === 'details');
   const [editor, setEditor] = useState<CustomQuestEdit | null>(null);
   const [editorKey, setEditorKey] = useState(0);
   // The editor loads on first use (lazy.tsx, CR-19).
@@ -147,22 +158,43 @@ export const AppSidePanel = memo(function AppSidePanel({
   const onNewCustomQuest = useCallback(() => {
     openEditor({ mode: 'new' }, customQuestOpenerKey({ mode: 'new' }));
   }, [openEditor]);
+  const onOpenQuest = useCallback(
+    (id: QuestId) => {
+      openQuestsInDetails(store, [id]);
+    },
+    [store],
+  );
 
   const details =
     editor === null ? (
-      <DetailsPanel
-        store={store}
-        view={view}
-        route={route}
-        dataset={dataset}
-        baseDataset={baseDataset}
-        activeRow={activeRow}
-        actions={actions}
-        questActions={questActions}
-        mapController={mapController}
-        announce={announce}
-        onFocusList={onFocusList}
-      />
+      detailsCode.kind === 'ready' ? (
+        <detailsCode.value.DetailsPanel
+          store={store}
+          view={view}
+          route={route}
+          dataset={dataset}
+          baseDataset={baseDataset}
+          activeRow={activeRow}
+          actions={actions}
+          questActions={questActions}
+          mapController={mapController}
+          announce={announce}
+          onFocusList={onFocusList}
+        />
+      ) : detailsCode.kind === 'failed' ? (
+        <PanelSection title="Details">
+          <p className="frl-app-hint">{`The details panel could not be loaded (${detailsCode.message}). Check the connection and try again.`}</p>
+          <div className="frl-app-actions">
+            <Button size="sm" onClick={detailsCode.retry}>
+              Try again
+            </Button>
+          </div>
+        </PanelSection>
+      ) : (
+        <PanelSection title="Details">
+          <p className="frl-app-hint">Loading the details panel…</p>
+        </PanelSection>
+      )
     ) : editorCode.kind === 'ready' ? (
       <editorCode.value.CustomQuestEditor
         key={editorKey}
@@ -206,8 +238,27 @@ export const AppSidePanel = memo(function AppSidePanel({
       onTabChange={(tab) => {
         store.setView({ rightTab: rightTabOf(tab) });
       }}
-      available={<AvailableQuests store={store} dataset={dataset} search={search} questActions={questActions} onNewCustomQuest={onNewCustomQuest} />}
-      questLog={QUEST_LOG}
+      available={
+        <AvailableQuests store={store} dataset={dataset} search={search} onSearchChange={onSearchChange} questActions={questActions} onNewCustomQuest={onNewCustomQuest} />
+      }
+      questLog={
+        questLogCode.kind === 'ready' ? (
+          <questLogCode.value.QuestLogPanel store={store} view={view} dataset={dataset} questActions={questActions} onOpen={onOpenQuest} />
+        ) : questLogCode.kind === 'failed' ? (
+          <PanelSection title="Quest log">
+            <p className="frl-app-hint">{`The quest log could not be loaded (${questLogCode.message}). Check the connection and try again.`}</p>
+            <div className="frl-app-actions">
+              <Button size="sm" onClick={questLogCode.retry}>
+                Try again
+              </Button>
+            </div>
+          </PanelSection>
+        ) : (
+          <PanelSection title="Quest log">
+            <p className="frl-app-hint">Loading the quest log…</p>
+          </PanelSection>
+        )
+      }
       details={details}
       validation={
         validationCode.kind === 'ready' ? (

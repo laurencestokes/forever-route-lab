@@ -3,7 +3,20 @@ import type { UiMapId, WorldMapId } from '../../domain/ids';
 import type { FrameDescriptor, WorldBounds } from '../adapter';
 import {
   boundsToLatLngBounds,
+  clipInset,
+  connectorArc,
+  connectorMidpoint,
   formatYards,
+  IDENTITY,
+  latLngBoundsMeet,
+  latLngBoundsOnMap,
+  latLngOnMap,
+  latLngToAtlas,
+  padLatLngBounds,
+  placedLatLng,
+  placedLatLngBounds,
+  placementLatLngBounds,
+  type LatLngBoundsPair,
   gridLabel,
   gridLinesIn,
   gridSpacingAt,
@@ -209,5 +222,159 @@ describe('hit helpers', () => {
     expect(zonesAt(frames, { mapId: ONE, x: 45, y: 45 })).toEqual([1454, 1411, 1413]);
     expect(zonesAt(frames, { mapId: ONE, x: 90, y: 90 })).toEqual([1411]);
     expect(zonesAt(frames, { mapId: worldMapId(0), x: 45, y: 45 })).toEqual([]);
+  });
+});
+
+// =============================================================================================
+// Through placements (docs/research/map-atlas.md §5.1, §5.4, §8.1; step ATL.3)
+
+/**
+ * The compact layout's placements (map-atlas.md §5.2; src/geo/atlas.test.ts pins them from the
+ * committed rows): map/leaflet may import only map/adapter values, so they are written out here as
+ * the plain data the adapter receives. Rectangles: UiMap 947 rows 46785 and 46784, and UiMap 2521
+ * row 69208 (1.60.1.70009).
+ */
+const PLACEMENTS = [
+  { mapId: worldMapId(1), eOff: 5652, sOff: 12778, rect: { mapId: worldMapId(1), xMin: -12800, xMax: 12266.700195312, yMin: -9600, yMax: 6933.2998046875 } },
+  { mapId: worldMapId(0), eOff: 22499, sOff: 7907, rect: { mapId: worldMapId(0), xMin: -16000, xMax: 6933.2998046875, yMin: -7466.7001953125, yMax: 8000 } },
+  { mapId: worldMapId(2991), eOff: 17671.25, sOff: 5468.25, rect: { mapId: worldMapId(2991), xMin: 1247.9169921875, xMax: 4956.25, yMin: -1331.25, yMax: 4231.25 } },
+] as const;
+
+/** The app's pick rounding (src/app/map-controller.ts `pickedPoint`): 0.1 yd, −0 folded to 0. */
+const roundPick = (value: number): number => {
+  const rounded = Math.round(value * 10) / 10;
+  return rounded === 0 ? 0 : rounded;
+};
+
+/** Park–Miller minimal standard generator (as src/geo/atlas.test.ts): exact in doubles, repeatable. */
+function seeded(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state * 48271) % 2147483647;
+    return state / 2147483647;
+  };
+}
+
+describe('the funnel through a placement (map-atlas.md §5.1, ATL.3)', () => {
+  it('is exactly the world transform, −0 included, through the identity placement', () => {
+    const values = [0, -0, 1, -1, 0.1, -600.2991646363, -4186.4222239014, 12799.900390625, -19733.2109375, Number.MAX_VALUE];
+    for (const x of values) {
+      for (const y of values) {
+        const [lat, lng] = placedLatLng(IDENTITY, x, y);
+        const [wLat, wLng] = worldToLatLng(x, y);
+        expect(Object.is(lat, wLat) && Object.is(lng, wLng), `${String(x)}, ${String(y)}`).toBe(true);
+        const back = latLngOnMap(IDENTITY, x, y, ONE);
+        const world = latLngToWorld(x, y, ONE);
+        expect(Object.is(back.x, world.x) && Object.is(back.y, world.y), `back ${String(x)}, ${String(y)}`).toBe(true);
+      }
+    }
+    const bounds: WorldBounds = { mapId: ONE, xMin: -1716.6666259766, xMax: 1808.3332519531, yMin: -7249.9995117188, yMax: -1962.4998779297 };
+    expect(placedLatLngBounds(IDENTITY, bounds)).toEqual(boundsToLatLngBounds(bounds));
+    expect(latLngBoundsOnMap(IDENTITY, -3, -4, 5, 6, ONE)).toEqual(latLngBoundsToWorld(-3, -4, 5, 6, ONE));
+  });
+
+  it('draws a placed point at latLng = (−S, E), with S = sOff − x and E = eOff − y', () => {
+    const [kalimdor] = PLACEMENTS;
+    // Gornek in Durotar: E = 5652 + 4186.42…, S = 12778 + 600.29…
+    const [lat, lng] = placedLatLng(kalimdor, -600.2991646363, -4186.4222239014);
+    expect(lng).toBe(5652 - -4186.4222239014);
+    expect(lat).toBe(0 - (12778 - -600.2991646363));
+    expect(latLngToAtlas(lat, lng)).toEqual({ e: 5652 - -4186.4222239014, s: 12778 - -600.2991646363 });
+  });
+
+  it('round-trips 10,000 seeded points per placement within 10⁻⁹ yd, exactly after the 0.1-yd pick rounding, and whole yards bit for bit', () => {
+    for (const [index, placement] of PLACEMENTS.entries()) {
+      const next = seeded(20260927 + index);
+      let worst = 0;
+      let rounded = 0;
+      let whole = 0;
+      for (let i = 0; i < 10_000; i += 1) {
+        const x = placement.rect.xMin + next() * (placement.rect.xMax - placement.rect.xMin);
+        const y = placement.rect.yMin + next() * (placement.rect.yMax - placement.rect.yMin);
+        const [lat, lng] = placedLatLng(placement, x, y);
+        const back = latLngOnMap(placement, lat, lng, placement.mapId);
+        worst = Math.max(worst, Math.abs(back.x - x), Math.abs(back.y - y));
+        const [pLat, pLng] = placedLatLng(placement, roundPick(x), roundPick(y));
+        const picked = latLngOnMap(placement, pLat, pLng, placement.mapId);
+        if (roundPick(picked.x) !== roundPick(x) || roundPick(picked.y) !== roundPick(y)) rounded += 1;
+        const [wLat, wLng] = placedLatLng(placement, Math.round(x), Math.round(y));
+        const again = latLngOnMap(placement, wLat, wLng, placement.mapId);
+        if (again.x !== Math.round(x) || again.y !== Math.round(y)) whole += 1;
+      }
+      const where = `map ${String(placement.mapId)}`;
+      expect(worst, where).toBeLessThanOrEqual(1e-9);
+      expect(rounded, where).toBe(0);
+      expect(whole, where).toBe(0);
+    }
+  });
+
+  it('computes the inverse as src/geo/atlas.ts does, x = sOff − S and y = eOff − E, bit for bit', () => {
+    for (const placement of PLACEMENTS) {
+      const next = seeded(99 + placement.mapId);
+      for (let i = 0; i < 1000; i += 1) {
+        const lat = 0 - next() * 30000;
+        const lng = next() * 30000;
+        const s = 0 - lat;
+        const back = latLngOnMap(placement, lat, lng, placement.mapId);
+        expect(back.x).toBe(placement.sOff - s);
+        expect(back.y).toBe(placement.eOff - lng);
+      }
+    }
+  });
+
+  it('places each map’s rectangle where the layout puts it, and pads and meets rectangles as Leaflet does', () => {
+    const [kalimdor, ek, zephras] = PLACEMENTS;
+    // Kalimdor's 947 row: E −1,281.3…15,252, S 511.3…25,578; the card E 13,440–19,002.5, S 512–4,220.3.
+    const k = placementLatLngBounds(kalimdor);
+    expect(k[0]).toEqual([-25578, 5652 - 6933.2998046875]);
+    expect(k[1]).toEqual([12266.700195312 - 12778, 15252]);
+    expect(placementLatLngBounds(zephras)).toEqual([
+      [1247.9169921875 - 5468.25, 13440],
+      [-512, 19002.5],
+    ]);
+    expect(latLngBoundsMeet(placementLatLngBounds(kalimdor), placementLatLngBounds(ek))).toBe(true);
+    const view: LatLngBoundsPair = [
+      [-14000, 7000],
+      [-12000, 9000],
+    ];
+    expect(latLngBoundsMeet(view, placementLatLngBounds(zephras))).toBe(false);
+    expect(padLatLngBounds(view, 0.5)).toEqual([
+      [-15000, 6000],
+      [-11000, 10000],
+    ]);
+  });
+});
+
+describe('connector arcs (map-atlas.md §8.5)', () => {
+  it('bulges 12 % of the chord to the left of travel at mid-arc, its ends exact', () => {
+    const from: readonly [number, number] = [0, 0];
+    const to: readonly [number, number] = [0, 1000];
+    const arc = connectorArc(from, to);
+    expect(arc).toHaveLength(25);
+    expect(arc[0]).toBe(from);
+    expect(arc[24]).toBe(to);
+    // Travelling east (lng growing), left is north (lat growing): the apex is 120 yd north of the chord.
+    expect(arc[12]?.[0]).toBeCloseTo(120, 9);
+    expect(arc[12]?.[1]).toBeCloseTo(500, 9);
+    expect(connectorMidpoint(from, to)).toEqual([120, 500]);
+    // Travelling west, the arc bulges south.
+    expect(connectorMidpoint(to, from)).toEqual([-120, 500]);
+  });
+});
+
+describe('clipInset (interim art clipped to its side of the partition)', () => {
+  const image: WorldBounds = { mapId: ONE, xMin: -100, xMax: 100, yMin: -200, yMax: 200 };
+
+  it('gives the cut on each side as fractions of the image, east on the right', () => {
+    // Keep y ≥ −100 (the west three quarters): a quarter is cut from the east (right).
+    expect(clipInset(image, { ...image, yMin: -100 })).toEqual({ top: 0, right: 0.25, bottom: 0, left: 0 });
+    expect(clipInset(image, { ...image, yMax: 100, xMax: 50 })).toEqual({ top: 0.25, right: 0, bottom: 0, left: 0.25 });
+  });
+
+  it('is null for no cut, another map or an empty image; a clip that misses cuts everything', () => {
+    expect(clipInset(image, image)).toBeNull();
+    expect(clipInset(image, { ...image, mapId: worldMapId(0), yMin: 0 })).toBeNull();
+    expect(clipInset({ ...image, xMax: -100 }, image)).toBeNull();
+    expect(clipInset(image, { ...image, yMin: 500, yMax: 600 })).toEqual({ top: 0, right: 1, bottom: 0, left: 0 });
   });
 });

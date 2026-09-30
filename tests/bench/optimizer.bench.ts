@@ -307,7 +307,7 @@ interface Prepared {
 }
 
 function prepare(pool: Pool): Prepared {
-  const host = createOptimizationHost({ project: pool.project, revision: 1, data: pool.data, geometry: fixtureGeometry(), navigation: { kind: 'unavailable', reason: 'bench' } });
+  const host = createOptimizationHost({ project: pool.project, revision: 1, data: pool.data, geometry: fixtureGeometry(), navigation: { kind: 'unavailable', reason: 'bench' }, taxi: null });
   const run = createRunWalker(host);
   const walked = walkSection(run, pool.project, pool.section, { probe: false });
   const analysis = analyse(run, pool, walked.walk);
@@ -518,7 +518,7 @@ const NO_SIGNAL = new AbortController().signal;
  */
 async function compileNavCase(pool: Pool): Promise<Stats> {
   const runtime = createNavigationRuntime(testNavManifest([1]), new StraightLegService(), new ManualTimers());
-  const host = createOptimizationHost({ project: pool.project, revision: 1, data: pool.data, geometry: fixtureGeometry(), navigation: { kind: 'available', runtime } });
+  const host = createOptimizationHost({ project: pool.project, revision: 1, data: pool.data, geometry: fixtureGeometry(), navigation: { kind: 'available', runtime }, taxi: null });
   const click = async (): Promise<number> => {
     const run = createRunWalker(host);
     const analysisWalk = walkSection(run, pool.project, pool.section, { probe: false });
@@ -785,7 +785,7 @@ async function measure(only: string | null): Promise<Record<string, unknown>> {
 
   if (wants('walks')) {
     const analysisWalk = bench(args.runs, args.warm, () => {
-      const run = createRunWalker(createOptimizationHost({ project: pool.project, revision: 1, data: pool.data, geometry: fixtureGeometry(), navigation: { kind: 'unavailable', reason: 'bench' } }));
+      const run = createRunWalker(createOptimizationHost({ project: pool.project, revision: 1, data: pool.data, geometry: fixtureGeometry(), navigation: { kind: 'unavailable', reason: 'bench' }, taxi: null }));
       walkSection(run, pool.project, pool.section, { probe: false });
     });
     const baselineWalk = bench(args.runs, args.warm, () => {

@@ -1011,3 +1011,56 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
     - The `minimap` folder is capped at 60 MB gzip-6, with 32 kB per tile and per-level baselines
       plus 10%.
     - `maps:validate` gains the offline checks M1-M10.
+- **Status (2026-09-30, the map-data review fixes; details, no new owner choice):**
+  - The offline checks are M1-M11 (map-atlas.md §24.4 lists M11, the independent seam measure), plus
+    MT: the manifest's tool tree hash against the checkout (review finding MD-01).
+  - The pack and its release are named by the tiles' tree hash and the pack's own SHA-256
+    (`minimap-tiles-<tree 12>-<SHA-256 12>.tar`), so a new pack is always a new release and none is
+    replaced (MD-02, §23.3).
+  - The owner's sign-off of the built contact sheets (O18, §18.10), including `edge-skirts.png` (the
+    edge-skirt rule is new since the prototype), is owed before the first release is published (MD-09).
+
+## D-050: Map and UI rework sign-off and follow-ups (owner and architect, 2026-09-30)
+
+- **Date:** 2026-09-30
+- **Decided by:** the owner decided the sign-off and items 1-3. Items 4-7 are architect rulings on
+  the final verification's proposals, and the owner may overrule them.
+- **Context:** docs/reviews/review-map-ui-rework.md.
+- **Owner:**
+  - **Sign-off:** the owner signed off the built map and UI sheets on 2026-09-30.
+    - This covers the minimap and painted contact sheets, the benchmark and UI comparisons, and the
+      minimap edge skirts.
+    - It is also D-049's O18 sign-off for the built tiles (MD-09), given before any publication.
+  1. **Re-pin to client build 1.60.1.70124**, which the owner's beta client updated to. Everything
+     client-derived is rebuilt with the usual byte-identical checks, and the changes are reviewed:
+     - the navmesh;
+     - the painted art;
+     - the atlas and minimap tiles and the minimap pack;
+     - the client tables;
+     - the DB2 rows and the terrain byproducts.
+  2. **Default state (PR-13, UI-08):**
+     - With no step selected, the map and panels show the state after the last step, as the status
+       bar already does.
+     - The app selects a step when it opens: the last one selected in that project, otherwise the
+       last step.
+  3. **Level ceiling (PR-18):** available quests more than 5 levels above the character's level at
+     the step are not drawn on the map. This is an ASSUMPTION, counted in the notes; the lists
+     still show them.
+- **Architect:**
+  4. **`map/marks` is two files:** `marks.ts`, and `marks-pins.ts` for the pin code shared by the
+     map and the drawer. The places model carries `zoneAt`.
+  5. **The regressions are fixed, not re-baselined:**
+     - map-edit and derived back within their --check rules;
+     - the selection-to-map and edit-to-map times;
+     - the 10,000-step pan at 4×;
+     - first art at 4×.
+     The first-view budget is measured on the view the app actually opens at (MR-06).
+  6. **Clustering moves into the derived publish**, to bring the entry chunk back under the 248.5 kB
+     stop rule.
+  7. **The left panel's readability is revisited** against WoWF-QRP, which the owner finds more
+     readable. The options are:
+     - titles that wrap rather than being cut off;
+     - larger text and more spacing;
+     - fewer inline parts per row;
+     - row buttons moved clear of the text.
+     This is D-048 A/F refined. Mocks go to the owner before building.

@@ -15,9 +15,17 @@ export interface TransportStopSeed {
   readonly mapId: WorldMapId;
   /**
    * Dataset NPCs (zeppelin and dock masters) whose spawn is the dock (TIME-7). Empty when none is
-   * known: the dock then has no position until the user enters one (`TransportRef.dock`).
+   * known: the dock then has no position until the user enters one (`TransportRef.dock`) or the
+   * committed taxi file gives an inferred one (`clientStop`).
    */
   readonly dockNpcIds: readonly NpcId[];
+  /**
+   * Which stop of the seed's client transport path (`TransportSeed.clientPath`) this stop is: its
+   * index among the path's `Delay` stops in `NodeIndex` order (the committed `taxi.json`'s
+   * `transports[].stops`, D-039 B). INFERRED, matched by hand in step MP.9 from the stop's world map
+   * and the order of the path (map-presentation.md §10); null when no stop is matched.
+   */
+  readonly clientStop?: number | null;
 }
 
 export interface TransportSeed {
@@ -32,6 +40,12 @@ export interface TransportSeed {
   readonly source: string;
   readonly build?: string;
   readonly note?: string;
+  /**
+   * The client `TaxiPath` id `source` cites for this service (the transport path whose stops the
+   * committed taxi file lists): its stops give the docks their inferred positions (`clientStop`,
+   * TIME-7, NAV-08). Null when none is cited.
+   */
+  readonly clientPath?: number | null;
 }
 
 /** A taxi node known only by a cited client `TaxiNodes` row (new Forever nodes have no dataset NPC). */
@@ -52,88 +66,102 @@ const EK = worldMapId(0);
 const KALIMDOR = worldMapId(1);
 const ZEPHRAS_ISLE = worldMapId(2991);
 
-const stop = (name: string, mapId: WorldMapId): TransportStopSeed => ({ name, mapId, dockNpcIds: [] });
+const stop = (name: string, mapId: WorldMapId, clientStop: number | null): TransportStopSeed => ({ name, mapId, dockNpcIds: [], clientStop });
 
 /**
  * Transports the research docs identify, with the world map of each stop. No dock NPC ids are
  * recorded: the docs name none, and the dataset ships quest-referenced NPCs, flight masters,
- * innkeepers and trainers (ARCHITECTURE §5.2), not zeppelin or dock masters, so the docks have no
- * seeded position until the user enters one (TIME-7). Wait and ride times are the assumed
- * defaults. Which stop pairs a multi-stop ship serves, and in which direction, is UNKNOWN; the
- * graph offers every ordered pair (an assumption).
+ * innkeepers and trainers (ARCHITECTURE §5.2), not zeppelin or dock masters. Each record names the
+ * client transport path its source cites (`clientPath`) and, per stop, which of that path's stops
+ * it is (`clientStop`): the committed taxi file's stop positions then give the docks an inferred
+ * position (TIME-7; map-presentation.md §10; NAV-08). The match was made by hand in step MP.9 from
+ * the path id, each stop's world map and the stops' order, checked against the stops' positions
+ * (for example path 11167's stops lie at Menethil Harbor, Southshore and Auberdine, in that order).
+ * Without the file the docks have no seeded position until the user enters one. Wait and ride times
+ * are the assumed defaults. Which stop pairs a multi-stop ship serves, and in which direction, is
+ * UNKNOWN; the graph offers every ordered pair (an assumption).
  */
 export const TRANSPORT_SEEDS: readonly TransportSeed[] = [
   {
     id: 'stormwind-auberdine',
     name: 'Stormwind Harbor – Auberdine ship',
-    stops: [stop('Auberdine', KALIMDOR), stop('Stormwind Harbor', EK)],
+    stops: [stop('Auberdine', KALIMDOR, 0), stop('Stormwind Harbor', EK, 1)],
     factions: null,
     basis: 'official',
     source: 'forever-game-rules.md §6.5: S3; client TaxiPathNode path 11616 (C3)',
     build: '1.60.1.69977',
+    clientPath: 11616,
   },
   {
     id: 'menethil-southshore-auberdine',
     name: 'Menethil – Southshore – Auberdine ship',
-    stops: [stop('Menethil', EK), stop('Southshore', EK), stop('Auberdine', KALIMDOR)],
+    stops: [stop('Menethil', EK, 0), stop('Southshore', EK, 1), stop('Auberdine', KALIMDOR, 2)],
     factions: null,
     basis: 'official',
     source: 'forever-game-rules.md §6.5: S3; client TaxiPathNode path 11167 (C3)',
     build: '1.60.1.69977',
+    clientPath: 11167,
   },
   {
     id: 'steamwheedle-powderfuse',
     name: 'Steamwheedle Port – Powderfuse Port ship',
-    stops: [stop('Steamwheedle Port, Tanaris', KALIMDOR), stop('Powderfuse Port, Riverglades', EK)],
+    stops: [stop('Steamwheedle Port, Tanaris', KALIMDOR, 0), stop('Powderfuse Port, Riverglades', EK, 1)],
     factions: null,
     basis: 'official',
     source: 'forever-game-rules.md §6.5: S3, R8; client TaxiPathNode path 11391 (C3)',
     build: '1.60.1.69977',
+    clientPath: 11391,
   },
   {
     id: 'dalaran-zephras',
     name: 'Dalaran – Zephras Isle transport',
-    stops: [stop('Dalaran, Alterac Mountains', EK), stop('Zephras Isle', ZEPHRAS_ISLE)],
+    stops: [stop('Dalaran, Alterac Mountains', EK, 0), stop('Zephras Isle', ZEPHRAS_ISLE, 1)],
     factions: null,
     basis: 'client-data',
     source: 'forever-game-rules.md §6.5: client TaxiPathNode path 11398 (C3)',
     build: '1.60.1.69977',
+    clientPath: 11398,
     note: 'R11 (weak, unsourced) calls it a Skycutter; whether the server runs it is UNKNOWN',
   },
   {
     id: 'mulgore-zephras',
     name: 'Mulgore – Zephras Isle transport',
-    stops: [stop('Mulgore, north of Thunder Bluff', KALIMDOR), stop('Zephras Isle', ZEPHRAS_ISLE)],
+    stops: [stop('Mulgore, north of Thunder Bluff', KALIMDOR, 0), stop('Zephras Isle', ZEPHRAS_ISLE, 1)],
     factions: null,
     basis: 'client-data',
     source: 'forever-game-rules.md §6.5: client TaxiPathNode path 11457 (C3)',
     build: '1.60.1.69977',
+    clientPath: 11457,
     note: 'R11 (weak) reports a Horde Skycutter; whether the server runs it is UNKNOWN',
   },
   {
     id: 'rutheran-auberdine',
     name: "Rut'theran – Auberdine boat",
-    stops: [stop("Rut'theran Village", KALIMDOR), stop('Auberdine', KALIMDOR)],
+    stops: [stop("Rut'theran Village", KALIMDOR, 0), stop('Auberdine', KALIMDOR, 1)],
     factions: null,
     basis: 'client-data',
     source: "forever-game-rules.md §6.5: Era path 293 (Rut'theran – Auberdine), geometry changed in Forever (C3); terrain-navigation.md §9.3",
     build: '1.60.1.69977',
+    clientPath: 293,
   },
   {
     id: 'menethil-auberdine',
     name: 'Menethil – Auberdine ship',
-    stops: [stop('Menethil', EK), stop('Auberdine', KALIMDOR)],
+    stops: [stop('Menethil', EK, 0), stop('Auberdine', KALIMDOR, 1)],
     factions: null,
     basis: 'client-data',
     source: 'forever-game-rules.md §6.5: the old Menethil – Auberdine path 295 still exists (C3)',
     build: '1.60.1.69977',
+    clientPath: 295,
   },
 ];
 
 /**
  * Era transport paths that are still in the Forever client (forever-game-rules.md §6.5, C3) but
  * whose docks the research docs do not name, so they seed no record. A user-entered dock
- * (`TransportRef.dock`) still gives a transport step its departure (TIME-7).
+ * (`TransportRef.dock`) still gives a transport step its departure (TIME-7). Their stops in the
+ * committed taxi file are drawn on the map as "Transport stop (service unknown)" and never reach
+ * the engine (map-presentation.md §10).
  */
 export const UNMAPPED_ERA_TRANSPORT_PATHS: readonly number[] = [241, 285, 292, 301, 302, 303, 436];
 

@@ -12,8 +12,7 @@ const ZONES = [
 
 function renderBar(overrides: Partial<TopBarProps> = {}) {
   const props: TopBarProps = {
-    projectName: 'Placeholder project',
-    routeName: 'Placeholder route',
+    character: { name: 'Orc Warrior', faction: 'Horde' },
     search: { value: '', onChange: vi.fn() },
     zones: { value: '', options: ZONES, onJump: vi.fn() },
     onImport: vi.fn(),
@@ -28,8 +27,8 @@ function renderBar(overrides: Partial<TopBarProps> = {}) {
   return { ...view, props };
 }
 
-const zoneSelect = () => screen.getByRole('combobox', { name: 'Jump to zone' });
-const go = () => screen.getByRole('button', { name: 'Go to zone' });
+const zoneSelect = () => screen.getByRole('combobox', { name: 'Go to zone or view' });
+const go = () => screen.getByRole('button', { name: 'Go to the chosen zone or view' });
 const describedBy = (element: HTMLElement) => document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent;
 
 describe('TopBar', () => {
@@ -51,7 +50,7 @@ describe('TopBar', () => {
     expect(describedBy(importButton)).toBe('Arrives in Milestone 4');
     expect(importButton.getAttribute('title')).toBe('Import a project or RXP guide: Arrives in Milestone 4');
     fireEvent.click(importButton);
-    fireEvent.click(toolbar.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(toolbar.getByRole('button', { name: 'Orc Warrior · Horde, settings' }));
     expect(onImport).not.toHaveBeenCalled();
     expect(onSettings).not.toHaveBeenCalled();
     // Export has no reason: available as usual.
@@ -59,6 +58,9 @@ describe('TopBar', () => {
     expect(exportButton.hasAttribute('aria-disabled')).toBe(false);
     expect(exportButton.hasAttribute('aria-describedby')).toBe(false);
     // Unavailable items keep their place in the toolbar's arrow-key order.
+    const settings = toolbar.getByRole('button', { name: 'Orc Warrior · Horde, settings' });
+    expect(settings.getAttribute('aria-disabled')).toBe('true');
+    expect(describedBy(settings)).toBe('Arrives in Milestone 6');
     importButton.focus();
     fireEvent.keyDown(importButton, { key: 'ArrowRight' });
     expect(document.activeElement).toBe(exportButton);
@@ -68,12 +70,28 @@ describe('TopBar', () => {
     renderBar({ unavailable: { import: 'Arrives in Milestone 4', export: 'Arrives in Milestone 4', settings: 'Arrives in Milestone 6' } });
     const toolbar = screen.getByRole('toolbar', { name: 'Project actions' });
     expect(within(toolbar).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual([
+      'Orc Warrior · Horde, settings',
       'Import',
       'Export',
-      'Settings',
       'System theme. Switch to light theme',
       'About Forever Route Lab',
     ]);
+  });
+
+  it('opens Settings from the character button, whose name starts with its visible words (D-048 D; WCAG 2.5.3)', () => {
+    const onSettings = vi.fn();
+    renderBar({ onSettings });
+    const button = screen.getByRole('button', { name: 'Orc Warrior · Horde, settings' });
+    expect(button.querySelector('.frl-topbar__character-name')?.textContent).toBe('Orc Warrior');
+    expect(button.querySelector('.frl-topbar__character-faction')?.textContent).toBe(' · Horde');
+    fireEvent.click(button);
+    expect(onSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('no longer shows the project and route crumb: the route panel names the route (ui-refresh.md §8)', () => {
+    renderBar();
+    expect(screen.getByRole('banner').querySelector('.frl-topbar__project')).toBeNull();
+    expect(screen.getByRole('searchbox', { name: 'Search quests' })).toBeDefined();
   });
 
   it('does not jump while the zone choice changes, only on Go or Enter (F-08)', () => {

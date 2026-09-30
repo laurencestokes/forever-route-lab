@@ -1,21 +1,24 @@
-import { memo, useCallback, useMemo, useState, type RefObject } from 'react';
+import { memo, useCallback, useMemo, useState, useSyncExternalStore, type RefObject } from 'react';
 import type { EditorState, EditorStore } from '../../app';
 import type { DatasetSource } from '../../app/dataset-source';
+import { selectZoneSpans } from '../../app/derived';
 import type { MapController } from '../../app/map-exports';
 import type { DownloadFile } from '../../app/persistence';
-import { useEditor } from '../../app/react';
+import { useDerivedSelector, useEditor } from '../../app/react';
+import type { ZoneSpans } from '../../app/zone-levels';
 import { RXP_EXPORT_LABEL, RXP_IMPORT_LABEL } from '../../app/rxp-options';
 import type { DatasetView } from '../../domain/dataset';
 import type { QuestId, UiMapId } from '../../domain/ids';
 import type { MapGeometry } from '../../geo/types';
+import { characterName } from '../app-model';
+import type { SelectOption, SelectOptionGroup } from '../primitives/Select';
 import { TopBar, type TopBarUnavailable } from '../shell/TopBar';
-import { ExportDialog, ImportDialog } from './ImportExport';
-import { LazyDialogFallback, loadRxpExportDialog, loadRxpImportDialog, useLazy } from './lazy';
+import { LazyDialogFallback, loadImportExport, loadRxpExportDialog, loadRxpImportDialog, useLazy, useLazyKept } from './lazy';
 import type { Announce } from './LiveAnnouncer';
-import { ProjectBar } from './ProjectMenu';
+import { ProjectBar, type ProjectsDialogMode } from './ProjectMenu';
 import { useProjectSession } from './ProjectMenuContext';
 import { RxpExportEntry, RxpImportEntry } from './RxpEntries';
-import { selectEditingLocked, selectRouteName, selectTheme } from './selectors';
+import { selectCharacter, selectEditingLocked, selectTheme } from './selectors';
 
 /**
  * Why top-bar actions cannot be used. They render aria-disabled with this text as their
@@ -37,10 +40,8 @@ export const LOCKED_REASON = 'Unavailable while the optimiser runs or a proposal
 export interface AppTopBarProps {
   readonly store: EditorStore;
   readonly dataset: DatasetView;
+  /** The open project's name, for the RXP export's file name. */
   readonly projectName: string;
-  readonly placeholder: boolean;
-  /** The word of the project's placeholder label ("Sample" for the generated sample route). */
-  readonly placeholderLabel?: string | undefined;
   readonly search: string;
   readonly onSearchChange: (value: string) => void;
   readonly onSearchSubmit: () => void;
@@ -53,6 +54,8 @@ export interface AppTopBarProps {
   readonly download?: ((file: DownloadFile) => void) | undefined;
   /** Opens the Settings dialog (the editor's, src/ui/app/SettingsDialog.tsx); omitted: Settings stays unavailable. */
   readonly onOpenSettings?: (() => void) | undefined;
+  /** Opens the Projects dialog (the project bar's notices); omitted: the notices say nothing. */
+  readonly onOpenProjects?: ((mode: ProjectsDialogMode) => void) | undefined;
   /**
    * The map geometry, for the RXP custom-guide import (`RXP035`) and export (points made in the
    * app); null or omitted: without it (docs/UI.md §15).
@@ -69,14 +72,48 @@ type FileDialog = 'import' | 'export' | 'rxp-import' | 'rxp-export';
 
 const selectZone = (s: EditorState) => s.view.map.zone;
 
+/**
+ * A zone's option text with its level span for the character (map-presentation.md §14.4; step
+ * MP.3): "The Barrens · quests 13–25 (93), Era data"; the name alone while the spans are not built.
+ * The span's basis is in the words, as a select's option cannot carry the boxed E.
+ */
+export function zoneOptionLabel(label: string, uiMapId: number, spans: ZoneSpans | null, minimap = false): string {
+  const span = spans?.get(uiMapId as UiMapId);
+  if (span === undefined) return label;
+  // In the minimap style an underground city says so (D-049 O19; review PR-17).
+  const name = minimap && span.undergroundName !== null ? span.undergroundName : label;
+  return `${name} · ${span.text}${span.low === null ? '' : ', Era data'}`;
+}
+
 const noop = () => undefined;
+const noSubscribe = () => noop;
+
+/** The views' values in "Go to zone or view…": a surface (`view:<id>`) or an atlas preset (its own `preset:` id). */
+const VIEW_PREFIX = 'view:';
+const PRESET_PREFIX = 'preset:';
+
+/**
+ * "Go to zone or view…" (ui-refresh.md §8): the atlas's views first ("Both continents" and its
+ * presets, which the map's surface select offered), then the zones grouped by world map, each with
+ * its level span.
+ */
+export function goToOptions(controller: MapController, spans: ZoneSpans | null, minimap = false): readonly (SelectOption | SelectOptionGroup)[] {
+  const atlas = controller.surfaces.find((surface) => surface.kind === 'atlas');
+  const views: SelectOption[] = [
+    ...(atlas === undefined ? [] : [{ value: `${VIEW_PREFIX}${atlas.id}`, label: 'Both continents' }]),
+    ...controller.presets.map((preset) => ({ value: preset.id, label: preset.name })),
+  ];
+  const zones = controller.zoneGroups.map((group) => ({
+    group: group.label,
+    options: group.zones.map((option) => ({ value: String(option.uiMapId), label: zoneOptionLabel(option.label, option.uiMapId, spans, minimap) })),
+  }));
+  return views.length === 0 ? zones : [{ group: 'Views', options: views }, ...zones];
+}
 
 export const AppTopBar = memo(function AppTopBar({
   store,
   dataset,
   projectName,
-  placeholder,
-  placeholderLabel,
   search,
   onSearchChange,
   onSearchSubmit,
@@ -86,39 +123,54 @@ export const AppTopBar = memo(function AppTopBar({
   announce,
   download,
   onOpenSettings,
+  onOpenProjects,
   geometry = null,
   data = null,
 }: AppTopBarProps) {
   const session = useProjectSession();
   const [fileDialog, setFileDialog] = useState<FileDialog | null>(null);
   // The RXP dialogs load on first use (lazy.tsx, CR-19).
+  // So do Import and Export (lazy parts: ui-refresh.md §10.3, the entry's stop line).
+  const files = useLazyKept(loadImportExport, fileDialog === 'import' || fileDialog === 'export');
   const rxpImport = useLazy(loadRxpImportDialog, fileDialog === 'rxp-import');
   const rxpExport = useLazy(loadRxpExportDialog, fileDialog === 'rxp-export');
-  const routeName = useEditor(store, selectRouteName);
+  const character = useEditor(store, selectCharacter);
   const theme = useEditor(store, selectTheme);
   const editingLocked = useEditor(store, selectEditingLocked);
   const zone = useEditor(store, selectZone);
+  const spans = useDerivedSelector(selectZoneSpans);
+  // The style shown, for the underground cities' names (a string snapshot: a re-render only when it changes).
+  const minimap = useSyncExternalStore(mapController?.subscribe ?? noSubscribe, () => mapController?.getStatus().style.shown === 'minimap', () => false);
   // With a map: the zones it can fit, grouped by world map. Without one, the dataset's zones
   // (the chooser is unavailable then, and says why).
   const zoneOptions = useMemo(
     () =>
       mapController === null
         ? dataset.zones().map((z) => ({ value: String(z.uiMapId), label: z.name ?? `UiMap ${String(z.uiMapId)}` }))
-        : mapController.zoneGroups.map((group) => ({
-            group: group.label,
-            options: group.zones.map((option) => ({ value: String(option.uiMapId), label: option.label })),
-          })),
-    [dataset, mapController],
+        : goToOptions(mapController, spans, minimap),
+    [dataset, mapController, spans, minimap],
   );
   const zoneLabel = useMemo(
-    () => new Map((mapController?.zoneGroups ?? []).flatMap((group) => group.zones.map((option) => [String(option.uiMapId), option.label] as const))),
+    () =>
+      new Map([
+        ...(mapController?.zoneGroups ?? []).flatMap((group) => group.zones.map((option) => [String(option.uiMapId), option.label] as const)),
+        ...(mapController?.presets ?? []).map((preset) => [preset.id, preset.name] as const),
+        ...(mapController?.surfaces ?? []).map((surface) => [`${VIEW_PREFIX}${surface.id}`, surface.kind === 'atlas' ? 'both continents' : surface.name] as const),
+      ]),
     [mapController],
   );
   const onJump = useCallback(
     (value: string) => {
-      if (mapController === null || !/^[1-9]\d*$/.test(value)) return;
-      // The option values are the controller's own UiMap ids, written as decimal integers.
-      const shown = mapController.jumpToZone(Number(value) as UiMapId);
+      if (mapController === null) return;
+      let shown = false;
+      if (value.startsWith(PRESET_PREFIX)) shown = mapController.showPreset(value);
+      else if (value.startsWith(VIEW_PREFIX)) {
+        const surface = mapController.surfaces.find((info) => `${VIEW_PREFIX}${info.id}` === value);
+        shown = surface !== undefined && mapController.showSurface(surface.id);
+      } else if (/^[1-9]\d*$/.test(value)) {
+        // The zone values are the controller's own UiMap ids, written as decimal integers.
+        shown = mapController.jumpToZone(Number(value) as UiMapId);
+      }
       if (shown) announce?.(`Map shows ${zoneLabel.get(value) ?? 'the zone'}.`);
     },
     [mapController, announce, zoneLabel],
@@ -148,10 +200,7 @@ export const AppTopBar = memo(function AppTopBar({
   };
   const bar = (
     <TopBar
-      projectName={projectName}
-      routeName={routeName}
-      placeholder={placeholder}
-      placeholderLabel={placeholderLabel}
+      character={{ name: characterName(character), faction: character.faction }}
       search={{
         value: search,
         onChange: onSearchChange,
@@ -180,16 +229,29 @@ export const AppTopBar = memo(function AppTopBar({
   return (
     <div className="frl-apptop">
       {bar}
-      <ProjectBar session={session} announce={announce} questName={questName} download={download} />
-      <ImportDialog
-        open={fileDialog === 'import'}
-        onClose={closeFileDialog}
-        session={session}
-        announce={announce}
-        unavailableReason={editingLocked ? LOCKED_REASON : null}
-        rxp={<RxpImportEntry onOpen={openRxpImport} unavailableReason={editingLocked ? LOCKED_REASON : null} />}
-      />
-      <ExportDialog open={fileDialog === 'export'} onClose={closeFileDialog} session={session} announce={announce} download={download} rxp={<RxpExportEntry onOpen={openRxpExport} />} />
+      <ProjectBar session={session} announce={announce} questName={questName} onOpenProjects={onOpenProjects} />
+      {files.kind === 'ready' ? (
+        <>
+          <files.value.ImportDialog
+            open={fileDialog === 'import'}
+            onClose={closeFileDialog}
+            session={session}
+            announce={announce}
+            unavailableReason={editingLocked ? LOCKED_REASON : null}
+            rxp={<RxpImportEntry onOpen={openRxpImport} unavailableReason={editingLocked ? LOCKED_REASON : null} />}
+          />
+          <files.value.ExportDialog
+            open={fileDialog === 'export'}
+            onClose={closeFileDialog}
+            session={session}
+            announce={announce}
+            download={download}
+            rxp={<RxpExportEntry onOpen={openRxpExport} />}
+          />
+        </>
+      ) : (
+        (fileDialog === 'import' || fileDialog === 'export') && <LazyDialogFallback title={fileDialog === 'export' ? 'Export' : 'Import'} state={files} onClose={closeFileDialog} />
+      )}
       {rxpImport.kind === 'ready' ? (
         <rxpImport.value.RxpImportDialog
           open={fileDialog === 'rxp-import'}

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
+import { pointerNameProblems } from '../../maps/lib/minimap-pack';
 import { compareStrings, formatBytes, listFiles } from './fs';
 import { matchesAnyGlob } from './glob';
 import {
@@ -54,6 +55,42 @@ export interface MapFolder extends GzipBudget {
   /** Repository folder it is built from; the folder is required in dist/ once `<source>/manifest.json` exists. */
   readonly source: string;
   readonly reason: string;
+  /** The decision that sets the budget, named in budget messages; D-034 item 4 when absent (the client tables' folder names D-039). */
+  readonly decision?: string;
+  /** A tile pyramid (the atlas, D-042 O5): its tiles are budgeted per level and per file instead of per file baseline. */
+  readonly tiled?: TiledBudget;
+  /** Files that come from a release-asset pack, not from git (the minimap tiles, D-049 O14). */
+  readonly external?: ExternalFiles;
+}
+
+/**
+ * A map folder's files under `<dir>/<prefix>` that come from a release-asset pack named by the
+ * pointer `<dir>/<pointer>` (docs/research/map-atlas.md §23.3, §24.3; D-049 O14, A18). The pointer
+ * ships beside the NOTICE and manifest and is not listed in the manifest (the pack holds the
+ * manifest); it must name the pack (`asset`, `tag`, `bytes`, `sha256`) and carry the tree hash of the
+ * manifest's files under the prefix (`treeHash`: SHA-256 of the sorted `<path> <sha256>\n` lines,
+ * as `tools/maps/lib/minimap-pack.ts` computes it). In the plain audit (`pnpm build`, so
+ * `pnpm check`) a build without any of those files passes with a loud warning, its budget taken from
+ * the manifest's per-level records (`levels[]`: `z`, `stored`, `gzipBytes`, `largestGzipBytes`), and a
+ * partial set fails; the deploy audit (`--deploy`, `pnpm build:deploy`) requires every one.
+ */
+export interface ExternalFiles {
+  readonly prefix: string;
+  readonly pointer: string;
+}
+
+/**
+ * The tiled mode of a map folder (docs/research/map-atlas.md §7.6; D-042 O5): files under
+ * `<dir>/<prefix>` are tiles `<prefix><level>/<x>/<y>.<ext>`. Each tile is within the per-file cap,
+ * and each level's tiles together within the level's recorded baseline + the folder's tolerance;
+ * once the folder is active a level without a baseline fails. The folder's other files (index,
+ * manifest, NOTICE) keep per-file baselines, and the whole folder its total.
+ */
+export interface TiledBudget {
+  readonly prefix: string;
+  readonly perFileGzipCapBytes: number;
+  /** Level (`-8` … `0`) → recorded gzip bytes of its tiles. */
+  readonly levelBaselines: Readonly<Record<string, number>>;
 }
 
 /**
@@ -134,7 +171,11 @@ export function parseDistRequirements(value: unknown): DistRequirements {
       throw new Error(`dist-requirements.json: ${where} needs "name", "dir", "source" and a non-empty "reason"`);
     }
     if (!/^[a-z0-9]+(\/[a-z0-9]+)*$/.test(entry.dir)) throw new Error(`dist-requirements.json: ${where}.dir must be a plain relative folder`);
-    return { name: entry.name, dir: entry.dir, source: entry.source, reason: entry.reason, ...readBudget(entry, where) };
+    if (entry.decision !== undefined && (typeof entry.decision !== 'string' || entry.decision.trim() === '')) throw new Error(`dist-requirements.json: ${where}.decision must be a non-empty string`);
+    const decision = typeof entry.decision === 'string' ? { decision: entry.decision } : {};
+    const tiled = entry.tiled === undefined ? {} : { tiled: readTiled(entry.tiled, where) };
+    const external = entry.external === undefined ? {} : { external: readExternal(entry.external, where) };
+    return { name: entry.name, dir: entry.dir, source: entry.source, reason: entry.reason, ...decision, ...tiled, ...external, ...readBudget(entry, where) };
   });
   return {
     required: stringList(value.required, 'required'),
@@ -160,6 +201,28 @@ function readBudget(value: Readonly<Record<string, unknown>>, where: string): Gz
     baselineTolerance: positiveNumber(value.baselineTolerance, `${where}.baselineTolerance`),
     baselines,
   };
+}
+
+function readExternal(value: unknown, where: string): ExternalFiles {
+  if (!isRecord(value) || typeof value.prefix !== 'string' || !/^[a-z0-9]+\/$/.test(value.prefix) || typeof value.pointer !== 'string' || !/^[a-z0-9-]+\.json$/.test(value.pointer)) {
+    throw new Error(`dist-requirements.json: ${where}.external needs a plain "prefix" ending in "/" and a "pointer" file name`);
+  }
+  return { prefix: value.prefix, pointer: value.pointer };
+}
+
+function readTiled(value: unknown, where: string): TiledBudget {
+  if (!isRecord(value) || typeof value.prefix !== 'string' || !/^[a-z0-9]+\/$/.test(value.prefix) || !isRecord(value.levelBaselines)) {
+    throw new Error(`dist-requirements.json: ${where}.tiled needs a plain "prefix" ending in "/", "perFileGzipCapBytes" and "levelBaselines"`);
+  }
+  const levelBaselines: Readonly<Record<string, number>> = Object.fromEntries(
+    Object.entries(value.levelBaselines)
+      .filter(([key]) => !key.startsWith('$'))
+      .map(([key, bytes]) => {
+        if (!/^(0|-[1-9]\d*)$/.test(key)) throw new Error(`dist-requirements.json: ${where}.tiled.levelBaselines key "${key}" is not a level`);
+        return [key, positiveNumber(bytes, `${where}.tiled.levelBaselines["${key}"]`)];
+      }),
+  );
+  return { prefix: value.prefix, perFileGzipCapBytes: positiveNumber(value.perFileGzipCapBytes, `${where}.tiled.perFileGzipCapBytes`), levelBaselines };
 }
 
 function readNav(value: unknown): NavBudget {
@@ -261,6 +324,46 @@ export interface MapFolderReport {
   readonly files: readonly SizedFile[];
   readonly totalGzipBytes: number;
   readonly budgetBytes: number;
+  /** A pack's files that are not in dist/ (the plain audit without the pack): counted from the manifest's records. */
+  readonly recorded?: { readonly files: number; readonly gzipBytes: number };
+}
+
+/** A tiled level as the manifest records it, for the budget of a pack that is not fetched. */
+export interface RecordedLevel {
+  readonly level: string;
+  readonly files: number;
+  readonly gzipBytes: number;
+  readonly largestGzipBytes: number;
+}
+
+/** The tree hash of a pack's files (`tools/maps/lib/minimap-pack.ts` `tilesTreeHash`): SHA-256 of the sorted `<path> <sha256>\n` lines. */
+export function packTreeHash(files: readonly { readonly path: string; readonly sha256: string }[]): string {
+  return createHash('sha256').update(files.map((f) => `${f.path} ${f.sha256}\n`).sort().join('')).digest('hex');
+}
+
+/** Up to this many missing pack files are reported one by one; more are counted in one violation. */
+const MISSING_LISTED_ONE_BY_ONE = 20;
+
+/** 6647 → "6,647" (locale-independent). */
+const thousands = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+function readRecordedLevels(manifest: unknown, listedFiles: number): RecordedLevel[] | string {
+  const levels = isRecord(manifest) && Array.isArray(manifest.levels) ? (manifest.levels as readonly unknown[]) : null;
+  if (levels === null) return 'the manifest has no levels[] records to budget the pack by';
+  const out: RecordedLevel[] = [];
+  for (const entry of levels) {
+    const z = isRecord(entry) ? entry.z : undefined;
+    const stored = isRecord(entry) ? entry.stored : undefined;
+    const gzipBytes = isRecord(entry) ? entry.gzipBytes : undefined;
+    const largest = isRecord(entry) ? entry.largestGzipBytes : undefined;
+    if (!Number.isInteger(z) || !Number.isInteger(stored) || !Number.isInteger(gzipBytes) || !Number.isInteger(largest) || (stored as number) < 0 || (gzipBytes as number) < 0 || (largest as number) < 0) {
+      return `levels[] entry ${JSON.stringify(entry)} needs integer z, stored, gzipBytes and largestGzipBytes`;
+    }
+    out.push({ level: String(z), files: stored as number, gzipBytes: gzipBytes as number, largestGzipBytes: largest as number });
+  }
+  const recorded = out.reduce((sum, l) => sum + l.files, 0);
+  if (recorded !== listedFiles) return `the manifest's levels[] record ${String(recorded)} stored tiles, its files[] list ${String(listedFiles)}`;
+  return out;
 }
 
 /**
@@ -275,9 +378,18 @@ export function checkMapFolders(
   files: readonly string[],
   folders: readonly MapFolder[],
   repoRoot: string,
-): { readonly allowedImages: ReadonlySet<string>; readonly violations: readonly AuditViolation[] } {
+  options: { readonly deploy?: boolean } = {},
+): {
+  readonly allowedImages: ReadonlySet<string>;
+  readonly violations: readonly AuditViolation[];
+  readonly notes: readonly string[];
+  /** Folder name → the manifest's level records, for each folder whose pack is not in dist/ (plain audit). */
+  readonly recorded: ReadonlyMap<string, readonly RecordedLevel[]>;
+} {
   const allowed = new Set<string>();
   const violations: AuditViolation[] = [];
+  const notes: string[] = [];
+  const recorded = new Map<string, readonly RecordedLevel[]>();
   for (const folder of folders) {
     const prefix = `${folder.dir}/`;
     const inside = files.filter((path) => path.startsWith(prefix));
@@ -291,10 +403,12 @@ export function checkMapFolders(
     const problems: AuditViolation[] = [];
     if (!inside.includes(noticePath)) problems.push({ rule: 'map-folder', path: noticePath, message: `${folder.name}: the folder's NOTICE.md is missing (D-033)` });
     const listed = new Map<string, string>();
+    let manifestJson: unknown = null;
     if (!inside.includes(manifestPath)) problems.push({ rule: 'map-folder', path: manifestPath, message: `${folder.name}: the folder's manifest.json is missing` });
     else {
       try {
         const manifest = JSON.parse(readFileSync(join(distDir, manifestPath), 'utf8')) as unknown;
+        manifestJson = manifest;
         const entries = isRecord(manifest) && Array.isArray(manifest.files) ? (manifest.files as readonly unknown[]) : null;
         if (entries === null) throw new Error('no "files" array');
         for (const entry of entries) {
@@ -309,19 +423,91 @@ export function checkMapFolders(
         problems.push({ rule: 'map-folder', path: manifestPath, message: `${folder.name}: cannot read the manifest: ${error instanceof Error ? error.message : String(error)}` });
       }
     }
+    const external = folder.external;
+    const pointerPath = external === undefined ? null : `${prefix}${external.pointer}`;
+    const externalPrefix = external === undefined ? null : `${prefix}${external.prefix}`;
+    if (pointerPath !== null && externalPrefix !== null) {
+      if (!inside.includes(pointerPath)) problems.push({ rule: 'map-folder', path: pointerPath, message: `${folder.name}: the pack pointer is missing` });
+      else if (listed.size > 0) problems.push(...checkPackPointer(distDir, folder.name, pointerPath, prefix, externalPrefix, listed));
+    }
     for (const path of inside) {
-      if (path === noticePath || path === manifestPath) continue;
+      if (path === noticePath || path === manifestPath || path === pointerPath) continue;
       const sha256 = listed.get(path);
       if (sha256 === undefined) problems.push({ rule: 'map-folder', path, message: `${folder.name}: not listed in ${manifestPath}` });
       else if (createHash('sha256').update(readFileSync(join(distDir, path))).digest('hex') !== sha256) {
         problems.push({ rule: 'map-folder', path, message: `${folder.name}: SHA-256 differs from ${manifestPath}` });
       }
     }
-    for (const path of listed.keys()) if (!inside.includes(path)) problems.push({ rule: 'map-folder', path, message: `${folder.name}: listed in ${manifestPath} but missing` });
+    const present = new Set(inside);
+    const missing = [...listed.keys()].filter((path) => !present.has(path));
+    const externalListed = externalPrefix === null ? 0 : [...listed.keys()].filter((path) => path.startsWith(externalPrefix)).length;
+    const externalMissing = externalPrefix === null ? [] : missing.filter((path) => path.startsWith(externalPrefix));
+    if (externalPrefix !== null && options.deploy !== true && externalListed > 0 && externalMissing.length === externalListed) {
+      // a clone or build without the pack (§23.4): the plain audit says so loudly, budgets the pack by
+      // the manifest's records, and passes
+      notes.push(
+        `${folder.name}: 0 of ${thousands(externalListed)} files under ${externalPrefix} present; the pack is not fetched ` +
+          `(pnpm maps:minimap:fetch fetches what ${pointerPath ?? 'the pointer'} names); the budget is checked from the manifest's records; a deploy build (pnpm build:deploy) would fail`,
+      );
+      for (const path of missing) if (!path.startsWith(externalPrefix)) problems.push({ rule: 'map-folder', path, message: `${folder.name}: listed in ${manifestPath} but missing` });
+      if (folder.tiled !== undefined) {
+        const levels = readRecordedLevels(manifestJson, externalListed);
+        if (typeof levels === 'string') problems.push({ rule: 'map-folder', path: manifestPath, message: `${folder.name}: ${levels}` });
+        else recorded.set(folder.name, levels);
+      }
+    } else {
+      const why = options.deploy === true ? 'a deploy build needs the whole pack' : 'a partial set of the pack';
+      if (externalPrefix !== null && externalMissing.length > MISSING_LISTED_ONE_BY_ONE) {
+        // thousands of tiles: one line that counts them, not one per tile
+        problems.push({
+          rule: 'map-folder',
+          path: externalPrefix,
+          message: `${folder.name}: ${thousands(externalMissing.length)} of the ${thousands(externalListed)} files ${manifestPath} lists under ${externalPrefix} are missing (${why}; first ${externalMissing[0] ?? ''}); run pnpm maps:minimap:fetch`,
+        });
+      }
+      for (const path of missing) {
+        const packed = externalPrefix !== null && path.startsWith(externalPrefix);
+        if (packed && externalMissing.length > MISSING_LISTED_ONE_BY_ONE) continue;
+        problems.push({ rule: 'map-folder', path, message: `${folder.name}: listed in ${manifestPath} but ${packed ? `missing (${why})` : 'missing'}` });
+      }
+    }
     violations.push(...problems);
     if (problems.length === 0) for (const path of listed.keys()) allowed.add(path);
   }
-  return { allowedImages: allowed, violations };
+  return { allowedImages: allowed, violations, notes, recorded };
+}
+
+/**
+ * The pack pointer of an external prefix: it names the pack (`asset`, `tag`, `bytes`, `sha256`) by
+ * the rules `readCommittedPack` and M7 apply (`pointerNameProblems`: the asset and tag carry the tree
+ * hash and the pack's SHA-256, the tag the client version, the contents `NOTICE.md`, `manifest.json`,
+ * `t/`; review finding MD-06), and its `treeHash` is the tree hash of the manifest's files under the
+ * prefix, so the pointer that ships pins exactly the files the manifest lists
+ * (docs/research/map-atlas.md §23.3, M7).
+ */
+function checkPackPointer(
+  distDir: string,
+  name: string,
+  pointerPath: string,
+  prefix: string,
+  externalPrefix: string,
+  listed: ReadonlyMap<string, string>,
+): AuditViolation[] {
+  let pointer: unknown;
+  try {
+    pointer = JSON.parse(readFileSync(join(distDir, pointerPath), 'utf8')) as unknown;
+  } catch (error) {
+    return [{ rule: 'map-folder', path: pointerPath, message: `${name}: cannot read the pack pointer: ${error instanceof Error ? error.message : String(error)}` }];
+  }
+  const hex64 = (value: unknown): boolean => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+  if (!isRecord(pointer) || typeof pointer.asset !== 'string' || pointer.asset === '' || typeof pointer.tag !== 'string' || pointer.tag === '' || !Number.isInteger(pointer.bytes) || (pointer.bytes as number) <= 0 || !hex64(pointer.sha256) || !hex64(pointer.treeHash)) {
+    return [{ rule: 'map-folder', path: pointerPath, message: `${name}: the pack pointer needs asset, tag, bytes, a 64-hex sha256 and a 64-hex treeHash` }];
+  }
+  const named = pointerNameProblems(pointer);
+  if (named.length > 0) return named.map((problem): AuditViolation => ({ rule: 'map-folder', path: pointerPath, message: `${name}: the pack pointer: ${problem}` }));
+  const files = [...listed].filter(([path]) => path.startsWith(externalPrefix)).map(([path, sha256]) => ({ path: path.slice(prefix.length), sha256 }));
+  const tree = packTreeHash(files);
+  return tree === pointer.treeHash ? [] : [{ rule: 'map-folder', path: pointerPath, message: `${name}: the pointer's treeHash is not the tree hash of the ${String(files.length)} files the manifest lists under ${externalPrefix} (${tree})` }];
 }
 
 /**
@@ -690,6 +876,60 @@ export function checkGzipBudget(
   return { report: { files: sized, totalGzipBytes }, violations };
 }
 
+/**
+ * A tiled map folder's budget (the atlas, D-042 O5; {@link TiledBudget}): tiles within the per-file
+ * cap and their level's baseline + tolerance, the other files within their own baselines, and the
+ * folder within its total.
+ */
+export function checkTiledBudget(
+  distDir: string,
+  files: readonly string[],
+  where: { readonly prefix: string; readonly section: string; readonly rule: string; readonly why: string },
+  budget: GzipBudget,
+  tiled: TiledBudget,
+  requireBaselines: boolean,
+  /** The tiles as the manifest records them, when they are not in dist/ (a pack not fetched, plain audit). */
+  recorded?: readonly RecordedLevel[],
+): { readonly report: DataReport; readonly violations: readonly AuditViolation[] } {
+  const tilePrefix = `${where.prefix}${tiled.prefix}`;
+  const inside = files.filter((path) => path.startsWith(where.prefix));
+  const others = checkGzipBudget(distDir, inside.filter((path) => !path.startsWith(tilePrefix)), where, { ...budget, totalGzipBudgetBytes: Number.MAX_SAFE_INTEGER }, requireBaselines);
+  const violations: AuditViolation[] = [...others.violations];
+  const tiles = inside.filter((path) => path.startsWith(tilePrefix)).map((path) => sizeOf(distDir, path));
+  const byLevel = new Map<string, number>();
+  for (const tile of tiles) {
+    if (tile.gzipBytes > tiled.perFileGzipCapBytes) {
+      violations.push({ rule: where.rule, path: tile.file, message: `${formatBytes(tile.gzipBytes)} gzip is over the ${formatBytes(tiled.perFileGzipCapBytes)} per-tile cap (${where.why})` });
+    }
+    const level = tile.file.slice(tilePrefix.length).split('/')[0] ?? '';
+    byLevel.set(level, (byLevel.get(level) ?? 0) + tile.gzipBytes);
+  }
+  let recordedGzip = 0;
+  if (tiles.length === 0 && recorded !== undefined) {
+    for (const level of recorded) {
+      if (level.files === 0) continue;
+      if (level.largestGzipBytes > tiled.perFileGzipCapBytes) {
+        violations.push({ rule: where.rule, path: `${tilePrefix}${level.level}`, message: `level ${level.level}: its largest tile is ${formatBytes(level.largestGzipBytes)} gzip in the manifest's records, over the ${formatBytes(tiled.perFileGzipCapBytes)} per-tile cap (${where.why})` });
+      }
+      byLevel.set(level.level, (byLevel.get(level.level) ?? 0) + level.gzipBytes);
+      recordedGzip += level.gzipBytes;
+    }
+  }
+  for (const [level, gzipBytes] of [...byLevel].sort((a, b) => compareStrings(a[0], b[0]))) {
+    const baseline = Object.hasOwn(tiled.levelBaselines, level) ? tiled.levelBaselines[level] : undefined;
+    if (baseline === undefined) {
+      if (requireBaselines) violations.push({ rule: where.rule, path: `${tilePrefix}${level}`, message: `no gzip baseline recorded for level ${level} (${formatBytes(gzipBytes)} now); add it to ${where.section} tiled.levelBaselines` });
+    } else if (gzipBytes > Math.floor(baseline * (1 + budget.baselineTolerance))) {
+      violations.push({ rule: where.rule, path: `${tilePrefix}${level}`, message: `level ${level}: ${formatBytes(gzipBytes)} gzip exceeds its baseline ${formatBytes(baseline)} + ${String(Math.round(budget.baselineTolerance * 100))}%` });
+    }
+  }
+  const totalGzipBytes = others.report.totalGzipBytes + tiles.reduce((sum, tile) => sum + tile.gzipBytes, 0) + recordedGzip;
+  if (totalGzipBytes > budget.totalGzipBudgetBytes) {
+    violations.push({ rule: where.rule, path: null, message: `${where.prefix} totals ${formatBytes(totalGzipBytes)} gzip${recordedGzip > 0 ? ' (its tiles as the manifest records them)' : ''}, over the ${formatBytes(budget.totalGzipBudgetBytes)} budget (${where.why})` });
+  }
+  return { report: { files: [...others.report.files, ...tiles], totalGzipBytes }, violations };
+}
+
 export interface NavReport {
   readonly active: boolean;
   readonly maps: readonly { readonly mapId: string; readonly files: number; readonly gzipBytes: number; readonly baseline: number | null }[];
@@ -768,19 +1008,25 @@ export interface AuditResult {
   readonly mapFolders: readonly MapFolderReport[];
   readonly nav: NavReport | null;
   readonly violations: readonly AuditViolation[];
+  /** What passed but must be said (a map folder's pack not fetched, D-049 O14). */
+  readonly notes: readonly string[];
+  /** `deploy` when every file of a map folder's pack was required (`--deploy`). */
+  readonly mode: 'plain' | 'deploy';
 }
 
 export function auditDist(options: {
   readonly distDir: string;
   readonly repoRoot: string;
   readonly requirements: DistRequirements;
+  /** The deploy audit (`audit-dist.ts --deploy`): every file a map folder's pack provides must be present. */
+  readonly deploy?: boolean;
 }): AuditResult {
   const { distDir, repoRoot, requirements } = options;
   if (!existsSync(distDir)) throw new Error(`${distDir} does not exist; run vite build first`);
   const files = listFiles(distDir);
   const violations: AuditViolation[] = [];
   let totalBytes = 0;
-  const folders = checkMapFolders(distDir, files, requirements.mapFolders, repoRoot);
+  const folders = checkMapFolders(distDir, files, requirements.mapFolders, repoRoot, { deploy: options.deploy === true });
   violations.push(...checkForbiddenPaths(files), ...folders.violations, ...checkImages(files, requirements.allowedImages, folders.allowedImages));
   for (const path of files) {
     const bytes = readFileSync(join(distDir, path));
@@ -795,10 +1041,12 @@ export function auditDist(options: {
   violations.push(...data.violations);
   const mapFolders = requirements.mapFolders.map((folder): MapFolderReport => {
     const active = existsSync(join(repoRoot, folder.source, MAP_FOLDER_MANIFEST));
-    const where = { prefix: `${folder.dir}/`, section: `mapFolders "${folder.name}"`, rule: `${folder.name}-budget`, why: 'D-034 item 4' };
-    const result = checkGzipBudget(distDir, files, where, folder, active);
+    const where = { prefix: `${folder.dir}/`, section: `mapFolders "${folder.name}"`, rule: `${folder.name}-budget`, why: folder.decision ?? 'D-034 item 4' };
+    const recorded = folders.recorded.get(folder.name);
+    const result = folder.tiled === undefined ? checkGzipBudget(distDir, files, where, folder, active) : checkTiledBudget(distDir, files, where, folder, folder.tiled, active, recorded);
     violations.push(...result.violations);
-    return { name: folder.name, dir: folder.dir, files: result.report.files, totalGzipBytes: result.report.totalGzipBytes, budgetBytes: folder.totalGzipBudgetBytes };
+    const report = { name: folder.name, dir: folder.dir, files: result.report.files, totalGzipBytes: result.report.totalGzipBytes, budgetBytes: folder.totalGzipBudgetBytes };
+    return recorded === undefined ? report : { ...report, recorded: { files: recorded.reduce((sum, l) => sum + l.files, 0), gzipBytes: recorded.reduce((sum, l) => sum + l.gzipBytes, 0) } };
   });
   let nav: NavReport | null = null;
   if (requirements.nav !== null) {
@@ -816,6 +1064,8 @@ export function auditDist(options: {
     mapFolders,
     nav,
     violations,
+    notes: folders.notes,
+    mode: options.deploy === true ? 'deploy' : 'plain',
   };
 }
 
@@ -831,7 +1081,7 @@ export function removeBuildManifest(distDir: string): boolean {
 }
 
 export function formatAuditReport(result: AuditResult): string {
-  const lines: string[] = [`dist audit: ${String(result.fileCount)} files, ${formatBytes(result.totalBytes)}`];
+  const lines: string[] = [`dist audit (${result.mode === 'deploy' ? 'deploy mode: every map-folder pack file required' : 'plain mode'}): ${String(result.fileCount)} files, ${formatBytes(result.totalBytes)}`];
   lines.push(
     `Required files (${result.required.milestone2Active ? 'Milestone 1 + Milestone 2 lists' : 'Milestone 1 list'}): ${result.required.files.join(', ')}`,
   );
@@ -858,9 +1108,10 @@ export function formatAuditReport(result: AuditResult): string {
   for (const folder of result.mapFolders) {
     if (folder.files.length === 0) continue;
     const largest = [...folder.files].sort((a, b) => b.gzipBytes - a.gzipBytes)[0];
+    const recorded = folder.recorded === undefined ? '' : ` + ${String(folder.recorded.files)} tiles not present, ${formatBytes(folder.recorded.gzipBytes)} gzip as the manifest records them`;
     lines.push(
       '',
-      `${folder.dir}/ (${folder.name} budget ${formatBytes(folder.budgetBytes)} gzip): ${String(folder.files.length)} files, gzip ${formatBytes(folder.totalGzipBytes)} ` +
+      `${folder.dir}/ (${folder.name} budget ${formatBytes(folder.budgetBytes)} gzip): ${String(folder.files.length)} files${recorded}, gzip ${formatBytes(folder.totalGzipBytes)} ` +
         `(${(100 * folder.totalGzipBytes / folder.budgetBytes).toFixed(1)}%)${largest === undefined ? '' : `; largest ${largest.file} ${formatBytes(largest.gzipBytes)}`}`,
     );
     if (folder.files.length <= 12) lines.push(...folder.files.map(row));
@@ -872,6 +1123,7 @@ export function formatAuditReport(result: AuditResult): string {
       lines.push(`    map ${map.mapId.padEnd(6)} ${String(map.files).padStart(5)} files  gzip ${formatBytes(map.gzipBytes).padStart(10)}  baseline ${map.baseline === null ? 'none' : formatBytes(map.baseline)}`);
     }
   }
+  if (result.notes.length > 0) lines.push('', ...result.notes.map((note) => `WARNING: ${note}`));
   if (result.violations.length === 0) {
     lines.push('', 'dist audit passed. (A guard, not proof: inspect release builds manually as well.)');
   } else {
@@ -881,4 +1133,14 @@ export function formatAuditReport(result: AuditResult): string {
     }
   }
   return lines.join('\n');
+}
+
+/**
+ * The warnings of a passing audit as a banner, printed last and to stderr so a build log cannot
+ * bury them (the minimap pack not fetched, docs/research/map-atlas.md §23.4, D-049 O14).
+ */
+export function formatAuditWarnings(result: AuditResult): string {
+  if (result.notes.length === 0) return '';
+  const rule = '='.repeat(100);
+  return [rule, ...result.notes.map((note) => `WARNING (dist audit): ${note}`), rule].join('\n');
 }

@@ -20,8 +20,10 @@
 .frl-tabs__tab {
   position: relative;
   display: inline-flex;
-  flex: 0 1 auto;
+  /* Across the strip (ui-refresh.md §4.2): equal shares of the room left after their words. */
+  flex: 1 1 auto;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   min-width: 0;
   padding: 0 6px;
@@ -48,9 +50,9 @@
   color: var(--frl-fg);
 }
 
-/* Selected: accent text, bold and a 2px bar (a shape cue as well as a colour). */
+/* Selected: body-colour bold text and a 2px accent bar (a shape cue as well as a colour). */
 .frl-tabs__tab.is-selected {
-  color: var(--frl-accent);
+  color: var(--frl-fg);
   font-weight: var(--frl-weight-bold);
 }
 

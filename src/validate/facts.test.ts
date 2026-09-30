@@ -43,6 +43,7 @@ describe('fact to issue', () => {
       [{ kind: 'hearth-cooldown', waitSeconds: 1810, upperBound: true }, 'SIM005-hearth-cooldown-uncertain'],
       [{ kind: 'hearth-unbound' }, 'SIM006-hearth-unbound'],
       [{ kind: 'flight-unknown-path', end: 'to', node: 'npc:3310' }, 'SIM007-flight-unknown-path'],
+      [{ kind: 'flight-no-known-journey' }, 'SIM007-flight-unknown-path-journey'],
       [{ kind: 'flight-unresolved', end: 'from', reason: 'several-nodes' }, 'SIM008-flight-unresolved'],
       [{ kind: 'mount-untrained' }, 'SIM009-mount-untrained'],
       [{ kind: 'riding-too-low', tier: 1, requiredLevel: 40, level: 38, uncertain: false }, 'SIM010-riding-too-low'],
@@ -52,6 +53,7 @@ describe('fact to issue', () => {
       [{ kind: 'objective-already-done', questId: q, objective: 0 }, 'SIM012-objective-already-done'],
       [{ kind: 'condition-unknown' }, 'SIM013-condition-unknown'],
       [{ kind: 'transport-faction', transportId: 'zeppelin-og-uc' }, 'SIM014-transport-faction'],
+      [{ kind: 'flight-faction', end: 'to', node: 'npc:3310' }, 'SIM024-flight-faction'],
       [{ kind: 'time-unknown', part: 'objective', reason: 'reputation-objective', questId: q, objective: 1 }, 'SIM015-time-unknown'],
       [{ kind: 'grind-zero-rate' }, 'SIM015-time-unknown'],
       [{ kind: 'complete-not-in-log', questId: q }, 'SIM016-complete-not-in-log'],
@@ -66,15 +68,25 @@ describe('fact to issue', () => {
     for (const [fact, code] of cases) expect(one(fact).code, fact.kind).toBe(code);
   });
 
-  it('records no issue for pending legs (route-level SIM-22), assumed mob levels (KXP-4), moves from an unknown position (TIME-2) or items counted at an accept (D-040)', () => {
+  it('records no issue for pending legs (route-level SIM-22), assumed mob levels (KXP-4), moves from an unknown position (TIME-2), items counted at an accept (D-040) or a ride (TIME-7)', () => {
     expect(
       issues([
         { kind: 'pending-leg' },
         { kind: 'mob-level-assumed', npcId: npcId(3098) },
         { kind: 'position-unknown', cause: 'start-unset' },
         { kind: 'objectives-before-accept', questId: questId(790), objectives: [0] },
+        { kind: 'transport-ride', transportId: 'stormwind-auberdine', edgeId: 'stormwind-auberdine:0>1', name: 'Stormwind Harbor – Auberdine ship', docks: [], berthWalk: true },
       ]),
     ).toEqual([]);
+  });
+
+  it('names the flight point a faction may not use (SIM-24), and says why the straight line stands in (SIM-7 variant)', () => {
+    expect(one({ kind: 'flight-faction', end: 'to', node: 'npc:3310' })).toMatchObject({
+      severity: 'warning',
+      data: { end: 'to', node: 'npc:3310' },
+      message: "The flight's destination node, Doras (npc:3310), is not open to the character's faction; the flight is still timed.",
+    });
+    expect(one({ kind: 'flight-no-known-journey' })).toMatchObject({ severity: 'warning', data: null });
   });
 
   it('writes messages and data with explicit nulls', () => {

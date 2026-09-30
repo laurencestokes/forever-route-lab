@@ -9,8 +9,9 @@ import { formatIssueMessage, ISSUE_CODE_PATTERN, ISSUE_CODES, issueCodeSpec, isR
 
 /**
  * SIMULATION §7.7 and §7.8, plus the ARCHITECTURE §9.4 variants and SIM-22 added in Milestone 6,
- * the Milestone 6 review's DATA003, SIM005-uncertain and SIM-23 (§1.5), and D-040's
- * VAL030-objectives-carried.
+ * the Milestone 6 review's DATA003, SIM005-uncertain and SIM-23 (§1.5), D-040's
+ * VAL030-objectives-carried, and the map rework's SIM007-flight-unknown-path-journey and SIM-24
+ * (§1.6, travel review TR-08, TR-09).
  */
 const EXPECTED: Readonly<Record<string, 'info' | 'warning' | 'error'>> = {
   'VAL001-already-in-log': 'error',
@@ -68,6 +69,7 @@ const EXPECTED: Readonly<Record<string, 'info' | 'warning' | 'error'>> = {
   'SIM005-hearth-cooldown-uncertain': 'warning',
   'SIM006-hearth-unbound': 'warning',
   'SIM007-flight-unknown-path': 'warning',
+  'SIM007-flight-unknown-path-journey': 'warning',
   'SIM008-flight-unresolved': 'warning',
   'SIM009-mount-untrained': 'warning',
   'SIM010-riding-too-low': 'warning',
@@ -87,6 +89,7 @@ const EXPECTED: Readonly<Record<string, 'info' | 'warning' | 'error'>> = {
   'SIM021-long-swim': 'warning',
   'SIM022-legs-pending': 'info',
   'SIM023-start-xp-beyond-level': 'warning',
+  'SIM024-flight-faction': 'warning',
 };
 
 /** Words the rules supply beside `data` (src/validate/*.ts). */

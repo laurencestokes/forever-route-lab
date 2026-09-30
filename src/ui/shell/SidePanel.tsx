@@ -19,8 +19,8 @@ export const SIDE_PANEL_TAB_ORDER: readonly SidePanelTabId[] = ['available', 'qu
 export interface SidePanelCounts {
   /** Quests available at the active step; null while unknown. */
   readonly available?: number | null | undefined;
-  /** Quest log fill at the active step. */
-  readonly questLog?: { readonly used: number; readonly capacity: number | null } | null | undefined;
+  /** The quests in the log after the active step: the tab's count ("4", "≥4") and its words ("4 quests after step 12"). */
+  readonly questLog?: { readonly badge: string; readonly badgeLabel: string } | null | undefined;
   readonly validation?: IssueCounts | null | undefined;
 }
 
@@ -47,10 +47,7 @@ function tabDefinitions(counts: SidePanelCounts): TabDefinition<SidePanelTabId>[
       case 'questLog': {
         const log = counts.questLog;
         if (log === undefined || log === null) return { id, label };
-        const text = log.capacity === null ? formatInteger(log.used) : `${formatInteger(log.used)}/${formatInteger(log.capacity)}`;
-        const words =
-          log.capacity === null ? `${formatInteger(log.used)} quests` : `${formatInteger(log.used)} of ${formatInteger(log.capacity)} quests`;
-        return { id, label, badge: text, badgeLabel: words };
+        return { id, label, badge: log.badge, badgeLabel: log.badgeLabel };
       }
       case 'details':
         return { id, label };

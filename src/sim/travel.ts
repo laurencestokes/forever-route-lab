@@ -6,7 +6,7 @@ import { type EffectiveRules, markedKeys } from '../rules/precedence';
 import { ridingSpellTier } from '../rules/riding';
 import type { RuleKey } from '../rules/ruleset';
 import type { SimFact } from './facts';
-import { type Basis, basisOf, combine, mergeKeys, ruleInput, withBasis } from './provenance';
+import { ASSUMPTION, type Basis, basisOf, combine, mergeKeys, ruleInput, withBasis } from './provenance';
 
 /**
  * Movement (docs/SIMULATION.md TIME-1..TIME-3): speeds from the ruleset and the riding state, and
@@ -219,4 +219,30 @@ export function groundTravel(
     used: legUsed(rules, speeds.used, leg.method === 'straight-line', model.id === 'navigation'),
     facts,
   };
+}
+
+/**
+ * TIME-7: a ground move to or from a client berth, an inferred transport dock (`inferredBerths`
+ * in src/rules/travel-graph.ts). The ship's stop lies in the water beside its pier, and the
+ * navigation data snaps it to the water surface under the pier's deck, so the leg ends (or starts)
+ * with a swim that stands for the walk along the pier. The leg is priced with its swimming yards
+ * at the ground speed, it raises no long-swim warning (SIM-21), and its seconds are an
+ * assumption. Measured on the committed navmesh against the walk to the nearest point that snaps
+ * to the pier: within about a third either way (SIMULATION TIME-7).
+ */
+export function berthTravel(
+  from: TravelEndpoint | null,
+  to: TravelEndpoint | null,
+  radius: number | null,
+  speeds: StepSpeeds,
+  model: TravelModel,
+  rules: EffectiveRules,
+): GroundTravel {
+  const walking: StepSpeeds = { ...speeds, speeds: { groundYps: speeds.speeds.groundYps, swimYps: speeds.speeds.groundYps } };
+  const move = groundTravel(from, to, radius, walking, model, rules);
+  if (move.outcome !== 'leg') return move;
+  const warnings = move.warnings.filter((warning) => warning.kind !== 'long-swim');
+  const facts = move.facts.filter((fact) => fact.kind !== 'travel-warning' || fact.warning.kind !== 'long-swim');
+  const seconds = move.seconds.value === null ? move.seconds : withBasis(move.seconds.value, combine([basisOf(move.seconds), ASSUMPTION]));
+  return { ...move, seconds, warnings, facts };
 }

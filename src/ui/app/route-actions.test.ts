@@ -52,6 +52,9 @@ describe('createRouteActions', () => {
     const { store, actions, ids, last } = setup();
     actions.duplicateSteps(ids(2, 3));
     expect(last()).toBe('2 steps duplicated: the copies are steps 4 to 5.');
+    // One copy takes the singular (QA-23).
+    actions.duplicateSteps(ids(1));
+    expect(last()).toBe('1 step duplicated: the copy is step 2.');
     actions.toggleLock(ids(2));
     expect(last()).toBe('1 step locked.');
     actions.toggleLock(ids(2));

@@ -8,7 +8,7 @@ import { knownReadout } from '../lib/readout';
 import { UNKNOWN_FOREVER_PROVENANCE } from '../markers/provenance';
 import { RouteList, routeRowDomId, type RouteListProps } from './RouteList';
 import { routeRowContext, type GroupRowModel, type RouteRowModel, type StepRowModel } from './rows';
-import { ROUTE_ROW_HEIGHT, type SelectionMode } from './virtual';
+import { ROW_DENSITIES, routeRowHeight, type RowDensity, type SelectionMode } from './virtual';
 
 afterEach(cleanup);
 
@@ -21,7 +21,9 @@ function placeholderStep(i: number): StepRowModel {
     key: `step-${String(i + 1)}`,
     number: i + 1,
     kind,
+    verb: 'Do',
     title: `Placeholder step ${String(i + 1)}`,
+    chain: null,
     detail: null,
     projectedLevel: knownReadout(1 + i / 100),
     duration: knownReadout(60),
@@ -30,14 +32,18 @@ function placeholderStep(i: number): StepRowModel {
     assumptions: null,
     quest: kind === 'accept' ? { level: 5, difficulty: 'difficult', uncertain: false, provenance: UNKNOWN_FOREVER_PROVENANCE } : null,
     issues: NO_ISSUES,
+    issue: null,
+    mark: kind === 'accept' ? 'available' : kind === 'turnin' ? 'ready' : null,
+    levelUp: null,
     locked: false,
   };
 }
 
 const rows = (n: number): RouteRowModel[] => Array.from({ length: n }, (_, i) => placeholderStep(i));
 
-/** 280px viewport: 10 rows visible. */
-const VIEWPORT = 10 * ROUTE_ROW_HEIGHT;
+/** 10 rows visible, in the density's row height. */
+const viewportOf = (density: RowDensity): number => 10 * routeRowHeight(density);
+const VIEWPORT = viewportOf('one-line');
 
 type Handlers = Pick<
   RouteListProps,
@@ -45,7 +51,7 @@ type Handlers = Pick<
 >;
 
 /** A controlled host that keeps the active row and a simple selection, like the store will. */
-function Harness({ count, readOnly = false, spy }: { count: number; readOnly?: boolean; spy: Partial<Handlers> }) {
+function Harness({ count, readOnly = false, spy, density = 'one-line' }: { count: number; readOnly?: boolean; spy: Partial<Handlers>; density?: RowDensity }) {
   const data = rows(count);
   const [active, setActive] = useState<number | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -81,8 +87,9 @@ function Harness({ count, readOnly = false, spy }: { count: number; readOnly?: b
       onDragStart={spy.onDragStart}
       onDragCancel={spy.onDragCancel}
       readOnly={readOnly}
+      density={density}
       overscan={2}
-      initialViewportHeight={VIEWPORT}
+      initialViewportHeight={viewportOf(density)}
     />
   );
 }
@@ -94,9 +101,10 @@ const renderedNumbers = () =>
     .map((el) => Number(el.getAttribute('aria-posinset')))
     .sort((a, b) => a - b);
 
-describe('RouteList virtualisation', () => {
+describe.each(ROW_DENSITIES)('RouteList virtualisation, %s rows', (density) => {
+  const H = routeRowHeight(density);
   it('mounts only the visible window plus overscan', () => {
-    render(<Harness count={1000} spy={{}} />);
+    render(<Harness count={1000} spy={{}} density={density} />);
     // Rows 0-9 visible, overscan 2 below: posinset 1-12.
     expect(renderedNumbers()).toEqual(Array.from({ length: 12 }, (_, i) => i + 1));
     const first = within(listbox()).getAllByRole('option')[0];
@@ -115,45 +123,50 @@ describe('RouteList virtualisation', () => {
         rows={rows(10_000)}
         deriveRow={deriveRow}
         estimateColumn="xp"
+        density={density}
         label="Placeholder route"
         activeIndex={null}
         selectedKeys={new Set()}
         onActiveIndexChange={vi.fn()}
         onSelect={vi.fn()}
         overscan={2}
-        initialViewportHeight={VIEWPORT}
+        initialViewportHeight={viewportOf(density)}
       />,
     );
     // 10 visible rows and 2 of overscan: 12 of 10,000 rows derived.
     expect([...new Set(asked)].sort((a, b) => a - b)).toEqual(Array.from({ length: 12 }, (_, i) => i));
     const options = within(listbox()).getAllByRole('option');
-    expect(options[0]?.querySelector('.frl-steprow__estimate')?.textContent).toContain('+100');
+    // XP gained: the one-line rows' chosen column, the two-line rows' top number.
+    expect(options[0]?.querySelector('.frl-steprow__estimate[data-column="xp"]')?.textContent).toContain('+100');
     expect(options[1]?.className).toContain('is-pending');
     expect(options[1]?.getAttribute('aria-label')).toContain('XP gained 200 XP');
   });
 
   it('sizes the canvas for every row and positions rows by index', () => {
-    render(<Harness count={1000} spy={{}} />);
+    render(<Harness count={1000} spy={{}} density={density} />);
     const canvas = listbox().firstElementChild as HTMLElement;
-    expect(canvas.style.height).toBe(`${String(1000 * ROUTE_ROW_HEIGHT)}px`);
+    expect(canvas.style.height).toBe(`${String(1000 * H)}px`);
     const row5 = within(listbox()).getAllByRole('option').find((el) => el.getAttribute('aria-posinset') === '6');
-    expect(row5?.style.top).toBe(`${String(5 * ROUTE_ROW_HEIGHT)}px`);
+    expect(row5?.style.top).toBe(`${String(5 * H)}px`);
+    expect(row5?.style.height).toBe(`${String(H)}px`);
+    expect(row5?.className).toContain(`frl-row--${density}`);
   });
 
   it('moves the window when the list scrolls', () => {
-    render(<Harness count={1000} spy={{}} />);
+    render(<Harness count={1000} spy={{}} density={density} />);
     const el = listbox();
-    el.scrollTop = 500 * ROUTE_ROW_HEIGHT;
+    el.scrollTop = 500 * H;
     fireEvent.scroll(el);
     // Rows 500-509 visible, overscan 2 each side: posinset 499-512.
     expect(renderedNumbers()).toEqual(Array.from({ length: 14 }, (_, i) => i + 499));
   });
 });
 
-describe('RouteList keyboard', () => {
+describe.each(ROW_DENSITIES)('RouteList keyboard, %s rows', (density) => {
+  const H = routeRowHeight(density);
   it('moves the active row and selection with the arrow keys', () => {
     const spy = { onActiveIndexChange: vi.fn(), onSelect: vi.fn() };
-    render(<Harness count={50} spy={spy} />);
+    render(<Harness count={50} spy={spy} density={density} />);
     const el = listbox();
     fireEvent.keyDown(el, { key: 'ArrowDown' });
     expect(spy.onActiveIndexChange).toHaveBeenLastCalledWith(0);
@@ -167,7 +180,7 @@ describe('RouteList keyboard', () => {
 
   it('extends with Shift and moves focus alone with Ctrl', () => {
     const spy = { onActiveIndexChange: vi.fn(), onSelect: vi.fn() };
-    render(<Harness count={50} spy={spy} />);
+    render(<Harness count={50} spy={spy} density={density} />);
     const el = listbox();
     fireEvent.keyDown(el, { key: 'ArrowDown' });
     fireEvent.keyDown(el, { key: 'ArrowDown', shiftKey: true });
@@ -185,8 +198,8 @@ describe('RouteList keyboard', () => {
     expect(selected).toEqual(['1', '2', '3']);
   });
 
-  it('scrolls the active row into view on End, PageUp and Home', () => {
-    render(<Harness count={1000} spy={{}} />);
+  it('scrolls the active row into view on End, PageUp and Home (a page is the rows that fit, less one)', () => {
+    render(<Harness count={1000} spy={{}} density={density} />);
     const el = listbox();
     fireEvent.keyDown(el, { key: 'End' });
     const activeId = el.getAttribute('aria-activedescendant');
@@ -202,10 +215,10 @@ describe('RouteList keyboard', () => {
   });
 
   it('keeps the active row mounted when scrolled far away', () => {
-    render(<Harness count={1000} spy={{}} />);
+    render(<Harness count={1000} spy={{}} density={density} />);
     const el = listbox();
     fireEvent.keyDown(el, { key: 'ArrowDown' });
-    el.scrollTop = 700 * ROUTE_ROW_HEIGHT;
+    el.scrollTop = 700 * H;
     fireEvent.scroll(el);
     const activeId = el.getAttribute('aria-activedescendant') ?? '';
     expect(document.getElementById(activeId)?.getAttribute('aria-posinset')).toBe('1');
@@ -214,7 +227,7 @@ describe('RouteList keyboard', () => {
 
   it('runs editing commands on the active row', () => {
     const spy = { onDelete: vi.fn(), onToggleLock: vi.fn(), onDuplicate: vi.fn(), onMove: vi.fn(), onActivate: vi.fn() };
-    render(<Harness count={20} spy={spy} />);
+    render(<Harness count={20} spy={spy} density={density} />);
     const el = listbox();
     fireEvent.keyDown(el, { key: 'ArrowDown' });
     fireEvent.keyDown(el, { key: 'ArrowDown' });
@@ -232,7 +245,7 @@ describe('RouteList keyboard', () => {
 
   it('ignores editing commands when read-only', () => {
     const spy = { onDelete: vi.fn(), onToggleLock: vi.fn(), onActiveIndexChange: vi.fn() };
-    render(<Harness count={20} readOnly spy={spy} />);
+    render(<Harness count={20} readOnly spy={spy} density={density} />);
     const el = listbox();
     fireEvent.keyDown(el, { key: 'ArrowDown' });
     fireEvent.keyDown(el, { key: 'Delete' });
@@ -244,10 +257,11 @@ describe('RouteList keyboard', () => {
   });
 });
 
-describe('RouteList pointer', () => {
+describe.each(ROW_DENSITIES)('RouteList pointer, %s rows', (density) => {
+  const H = routeRowHeight(density);
   it('selects on click with the modifier conventions', () => {
     const spy = { onSelect: vi.fn(), onActiveIndexChange: vi.fn() };
-    render(<Harness count={20} spy={spy} />);
+    render(<Harness count={20} spy={spy} density={density} />);
     const options = within(listbox()).getAllByRole('option');
     fireEvent.click(options[3] as HTMLElement);
     expect(spy.onActiveIndexChange).toHaveBeenLastCalledWith(3);
@@ -258,19 +272,19 @@ describe('RouteList pointer', () => {
     expect(spy.onSelect).toHaveBeenLastCalledWith(7, 'range');
   });
 
-  it('reports a drag as from/to indices and draws the drop line locally', () => {
+  it('reports a drag from the step number (the handle) as from/to indices and draws the drop line locally', () => {
     const spy = { onDragStart: vi.fn(), onDrop: vi.fn(), onDragCancel: vi.fn() };
-    const { container } = render(<Harness count={20} spy={spy} />);
-    const handle = container.querySelectorAll('.frl-row__handle')[1] as HTMLElement;
-    fireEvent.pointerDown(handle, { button: 0, clientY: 1.5 * ROUTE_ROW_HEIGHT });
+    const { container } = render(<Harness count={20} spy={spy} density={density} />);
+    const handle = container.querySelectorAll('.frl-steprow__number.is-handle')[1] as HTMLElement;
+    fireEvent.pointerDown(handle, { button: 0, clientY: 1.5 * H });
     expect(spy.onDragStart).toHaveBeenCalledWith(1);
     // Pointer near the gap above row 5 (the test DOM has no layout, so offsets are client Y).
     act(() => {
-      window.dispatchEvent(new PointerEvent('pointermove', { clientY: 5 * ROUTE_ROW_HEIGHT + 3 }));
+      window.dispatchEvent(new PointerEvent('pointermove', { clientY: 5 * H + 3 }));
     });
-    expect(container.querySelector('.frl-routelist__drop')).not.toBeNull();
+    expect(container.querySelector<HTMLElement>('.frl-routelist__drop')?.style.top).toBe(`${String(5 * H)}px`);
     act(() => {
-      window.dispatchEvent(new PointerEvent('pointerup', { clientY: 5 * ROUTE_ROW_HEIGHT + 3 }));
+      window.dispatchEvent(new PointerEvent('pointerup', { clientY: 5 * H + 3 }));
     });
     expect(spy.onDrop).toHaveBeenCalledWith(1, 4);
     expect(container.querySelector('.frl-routelist__drop')).toBeNull();
@@ -278,24 +292,24 @@ describe('RouteList pointer', () => {
 
   it('cancels a drag on Escape or a drop in place', () => {
     const spy = { onDrop: vi.fn(), onDragCancel: vi.fn() };
-    const { container } = render(<Harness count={20} spy={spy} />);
-    const handle = () => container.querySelectorAll('.frl-row__handle')[2] as HTMLElement;
-    fireEvent.pointerDown(handle(), { button: 0, clientY: 2.5 * ROUTE_ROW_HEIGHT });
+    const { container } = render(<Harness count={20} spy={spy} density={density} />);
+    const handle = () => container.querySelectorAll('.frl-steprow__number.is-handle')[2] as HTMLElement;
+    fireEvent.pointerDown(handle(), { button: 0, clientY: 2.5 * H });
     act(() => {
-      window.dispatchEvent(new PointerEvent('pointermove', { clientY: 9 * ROUTE_ROW_HEIGHT }));
+      window.dispatchEvent(new PointerEvent('pointermove', { clientY: 9 * H }));
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     });
     expect(spy.onDragCancel).toHaveBeenCalledTimes(1);
-    fireEvent.pointerDown(handle(), { button: 0, clientY: 2.5 * ROUTE_ROW_HEIGHT });
+    fireEvent.pointerDown(handle(), { button: 0, clientY: 2.5 * H });
     act(() => {
-      window.dispatchEvent(new PointerEvent('pointerup', { clientY: 2.5 * ROUTE_ROW_HEIGHT }));
+      window.dispatchEvent(new PointerEvent('pointerup', { clientY: 2.5 * H }));
     });
     expect(spy.onDragCancel).toHaveBeenCalledTimes(2);
     expect(spy.onDrop).not.toHaveBeenCalled();
   });
 });
 
-const header = (key: string, label: string, stepCount: number): GroupRowModel => ({ type: 'group', key, label, stepCount });
+const header = (key: string, label: string, stepCount: number): GroupRowModel => ({ type: 'group', key, label, stepCount, imported: true, levelSpan: null });
 
 /** Steps 1-6 with a header over steps 2-4: rows H? S1 [H S2 S3 S4] S5 S6. */
 function groupedRows(): RouteRowModel[] {
@@ -386,5 +400,49 @@ describe('RouteList semantics', () => {
     }
     // The list itself is the one tab stop.
     expect(listbox().tabIndex).toBe(0);
+  });
+});
+
+describe.each(ROW_DENSITIES)('RouteList insertion line and later band, %s rows (D-048 B)', (density) => {
+  const H = routeRowHeight(density);
+  function Insert({ insertAt, count = 30 }: { readonly insertAt: number | null; readonly count?: number }) {
+    return (
+      <RouteList
+        rows={rows(count)}
+        density={density}
+        insertAt={insertAt}
+        label="Placeholder route"
+        activeIndex={null}
+        selectedKeys={new Set()}
+        onActiveIndexChange={vi.fn()}
+        onSelect={vi.fn()}
+        initialViewportHeight={viewportOf(density)}
+      />
+    );
+  }
+
+  it('draws one dashed line at the boundary and one band under every later row, outside the rows', () => {
+    const { container, rerender } = render(<Insert insertAt={6} />);
+    const line = () => container.querySelector<HTMLElement>('.frl-routelist__insert');
+    const band = () => container.querySelector<HTMLElement>('.frl-routelist__later');
+    expect(line()?.style.top).toBe(`${String(6 * H)}px`);
+    expect(band()?.style.top).toBe(`${String(6 * H)}px`);
+    expect(band()?.style.height).toBe(`${String(24 * H)}px`);
+    for (const el of [line(), band()]) {
+      expect(el?.getAttribute('aria-hidden')).toBe('true');
+      expect(el?.closest('[role="option"]')).toBeNull();
+    }
+    rerender(<Insert insertAt={2} />);
+    expect(line()?.style.top).toBe(`${String(2 * H)}px`);
+    expect(band()?.style.height).toBe(`${String(28 * H)}px`);
+  });
+
+  it('draws the line at the end without a band when new steps go last, and neither without an insertion point', () => {
+    const { container, rerender } = render(<Insert insertAt={30} />);
+    expect(container.querySelector<HTMLElement>('.frl-routelist__insert')?.style.top).toBe(`${String(30 * H)}px`);
+    expect(container.querySelector('.frl-routelist__later')).toBeNull();
+    rerender(<Insert insertAt={null} />);
+    expect(container.querySelector('.frl-routelist__insert')).toBeNull();
+    expect(container.querySelector('.frl-routelist__later')).toBeNull();
   });
 });

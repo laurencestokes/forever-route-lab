@@ -14,17 +14,26 @@ assets-source/*
 !assets-source/README.md
 
 # public/maps holds only the committed outputs: the placeholder geometry (D-018), the painted map
-# art (D-033) and the terrain byproducts (D-032), each with its manifest and NOTICE. Local map
-# outputs go to local-maps/ (outside public/, D-018), never here.
+# art (D-033), the terrain byproducts (D-032), the client tables (D-039), the atlas tiles (D-042) and
+# the fallback zone tints (map-presentation.md §12.6, step MP.10), each with its manifest and NOTICE. Local map outputs go to local-maps/ (outside public/, D-018), never here.
+# The minimap style (D-045, D-049 O14) commits only its index, manifest, NOTICE and pack pointer: its
+# tiles (public/maps/minimap/t/) ship as a release-asset pack and are never committed.
 public/maps/*
 !public/maps/placeholder/
 !public/maps/art/
 !public/maps/terrain/
+!public/maps/client/
+!public/maps/atlas/
+!public/maps/tint/
+!public/maps/minimap/
+public/maps/minimap/t/
 
 # Extraction reports (timings, full input lists): not committed (ARCHITECTURE §5.2).
 generated/questiedb-report.json
 generated/terrain-nav-report*.json
 generated/maps-art-report.json
+generated/maps-atlas-report.json
+generated/maps-minimap-report.json
 generated/terrain-report.json
 
 # Editor / OS noise

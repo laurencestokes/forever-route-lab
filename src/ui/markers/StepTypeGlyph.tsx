@@ -104,7 +104,8 @@ export interface StepTypeGlyphProps {
    * for places where the kind is already spelled out in text or in an enclosing label.
    */
   readonly labelled?: boolean | undefined;
-  readonly size?: 14 | 16 | undefined;
+  /** 16px by default; 14px and 12px inside the route rows' step discs (`StepMark`). */
+  readonly size?: 12 | 14 | 16 | undefined;
   readonly className?: string | undefined;
 }
 

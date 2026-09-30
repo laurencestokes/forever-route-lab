@@ -22,9 +22,15 @@
  * `setLayer` and the canvas redraw on top (docs/measurements/map-m3.json `browser`), so these
  * figures alone do not show the budget is met.
  *
- * Prints one JSON object: min / median / p90 per case, for the route and for the sample route.
- * With `--check <file>`, compares the route's medians with the file's `milestone4Perf2` baseline
- * and exits with 1 when one is more than 25% slower (the §14 regression rule).
+ * **The two-builder atlas case** (docs/research/map-atlas.md §8.2, §9.2; step ATL.4): the same
+ * route and actions on the atlas surface (the controller's `atlas` option), with the view on
+ * Durotar's east coast at zone zoom, where Kalimdor's and the Eastern Kingdoms' builders are both
+ * active and their parts are joined, the cap shared between them.
+ *
+ * Prints one JSON object: min / median / p90 per case, for the route, for the sample route and for
+ * the route on the atlas. With `--check <file>`, compares the route's medians, and the atlas case's,
+ * with the file's `milestone4Perf2` baseline and exits with 1 when one is more than 25% slower
+ * (the §14 regression rule), or when an atlas median is over 8 ms (ARCHITECTURE §14, the ATL.4 gate).
  */
 import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
@@ -35,8 +41,9 @@ import { sequentialIdSource } from '../../src/app/shell-support';
 import { loadWorkspace, type Workspace } from '../../src/app/workspace';
 import type { ProjectV1 } from '../../src/domain/project';
 import type { RouteStep } from '../../src/domain/route';
-import { uiMapId, type StepId } from '../../src/domain/ids';
+import { uiMapId, worldMapId, type StepId } from '../../src/domain/ids';
 import { fakeServer, nodeSha256, publicSite } from '../support/fake-fetch';
+import { MAP_WORDING } from '../../src/app/map-wording';
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string): string => {
@@ -51,6 +58,14 @@ const NOW = '2026-09-26T00:00:00.000Z';
 const DUROTAR = uiMapId(1411);
 /** §14: a stored baseline fails on a regression of more than 25%. */
 const REGRESSION = 1.25;
+/** ARCHITECTURE §14: one route edit applied ≤ 8 ms (the ATL.4 gate for the two-builder atlas case). */
+const EDIT_BUDGET_MS = 8;
+/**
+ * The atlas view of the two-builder case: Durotar's east coast (atlas E 13,000, S 12,700; in
+ * Kalimdor's yards x = 12,778 − 12,700, y = 5,652 − 13,000) at zoom −2. The fake stage's 800 × 600
+ * px, padded by half, reaches the Eastern Kingdoms' rectangle (from E 14,499) and not the card.
+ */
+const ATLAS_VIEW = { mapId: worldMapId(1), x: 12778 - 12700, y: 5652 - 13000, zoom: -2 } as const;
 
 interface Stats {
   readonly min: number;
@@ -112,7 +127,7 @@ function longRoute(sample: ProjectV1, count: number): ProjectV1 {
 
 const newStore = (project: ProjectV1): EditorStore => createEditorStore({ project, ids: sequentialIdSource(5_000_000), clock: fixedClock(NOW) });
 
-function run(workspace: Workspace, project: ProjectV1) {
+function run(workspace: Workspace, project: ProjectV1, atlas = false) {
   const placed = project.route.steps.filter((step) => step.location !== null);
   const target = placed[Math.floor(placed.length / 2)];
   if (target === undefined) throw new Error('the route has no placed step');
@@ -144,12 +159,14 @@ function run(workspace: Workspace, project: ProjectV1) {
   const store = newStore(project);
   const { factory, adapters } = fakeAdapterFactory();
   const controller = createMapController({
+    wording: MAP_WORDING,
     store,
     data: workspace.data,
     geometry: workspace.geometry.geometry,
     describeStep: (step, index) => `${String(index + 1)} · ${step.kind}`,
     timing: null,
     objectUrls: null,
+    atlas,
   });
   const attachStart = performance.now();
   controller.attach(factory, { nodeType: 1, ownerDocument: null });
@@ -157,6 +174,13 @@ function run(workspace: Workspace, project: ProjectV1) {
   controller.jumpToZone(DUROTAR);
   const adapter = adapters[0];
   if (adapter === undefined) throw new Error('no adapter');
+  let builders = 1;
+  if (atlas) {
+    adapter.pan(ATLAS_VIEW);
+    builders = adapter.getView()?.visible?.length ?? 0;
+    if (builders !== 2) throw new Error(`the atlas case needs two active builders, the view has ${String(builders)}`);
+  }
+  const routeSteps = adapter.contents.get('route-steps')?.stats;
 
   const selectionChange = bench((i) => {
     const step = placed[(Math.abs(i) * 97 + 1000) % placed.length];
@@ -181,6 +205,8 @@ function run(workspace: Workspace, project: ProjectV1) {
 
   return {
     steps: project.route.steps.length,
+    builders,
+    routeStepsDrawn: routeSteps === undefined ? null : { drawn: routeSteps.drawn, notDrawn: routeSteps.notDrawn },
     attachMs,
     selectionChange: { totalMs: selectionChange, storeOnlyMs: { median: storeOnly.selectionChange.median } },
     moveStep: {
@@ -199,7 +225,7 @@ type RouteResult = ReturnType<typeof run>;
 /** The route cases whose medians `--check` compares with the stored baseline. */
 const CHECKED = ['selectionChange', 'moveStep', 'insertNote', 'editNote'] as const;
 
-function regressions(result: RouteResult, file: string): string[] {
+function regressions(result: RouteResult, file: string, label = ''): string[] {
   const stored = JSON.parse(readFileSync(file, 'utf8')) as { milestone4Perf2?: { route10000?: Record<string, { totalMs?: { median?: number } }> } };
   const baseline = stored.milestone4Perf2?.route10000;
   if (baseline === undefined) return [`${file} has no milestone4Perf2.route10000 baseline`];
@@ -207,9 +233,14 @@ function regressions(result: RouteResult, file: string): string[] {
   for (const name of CHECKED) {
     const was = baseline[name]?.totalMs?.median;
     const now = result[name].totalMs.median;
-    if (was !== undefined && now > was * REGRESSION) found.push(`${name}: ${String(now)} ms median, baseline ${String(was)} ms (+${String(Math.round((now / was - 1) * 100))}%)`);
+    if (was !== undefined && now > was * REGRESSION) found.push(`${label}${name}: ${String(now)} ms median, baseline ${String(was)} ms (+${String(Math.round((now / was - 1) * 100))}%)`);
   }
   return found;
+}
+
+/** The two-builder atlas case's medians over the ARCHITECTURE §14 edit budget. */
+function overBudget(result: RouteResult): string[] {
+  return CHECKED.filter((name) => result[name].totalMs.median > EDIT_BUDGET_MS).map((name) => `atlas ${name}: ${String(result[name].totalMs.median)} ms median, over ${String(EDIT_BUDGET_MS)} ms`);
 }
 
 const server = fakeServer(publicSite());
@@ -222,8 +253,10 @@ const workspace = await loadWorkspace({
   yieldToRender: () => Promise.resolve(),
 });
 const sample = workspace.project;
-const route = run(workspace, longRoute(sample, STEPS));
+const long = longRoute(sample, STEPS);
+const route = run(workspace, long);
 const sampleRoute = run(workspace, sample);
+const atlasRoute = run(workspace, long, true);
 const report = {
   runs: RUNS,
   warm: WARM,
@@ -231,15 +264,16 @@ const report = {
   platform: `${process.platform} ${process.arch}`,
   [`route${String(STEPS)}`]: route,
   [`sampleRoute${String(sample.route.steps.length)}`]: sampleRoute,
+  [`atlasTwoBuilders${String(STEPS)}`]: atlasRoute,
 };
 console.log(JSON.stringify(report, null, 2));
 if (CHECK !== null) {
   if (STEPS !== 10_000) throw new Error('--check compares a 10,000-step route (--steps 10000)');
-  const found = regressions(route, CHECK);
+  const found = [...regressions(route, CHECK), ...regressions(atlasRoute, CHECK, 'atlas '), ...overBudget(atlasRoute)];
   if (found.length > 0) {
-    console.error(`Slower than the stored baseline by more than 25%:\n  ${found.join('\n  ')}`);
+    console.error(`Slower than the stored baseline by more than 25%, or over the edit budget:\n  ${found.join('\n  ')}`);
     process.exitCode = 1;
   } else {
-    console.error('Within 25% of the stored baseline.');
+    console.error('Within 25% of the stored baseline; the two-builder atlas case within it and within 8 ms.');
   }
 }

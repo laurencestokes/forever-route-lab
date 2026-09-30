@@ -11,6 +11,7 @@ import { createNavigationRuntime } from './navigation-runtime';
 import { endpoint, ManualTimers, otherComponent, testNavManifest } from './navigation-test-helpers';
 import { createRoutePathFeed, type RoutePathFeedOptions } from './route-paths';
 import { createEditorStore } from './store';
+import { MAP_WORDING } from './map-wording';
 
 /**
  * Map path wiring (MAPS §7.4; terrain-navigation.md §9.3 `path()`): the navigation model's paths
@@ -56,6 +57,7 @@ function setup(steps: RouteStep[] = mapTestSteps(), feedOptions: Partial<RoutePa
   const feed = createRoutePathFeed({ store, geometry: workspace.geometry, timers, now: () => timers.now, ...feedOptions });
   const factory = fakeAdapterFactory();
   const controller = createMapController({
+    wording: MAP_WORDING,
     store,
     data: workspace.data,
     geometry: workspace.geometry,
@@ -63,6 +65,10 @@ function setup(steps: RouteStep[] = mapTestSteps(), feedOptions: Partial<RoutePa
     paths: feed,
     timing: null,
     objectUrls: null,
+    // One world surface per world map, as before step ATL.10 (the path instances and a geometry
+    // without the 947 rows still take); the atlas, the default since ATL.10, is route-paths.atlas.test.ts.
+    atlas: false,
+    smoothWheel: false,
   });
   const adapter = () => {
     const a = factory.adapters[0];

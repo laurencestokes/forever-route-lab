@@ -293,7 +293,9 @@ at Era 1.15.9.69722.
 - Between Era 69722 and Forever 70009, assignment 46784 (Azeroth/Eastern Kingdoms) changed
   `OrderIndex` from 0 to 1. Nothing else about the continents changed.
 - `UiMapLink` returned `{"errors":"Table not found."}` from wago.tools at 70009, although WoWDBDefs
-  lists 1.60.1.x builds for it (`UiMapLink.dbd:207`). Whether the client has rows is **UNKNOWN**.
+  lists 1.60.1.x builds for it (`UiMapLink.dbd:207`). *Answered since (map-atlas.md §3.1, read from
+  the client through `tools/casc` and re-derived by that design's review):* the client's
+  `UiMapLink` (FileDataID 2030690) has **0 records** at 1.60.1.70009.
 
 ## 7. Worked example 1: Gornek in Durotar (unchanged zone)
 
@@ -552,9 +554,13 @@ Observations:
 - Hyjal, Shen'dralas and Riverglades are on the existing continents and fit the same world frames.
 - Zephras Isle is on its own world map (2991), and Darkspear Islands is on 2997, which has
   `InstanceType = 3` (the value used for battlegrounds). Neither can be projected onto Kalimdor,
-  Eastern Kingdoms or Azeroth with `UiMapAssignment`: 947 has rows only for MapIDs 0 and 1. How the
-  client places them on the world map is **UNKNOWN**. Per-world-map surfaces (`world:2991`,
-  `world:2997`; ARCHITECTURE §7.2) do not need this. Only the deferred overview surface would.
+  Eastern Kingdoms or Azeroth with `UiMapAssignment`: 947 has rows only for MapIDs 0 and 1.
+  **Answered for 1.60.1.70009 (C1):** the client places neither on the world map (`UiMapLink` 0
+  records; `Map.ParentMapID` and `CosmeticParentMapID` −1; no `UiMapGroupMember` rows; map-atlas.md
+  §3.1). Rows a server sends at run time are **UNKNOWN** (they live in `Cache/`, which is never
+  read). The atlas surface (D-042) therefore shows Zephras Isle as a captioned card "not in
+  position", placed by a committed layout constant with its reason, and Darkspear Islands, a
+  battleground map, keeps its own surface `world:2997`.
 - QuestieDB's Forever NPC and object DBs contain **zero** spawns keyed by AreaIDs 616, 16591,
   16593, 16606 or 16651 (grep of `data/Forever/*DB.lua`). The route planner has no QuestieDB points
   there yet.
@@ -661,8 +667,27 @@ Leaflet 1.9.4 `L.CRS.Simple` uses `LonLat` projection, transformation `(1, 0, �
 
 ### 14.1 Surfaces
 
-**WorldSurface(mapId)**, `SurfaceId` `world:<mapId>` (ARCHITECTURE §7.1): one per world MapID
-(0, 1, 2991, 2997, …). Units are yards. This is the only MVP surface kind.
+**AtlasSurface**, `SurfaceId` `atlas` (ARCHITECTURE §7.2; D-042; map-atlas.md §5): maps 1 and 0
+placed side by side and Zephras Isle (2991) as an inset card, **the default since step ATL.10**,
+which retired `world:0`, `world:1` and `world:2991`. Units stay yards: each placement is a
+translation only (`scale` 1), from the committed 947 rows moved by whole 1,024-yd tiles (the
+compact layout), with the inset's corner a committed constant (`src/geo/atlas-layout.ts`):
+
+```
+E = eOff − Y,  S = sOff − X                 // atlas east and south, per placement
+toLatLng(X, Y) = L.latLng(−S, E)            // one code path with the world surface's (offsets 0)
+inverse: X = sOff − S, Y = eOff − E         // picks round to 0.1 yd, after which it is exact
+map of a point: inside the card → 2991; E ≤ seamE (16,617) → 1; else 0
+```
+
+Compact layout (1.60.1.70009 rows): Kalimdor eOff 5,652, sOff 12,778; the Eastern Kingdoms 22,499,
+7,907; Zephras Isle 17,671.25, 5,468.25 (its rectangle's north-west corner at E 13,440, S 512).
+Extent E 0–30,720, S 0–26,112. Atlas units are display only (D-017): they never feed a distance or
+reach a saved project, which a file-level rule in `tests/architecture.test.ts` enforces.
+
+**WorldSurface(mapId)**, `SurfaceId` `world:<mapId>` (ARCHITECTURE §7.1): one per world MapID the
+atlas does not place (instances, battlegrounds, Darkspear Islands 2997), and for every world map
+when a geometry has no 947 rows. Units are yards.
 
 ```
 toLatLng(X, Y) = L.latLng(X, −Y)            // lat = north, lng = east
@@ -677,9 +702,9 @@ a continent, the continent art and every route line share one coordinate system.
 handling.
 
 **UiSurface(uiMapId)**, for maps that are not a single world rectangle (Azeroth 947) or for a
-strict per-map "Blizzard map" view. *Deferred until after the MVP (F23; ARCHITECTURE §7.2: the
-combined overview surface waits, and the surface abstraction keeps it possible).* The maths is
-kept for that later work. Units are art pixels, `W × H = LayerWidth × LayerHeight`
+strict per-map "Blizzard map" view. *Deferred until after the MVP (F23), then superseded by the
+atlas surface above (D-042), which places the continents in yards and draws no 947 painting.* The
+maths is kept for reference. Units are art pixels, `W × H = LayerWidth × LayerHeight`
 (1002 × 668):
 
 ```
@@ -700,8 +725,9 @@ its own sub-rectangle. Lines are drawn only between points on the same MapID.
    each run as one polyline on that map's WorldSurface, plus a small highlight polyline for the
    selected leg (ARCHITECTURE §7.2).
 3. At a `mapId` change (boat, zeppelin, portal, instance, hearthstone), end the run. Draw a
-   transition glyph at both ends. The dashed Azeroth 947 connector between endpoints in 947
-   sub-rectangles belongs to the deferred overview surface.
+   transition glyph at both ends. On the atlas, a ride between the two placed continents is drawn
+   as a `connector` arc instead (never measured); legs to the Zephras Isle card or an instance keep
+   the glyph pair.
 4. Instance-presence spawns (`{-1,-1}`) render at the resolved entrance, with an instance badge.
 5. On a zone view, keep drawing points outside `[0,100]` with an off-map indicator. They are valid.
 6. Level of detail, the path cap and layer diffing by descriptor id are specified in MAPS.md
@@ -1001,7 +1027,7 @@ worked examples on the committed 61 rows.
 
 | # | Question | Why it matters |
 |---|---|---|
-| C1 | How does the client place Zephras Isle (MapID 2991) and Darkspear Islands (2997) on the world map? `UiMapLink` data is unavailable. | Only the deferred overview surface needs it; per-world surfaces do not (ARCHITECTURE §7.2) |
+| C1 | How does the client place Zephras Isle (MapID 2991) and Darkspear Islands (2997) on the world map? | **Answered for 1.60.1.70009** (map-atlas.md §3.1, read from the client through `tools/casc` and re-derived by its review): it places **neither**. `UiMapAssignment` has 947 rows only for MapIDs 0 and 1; `UiMapLink` (FileDataID 2030690) has 0 records; `Map` gives both maps `ParentMapID` and `CosmeticParentMapID` −1; `UiMapGroupMember` has no rows; `AreaTable` 16593 and 16606 have no parent. Rows a server may send at run time live in `Cache/`, which is never read: **UNKNOWN**. The atlas shows Zephras Isle as a card, not in position (D-042 O2), and Darkspear Islands keeps its own surface (a battleground, `InstanceType` 3). If a later build places either map, the atlas takes the cited row and its check T4 notices the change. |
 | C2 | What are UiMaps 1463 and 1464 (512² continent maps with parent 0) for? | Only relevant if they are ever shown |
 | C3 | Were the 98 RXP Forever percent-form `.goto` lines on changed zones authored in the Forever frame? | ~100 yd errors if they are Era-framed (section 9). Handled by the import frame option and `RXP030-frame-ambiguous`. |
 | C4 | Do later betas change `UiMapAssignment`? | For the 49 shared frames, the frame hash detects it: local sets fall back, and a QuestieDB pin bump re-validates. For the 12 DB2-only rows, a local set with a differing row is rejected (C8); adopting a later build's rows needs a new committed rows file and owner review. |

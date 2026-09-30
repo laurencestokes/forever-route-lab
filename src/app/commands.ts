@@ -12,8 +12,11 @@ import {
   insertSteps,
   joinSections as joinStepSections,
   makeGrindStep,
+  makeHearthStep,
   makeNoteStep,
+  makeTrainStep,
   makeTravelStep,
+  makeVendorStep,
   moveSteps,
   moveStepsBy,
   pasteSection,
@@ -159,6 +162,24 @@ export function insertTravel(fields: TravelFields = {}, at: number | null = null
 
 export function insertGrind(fields: GrindFields, at: number | null = null): Command {
   return insertStep((ids) => makeGrindStep(ids, fields), at, 'Insert grind');
+}
+
+/**
+ * A hearthstone use (`use`, the default: to the bind point, which the walk knows) or bind step
+ * (docs/research/ui-refresh.md §7.3, the Add footer's Hearth).
+ */
+export function insertHearth(mode: 'use' | 'bind' = 'use', at: number | null = null): Command {
+  return insertStep((ids) => makeHearthStep(ids, { mode }), at, 'Insert hearth');
+}
+
+/** A train step with nothing set yet (the Add footer's Train): Details sets what and where. */
+export function insertTrain(at: number | null = null): Command {
+  return insertStep((ids) => makeTrainStep(ids), at, 'Insert train');
+}
+
+/** A vendor step with nothing set yet (the Add footer's Buy): Details sets what and where. */
+export function insertVendor(at: number | null = null): Command {
+  return insertStep((ids) => makeVendorStep(ids), at, 'Insert vendor');
 }
 
 // Selection-based edits ------------------------------------------------------------------------

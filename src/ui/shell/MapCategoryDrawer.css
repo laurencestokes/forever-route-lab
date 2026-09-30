@@ -1,0 +1,441 @@
+/*
+ * The Map layers drawer (docs/research/map-presentation.md §25.3.1 to §25.3.6): the kit's controls,
+ * 24 px rows with a 16 px native checkbox inside a 24 px target, the category's pin in monochrome,
+ * the count right-aligned in tabular figures, and a hidden row both unticked and struck through.
+ * Tokens only.
+ */
+
+.frl-mapdrawer {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  font-size: var(--frl-text-sm);
+}
+
+.frl-mapdrawer__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--frl-space-2);
+  height: var(--frl-panel-header-height);
+  padding: 0 var(--frl-space-2) 0 var(--frl-space-3);
+  border-bottom: 1px solid var(--frl-border);
+}
+
+.frl-mapdrawer__title {
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-mapdrawer__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+  min-height: 0;
+  padding: var(--frl-space-2) var(--frl-space-3) var(--frl-space-3);
+  overflow: auto;
+}
+
+.frl-mapdrawer__style {
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+}
+
+.frl-mapdrawer__style-label {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-mapdrawer__note,
+.frl-mapdrawer__notices,
+.frl-mapdrawer__summary,
+.frl-mapdrawer__more {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-mapdrawer__notices {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--frl-space-1) var(--frl-space-2);
+  border-left: 2px solid var(--frl-border-strong);
+}
+
+.frl-mapdrawer__search .frl-search {
+  width: 100%;
+}
+
+.frl-mapdrawer__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--frl-space-1);
+}
+
+/* Groups */
+
+.frl-mapdrawer__group {
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--frl-space-1);
+  border-top: 1px solid var(--frl-border);
+}
+
+.frl-mapdrawer__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+  min-height: 24px;
+}
+
+.frl-mapdrawer__group-box .frl-checkbox label {
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-mapdrawer__subtitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-mapdrawer__collapse {
+  margin-left: auto;
+  transition: transform var(--frl-duration-fast) var(--frl-ease);
+}
+
+.frl-mapdrawer__collapse.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frl-mapdrawer__collapse {
+    transition: none;
+  }
+}
+
+.frl-mapdrawer__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.frl-mapdrawer__row {
+  display: flex;
+  flex-direction: column;
+}
+
+.frl-mapdrawer__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: var(--frl-fg);
+  cursor: pointer;
+}
+
+.frl-mapdrawer__box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.frl-mapdrawer__box input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.frl-mapdrawer__box input:focus-visible,
+.frl-mapdrawer__group-box input:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 2px;
+}
+
+.frl-mapdrawer__icon {
+  flex: none;
+  color: var(--frl-fg);
+}
+
+/* The zone border swatch takes the map frame token, as the canvas strokes the zone frames (style.ts role `frame`). */
+.frl-mapdrawer__icon[data-swatch='border'] {
+  color: var(--frl-map-frame);
+}
+
+.frl-mapdrawer__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A hidden row: unticked and struck through (MapGenie strikes through; the tick does not depend on reading). */
+.frl-mapdrawer__row.is-hidden .frl-mapdrawer__name {
+  color: var(--frl-fg-muted);
+  text-decoration: line-through;
+}
+
+.frl-mapdrawer__row.is-unavailable .frl-mapdrawer__label {
+  cursor: default;
+}
+
+/* Unavailable rows keep focus (aria-disabled, UI.md §9 rule 6) and take the kit's disabled ink. */
+.frl-mapdrawer__row.is-unavailable .frl-mapdrawer__name,
+.frl-mapdrawer__row.is-unavailable .frl-mapdrawer__icon {
+  color: var(--frl-fg-disabled);
+}
+
+.frl-mapdrawer__box input[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.frl-mapdrawer__count {
+  flex: none;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.frl-mapdrawer__notes {
+  padding: 0 0 var(--frl-space-1) 30px;
+  color: var(--frl-fg-subtle);
+  font-size: var(--frl-text-xs);
+  line-height: var(--frl-leading-tight);
+  cursor: pointer;
+}
+
+/* A row's notes as one muted line (review PR-09; §25.3.3): the first note, ellipsised, and how many more. */
+.frl-mapdrawer__note-line {
+  display: flex;
+  gap: var(--frl-space-1);
+  min-width: 0;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.frl-mapdrawer__note-first {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.frl-mapdrawer__note-more {
+  flex: none;
+  color: var(--frl-fg-muted);
+}
+
+.frl-mapdrawer__note-all {
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The whole notes: opened by a press of the line, or while the row's box has keyboard focus. */
+.frl-mapdrawer__notes.is-open .frl-mapdrawer__note-line,
+.frl-mapdrawer__row:has(input:focus-visible) .frl-mapdrawer__note-line {
+  display: none;
+}
+
+.frl-mapdrawer__notes.is-open .frl-mapdrawer__note-all,
+.frl-mapdrawer__row:has(input:focus-visible) .frl-mapdrawer__note-all {
+  display: flex;
+}
+
+/* The rows' pins: the dark family's body with a light glyph, the light family's the other way round. */
+.frl-mapdrawer__pin .frl-mapdrawer__pin-body {
+  fill: var(--frl-map-pin);
+  stroke: var(--frl-map-pin-glyph);
+}
+
+.frl-mapdrawer__pin .frl-mapdrawer__pin-glyph {
+  color: var(--frl-map-pin-glyph);
+}
+
+.frl-mapdrawer__pin.is-light .frl-mapdrawer__pin-body {
+  fill: var(--frl-map-pin-glyph);
+  stroke: var(--frl-map-pin);
+}
+
+.frl-mapdrawer__pin.is-light .frl-mapdrawer__pin-glyph {
+  color: var(--frl-map-pin);
+}
+
+/* A glyph's cuts take the body's colour. */
+.frl-mapdrawer__pin .frl-mapdrawer__cut {
+  stroke: var(--frl-map-pin);
+}
+
+.frl-mapdrawer__pin .frl-mapdrawer__cut-fill {
+  fill: var(--frl-map-pin);
+}
+
+.frl-mapdrawer__pin.is-light .frl-mapdrawer__cut {
+  stroke: var(--frl-map-pin-glyph);
+}
+
+.frl-mapdrawer__pin.is-light .frl-mapdrawer__cut-fill {
+  fill: var(--frl-map-pin-glyph);
+}
+
+.frl-mapdrawer__badge {
+  fill: var(--frl-map-pin-glyph);
+  stroke: var(--frl-map-pin);
+  stroke-width: 1;
+}
+
+.frl-mapdrawer__pin > g:not(.frl-mapdrawer__pin-glyph) {
+  color: var(--frl-map-pin);
+}
+
+/* Search results */
+
+.frl-mapdrawer__results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+}
+
+.frl-mapdrawer__result-title {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.frl-mapdrawer__result-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.frl-mapdrawer__result {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 3px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--frl-radius-control);
+  background: transparent;
+  color: var(--frl-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.frl-mapdrawer__result:hover {
+  background: var(--frl-surface-hover);
+}
+
+.frl-mapdrawer__result:focus-visible {
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: 1px;
+}
+
+.frl-mapdrawer__result-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.frl-mapdrawer__result-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-mapdrawer__result-line {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  line-height: var(--frl-leading-tight);
+}
+
+/* The key */
+
+.frl-mapdrawer__key {
+  padding-top: var(--frl-space-2);
+  border-top: 1px solid var(--frl-border);
+}
+
+.frl-mapdrawer__key > summary {
+  color: var(--frl-fg);
+  font-weight: var(--frl-weight-bold);
+  cursor: pointer;
+}
+
+.frl-mapkey {
+  display: flex;
+  flex-direction: column;
+  gap: var(--frl-space-2);
+  padding-top: var(--frl-space-2);
+}
+
+.frl-mapkey__heading {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-mapkey__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.frl-mapkey__entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--frl-fg);
+  font-size: var(--frl-text-xs);
+  line-height: var(--frl-leading-tight);
+}
+
+.frl-mapkey__note,
+.frl-mapkey__links {
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  line-height: var(--frl-leading-tight);
+}
+
+@media (forced-colors: active) {
+  .frl-mapdrawer__pin .frl-mapdrawer__pin-body,
+  .frl-mapdrawer__pin.is-light .frl-mapdrawer__pin-body {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+
+  .frl-mapdrawer__pin .frl-mapdrawer__pin-glyph,
+  .frl-mapdrawer__pin.is-light .frl-mapdrawer__pin-glyph,
+  .frl-mapdrawer__pin > g:not(.frl-mapdrawer__pin-glyph) {
+    color: CanvasText;
+  }
+
+  .frl-mapdrawer__badge {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+
+  .frl-mapdrawer__row.is-hidden .frl-mapdrawer__name {
+    color: GrayText;
+  }
+}

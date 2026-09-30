@@ -25,6 +25,7 @@ import {
   resolveTaxiNodeRef,
   type TaxiNode,
   type TaxiNodeLookup,
+  taxiNodeOpenTo,
   transportEdges,
   type TransportEdge,
   type TravelGraph,
@@ -32,7 +33,7 @@ import {
 } from '../rules/travel-graph';
 import type { RuleKey } from '../rules/ruleset';
 import { applyDurationOverride, type StepEstimate, stepDuration, type TimePart } from '../sim/estimate';
-import type { SimFact, SimFactKind } from '../sim/facts';
+import type { SimFact, SimFactKind, TransportDockFact } from '../sim/facts';
 import { grind } from '../sim/grind';
 import { hearthUse } from '../sim/hearth';
 import type { Interaction } from '../sim/interaction';
@@ -41,11 +42,11 @@ import { type ObjectiveWork, partialWork } from '../sim/objectives';
 import { type Basis, sumEstimates } from '../sim/provenance';
 import { flightTime, type LocalTaxiData, nearestLocalTaxiNode } from '../sim/taxi';
 import { transportCrossing } from '../sim/transport';
-import { type GroundTravel, groundTravel, type StepSpeeds, trainRiding } from '../sim/travel';
+import { type GroundTravel, type StepSpeeds, trainRiding } from '../sim/travel';
 import { grantXp } from '../sim/xp';
 import { evaluateFilter, evaluateSkipIf, or3 } from './conditions';
 import { newStepWork, reportUnresolved, type StepWork, type WalkEnv, ZERO_XP } from './env';
-import { here, reportUnknownPosition, setLocation, unknownTravel, walkTo } from './movement';
+import { groundMove, here, reportUnknownPosition, setLocation, touchesBerth, unknownTravel, walkTo } from './movement';
 import { newLogEntry, type VisitKey, type WalkMemo } from './state';
 import type { CharacterState, QuestLogEntry, StepDelta, StepRecord } from './types';
 
@@ -560,7 +561,8 @@ function priceCrossing(
   radius: number | null,
   speeds: StepSpeeds,
 ): PricedCrossing {
-  const walk = groundTravel(here(state), dock, null, speeds, env.model, env.rules);
+  // A walk to or from an inferred berth prices its swim as the walk along the pier (TIME-7).
+  const walk = groundMove(env, here(state), dock, null, speeds);
   const crossing = transportCrossing(walk, edge, env.project.character.faction, env.rules);
   const facts: SimFact[] = [...crossing.facts];
   if (walk.outcome === 'cross-map' && state.location !== null && dock !== null) {
@@ -568,7 +570,7 @@ function priceCrossing(
     facts.push({ kind: 'cross-world-no-transport', fromMapId: state.location.mapId, toMapId: dock.point.mapId });
   }
   const arrival = edge === null ? null : env.places.dock(edge.to);
-  const onward = arrival !== null && target !== null && arrival.point.mapId === target.point.mapId ? groundTravel(arrival, target, radius, speeds, env.model, env.rules) : null;
+  const onward = arrival !== null && target !== null && arrival.point.mapId === target.point.mapId ? groundMove(env, arrival, target, radius, speeds) : null;
   const parts: TimePart[] = [...crossing.parts];
   const used: (readonly RuleKey[])[] = [crossing.used];
   if (onward !== null) {
@@ -579,6 +581,29 @@ function priceCrossing(
   let total: number | null = 0;
   for (const part of parts) total = total === null || part.seconds.value === null ? null : total + part.seconds.value;
   return { edge, walk, dock, arrival, onward, parts, used, facts, total };
+}
+
+/**
+ * TIME-7: an edge as the quickest-edge choice may price it (a transport step naming no record and
+ * no dock). Which named service a client path is, is itself inferred (map-presentation.md §10),
+ * so a dock whose position is only the committed file's inferred stop counts as unpositioned for
+ * the choice: the step stays unknown with SIM-3, as before the file loaded, until the step names
+ * its transport. User docks and dock NPCs still position it.
+ */
+function forChoice(edge: TransportEdge): TransportEdge {
+  const unplaced = (dock: TransportEdge['from']): TransportEdge['from'] => {
+    if (dock.pointFrom !== 'inferred') return dock;
+    const { record: _record, ...rest } = dock;
+    return { ...rest, point: null, pointFrom: null };
+  };
+  if (edge.from.pointFrom !== 'inferred' && edge.to.pointFrom !== 'inferred') return edge;
+  return { ...edge, from: unplaced(edge.from), to: unplaced(edge.to) };
+}
+
+/** The ride's `transport-ride` fact (TIME-7): the edge, and where each dock's position comes from. */
+function rideFact(edge: TransportEdge, berthWalk: boolean): SimFact {
+  const dockOf = (end: 'departure' | 'arrival', dock: TransportEdge['from']): TransportDockFact => ({ end, name: dock.name, pointFrom: dock.pointFrom, record: dock.record ?? null });
+  return { kind: 'transport-ride', transportId: edge.transportId, edgeId: edge.id, name: edge.name, docks: [dockOf('departure', edge.from), dockOf('arrival', edge.to)], berthWalk };
 }
 
 /** The better of two crossings: known before unknown, then the least total, then the lower edge id. */
@@ -609,7 +634,8 @@ function transport(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: St
     for (const candidate of edges) {
       if (fromMap !== null && candidate.from.mapId !== fromMap) continue;
       if (toMap !== null && candidate.to.mapId !== toMap) continue;
-      const edge = dock === null ? candidate : withDeparture(candidate, dock.point);
+      // No record and no dock: the walker chooses the service, never among inferred docks (TIME-7).
+      const edge = dock === null ? (id === null ? forChoice(candidate) : candidate) : withDeparture(candidate, dock.point);
       if (edge === null) continue;
       const priced = priceCrossing(env, state, edge, dock ?? env.places.dock(edge.from), target, radius, speeds);
       if (best === null || better(priced, best)) best = priced;
@@ -643,6 +669,13 @@ function transport(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: St
     setLocation(state, memo, target, 'transport-arrival');
     return;
   }
+  // The edge ridden and its docks' provenance (TIME-7; map-presentation.md §10, MP-R32): for a
+  // named transport, or a chosen one whose time is known (an unknown choice ties by id, so it names
+  // no service).
+  const berthWalk =
+    (chosen.walk.outcome === 'leg' && touchesBerth(env.graph, from, chosen.dock)) ||
+    (chosen.onward !== null && chosen.onward.outcome === 'leg' && touchesBerth(env.graph, chosen.arrival, target));
+  if (id !== null || chosen.total !== null) work.facts.push(rideFact(chosen.edge, berthWalk));
   if (chosen.onward !== null && chosen.arrival !== null && target !== null) {
     if (chosen.onward.outcome === 'leg' && chosen.onward.method !== null) {
       work.legs.push({ from: chosen.arrival, to: target, purpose: 'step', seconds: chosen.onward.seconds, method: chosen.onward.method, pending: chosen.onward.pending, warnings: chosen.onward.warnings });
@@ -763,7 +796,7 @@ function flight(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: StepW
   // A located flight step (an RXP `.fly` with its `.goto`) happens at its location, the flight
   // master: the character walks there first, through the group's leg waypoints.
   goToLocation(env, state, memo, work, step, group, speeds);
-  const usable = (node: TaxiNode): boolean => node.point !== null && (node.factions === null || node.factions.includes(faction));
+  const usable = (node: TaxiNode): boolean => node.point !== null && taxiNodeOpenTo(node, faction);
   let from: TaxiNode | null;
   if (step.from !== null) from = oneNode(work, resolveTaxiNodeRef(env.graph, step.from, faction), 'from');
   else {
@@ -777,6 +810,8 @@ function flight(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: StepW
     if (node === null) continue;
     if (node.point === null) work.facts.push({ kind: 'flight-unresolved', end, reason: 'no-position' });
     else if (!state.knownFlightPaths.has(node.key)) work.facts.push({ kind: 'flight-unknown-path', end, node: node.key });
+    // SIM-24: a node the character's faction may not use (the graph's one faction source); still timed.
+    if (!taxiNodeOpenTo(node, faction)) work.facts.push({ kind: 'flight-faction', end, node: node.key });
   }
   const fromEnd = from === null ? null : env.places.taxiNode(from);
   const toEnd = to === null ? null : env.places.taxiNode(to);
@@ -793,7 +828,9 @@ function flight(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: StepW
             // TIME-6 multi-hop: a TaxiNodes row is usable when a node the character knows (under
             // either key form) maps to it and serves the character's faction.
             usable: (taxiNodeId: number) =>
-              (index.byRow.get(taxiNodeId) ?? NONE).some((node) => state.knownFlightPaths.has(node.key) && (node.factions === null || node.factions.includes(faction))),
+              (index.byRow.get(taxiNodeId) ?? NONE).some((node) => state.knownFlightPaths.has(node.key) && taxiNodeOpenTo(node, faction)),
+            // SIM-7 variant: a journey exists, but only through rows the character does not know yet.
+            open: (taxiNodeId: number) => (index.byRow.get(taxiNodeId) ?? NONE).some((node) => taxiNodeOpenTo(node, faction)),
           };
     const fromRow = from === null || index === null ? null : (index.byNode.get(from) ?? null);
     const toRow = to === null || index === null ? null : (index.byNode.get(to) ?? null);

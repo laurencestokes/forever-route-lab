@@ -23,6 +23,20 @@ describe('package.json scripts', () => {
     ]);
   });
 
+  it('build:deploy (the Pages deploy build) fetches and verifies the minimap pack, then runs every gate of build with the deploy audit (D-049 O14)', () => {
+    const deploy = steps(scripts['build:deploy']);
+    expect(deploy[0]).toBe('tsx tools/build/minimap-fetch.ts');
+    // The deploy build is built in mode `deploy`: the map's messages then name no developer command (review MD-03).
+    expect(deploy.slice(1)).toEqual(
+      steps(scripts['build']).map((step) => (step.startsWith('tsx tools/build/audit-dist.ts') ? `${step} --deploy` : step === 'vite build' ? 'vite build --mode deploy' : step)),
+    );
+    expect(deploy.at(-1)).toBe('tsx tools/build/audit-dist.ts --strip-manifest --deploy');
+    // the plain build never needs the tiles (pnpm check passes without them, docs/research/map-atlas.md §23.4)
+    expect(scripts['build']).not.toMatch(/minimap-fetch|--deploy/);
+    expect(scripts['maps:minimap:fetch']).toBe('tsx tools/build/minimap-fetch.ts');
+    expect(scripts['maps:minimap:pack']).toBe('tsx tools/build/minimap-pack.ts');
+  });
+
   it('typecheck compiles the pure, app and node projects', () => {
     expect(steps(scripts['typecheck'])).toEqual([
       'tsc --noEmit -p tsconfig.pure.json',

@@ -1,17 +1,20 @@
 import type { CSSProperties, MouseEvent, PointerEvent, ReactNode } from 'react';
 import { cx } from '../lib/cx';
 import { formatDuration, formatDurationLong, formatInteger, formatLevel } from '../lib/format';
-import { describeIssueCounts, totalIssues, worstSeverity } from '../lib/issues';
+import { describeIssueCounts, SEVERITY_LABELS, totalIssues, worstSeverity } from '../lib/issues';
 import type { Readout } from '../lib/readout';
 import { Icon, type IconName } from '../primitives/Icon';
 import { DifficultyLabel, describeDifficulty } from '../markers/DifficultyLabel';
 import { PENDING_TRAVEL_TEXTS, PendingMarker, type PendingTravel } from '../markers/PendingMarker';
 import { ProvenanceBadge } from '../markers/ProvenanceBadge';
+import { QuestMark } from '../markers/QuestMark';
 import { ReadoutValue } from '../markers/ReadoutValue';
 import { SeverityIcon } from '../markers/SeverityIcon';
-import { STEP_KIND_LABELS, StepTypeGlyph } from '../markers/StepTypeGlyph';
+import { StepMark } from '../markers/StepMark';
+import { STEP_KIND_LABELS } from '../markers/StepTypeGlyph';
 import { describeForeverProvenance } from '../markers/provenance';
-import type { EstimateColumn, GroupRowModel, StepRowModel } from './rows';
+import type { EstimateColumn, GroupRowModel, RowMarkState, StepRowModel, TopNumber } from './rows';
+import type { RowDensity } from './virtual';
 import './RouteList.css';
 
 /** Shared by step and group rows: the list positions them and wires the pointer. */
@@ -28,11 +31,13 @@ interface RowFrameProps {
   readonly posInSet?: number | undefined;
   readonly setSize?: number | undefined;
   readonly style?: CSSProperties | undefined;
+  /** Two lines of 40px (the default, D-048 A) or one line of 28px (the compact View choice). */
+  readonly density?: RowDensity | undefined;
   readonly onClick?: ((event: MouseEvent<HTMLDivElement>) => void) | undefined;
   readonly onDoubleClick?: ((event: MouseEvent<HTMLDivElement>) => void) | undefined;
   /** The pointer entered the row (the map highlights its step's marker). */
   readonly onMouseEnter?: (() => void) | undefined;
-  /** Pointer down on the drag handle. Omit to hide the handle (read-only lists). */
+  /** Pointer down on the drag handle (the step number). Omit for no drag (read-only lists). */
   readonly onHandlePointerDown?: ((event: PointerEvent<HTMLElement>) => void) | undefined;
 }
 
@@ -40,8 +45,10 @@ export interface StepRowProps extends RowFrameProps {
   readonly model: StepRowModel;
   /** Label of the group header this step sits under, or null; spoken as "in group …". */
   readonly groupLabel?: string | null | undefined;
-  /** Which estimate the right-hand column shows (default the level after the step); the name says all three. */
+  /** One-line rows: which estimate the right-hand column shows (default the level after the step); the name says all three. */
   readonly estimateColumn?: EstimateColumn | undefined;
+  /** Two-line rows: the top number over the level after (default the XP gained). */
+  readonly topNumber?: TopNumber | undefined;
   /** Hides the editing affordances (lock, duplicate, delete); a locked step still shows its lock. */
   readonly readOnly?: boolean | undefined;
   readonly onToggleLock?: (() => void) | undefined;
@@ -67,6 +74,12 @@ const PENDING_TITLE_WORDS: Readonly<Record<PendingTravel, string>> = {
   checking: 'navigation data being checked',
 };
 
+/** A quest mark's state in words, by the step's kind (the mark itself is decorative). */
+const MARK_WORDS: Readonly<Record<'accept' | 'turnin', Readonly<Partial<Record<RowMarkState, string>>>>> = {
+  accept: { available: 'Available', uncertain: 'May be available', locked: 'Cannot be accepted here' },
+  turnin: { ready: 'Ready to turn in', uncertain: 'May be ready to turn in', locked: 'Cannot be turned in here', 'record-unknown': 'Readiness unknown' },
+};
+
 /** "(depends on assumptions, uses Era values)", or nothing for a plain value. */
 function flagWords(readout: Readout<number>): string {
   const flags = [readout.assumed ? 'depends on assumptions' : null, readout.eraFallback ? 'uses Era values' : null].filter((flag) => flag !== null);
@@ -85,7 +98,7 @@ const xpWords = (value: number): string => `${formatInteger(value)} XP`;
 
 /**
  * The step's estimates in words. When all three are unknown for the same reason (nothing is
- * simulated yet) the reason is said once.
+ * simulated yet) the reason is said once. A level-up adds "reaches level N" to the level.
  */
 function estimateWords(model: StepRowModel): string[] {
   const { projectedLevel: level, xpGained: xp, duration } = model;
@@ -99,32 +112,43 @@ function estimateWords(model: StepRowModel): string[] {
     return [`Level after step, XP and time unknown${level.unknownReason === null ? '' : `: ${level.unknownReason}`}`];
   }
   const time = readoutWords('Time', duration, formatDurationLong);
+  const up = model.levelUp === null ? '' : `, reaches level ${String(model.levelUp)}`;
   return [
-    readoutWords('Level after step', level, formatLevel),
+    `${readoutWords('Level after step', level, formatLevel)}${up}`,
     readoutWords('XP gained', xp, xpWords),
     model.pending === null ? time : `${time}, pending: ${PENDING_ROW_WORDS[model.pending]}`,
   ];
 }
 
+/** Sentences joined with full stops, never doubling one where a part already ends in one (`ours.md` §5). */
+function sentences(parts: readonly string[]): string {
+  return `${parts.map((part) => part.replace(/\.+$/, '')).join('. ')}.`;
+}
+
 /**
- * The accessible name of a step row; the row's children are presentational (role option).
- * `groupLabel` names the group header the step sits under, if any. It says every estimate (the
- * level after the step, the XP gained and the time), whichever one the row's column shows, and the
- * issues found at the step by severity.
+ * The accessible name of a step row; the row's children are presentational (role option). It says
+ * the whole row in a fixed order: the number, the kind and title with the chain position and where,
+ * the group, the mark's state, the difficulty and provenance, every estimate (whichever the row
+ * shows) with a level-up, the issues by severity and the worst one's words (line 2 shows them), and
+ * the lock.
  */
 export function describeStepRow(model: StepRowModel, groupLabel: string | null = null): string {
   const parts: string[] = [];
-  const detail = model.detail === null ? '' : `, ${model.detail}`;
+  const chain = model.chain === null ? '' : ` (${String(model.chain.index)} of ${String(model.chain.length)})`;
+  const detail = model.detail === null ? '' : `, ${model.detail.replaceAll(' · ', ', ')}`;
   const group = groupLabel === null ? '' : `, in group ${groupLabel}`;
-  parts.push(`${String(model.number)}. ${STEP_KIND_LABELS[model.kind]}: ${model.title}${detail}${group}`);
+  parts.push(`${String(model.number)}. ${STEP_KIND_LABELS[model.kind]}: ${model.title}${chain}${detail}${group}`);
+  const markWords = model.mark === null || (model.kind !== 'accept' && model.kind !== 'turnin') ? undefined : MARK_WORDS[model.kind][model.mark];
+  if (markWords !== undefined) parts.push(markWords);
   if (model.quest !== null) {
     parts.push(describeDifficulty(model.quest.level, model.quest.difficulty, model.quest.uncertain));
     if (model.quest.provenance.claim !== 'unknown') parts.push(describeForeverProvenance(model.quest.provenance));
   }
   parts.push(...estimateWords(model));
   if (totalIssues(model.issues) > 0) parts.push(`Issues: ${describeIssueCounts(model.issues)}`);
+  if (model.issue !== null) parts.push(`${SEVERITY_LABELS[model.issue.severity]}: ${model.issue.message}`);
   if (model.locked) parts.push('Locked');
-  return `${parts.join('. ')}.`;
+  return sentences(parts);
 }
 
 /** XP gained as the column shows it: `+450`; nothing gained is `0`. */
@@ -139,7 +163,7 @@ function estimateTitle(model: StepRowModel): string {
       ? '?'
       : `${readout.lowerBound ? '≥' : readout.upperBound ? '≤' : ''}${format(readout.value)}${readout.assumed ? ' ≈' : ''}${readout.eraFallback ? ' E' : ''}`;
   const parts = [
-    `Level after ${short(model.projectedLevel, formatLevel)}`,
+    `Level after ${short(model.projectedLevel, formatLevel)}${model.levelUp === null ? '' : ` (reaches level ${String(model.levelUp)})`}`,
     `XP ${short(model.xpGained, formatXpGained)}`,
     `Time ${short(model.duration, formatDuration)}${model.pending === null ? '' : ` (${PENDING_TITLE_WORDS[model.pending]})`}`,
   ];
@@ -147,31 +171,67 @@ function estimateTitle(model: StepRowModel): string {
   return `${parts.join(' · ')}${assumptions}`;
 }
 
+/** The step time with its markers and, while it is provisional, the hourglass in its left gutter. */
+function TimeValue({ model, detail }: { readonly model: StepRowModel; readonly detail: string | undefined }) {
+  return (
+    <>
+      {model.pending !== null && <PendingMarker silent detail={PENDING_TRAVEL_TEXTS[model.pending]} className="frl-steprow__pending" />}
+      <ReadoutValue readout={model.duration} format={formatDuration} formatLong={formatDurationLong} compactMarkers assumptionDetail={detail} />
+    </>
+  );
+}
+
+/** XP gained with its markers: a gain in bold, a known zero muted and regular (review UO-14). */
+function XpValue({ model, detail }: { readonly model: StepRowModel; readonly detail: string | undefined }) {
+  const zero = model.xpGained.value === 0 && !model.xpGained.lowerBound;
+  return (
+    <span className={cx('frl-steprow__xp', zero && 'is-zero')}>
+      <ReadoutValue readout={model.xpGained} format={formatXpGained} formatLong={xpWords} compactMarkers assumptionDetail={detail} />
+    </span>
+  );
+}
+
+/** The level after the step, with "↑" in bold where it crosses a whole level (ui-refresh.md §5.3). */
+function LevelValue({ model }: { readonly model: StepRowModel }) {
+  return (
+    <span className={cx('frl-steprow__level', model.levelUp !== null && 'is-up')}>
+      {model.levelUp !== null && (
+        <span className="frl-steprow__up" aria-hidden="true">
+          ↑
+        </span>
+      )}
+      <ReadoutValue readout={model.projectedLevel} format={formatLevel} compactMarkers />
+    </span>
+  );
+}
+
 /**
- * The right-hand estimate cell: the chosen estimate with its markers, and, beside a step time that
- * is provisional, the pending hourglass. The level and XP columns never carry it: they do not wait
- * for walking paths (the row's name still says the travel time is pending).
+ * One-line rows' estimate cell: the chosen estimate with its markers and, beside a step time that is
+ * provisional, the pending hourglass. The level and XP columns never carry it: they do not wait for
+ * walking paths (the row's name still says the travel time is pending).
  */
 function EstimateCell({ model, column }: { readonly model: StepRowModel; readonly column: EstimateColumn }) {
   const detail = model.assumptions === null ? undefined : `this step reads ${model.assumptions}`;
   return (
     <span className="frl-steprow__estimate" data-column={column} title={estimateTitle(model)}>
-      {column === 'time' && model.pending !== null && (
-        <PendingMarker silent detail={PENDING_TRAVEL_TEXTS[model.pending]} className="frl-steprow__pending" />
-      )}
-      {column === 'level' && <ReadoutValue readout={model.projectedLevel} format={formatLevel} compactMarkers />}
-      {column === 'xp' && (
-        <ReadoutValue readout={model.xpGained} format={formatXpGained} formatLong={xpWords} compactMarkers assumptionDetail={detail} />
-      )}
-      {column === 'time' && (
-        <ReadoutValue
-          readout={model.duration}
-          format={formatDuration}
-          formatLong={formatDurationLong}
-          compactMarkers
-          assumptionDetail={detail}
-        />
-      )}
+      {column === 'level' && <LevelValue model={model} />}
+      {column === 'xp' && <XpValue model={model} detail={detail} />}
+      {column === 'time' && <TimeValue model={model} detail={detail} />}
+    </span>
+  );
+}
+
+/** Two-line rows' estimates: the top number (XP gained or the step time) over the level after. */
+function EstimatePair({ model, top }: { readonly model: StepRowModel; readonly top: TopNumber }) {
+  const detail = model.assumptions === null ? undefined : `this step reads ${model.assumptions}`;
+  return (
+    <span className="frl-steprow__estimates" title={estimateTitle(model)}>
+      <span className="frl-steprow__estimate frl-steprow__top" data-column={top}>
+        {top === 'xp' ? <XpValue model={model} detail={detail} /> : <TimeValue model={model} detail={detail} />}
+      </span>
+      <span className="frl-steprow__estimate frl-steprow__bottom" data-column="level">
+        <LevelValue model={model} />
+      </span>
     </span>
   );
 }
@@ -218,6 +278,22 @@ function RowAction({ icon, label, shortcut, action, onActivate, pressed = false 
   );
 }
 
+/** The drag handle's pointer wiring: pressing it drags, never selects or focuses. */
+function handleProps(onHandlePointerDown: ((event: PointerEvent<HTMLElement>) => void) | undefined) {
+  return onHandlePointerDown === undefined
+    ? {}
+    : {
+        title: 'Drag to reorder (keyboard: Alt+↑ / Alt+↓)',
+        onPointerDown: onHandlePointerDown,
+        onMouseDown: (event: MouseEvent) => {
+          event.preventDefault();
+        },
+        onClick: (event: MouseEvent) => {
+          event.stopPropagation();
+        },
+      };
+}
+
 function RowFrame({
   id,
   selected,
@@ -226,10 +302,10 @@ function RowFrame({
   posInSet,
   setSize,
   style,
+  density = 'two-line',
   onClick,
   onDoubleClick,
   onMouseEnter,
-  onHandlePointerDown,
   label,
   className,
   children,
@@ -248,101 +324,204 @@ function RowFrame({
       aria-label={label}
       aria-posinset={posInSet}
       aria-setsize={setSize}
-      className={cx('frl-row', className, selected && 'is-selected', active && 'is-active', dragging && 'is-dragging')}
+      className={cx('frl-row', `frl-row--${density}`, className, selected && 'is-selected', active && 'is-active', dragging && 'is-dragging')}
       style={style}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onMouseEnter={onMouseEnter}
       {...data}
     >
-      {onHandlePointerDown === undefined ? (
-        <span className="frl-row__handle frl-row__handle--none" aria-hidden="true" />
-      ) : (
-        <span
-          className="frl-row__handle"
-          aria-hidden="true"
-          title="Drag to reorder (keyboard: Alt+↑ / Alt+↓)"
-          onPointerDown={onHandlePointerDown}
-          onMouseDown={(event) => {
-            event.preventDefault();
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-          }}
-        >
-          <Icon name="grip" size={14} />
-        </span>
-      )}
       {children}
     </div>
   );
 }
 
-/**
- * One route step on one 28px line: number, step glyph, title, quest level and provenance, issue
- * marker, one estimate (level after, XP or time, with the pending hourglass while a walking path
- * is computed), lock toggle; duplicate and delete appear on hover or when active.
- */
-export function StepRow({ model, groupLabel = null, estimateColumn = 'level', readOnly = false, onToggleLock, onDuplicate, onDelete, ...frame }: StepRowProps) {
-  const worst = worstSeverity(model.issues);
-  const issueTotal = totalIssues(model.issues);
-  const quest = model.quest;
+/** The row's mark: the quest's "!" or "?" in its state, or the kind's neutral disc (ui-refresh.md §5.1, §5.2). */
+function RowMark({ model, compact }: { readonly model: StepRowModel; readonly compact: boolean }) {
+  const size = compact ? 'compact' : 'md';
+  if ((model.kind === 'accept' || model.kind === 'turnin') && model.mark !== null) {
+    return (
+      <QuestMark
+        state={model.mark}
+        difficulty={model.quest?.difficulty ?? null}
+        size={size}
+        glyph={model.kind === 'turnin' ? 'turn-in' : 'quest'}
+        className="frl-steprow__mark"
+      />
+    );
+  }
+  if (model.kind === 'accept' || model.kind === 'turnin') return null;
+  return <StepMark kind={model.kind} size={size} className="frl-steprow__mark" />;
+}
+
+/** Line 1's title: the verb in the muted ink, then what it acts on (one ellipsis for both). */
+function TitleText({ model, withDetail }: { readonly model: StepRowModel; readonly withDetail: boolean }) {
+  const detail = withDetail && model.detail !== null ? model.detail : null;
+  const full = `${model.verb} ${model.title}`;
   return (
-    <RowFrame
-      {...frame}
-      onHandlePointerDown={readOnly ? undefined : frame.onHandlePointerDown}
-      label={describeStepRow(model, groupLabel)}
-      className={cx('frl-steprow', model.locked && 'is-locked', model.pending !== null && 'is-pending')}
-      data={{ 'data-row-type': 'step', 'data-step-kind': model.kind }}
-    >
-      <span className="frl-steprow__number frl-num" aria-hidden="true">
-        {model.number}
-      </span>
-      <StepTypeGlyph kind={model.kind} className="frl-steprow__glyph" />
-      <span className="frl-steprow__title" title={model.detail === null ? model.title : `${model.title} · ${model.detail}`}>
-        {model.title}
-        {model.detail !== null && <span className="frl-steprow__detail"> {model.detail}</span>}
-      </span>
-      {!readOnly && (onDuplicate !== undefined || onDelete !== undefined) && (
-        <span className="frl-steprow__actions">
-          {onDuplicate !== undefined && (
-            <RowAction icon="duplicate" label="Duplicate step" shortcut="Ctrl+D" action="duplicate" onActivate={onDuplicate} />
-          )}
-          {onDelete !== undefined && <RowAction icon="delete" label="Delete step" shortcut="Delete" action="delete" onActivate={onDelete} />}
-        </span>
-      )}
-      {quest !== null && quest.provenance.claim !== 'unknown' && (
-        <ProvenanceBadge provenance={quest.provenance} className="frl-steprow__provenance" />
-      )}
-      {quest !== null && (
-        <DifficultyLabel
-          level={quest.level}
-          difficulty={quest.difficulty}
-          uncertain={quest.uncertain}
-          className="frl-steprow__difficulty"
+    <span className="frl-steprow__title" title={detail === null ? full : `${full} · ${detail}`}>
+      <span className="frl-steprow__verb">{model.verb}</span> {model.title}
+      {detail !== null && <span className="frl-steprow__detail"> {detail}</span>}
+    </span>
+  );
+}
+
+/** The chain position after the title, muted: "1/2" (the name says "1 of 2"). */
+function Chain({ model }: { readonly model: StepRowModel }) {
+  return model.chain === null ? null : (
+    <span className="frl-steprow__chain frl-num">
+      {model.chain.index}/{model.chain.length}
+    </span>
+  );
+}
+
+/** The issue marker: the worst severity's shape and the step's issue count. */
+function IssueMarker({ model }: { readonly model: StepRowModel }) {
+  const worst = worstSeverity(model.issues);
+  if (worst === null) return null;
+  return (
+    <span className="frl-steprow__issues" title={`Issues: ${describeIssueCounts(model.issues)}`} data-severity={worst}>
+      <SeverityIcon severity={worst} labelled={false} size={12} />
+      <span className="frl-num">{totalIssues(model.issues)}</span>
+    </span>
+  );
+}
+
+/**
+ * One route step: two lines of 40px (the default) or one line of 28px (docs/research/ui-refresh.md
+ * §6). Two lines: the number (the drag handle), the mark, line 1 with the verb, title, chain,
+ * provenance, issue marker and lock; line 2 with the quest's chip and where the step happens, or
+ * the worst issue in words, and the row actions (duplicate, delete, lock) on every row, muted
+ * (D-048 F); on the right the top number (XP gained or the step time) over the level after. One
+ * line: today's row with the mark, the verb and one chosen estimate; duplicate and delete appear on
+ * hover or when active.
+ */
+export function StepRow({
+  model,
+  groupLabel = null,
+  estimateColumn = 'level',
+  topNumber = 'xp',
+  readOnly = false,
+  onToggleLock,
+  onDuplicate,
+  onDelete,
+  onHandlePointerDown,
+  ...frame
+}: StepRowProps) {
+  const density = frame.density ?? 'two-line';
+  const quest = model.quest;
+  const handle = handleProps(readOnly ? undefined : onHandlePointerDown);
+  const number = (
+    <span className={cx('frl-steprow__number frl-num', handle.onPointerDown !== undefined && 'is-handle')} aria-hidden="true" {...handle}>
+      {model.number}
+    </span>
+  );
+  const provenance = quest !== null && quest.provenance.claim !== 'unknown' && <ProvenanceBadge provenance={quest.provenance} className="frl-steprow__provenance" />;
+  const chip = quest !== null && (
+    <DifficultyLabel level={quest.level} difficulty={quest.difficulty} uncertain={quest.uncertain} className="frl-steprow__difficulty" />
+  );
+  const actions = !readOnly && (onDuplicate !== undefined || onDelete !== undefined || onToggleLock !== undefined) && (
+    <span className="frl-steprow__actions">
+      {onDuplicate !== undefined && <RowAction icon="duplicate" label="Duplicate step" shortcut="Ctrl+D" action="duplicate" onActivate={onDuplicate} />}
+      {onDelete !== undefined && <RowAction icon="delete" label="Delete step" shortcut="Delete" action="delete" onActivate={onDelete} />}
+      {density === 'two-line' && (
+        <RowAction
+          icon={model.locked ? 'lock' : 'unlock'}
+          label={model.locked ? 'Unlock step' : 'Lock step'}
+          shortcut="L"
+          action="lock"
+          pressed={model.locked}
+          onActivate={onToggleLock}
         />
       )}
-      {worst !== null && (
-        <span className="frl-steprow__issues" title={`Issues: ${describeIssueCounts(model.issues)}`} data-severity={worst}>
-          <SeverityIcon severity={worst} labelled={false} size={12} />
-          <span className="frl-num">{issueTotal}</span>
+    </span>
+  );
+  const className = cx('frl-steprow', model.locked && 'is-locked', model.pending !== null && 'is-pending');
+  const data = { 'data-row-type': 'step', 'data-step-kind': model.kind };
+  const label = describeStepRow(model, groupLabel);
+
+  if (density === 'one-line') {
+    return (
+      <RowFrame {...frame} label={label} className={className} data={data}>
+        {number}
+        <RowMark model={model} compact />
+        <TitleText model={model} withDetail />
+        <Chain model={model} />
+        {actions}
+        {provenance}
+        {chip}
+        <IssueMarker model={model} />
+        <EstimateCell model={model} column={estimateColumn} />
+        <span className="frl-steprow__lock">
+          {readOnly ? (
+            model.locked && <Icon name="lock" size={14} label="Locked" />
+          ) : (
+            <RowAction
+              icon={model.locked ? 'lock' : 'unlock'}
+              label={model.locked ? 'Unlock step' : 'Lock step'}
+              shortcut="L"
+              action="lock"
+              pressed={model.locked}
+              onActivate={onToggleLock}
+            />
+          )}
         </span>
-      )}
-      <EstimateCell model={model} column={estimateColumn} />
-      <span className="frl-steprow__lock">
-        {readOnly ? (
-          model.locked && <Icon name="lock" size={14} label="Locked" />
-        ) : (
-          <RowAction
-            icon={model.locked ? 'lock' : 'unlock'}
-            label={model.locked ? 'Unlock step' : 'Lock step'}
-            shortcut="L"
-            action="lock"
-            pressed={model.locked}
-            onActivate={onToggleLock}
-          />
-        )}
+      </RowFrame>
+    );
+  }
+
+  const issue = model.issue;
+  // Line 2's place: who, then the zone, which stays when the lead gives way; the coordinates are in the tooltip and the name (UI-01).
+  const place = model.place ?? null;
+  const detail = model.assumptions === null ? undefined : `this step reads ${model.assumptions}`;
+  return (
+    <RowFrame {...frame} label={label} className={className} data={data}>
+      {number}
+      <span className="frl-steprow__markbox">
+        <RowMark model={model} compact={false} />
       </span>
+      <span className="frl-steprow__text">
+        <span className="frl-steprow__line1">
+          <TitleText model={model} withDetail={false} />
+          <Chain model={model} />
+          {provenance}
+          <IssueMarker model={model} />
+          {model.locked && (
+            <span className="frl-steprow__locked" title="Locked">
+              <Icon name="lock" size={14} />
+            </span>
+          )}
+        </span>
+        <span className="frl-steprow__line2">
+          {chip}
+          {issue !== null ? (
+            <span className="frl-steprow__issue" data-severity={issue.severity} title={issue.message}>
+              <SeverityIcon severity={issue.severity} labelled={false} size={12} />
+              <span className="frl-steprow__issue-text">{issue.short ?? issue.message}</span>
+            </span>
+          ) : model.kind === 'travel' && topNumber !== 'time' ? (
+            <span className="frl-steprow__detail frl-steprow__travel-time">
+              <TimeValue model={model} detail={detail} />
+            </span>
+          ) : (
+            model.detail !== null && (
+              <span className={cx('frl-steprow__detail', place !== null && 'is-place')} title={model.detail}>
+                {place === null ? (
+                  model.detail
+                ) : (
+                  <>
+                    {place.lead !== null && <span className="frl-steprow__lead">{place.lead}</span>}
+                    {place.lead !== null && place.zone !== null && <span className="frl-steprow__sep"> · </span>}
+                    {place.zone !== null && <span className="frl-steprow__zone">{place.zone}</span>}
+                  </>
+                )}
+              </span>
+            )
+          )}
+          {actions}
+        </span>
+      </span>
+      <EstimatePair model={model} top={topNumber} />
     </RowFrame>
   );
 }
@@ -351,20 +530,42 @@ export interface GroupRowProps extends RowFrameProps {
   readonly model: GroupRowModel;
 }
 
-/** A group header: the steps an imported RXP step lowered to. */
-export function GroupRow({ model, ...frame }: GroupRowProps) {
+/** The level span of a group's steps in words and short form ("6.0-6.8"), or null before the walk. */
+function spanOf(model: GroupRowModel): { readonly text: string; readonly words: string } | null {
+  const span = model.levelSpan;
+  if (span === null || span.from.value === null || span.to.value === null) return null;
+  const bound = span.from.lowerBound || span.to.lowerBound;
+  const text = `${bound ? '≥' : ''}${formatLevel(span.from.value)}-${formatLevel(span.to.value)}`;
+  return { text, words: `levels after its steps ${bound ? 'at least ' : ''}${formatLevel(span.from.value)} to ${formatLevel(span.to.value)}` };
+}
+
+/** A group header: the steps an imported RXP step lowered to, as tall as the list's step rows. */
+export function GroupRow({ model, onHandlePointerDown, ...frame }: GroupRowProps) {
   const count = `${String(model.stepCount)} ${model.stepCount === 1 ? 'step' : 'steps'}`;
+  const span = spanOf(model);
+  const handle = handleProps(onHandlePointerDown);
+  const twoLine = (frame.density ?? 'two-line') === 'two-line';
   return (
     <RowFrame
       {...frame}
-      label={`Group: ${model.label}, ${count}.`}
+      label={`Group: ${model.label}, ${count}${span === null ? '' : `, ${span.words}`}.`}
       className="frl-grouprow"
       data={{ 'data-row-type': 'group' }}
     >
-      <span className="frl-grouprow__label" title={model.label}>
-        {model.label}
+      <span className={cx('frl-grouprow__handle', handle.onPointerDown !== undefined && 'is-handle')} aria-hidden="true" {...handle} />
+      <span className="frl-grouprow__text">
+        <span className="frl-grouprow__label" title={model.label}>
+          {model.label}
+        </span>
+        {twoLine && (
+          <span className="frl-grouprow__meta frl-num">
+            {count}
+            {model.imported && ' · imported RXP step'}
+          </span>
+        )}
       </span>
-      <span className="frl-grouprow__count frl-num">{count}</span>
+      {!twoLine && <span className="frl-grouprow__count frl-num">{count}</span>}
+      {span !== null && <span className="frl-grouprow__span frl-num">{span.text}</span>}
     </RowFrame>
   );
 }

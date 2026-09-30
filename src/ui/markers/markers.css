@@ -76,6 +76,171 @@
   font-weight: var(--frl-weight-medium);
 }
 
+/* Quest marks (ui-refresh.md §5.1; the state table is map-presentation.md §25.2.3) --------------- */
+/* The disc takes the quest's difficulty colour (built on DifficultyLabel's rating: the only other
+   reader of the reserved tokens, tests/ui-tokens.test.ts); the glyph and the keyline are the dark
+   well, so the glyph on the disc is the chip's own pair (4.75 to 17.46:1). */
+.frl-quest-mark {
+  --frl-quest-mark-colour: var(--frl-difficulty-unknown);
+  flex: none;
+  width: var(--frl-mark-size);
+  height: var(--frl-mark-size);
+  overflow: visible;
+}
+
+.frl-quest-mark--compact {
+  width: var(--frl-mark-size-compact);
+  height: var(--frl-mark-size-compact);
+}
+
+.frl-quest-mark--trivial {
+  --frl-quest-mark-colour: var(--frl-difficulty-trivial);
+}
+
+.frl-quest-mark--standard {
+  --frl-quest-mark-colour: var(--frl-difficulty-standard);
+}
+
+.frl-quest-mark--difficult {
+  --frl-quest-mark-colour: var(--frl-difficulty-difficult);
+}
+
+.frl-quest-mark--verydifficult {
+  --frl-quest-mark-colour: var(--frl-difficulty-verydifficult);
+}
+
+.frl-quest-mark--impossible {
+  --frl-quest-mark-colour: var(--frl-difficulty-impossible);
+}
+
+.frl-quest-mark.is-filled .frl-quest-mark__disc {
+  fill: var(--frl-quest-mark-colour);
+  stroke: var(--frl-difficulty-well);
+  stroke-width: 1.5;
+}
+
+.frl-quest-mark.is-filled .frl-quest-mark__glyph .frl-quest-mark__fill {
+  fill: var(--frl-difficulty-well);
+}
+
+.frl-quest-mark.is-filled .frl-quest-mark__glyph .frl-quest-mark__stroke {
+  stroke: var(--frl-difficulty-well);
+}
+
+/* "Not sure" outside a filled disc: a dashed ring, 3:1 or more on every row state. */
+.frl-quest-mark__ring {
+  fill: none;
+  stroke: var(--frl-border-strong);
+  stroke-width: 1.3;
+  stroke-dasharray: 2.7 2.1;
+}
+
+/* Hollow: nothing to take yet. No fill, so the row's hover, selection or later band shows through. */
+.frl-quest-mark.is-hollow .frl-quest-mark__disc {
+  fill: none;
+  stroke: var(--frl-border-strong);
+  stroke-width: 1.3;
+}
+
+.frl-quest-mark.is-hollow.is-uncertain .frl-quest-mark__disc {
+  stroke-dasharray: 2.7 2.1;
+}
+
+.frl-quest-mark.is-hollow .frl-quest-mark__glyph .frl-quest-mark__fill {
+  fill: var(--frl-fg);
+}
+
+.frl-quest-mark.is-hollow .frl-quest-mark__glyph .frl-quest-mark__stroke {
+  stroke: var(--frl-fg);
+}
+
+/* Badges: a light disc with a strong rim, in the map's slots (top left the arch, top right the state). */
+.frl-quest-mark__badge {
+  fill: var(--frl-surface);
+  stroke: var(--frl-border-strong);
+  stroke-width: 1;
+}
+
+.frl-quest-mark__badge-ink,
+.frl-quest-mark__arch .frl-quest-mark__fill {
+  fill: var(--frl-fg-muted);
+}
+
+.frl-quest-mark__lock {
+  fill: none;
+  stroke: var(--frl-fg-muted);
+  stroke-width: 1;
+}
+
+.frl-quest-mark__level {
+  fill: var(--frl-fg-muted);
+  font: var(--frl-weight-bold) 6.4px/1 var(--frl-font-ui);
+}
+
+.frl-quest-mark__pie-rim {
+  fill: none;
+  stroke: var(--frl-fg-muted);
+  stroke-width: 0.9;
+}
+
+.frl-quest-mark__pie-rim.is-unknown {
+  stroke-dasharray: 1.3 1;
+}
+
+/* Step marks: the other kinds on a neutral disc, told apart by glyph (ui-refresh.md §5.1). */
+.frl-step-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--frl-mark-size);
+  height: var(--frl-mark-size);
+  border: 1px solid var(--frl-border);
+  border-radius: 50%;
+  background: var(--frl-tile);
+  color: var(--frl-fg-muted);
+}
+
+.frl-step-mark--compact {
+  width: var(--frl-mark-size-compact);
+  height: var(--frl-mark-size-compact);
+}
+
+/* Forced colours: a filled mark keeps its colours, as the chip does (its pips beside it carry the
+   meaning too); hollow marks, rings, badges and the pie take the system ink, badges on Canvas; the
+   step disc's edge and glyph take the system ink. */
+@media (forced-colors: active) {
+  .frl-quest-mark.is-filled {
+    forced-color-adjust: none;
+  }
+
+  .frl-quest-mark.is-hollow .frl-quest-mark__disc,
+  .frl-quest-mark__ring,
+  .frl-quest-mark__badge,
+  .frl-quest-mark.is-hollow .frl-quest-mark__glyph .frl-quest-mark__stroke,
+  .frl-quest-mark__lock,
+  .frl-quest-mark__pie-rim {
+    stroke: CanvasText;
+  }
+
+  .frl-quest-mark.is-hollow .frl-quest-mark__glyph .frl-quest-mark__fill,
+  .frl-quest-mark__badge-ink,
+  .frl-quest-mark__level,
+  .frl-quest-mark__arch .frl-quest-mark__fill {
+    fill: CanvasText;
+  }
+
+  .frl-quest-mark__badge {
+    fill: Canvas;
+  }
+
+  .frl-step-mark,
+  .frl-step-mark .frl-step-glyph {
+    border-color: CanvasText;
+    color: CanvasText;
+  }
+}
+
 /* Forever provenance (reserved cyan) -------------------------------------------------------- */
 .frl-provenance {
   display: inline-flex;

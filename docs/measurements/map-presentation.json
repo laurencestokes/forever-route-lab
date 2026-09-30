@@ -1,0 +1,3146 @@
+{
+  "about": "Map presentation measurements (docs/research/map-presentation.md). Step MP.1: the MAPS §7.2 harness extended to the revision 3.1 mix at the caps (§25.7) with the moveend bookkeeping, at 1x and 4x CPU throttling, and the band crossing (§17.4). Step MP.2: the art-sampling contrast test's minima (§25.6).",
+  "mp1": {
+    "when": "2026-09-27T19:31:36.799Z",
+    "browser": "Chrome/153.0.8010.54 headless (new), no GPU (software raster), throwaway profile deleted",
+    "method": "The real LeafletMapAdapter (smoothWheel on: the backing store at the device pixel ratio) in a 1280 x 800 stage at DPR 1.5, zone band (zoom -2), our own scratch page .cache/mp1/harness/main.ts driven by .cache/mp1/harness/run.mjs (CDP, Emulation.setCPUThrottlingRate 1 and 4). Mix A: 300 pins drawn from cached bitmaps through the path renderer (100 quest givers with the pip tag, 40 turn-ins, 30 dungeons, 35 flight points, 27 transport stops, 18 light services, 50 counted objectives; the MP.4a design drawn with src/map/marks.ts) and 1,720 other items (58 frames and 2 terrain paths, 100 flight lines, 150 route pieces of 64 vertices, 450 objective dots, 700 beads, 100 proposal lines, 100 selection items, 60 labels on the labels canvas with 150 step numbers). The moveend frame is the synchronous task of a 120 px pan (Leaflet's projection and redraw, the adapter's moveend, the stack merge by spatial hash over the pins); the labels canvas is drawn in the next frame and the hit index (a 32 px grid) off the frame, each timed on its own. Mix B adds 480 pins (2,500 items, the full cap). Fallback 1: objective dots 500 to 300 at the zone band; fallback 2: also pins 300 to 250 (§25.7). The crossing: a smooth-wheel settle (_moveEnd after six gesture frames) from the continent band (-3.8) to the zone band (-3.25) and back, with the band-dependent layers swapped in as the controller does (quest givers, objectives, flight lines, labels) and the adapter's cross-fade; setZoomBackTaskMs is a button or key zoom back with no content change. Frame intervals include headless software compositing of the 2304 x 1440 canvases and are an upper bound, not the app's GPU path (§25.7).",
+    "runs": [
+      {
+        "throttle": 1,
+        "reducedMotion": true,
+        "crossing": {
+          "continent->zone": {
+            "inTask": {
+              "updatePathsMs": 3.1,
+              "setLayerMs": 3.2,
+              "redrawMs": 1.5,
+              "swapMs": 3.3
+            },
+            "plainZoomBackTaskMs": 13.4,
+            "crossingTaskMs": 11.3,
+            "frameIntervalsMs": {
+              "median": 8,
+              "p90": 8.3,
+              "max": 59.8,
+              "n": 65
+            },
+            "worstFrameMs": 59.8,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "zone"
+          },
+          "zone->continent": {
+            "inTask": {
+              "updatePathsMs": 3.4,
+              "setLayerMs": 2.2,
+              "redrawMs": 1.9,
+              "swapMs": 2.2
+            },
+            "plainZoomBackTaskMs": 12.3,
+            "crossingTaskMs": 8.7,
+            "frameIntervalsMs": {
+              "median": 7.9,
+              "p90": 8.1,
+              "max": 58.5,
+              "n": 76
+            },
+            "worstFrameMs": 58.5,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "continent"
+          }
+        }
+      },
+      {
+        "throttle": 4,
+        "reducedMotion": true,
+        "crossing": {
+          "continent->zone": {
+            "inTask": {
+              "updatePathsMs": 16.1,
+              "setLayerMs": 11.3,
+              "redrawMs": 9.1,
+              "swapMs": 12.1
+            },
+            "plainZoomBackTaskMs": 58.1,
+            "crossingTaskMs": 45.3,
+            "frameIntervalsMs": {
+              "median": 7.9,
+              "p90": 8.5,
+              "max": 94.4,
+              "n": 57
+            },
+            "worstFrameMs": 94.4,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "zone"
+          },
+          "zone->continent": {
+            "inTask": {
+              "updatePathsMs": 17.1,
+              "setLayerMs": 10.5,
+              "redrawMs": 9.9,
+              "swapMs": 10.9
+            },
+            "plainZoomBackTaskMs": 59.6,
+            "crossingTaskMs": 41.2,
+            "frameIntervalsMs": {
+              "median": 8,
+              "p90": 8,
+              "max": 94.7,
+              "n": 73
+            },
+            "worstFrameMs": 94.7,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "continent"
+          }
+        }
+      },
+      {
+        "throttle": 1,
+        "run": 0,
+        "mixA": {
+          "moveendFrameMs": {
+            "median": 4.5,
+            "p90": 5.5,
+            "max": 8.9,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.6,
+            "p90": 4.5,
+            "max": 7,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0.5,
+            "p90": 0.7,
+            "max": 1.2,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.5,
+            "p90": 2.1,
+            "max": 2.6,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.4,
+            "max": 1,
+            "n": 60
+          },
+          "renumberLabelsMs": {
+            "median": 1.5,
+            "p90": 2,
+            "max": 2.2,
+            "n": 20
+          },
+          "pathCanvasWorkOnRenumberMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0,
+            "n": 20
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 300,
+            "total": 2020,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "mixB": {
+          "moveendFrameMs": {
+            "median": 5.8,
+            "p90": 7,
+            "max": 7.4,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 4.2,
+            "p90": 5,
+            "max": 5.3,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 1.3,
+            "p90": 1.7,
+            "max": 2.4,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.6,
+            "p90": 2.1,
+            "max": 2.4,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.7,
+            "p90": 0.8,
+            "max": 1.1,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 780,
+            "total": 2500,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "fallback1": {
+          "moveendFrameMs": {
+            "median": 4.1,
+            "p90": 5.1,
+            "max": 6,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.4,
+            "p90": 4.2,
+            "max": 4.6,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0.5,
+            "p90": 0.7,
+            "max": 1.2,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.5,
+            "p90": 1.9,
+            "max": 2.3,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.4,
+            "max": 0.8,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 300,
+            "total": 1820,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "fallback2": {
+          "moveendFrameMs": {
+            "median": 4,
+            "p90": 4.7,
+            "max": 5.6,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.3,
+            "p90": 4,
+            "max": 4.7,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0.4,
+            "p90": 0.6,
+            "max": 0.8,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.3,
+            "p90": 1.7,
+            "max": 2.2,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.4,
+            "max": 0.5,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 250,
+            "total": 1770,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "noPins": {
+          "moveendFrameMs": {
+            "median": 3.3,
+            "p90": 4,
+            "max": 4.1,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.1,
+            "p90": 3.8,
+            "max": 3.9,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0.1,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.4,
+            "p90": 1.7,
+            "max": 2,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0.1,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 0,
+            "total": 1720,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "crossing": {
+          "continent->zone": {
+            "inTask": {
+              "updatePathsMs": 3.6,
+              "setLayerMs": 2.9,
+              "redrawMs": 2.3,
+              "swapMs": 2.9
+            },
+            "plainZoomBackTaskMs": 11.1,
+            "crossingTaskMs": 11.5,
+            "frameIntervalsMs": {
+              "median": 8,
+              "p90": 8.1,
+              "max": 61.7,
+              "n": 60
+            },
+            "worstFrameMs": 61.7,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "zone"
+          },
+          "zone->continent": {
+            "inTask": {
+              "updatePathsMs": 4.5,
+              "setLayerMs": 2.5,
+              "redrawMs": 2.6,
+              "swapMs": 2.7
+            },
+            "plainZoomBackTaskMs": 10.4,
+            "crossingTaskMs": 12.1,
+            "frameIntervalsMs": {
+              "median": 8,
+              "p90": 8.1,
+              "max": 59.6,
+              "n": 75
+            },
+            "worstFrameMs": 59.6,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "continent"
+          }
+        },
+        "bitmaps": 15
+      },
+      {
+        "throttle": 1,
+        "run": 1,
+        "mixA": {
+          "moveendFrameMs": {
+            "median": 4,
+            "p90": 5,
+            "max": 8.6,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.3,
+            "p90": 4.2,
+            "max": 6.9,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0.5,
+            "p90": 0.7,
+            "max": 1.1,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.7,
+            "p90": 2.2,
+            "max": 2.8,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.4,
+            "max": 0.6,
+            "n": 60
+          },
+          "renumberLabelsMs": {
+            "median": 1.7,
+            "p90": 2,
+            "max": 2.1,
+            "n": 20
+          },
+          "pathCanvasWorkOnRenumberMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0,
+            "n": 20
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 300,
+            "total": 2020,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "mixB": {
+          "moveendFrameMs": {
+            "median": 5,
+            "p90": 6.4,
+            "max": 7.1,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.7,
+            "p90": 4.8,
+            "max": 5.2,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 1.1,
+            "p90": 1.4,
+            "max": 2,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.4,
+            "p90": 2,
+            "max": 2.6,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.6,
+            "p90": 0.8,
+            "max": 1.3,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 780,
+            "total": 2500,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "fallback1": {
+          "moveendFrameMs": {
+            "median": 4.3,
+            "p90": 5,
+            "max": 5.9,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.7,
+            "p90": 4.1,
+            "max": 4.4,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0.5,
+            "p90": 0.8,
+            "max": 1.1,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.6,
+            "p90": 1.9,
+            "max": 2.6,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.4,
+            "max": 0.7,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 300,
+            "total": 1820,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "fallback2": {
+          "moveendFrameMs": {
+            "median": 3.9,
+            "p90": 4.6,
+            "max": 5.4,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.2,
+            "p90": 3.9,
+            "max": 4.8,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0.4,
+            "p90": 0.6,
+            "max": 0.9,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.2,
+            "p90": 1.6,
+            "max": 1.7,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.2,
+            "p90": 0.3,
+            "max": 0.8,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 250,
+            "total": 1770,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "noPins": {
+          "moveendFrameMs": {
+            "median": 3.1,
+            "p90": 3.8,
+            "max": 4.7,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 2.8,
+            "p90": 3.7,
+            "max": 4.4,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.3,
+            "p90": 1.7,
+            "max": 1.8,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0.1,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 0,
+            "total": 1720,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "crossing": {
+          "continent->zone": {
+            "inTask": {
+              "updatePathsMs": 3.6,
+              "setLayerMs": 2.8,
+              "redrawMs": 2.2,
+              "swapMs": 2.9
+            },
+            "plainZoomBackTaskMs": 14.7,
+            "crossingTaskMs": 10.4,
+            "frameIntervalsMs": {
+              "median": 7.9,
+              "p90": 8.3,
+              "max": 69.2,
+              "n": 58
+            },
+            "worstFrameMs": 69.2,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "zone"
+          },
+          "zone->continent": {
+            "inTask": {
+              "updatePathsMs": 3.2,
+              "setLayerMs": 2.3,
+              "redrawMs": 1.8,
+              "swapMs": 2.4
+            },
+            "plainZoomBackTaskMs": 13.1,
+            "crossingTaskMs": 9,
+            "frameIntervalsMs": {
+              "median": 8,
+              "p90": 8.1,
+              "max": 61.9,
+              "n": 74
+            },
+            "worstFrameMs": 61.9,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "continent"
+          }
+        },
+        "bitmaps": 15
+      },
+      {
+        "throttle": 1,
+        "run": 2,
+        "mixA": {
+          "moveendFrameMs": {
+            "median": 4.1,
+            "p90": 5.1,
+            "max": 7.9,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.3,
+            "p90": 4.2,
+            "max": 6.4,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0.5,
+            "p90": 0.7,
+            "max": 1.3,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.4,
+            "p90": 2.1,
+            "max": 2.7,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.4,
+            "max": 0.7,
+            "n": 60
+          },
+          "renumberLabelsMs": {
+            "median": 1.8,
+            "p90": 2.2,
+            "max": 2.3,
+            "n": 20
+          },
+          "pathCanvasWorkOnRenumberMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0,
+            "n": 20
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 300,
+            "total": 2020,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "mixB": {
+          "moveendFrameMs": {
+            "median": 5.4,
+            "p90": 6.4,
+            "max": 7.3,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.8,
+            "p90": 4.7,
+            "max": 5.2,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 1.2,
+            "p90": 1.5,
+            "max": 2,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.7,
+            "p90": 2,
+            "max": 2.2,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.7,
+            "p90": 0.8,
+            "max": 1.3,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 780,
+            "total": 2500,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "fallback1": {
+          "moveendFrameMs": {
+            "median": 4.4,
+            "p90": 5,
+            "max": 6.3,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 3.6,
+            "p90": 4.1,
+            "max": 4.5,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0.5,
+            "p90": 0.7,
+            "max": 1.3,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.6,
+            "p90": 1.8,
+            "max": 2,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.4,
+            "max": 0.7,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 300,
+            "total": 1820,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "fallback2": {
+          "moveendFrameMs": {
+            "median": 3.6,
+            "p90": 4.7,
+            "max": 5.1,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 2.9,
+            "p90": 3.9,
+            "max": 4.2,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0.4,
+            "p90": 0.6,
+            "max": 1.1,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.2,
+            "p90": 1.6,
+            "max": 1.8,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.3,
+            "max": 0.6,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 250,
+            "total": 1770,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "noPins": {
+          "moveendFrameMs": {
+            "median": 3,
+            "p90": 4,
+            "max": 4.4,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 2.8,
+            "p90": 3.9,
+            "max": 4.2,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0.1,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 1.2,
+            "p90": 1.7,
+            "max": 1.9,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0.1,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 0,
+            "total": 1720,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "crossing": {
+          "continent->zone": {
+            "inTask": {
+              "updatePathsMs": 2.7,
+              "setLayerMs": 2,
+              "redrawMs": 1.5,
+              "swapMs": 2.1
+            },
+            "plainZoomBackTaskMs": 13.1,
+            "crossingTaskMs": 9.5,
+            "frameIntervalsMs": {
+              "median": 7.9,
+              "p90": 8.1,
+              "max": 70.8,
+              "n": 60
+            },
+            "worstFrameMs": 70.8,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "zone"
+          },
+          "zone->continent": {
+            "inTask": {
+              "updatePathsMs": 4.5,
+              "setLayerMs": 2.7,
+              "redrawMs": 2.6,
+              "swapMs": 2.7
+            },
+            "plainZoomBackTaskMs": 12.5,
+            "crossingTaskMs": 11.1,
+            "frameIntervalsMs": {
+              "median": 8,
+              "p90": 8.1,
+              "max": 56.9,
+              "n": 75
+            },
+            "worstFrameMs": 56.9,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "continent"
+          }
+        },
+        "bitmaps": 15
+      },
+      {
+        "throttle": 4,
+        "run": 0,
+        "mixA": {
+          "moveendFrameMs": {
+            "median": 19.7,
+            "p90": 23.4,
+            "max": 29.1,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 16,
+            "p90": 19.2,
+            "max": 24,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 2.6,
+            "p90": 3.1,
+            "max": 4.8,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 8.1,
+            "p90": 9.5,
+            "max": 10.3,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 1.6,
+            "p90": 2.1,
+            "max": 2.6,
+            "n": 60
+          },
+          "renumberLabelsMs": {
+            "median": 7.1,
+            "p90": 8.4,
+            "max": 9.1,
+            "n": 20
+          },
+          "pathCanvasWorkOnRenumberMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0,
+            "n": 20
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 300,
+            "total": 2020,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "mixB": {
+          "moveendFrameMs": {
+            "median": 24.7,
+            "p90": 28.7,
+            "max": 31.5,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 17.9,
+            "p90": 21.3,
+            "max": 23.3,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 5.9,
+            "p90": 7.1,
+            "max": 8.9,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 8,
+            "p90": 9.2,
+            "max": 10.9,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 3.8,
+            "p90": 4.4,
+            "max": 5.1,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 780,
+            "total": 2500,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "fallback1": {
+          "moveendFrameMs": {
+            "median": 18.8,
+            "p90": 22.3,
+            "max": 25.1,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 15.6,
+            "p90": 18.1,
+            "max": 19.9,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 2.6,
+            "p90": 3.4,
+            "max": 3.8,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 6.8,
+            "p90": 8.8,
+            "max": 10.3,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 1.6,
+            "p90": 2,
+            "max": 2.3,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 300,
+            "total": 1820,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "fallback2": {
+          "moveendFrameMs": {
+            "median": 17.8,
+            "p90": 20.4,
+            "max": 22.4,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 14.3,
+            "p90": 17.4,
+            "max": 18.5,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 2,
+            "p90": 2.4,
+            "max": 3.9,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 6.5,
+            "p90": 7.3,
+            "max": 8.5,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 1.3,
+            "p90": 1.6,
+            "max": 2.3,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 250,
+            "total": 1770,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "noPins": {
+          "moveendFrameMs": {
+            "median": 15.4,
+            "p90": 17.8,
+            "max": 19.2,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 14.6,
+            "p90": 16.9,
+            "max": 18.5,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0.2,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 6.4,
+            "p90": 7.7,
+            "max": 8.6,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0.2,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 0,
+            "total": 1720,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "crossing": {
+          "continent->zone": {
+            "inTask": {
+              "updatePathsMs": 15.6,
+              "setLayerMs": 10,
+              "redrawMs": 9.9,
+              "swapMs": 10.6
+            },
+            "plainZoomBackTaskMs": 61.7,
+            "crossingTaskMs": 46.2,
+            "frameIntervalsMs": {
+              "median": 8,
+              "p90": 8.1,
+              "max": 92.5,
+              "n": 56
+            },
+            "worstFrameMs": 92.5,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "zone"
+          },
+          "zone->continent": {
+            "inTask": {
+              "updatePathsMs": 19.9,
+              "setLayerMs": 11.5,
+              "redrawMs": 12,
+              "swapMs": 11.7
+            },
+            "plainZoomBackTaskMs": 50.9,
+            "crossingTaskMs": 49,
+            "frameIntervalsMs": {
+              "median": 8,
+              "p90": 8.1,
+              "max": 95.5,
+              "n": 74
+            },
+            "worstFrameMs": 95.5,
+            "longTasksMs": [
+              54
+            ],
+            "fadesAfter600ms": 0,
+            "band": "continent"
+          }
+        },
+        "bitmaps": 15
+      },
+      {
+        "throttle": 4,
+        "run": 1,
+        "mixA": {
+          "moveendFrameMs": {
+            "median": 19.2,
+            "p90": 22.5,
+            "max": 34.6,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 16.1,
+            "p90": 18.9,
+            "max": 26,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 2.4,
+            "p90": 2.9,
+            "max": 5.7,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 7.2,
+            "p90": 9.2,
+            "max": 11.8,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 1.5,
+            "p90": 1.9,
+            "max": 2.4,
+            "n": 60
+          },
+          "renumberLabelsMs": {
+            "median": 6.4,
+            "p90": 8.6,
+            "max": 10.1,
+            "n": 20
+          },
+          "pathCanvasWorkOnRenumberMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0,
+            "n": 20
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 300,
+            "total": 2020,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "mixB": {
+          "moveendFrameMs": {
+            "median": 23.1,
+            "p90": 27.8,
+            "max": 32,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 17.5,
+            "p90": 20.6,
+            "max": 24.4,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 5.4,
+            "p90": 6.7,
+            "max": 10.4,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 7.7,
+            "p90": 8.7,
+            "max": 10,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 3.6,
+            "p90": 4.2,
+            "max": 5,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 780,
+            "total": 2500,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "fallback1": {
+          "moveendFrameMs": {
+            "median": 17.6,
+            "p90": 20.9,
+            "max": 25.6,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 14.6,
+            "p90": 17.2,
+            "max": 20.3,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 2.2,
+            "p90": 2.8,
+            "max": 4.9,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 6.8,
+            "p90": 8.3,
+            "max": 9,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 1.5,
+            "p90": 1.8,
+            "max": 2.4,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 300,
+            "total": 1820,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "fallback2": {
+          "moveendFrameMs": {
+            "median": 17.3,
+            "p90": 21.1,
+            "max": 23.9,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 14.7,
+            "p90": 17.8,
+            "max": 20.7,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 2,
+            "p90": 2.6,
+            "max": 2.9,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 6.6,
+            "p90": 7.7,
+            "max": 8.7,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 1.3,
+            "p90": 1.6,
+            "max": 1.8,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 250,
+            "total": 1770,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "noPins": {
+          "moveendFrameMs": {
+            "median": 16,
+            "p90": 19,
+            "max": 23,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 15,
+            "p90": 17.6,
+            "max": 21.3,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0,
+            "p90": 0.1,
+            "max": 0.2,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 6.9,
+            "p90": 8,
+            "max": 10.5,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0.2,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 0,
+            "total": 1720,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "crossing": {
+          "continent->zone": {
+            "inTask": {
+              "updatePathsMs": 16.5,
+              "setLayerMs": 12.3,
+              "redrawMs": 11.1,
+              "swapMs": 12.3
+            },
+            "plainZoomBackTaskMs": 47.6,
+            "crossingTaskMs": 49.9,
+            "frameIntervalsMs": {
+              "median": 7,
+              "p90": 8,
+              "max": 97.2,
+              "n": 60
+            },
+            "worstFrameMs": 97.2,
+            "longTasksMs": [
+              54
+            ],
+            "fadesAfter600ms": 0,
+            "band": "zone"
+          },
+          "zone->continent": {
+            "inTask": {
+              "updatePathsMs": 13.6,
+              "setLayerMs": 12.4,
+              "redrawMs": 7.7,
+              "swapMs": 12.6
+            },
+            "plainZoomBackTaskMs": 54.3,
+            "crossingTaskMs": 42.1,
+            "frameIntervalsMs": {
+              "median": 6.9,
+              "p90": 7.1,
+              "max": 83.4,
+              "n": 81
+            },
+            "worstFrameMs": 83.4,
+            "longTasksMs": [],
+            "fadesAfter600ms": 0,
+            "band": "continent"
+          }
+        },
+        "bitmaps": 15
+      },
+      {
+        "throttle": 4,
+        "run": 2,
+        "mixA": {
+          "moveendFrameMs": {
+            "median": 19.7,
+            "p90": 25.6,
+            "max": 40.9,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 15.5,
+            "p90": 21,
+            "max": 31.8,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 2.4,
+            "p90": 3.5,
+            "max": 5.4,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 8,
+            "p90": 10.6,
+            "max": 13.6,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 1.5,
+            "p90": 2,
+            "max": 2.6,
+            "n": 60
+          },
+          "renumberLabelsMs": {
+            "median": 7.3,
+            "p90": 9.8,
+            "max": 11.5,
+            "n": 20
+          },
+          "pathCanvasWorkOnRenumberMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0,
+            "n": 20
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 300,
+            "total": 2020,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "mixB": {
+          "moveendFrameMs": {
+            "median": 23.6,
+            "p90": 27.8,
+            "max": 31.6,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 17.6,
+            "p90": 20.5,
+            "max": 24.7,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 5.5,
+            "p90": 6.5,
+            "max": 8.6,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 7.1,
+            "p90": 9.1,
+            "max": 10.9,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 3.5,
+            "p90": 4.1,
+            "max": 5.5,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 780,
+            "total": 2500,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "fallback1": {
+          "moveendFrameMs": {
+            "median": 17.6,
+            "p90": 21.6,
+            "max": 25.3,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 14.5,
+            "p90": 18,
+            "max": 19.7,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 2.4,
+            "p90": 3.1,
+            "max": 6.2,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 6.8,
+            "p90": 8.3,
+            "max": 10.1,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 1.5,
+            "p90": 1.8,
+            "max": 2.7,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 300,
+            "total": 1820,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "fallback2": {
+          "moveendFrameMs": {
+            "median": 19.4,
+            "p90": 24.2,
+            "max": 32,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 16.2,
+            "p90": 20,
+            "max": 26.5,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 2.4,
+            "p90": 3,
+            "max": 4.2,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 7.1,
+            "p90": 8.7,
+            "max": 16.5,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 1.4,
+            "p90": 1.9,
+            "max": 3.9,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1520,
+            "pins": 250,
+            "total": 1770,
+            "labelsPlaced": 50,
+            "stepNumbers": 150
+          }
+        },
+        "noPins": {
+          "moveendFrameMs": {
+            "median": 16.2,
+            "p90": 20.1,
+            "max": 26.9,
+            "n": 60
+          },
+          "updatePathsMs": {
+            "median": 15,
+            "p90": 18.4,
+            "max": 25.4,
+            "n": 60
+          },
+          "stackMergeMs": {
+            "median": 0,
+            "p90": 0.1,
+            "max": 0.2,
+            "n": 60
+          },
+          "labelsNextFrameMs": {
+            "median": 7.3,
+            "p90": 9,
+            "max": 10.4,
+            "n": 60
+          },
+          "hitIndexIdleMs": {
+            "median": 0,
+            "p90": 0.1,
+            "max": 0.2,
+            "n": 60
+          },
+          "counts": {
+            "adapterPaths": 1720,
+            "pins": 0,
+            "total": 1720,
+            "labelsPlaced": 51,
+            "stepNumbers": 150
+          }
+        },
+        "crossing": {
+          "continent->zone": {
+            "inTask": {
+              "updatePathsMs": 17.6,
+              "setLayerMs": 11.6,
+              "redrawMs": 11.5,
+              "swapMs": 11.6
+            },
+            "plainZoomBackTaskMs": 65.2,
+            "crossingTaskMs": 49.8,
+            "frameIntervalsMs": {
+              "median": 7,
+              "p90": 7.1,
+              "max": 90.4,
+              "n": 57
+            },
+            "worstFrameMs": 90.4,
+            "longTasksMs": [
+              54
+            ],
+            "fadesAfter600ms": 0,
+            "band": "zone"
+          },
+          "zone->continent": {
+            "inTask": {
+              "updatePathsMs": 19.4,
+              "setLayerMs": 12.5,
+              "redrawMs": 10.9,
+              "swapMs": 12.8
+            },
+            "plainZoomBackTaskMs": 53.7,
+            "crossingTaskMs": 53.4,
+            "frameIntervalsMs": {
+              "median": 6.9,
+              "p90": 7,
+              "max": 97.3,
+              "n": 82
+            },
+            "worstFrameMs": 97.3,
+            "longTasksMs": [
+              60
+            ],
+            "fadesAfter600ms": 0,
+            "band": "continent"
+          }
+        },
+        "bitmaps": 15
+      }
+    ]
+  },
+  "mp2ArtContrast": {
+    "method": "tests/map-art-contrast.test.ts: 400 pixels on a fixed grid from each of the 318 committed painted atlas tiles at level -2 (127,202 samples with the two sea colours) and from every 16th minimap tile at level 0 (300 tiles, 120,001 samples with the navy; the local tile pack, not committed, D-049 O14). Minimum contrast over the samples.",
+    "painted": {
+      "light": {
+        "pinSilhouette": 4.09,
+        "labelOnHalo": 12.71,
+        "routeAndRingOnHalo": 4.84
+      },
+      "dark": {
+        "pinSilhouette": 4.09,
+        "labelOnHalo": 10.95,
+        "routeAndRingOnHalo": 5.61
+      }
+    },
+    "minimap": {
+      "pinSilhouette": 4.09,
+      "labelOnHalo": 11.57,
+      "routeAndRingOnHalo": 5.4,
+      "lineOrItsHalo": 3.28
+    },
+    "navyFlat": {
+      "pinSilhouette": 15.42,
+      "labelOnHalo": 17.13,
+      "routeAndRingOnHalo": 8,
+      "lineOrItsHalo": 10.8
+    },
+    "note": "The design's figures (§25.6, from the probe's native samples): pin 4.09, minimap label 11.57, route 5.40, lines 3.88. The line figure here, 3.28 over the stitched level-0 tiles, is lower; every check passes its 3:1 or 4.5:1 need."
+  },
+  "entryChunk": {
+    "mm1": 247.12,
+    "mp1ToMp2b": 248.98,
+    "deltaKb": 1.86,
+    "stopLine": 248.5,
+    "note": "Above the ledger's 248.5 kB stop line (ui-refresh.md §10.3): for the architect. In context: controller +0.60, map/layers +0.74, map/adapter +0.41, MapPanel +0.04; marks.ts 0 while nothing in ui imports it."
+  },
+  "benches": {
+    "mapEditCheck": "pass (route10000 moveStep 5.33 ms median, atlas two-builder 5.10 ms)",
+    "mapPathsBudget": "pass (paths10000 moveStep 6.27 ms median)"
+  },
+  "mp3": {
+    "when": "2026-09-27",
+    "about": "Step MP.3: the QuestStateModel (src/app/quest-state.ts) and the objectives layer built from it, by tests/bench/map-state.bench.ts (bundled with esbuild, Node, unthrottled; min / median / p90 ms). The log fixture is the design's rev2/log-objectives.ts method (map-presentation.md §7.4); the realistic route is tests/bench/bench-support.ts's 10,000-step route (Orc Warrior).",
+    "probeMs": 42.25,
+    "budgets": {
+      "layerMs": 8,
+      "logShare20Ms": 5
+    },
+    "logFixture": [
+      {
+        "fixture": "Durotar 1-12 (Orc Warrior)",
+        "logSize": 10,
+        "level": 8,
+        "model": {
+          "min": 4.06,
+          "median": 6,
+          "p90": 8.51
+        },
+        "modelCold": {
+          "min": 3.11,
+          "median": 3.53,
+          "p90": 4.33
+        },
+        "modelNoLog": {
+          "min": 2.38,
+          "median": 2.75,
+          "p90": 3.83
+        },
+        "logShareMs": 3.25,
+        "layer": {
+          "min": 0.34,
+          "median": 0.55,
+          "p90": 0.69
+        },
+        "layerItems": 261,
+        "inView": {
+          "raw": 197,
+          "counted": 18,
+          "areas": 16
+        },
+        "wholeLog": {
+          "counted": 28,
+          "areas": 17,
+          "turnInGroups": 9
+        },
+        "drawnGivers": 83
+      },
+      {
+        "fixture": "The Barrens 10-20 (Orc Warrior)",
+        "logSize": 10,
+        "level": 14,
+        "model": {
+          "min": 3.88,
+          "median": 4.42,
+          "p90": 5.84
+        },
+        "modelCold": {
+          "min": 3.71,
+          "median": 4.05,
+          "p90": 4.42
+        },
+        "modelNoLog": {
+          "min": 2.63,
+          "median": 2.9,
+          "p90": 3.2
+        },
+        "logShareMs": 1.52,
+        "layer": {
+          "min": 0.42,
+          "median": 0.45,
+          "p90": 0.5
+        },
+        "layerItems": 395,
+        "inView": {
+          "raw": 318,
+          "counted": 31,
+          "areas": 34
+        },
+        "wholeLog": {
+          "counted": 36,
+          "areas": 35,
+          "turnInGroups": 7
+        },
+        "drawnGivers": 143
+      },
+      {
+        "fixture": "The Barrens 10-20 (Orc Warrior)",
+        "logSize": 20,
+        "level": 15,
+        "model": {
+          "min": 4.51,
+          "median": 5.2,
+          "p90": 5.68
+        },
+        "modelCold": {
+          "min": 4.58,
+          "median": 4.91,
+          "p90": 5.1
+        },
+        "modelNoLog": {
+          "min": 2.55,
+          "median": 2.84,
+          "p90": 3.14
+        },
+        "logShareMs": 2.36,
+        "layer": {
+          "min": 0.79,
+          "median": 0.91,
+          "p90": 1.11
+        },
+        "layerItems": 500,
+        "inView": {
+          "raw": 391,
+          "counted": 50,
+          "areas": 55
+        },
+        "wholeLog": {
+          "counted": 66,
+          "areas": 59,
+          "turnInGroups": 11
+        },
+        "drawnGivers": 142
+      },
+      {
+        "fixture": "Elwynn Forest 1-12 (Human Warrior)",
+        "logSize": 10,
+        "level": 8,
+        "model": {
+          "min": 3.92,
+          "median": 4.57,
+          "p90": 4.68
+        },
+        "modelCold": {
+          "min": 4.07,
+          "median": 4.5,
+          "p90": 4.91
+        },
+        "modelNoLog": {
+          "min": 2.73,
+          "median": 3.06,
+          "p90": 3.52
+        },
+        "logShareMs": 1.51,
+        "layer": {
+          "min": 0.7,
+          "median": 0.78,
+          "p90": 0.99
+        },
+        "layerItems": 500,
+        "inView": {
+          "raw": 254,
+          "counted": 25,
+          "areas": 20
+        },
+        "wholeLog": {
+          "counted": 46,
+          "areas": 31,
+          "turnInGroups": 8
+        },
+        "drawnGivers": 111
+      },
+      {
+        "fixture": "Westfall 9-18 (Human Warrior)",
+        "logSize": 10,
+        "level": 14,
+        "model": {
+          "min": 4.72,
+          "median": 5.46,
+          "p90": 6.52
+        },
+        "modelCold": {
+          "min": 4.51,
+          "median": 4.97,
+          "p90": 5.49
+        },
+        "modelNoLog": {
+          "min": 2.84,
+          "median": 3.16,
+          "p90": 3.4
+        },
+        "logShareMs": 2.3,
+        "layer": {
+          "min": 1.14,
+          "median": 1.23,
+          "p90": 1.85
+        },
+        "layerItems": 500,
+        "inView": {
+          "raw": 406,
+          "counted": 39,
+          "areas": 35
+        },
+        "wholeLog": {
+          "counted": 103,
+          "areas": 59,
+          "turnInGroups": 8
+        },
+        "drawnGivers": 185
+      },
+      {
+        "fixture": "Stranglethorn Vale 30-45 (Orc Warrior)",
+        "logSize": 10,
+        "level": 33,
+        "model": {
+          "min": 3.4,
+          "median": 4.2,
+          "p90": 5.21
+        },
+        "modelCold": {
+          "min": 3.35,
+          "median": 3.82,
+          "p90": 4.21
+        },
+        "modelNoLog": {
+          "min": 2.76,
+          "median": 3.17,
+          "p90": 3.33
+        },
+        "logShareMs": 1.03,
+        "layer": {
+          "min": 0.2,
+          "median": 0.21,
+          "p90": 0.27
+        },
+        "layerItems": 209,
+        "inView": {
+          "raw": 172,
+          "counted": 19,
+          "areas": 18
+        },
+        "wholeLog": {
+          "counted": 30,
+          "areas": 18,
+          "turnInGroups": 7
+        },
+        "drawnGivers": 193
+      },
+      {
+        "fixture": "Stranglethorn Vale 30-45 (Orc Warrior)",
+        "logSize": 20,
+        "level": 35,
+        "model": {
+          "min": 3.55,
+          "median": 4.08,
+          "p90": 4.73
+        },
+        "modelCold": {
+          "min": 3.64,
+          "median": 3.99,
+          "p90": 4.28
+        },
+        "modelNoLog": {
+          "min": 2.76,
+          "median": 3.13,
+          "p90": 3.6
+        },
+        "logShareMs": 0.95,
+        "layer": {
+          "min": 0.22,
+          "median": 0.23,
+          "p90": 0.26
+        },
+        "layerItems": 248,
+        "inView": {
+          "raw": 172,
+          "counted": 43,
+          "areas": 31
+        },
+        "wholeLog": {
+          "counted": 56,
+          "areas": 31,
+          "turnInGroups": 10
+        },
+        "drawnGivers": 193
+      },
+      {
+        "fixture": "Tanaris 40-50 (Orc Warrior)",
+        "logSize": 10,
+        "level": 45,
+        "model": {
+          "min": 3.57,
+          "median": 4.29,
+          "p90": 4.88
+        },
+        "modelCold": {
+          "min": 3.65,
+          "median": 4,
+          "p90": 4.6
+        },
+        "modelNoLog": {
+          "min": 3.02,
+          "median": 3.28,
+          "p90": 3.59
+        },
+        "logShareMs": 1.01,
+        "layer": {
+          "min": 0.22,
+          "median": 0.23,
+          "p90": 0.28
+        },
+        "layerItems": 153,
+        "inView": {
+          "raw": 116,
+          "counted": 25,
+          "areas": 10
+        },
+        "wholeLog": {
+          "counted": 33,
+          "areas": 11,
+          "turnInGroups": 6
+        },
+        "drawnGivers": 261
+      },
+      {
+        "fixture": "Tanaris 40-50 (Orc Warrior)",
+        "logSize": 20,
+        "level": 46,
+        "model": {
+          "min": 3.85,
+          "median": 6,
+          "p90": 6.28
+        },
+        "modelCold": {
+          "min": 3.89,
+          "median": 5.7,
+          "p90": 6.15
+        },
+        "modelNoLog": {
+          "min": 3.62,
+          "median": 4.63,
+          "p90": 4.94
+        },
+        "logShareMs": 1.37,
+        "layer": {
+          "min": 0.29,
+          "median": 0.3,
+          "p90": 0.32
+        },
+        "layerItems": 185,
+        "inView": {
+          "raw": 44,
+          "counted": 40,
+          "areas": 16
+        },
+        "wholeLog": {
+          "counted": 50,
+          "areas": 19,
+          "turnInGroups": 14
+        },
+        "drawnGivers": 258
+      }
+    ],
+    "realistic": [
+      {
+        "beforeStep": 2000,
+        "level": 17,
+        "levelLowerBound": true,
+        "model": {
+          "min": 4.75,
+          "median": 6.35,
+          "p90": 8.25
+        },
+        "rows": {
+          "available": 110,
+          "may-be-available": 42,
+          "needs-prerequisite": 72,
+          "unlocks-soon": 0,
+          "low-level": 43,
+          "turn-ins": 0
+        },
+        "outside": {
+          "level-ahead": 700,
+          "prerequisite-outside": 979,
+          "follow-up": 0,
+          "level-and-prerequisite": 0,
+          "closed": 0,
+          "level-unknown": 0,
+          "event": 107
+        },
+        "drawnGiverPoints": 143
+      },
+      {
+        "beforeStep": 5000,
+        "level": 34,
+        "levelLowerBound": true,
+        "model": {
+          "min": 3.91,
+          "median": 5.32,
+          "p90": 7.69
+        },
+        "rows": {
+          "available": 124,
+          "may-be-available": 46,
+          "needs-prerequisite": 83,
+          "unlocks-soon": 0,
+          "low-level": 116,
+          "turn-ins": 1
+        },
+        "outside": {
+          "level-ahead": 535,
+          "prerequisite-outside": 861,
+          "follow-up": 1,
+          "level-and-prerequisite": 0,
+          "closed": 6,
+          "level-unknown": 0,
+          "event": 104
+        },
+        "drawnGiverPoints": 161
+      },
+      {
+        "beforeStep": 8000,
+        "level": 47,
+        "levelLowerBound": true,
+        "model": {
+          "min": 3.81,
+          "median": 4.9,
+          "p90": 5.54
+        },
+        "rows": {
+          "available": 147,
+          "may-be-available": 158,
+          "needs-prerequisite": 149,
+          "unlocks-soon": 0,
+          "low-level": 176,
+          "turn-ins": 1
+        },
+        "outside": {
+          "level-ahead": 273,
+          "prerequisite-outside": 684,
+          "follow-up": 3,
+          "level-and-prerequisite": 0,
+          "closed": 11,
+          "level-unknown": 0,
+          "event": 102
+        },
+        "drawnGiverPoints": 298
+      },
+      {
+        "beforeStep": 10000,
+        "level": 53,
+        "levelLowerBound": true,
+        "model": {
+          "min": 2.92,
+          "median": 4.17,
+          "p90": 4.84
+        },
+        "rows": {
+          "available": 261,
+          "may-be-available": 146,
+          "needs-prerequisite": 202,
+          "unlocks-soon": 0,
+          "low-level": 198,
+          "turn-ins": 0
+        },
+        "outside": {
+          "level-ahead": 117,
+          "prerequisite-outside": 541,
+          "follow-up": 0,
+          "level-and-prerequisite": 0,
+          "closed": 16,
+          "level-unknown": 0,
+          "event": 101
+        },
+        "drawnGiverPoints": 349
+      }
+    ],
+    "entryChunk": {
+      "before": 246.62,
+      "after": 248.22,
+      "deltaKb": 1.6,
+      "inContextKb": {
+        "availableContent": 1.25,
+        "mapController": 0.65,
+        "mapLayers": 0.56,
+        "topBarSpans": 0.04,
+        "questStateText": 0.06
+      },
+      "stopLine": 248.5,
+      "note": "dist audit; the model, its words and the layer notes are in the lazy derived pipeline (quest-state.ts, zone-levels.ts and geo/groups.ts are not in the entry). The first build of this step, with the notes in the controller, was 249.03 kB.",
+      "lazyDerivedPipelineGzipKb": 42.33
+    }
+  },
+  "mp4a": {
+    "when": "2026-09-28T03:24:44.406Z",
+    "browser": "Chrome/153.0.8010.54 headless (new), no GPU (software raster), throwaway profile deleted; another process held one of the 16 logical processors throughout",
+    "method": "The real LeafletMapAdapter with the real pins (src/map/leaflet/pins.ts: bitmaps from the LRU cache, stacks by spatial hash at the zone and close bands, the hit index built off the frame) and the real layer builder (src/map/layers.ts), in a 1280 x 800 stage at DPR 1.5 (smoothWheel on), our own scratch page .cache/mp4/harness/main.ts driven by .cache/mp4/harness/run.mjs (CDP, Emulation.setCPUThrottlingRate 1 and 4, two page loads each, 40 pans of 120 px). Synthetic, deterministic content. Zone band (zoom -2): the builder's quest givers (100 drawn of 120 in view, one to three quests each, five difficulties, available, uncertain and locked), turn-ins (40, in progress) and flight masters (35, no route state), 50 counted objective pins beside 450 objective dots, and 30 dungeons, 27 transport stops and 18 services as descriptors (their builders arrive with later steps), plus MP.1's other items (58 frames, 2 terrain paths, 100 flight lines, 150 route pieces of 64 vertices, 700 beads, 100 proposal lines, 100 selection items, 60 labels): 2,020 items. zoneWithoutPinLayers: the same with every pin layer empty (the 300 pins and the 450 dots gone, 1,270 items). Continent band (zoom -4): 373 givers over the continent, clustered by the builder (the cells of the level the zoom picks), turn-ins, flight masters, dungeons and transports: 1,702 items. panTaskMs is the synchronous task of a pan (Leaflet's projection and redraw, the adapter's moveend; stacks are not recomputed on a pan); labelsNextFrameMs the labels canvas in the next frame; hitIndexIdleMs one build of the pins' hit index as the idle callback makes it; zoomSettleTaskMs a button zoom of half a level within the zone band with pinRefreshAtSettleMs the pins' refresh (sizes, mask, stacks) inside it; clustering the builder's first call for 373 givers (all four levels) and a call at another continent zoom (the memo's lookup); the crossing a button zoom from -4 to -3 with the content kept (the controller would rebuild the layers there; this is the adapter's settle with its pin refresh). Frame and task times include headless software compositing and are an upper bound, not the app's GPU path (map-presentation.md 25.7).",
+    "runs": [
+      {
+        "throttle": 1,
+        "run": 0,
+        "clustering": {
+          "givers": 373,
+          "clustersAtMinus4_5": 39,
+          "firstBuildAllLevelsMs": {
+            "median": 2.1,
+            "p90": 2.9,
+            "max": 5.9,
+            "n": 10
+          },
+          "otherLevelMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0.1,
+            "n": 10
+          }
+        },
+        "zoneMixA": {
+          "items": 2020,
+          "pins": {
+            "drawn": 296,
+            "hidden": 0,
+            "merged": 4,
+            "stacks": 4,
+            "clusters": 0,
+            "diameter": 26,
+            "bitmaps": 34
+          },
+          "pinDescriptors": {
+            "available-quests": 100,
+            "turn-ins": 40,
+            "flight-masters": 35,
+            "objectives": 500,
+            "dungeons": 30,
+            "transports": 27,
+            "services": 18
+          },
+          "labelsPlaced": 31,
+          "panTaskMs": {
+            "median": 3.9,
+            "p90": 5.5,
+            "max": 6,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 3.7,
+            "p90": 5.1,
+            "max": 5.6,
+            "n": 40
+          },
+          "labelsNextFrameMs": {
+            "median": 1.9,
+            "p90": 2.8,
+            "max": 3.8,
+            "n": 40
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.4,
+            "max": 0.8,
+            "n": 40
+          },
+          "zoomSettleTaskMs": {
+            "median": 11.1,
+            "p90": 14.4,
+            "max": 15.3,
+            "n": 20
+          },
+          "pinRefreshAtSettleMs": {
+            "median": 1.1,
+            "p90": 1.9,
+            "max": 2.1,
+            "n": 20
+          }
+        },
+        "zoneWithoutPinLayers": {
+          "items": 1270,
+          "panTaskMs": {
+            "median": 2.8,
+            "p90": 3.9,
+            "max": 4.6,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 2.6,
+            "p90": 3.6,
+            "max": 4.4,
+            "n": 40
+          }
+        },
+        "continent": {
+          "items": 1702,
+          "pins": {
+            "drawn": 242,
+            "hidden": 0,
+            "merged": 0,
+            "stacks": 0,
+            "clusters": 47,
+            "diameter": 22,
+            "bitmaps": 68
+          },
+          "pinDescriptors": {
+            "available-quests": 120,
+            "turn-ins": 30,
+            "flight-masters": 35,
+            "objectives": 80,
+            "dungeons": 30,
+            "transports": 27,
+            "services": 0
+          },
+          "panTaskMs": {
+            "median": 4,
+            "p90": 4.6,
+            "max": 5.5,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 3.9,
+            "p90": 4.3,
+            "max": 5.3,
+            "n": 40
+          },
+          "labelsNextFrameMs": {
+            "median": 2.8,
+            "p90": 3.9,
+            "max": 4.3,
+            "n": 40
+          },
+          "hitIndexIdleMs": {
+            "median": 0.2,
+            "p90": 0.2,
+            "max": 0.3,
+            "n": 40
+          }
+        },
+        "crossingContinentToZone": {
+          "taskMs": 8.9,
+          "pinRefreshMs": 1,
+          "pins": {
+            "drawn": 240,
+            "hidden": 0,
+            "merged": 2,
+            "stacks": 2,
+            "clusters": 47,
+            "diameter": 26,
+            "bitmaps": 85
+          }
+        },
+        "bitmapsAtEnd": 85
+      },
+      {
+        "throttle": 1,
+        "run": 1,
+        "clustering": {
+          "givers": 373,
+          "clustersAtMinus4_5": 39,
+          "firstBuildAllLevelsMs": {
+            "median": 2.4,
+            "p90": 2.8,
+            "max": 5,
+            "n": 10
+          },
+          "otherLevelMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0,
+            "n": 10
+          }
+        },
+        "zoneMixA": {
+          "items": 2020,
+          "pins": {
+            "drawn": 296,
+            "hidden": 0,
+            "merged": 4,
+            "stacks": 4,
+            "clusters": 0,
+            "diameter": 26,
+            "bitmaps": 34
+          },
+          "pinDescriptors": {
+            "available-quests": 100,
+            "turn-ins": 40,
+            "flight-masters": 35,
+            "objectives": 500,
+            "dungeons": 30,
+            "transports": 27,
+            "services": 18
+          },
+          "labelsPlaced": 31,
+          "panTaskMs": {
+            "median": 4.3,
+            "p90": 5,
+            "max": 7.4,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 4,
+            "p90": 4.7,
+            "max": 7.1,
+            "n": 40
+          },
+          "labelsNextFrameMs": {
+            "median": 2.2,
+            "p90": 2.7,
+            "max": 3.1,
+            "n": 40
+          },
+          "hitIndexIdleMs": {
+            "median": 0.3,
+            "p90": 0.4,
+            "max": 0.4,
+            "n": 40
+          },
+          "zoomSettleTaskMs": {
+            "median": 11.2,
+            "p90": 12.9,
+            "max": 16.5,
+            "n": 20
+          },
+          "pinRefreshAtSettleMs": {
+            "median": 1.1,
+            "p90": 1.4,
+            "max": 1.8,
+            "n": 20
+          }
+        },
+        "zoneWithoutPinLayers": {
+          "items": 1270,
+          "panTaskMs": {
+            "median": 2.9,
+            "p90": 3.8,
+            "max": 4.1,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 2.7,
+            "p90": 3.5,
+            "max": 3.8,
+            "n": 40
+          }
+        },
+        "continent": {
+          "items": 1702,
+          "pins": {
+            "drawn": 242,
+            "hidden": 0,
+            "merged": 0,
+            "stacks": 0,
+            "clusters": 47,
+            "diameter": 22,
+            "bitmaps": 68
+          },
+          "pinDescriptors": {
+            "available-quests": 120,
+            "turn-ins": 30,
+            "flight-masters": 35,
+            "objectives": 80,
+            "dungeons": 30,
+            "transports": 27,
+            "services": 0
+          },
+          "panTaskMs": {
+            "median": 3.8,
+            "p90": 4.2,
+            "max": 4.4,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 3.6,
+            "p90": 4.1,
+            "max": 4.2,
+            "n": 40
+          },
+          "labelsNextFrameMs": {
+            "median": 2.1,
+            "p90": 2.4,
+            "max": 2.5,
+            "n": 40
+          },
+          "hitIndexIdleMs": {
+            "median": 0.2,
+            "p90": 0.2,
+            "max": 0.3,
+            "n": 40
+          }
+        },
+        "crossingContinentToZone": {
+          "taskMs": 10.7,
+          "pinRefreshMs": 1.4,
+          "pins": {
+            "drawn": 240,
+            "hidden": 0,
+            "merged": 2,
+            "stacks": 2,
+            "clusters": 47,
+            "diameter": 26,
+            "bitmaps": 85
+          }
+        },
+        "bitmapsAtEnd": 85
+      },
+      {
+        "throttle": 4,
+        "run": 0,
+        "clustering": {
+          "givers": 373,
+          "clustersAtMinus4_5": 39,
+          "firstBuildAllLevelsMs": {
+            "median": 10.7,
+            "p90": 12.7,
+            "max": 23.8,
+            "n": 10
+          },
+          "otherLevelMs": {
+            "median": 0,
+            "p90": 0.1,
+            "max": 0.1,
+            "n": 10
+          }
+        },
+        "zoneMixA": {
+          "items": 2020,
+          "pins": {
+            "drawn": 296,
+            "hidden": 0,
+            "merged": 4,
+            "stacks": 4,
+            "clusters": 0,
+            "diameter": 26,
+            "bitmaps": 34
+          },
+          "pinDescriptors": {
+            "available-quests": 100,
+            "turn-ins": 40,
+            "flight-masters": 35,
+            "objectives": 500,
+            "dungeons": 30,
+            "transports": 27,
+            "services": 18
+          },
+          "labelsPlaced": 31,
+          "panTaskMs": {
+            "median": 19.1,
+            "p90": 22.4,
+            "max": 31.9,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 18.1,
+            "p90": 21.4,
+            "max": 28.5,
+            "n": 40
+          },
+          "labelsNextFrameMs": {
+            "median": 10.1,
+            "p90": 12.2,
+            "max": 13.5,
+            "n": 40
+          },
+          "hitIndexIdleMs": {
+            "median": 1.4,
+            "p90": 1.8,
+            "max": 2.8,
+            "n": 40
+          },
+          "zoomSettleTaskMs": {
+            "median": 40.5,
+            "p90": 52.1,
+            "max": 55.9,
+            "n": 20
+          },
+          "pinRefreshAtSettleMs": {
+            "median": 4.2,
+            "p90": 5.7,
+            "max": 6.2,
+            "n": 20
+          }
+        },
+        "zoneWithoutPinLayers": {
+          "items": 1270,
+          "panTaskMs": {
+            "median": 12.8,
+            "p90": 15.6,
+            "max": 18.6,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 12.1,
+            "p90": 14.8,
+            "max": 17.4,
+            "n": 40
+          }
+        },
+        "continent": {
+          "items": 1702,
+          "pins": {
+            "drawn": 242,
+            "hidden": 0,
+            "merged": 0,
+            "stacks": 0,
+            "clusters": 47,
+            "diameter": 22,
+            "bitmaps": 68
+          },
+          "pinDescriptors": {
+            "available-quests": 120,
+            "turn-ins": 30,
+            "flight-masters": 35,
+            "objectives": 80,
+            "dungeons": 30,
+            "transports": 27,
+            "services": 0
+          },
+          "panTaskMs": {
+            "median": 15.7,
+            "p90": 18.9,
+            "max": 23.1,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 14.8,
+            "p90": 18.2,
+            "max": 21.7,
+            "n": 40
+          },
+          "labelsNextFrameMs": {
+            "median": 8.2,
+            "p90": 11.4,
+            "max": 13.6,
+            "n": 40
+          },
+          "hitIndexIdleMs": {
+            "median": 0.8,
+            "p90": 1,
+            "max": 1.2,
+            "n": 40
+          }
+        },
+        "crossingContinentToZone": {
+          "taskMs": 47.3,
+          "pinRefreshMs": 6,
+          "pins": {
+            "drawn": 240,
+            "hidden": 0,
+            "merged": 2,
+            "stacks": 2,
+            "clusters": 47,
+            "diameter": 26,
+            "bitmaps": 85
+          }
+        },
+        "bitmapsAtEnd": 85
+      },
+      {
+        "throttle": 4,
+        "run": 1,
+        "clustering": {
+          "givers": 373,
+          "clustersAtMinus4_5": 39,
+          "firstBuildAllLevelsMs": {
+            "median": 8.1,
+            "p90": 11.5,
+            "max": 21.9,
+            "n": 10
+          },
+          "otherLevelMs": {
+            "median": 0,
+            "p90": 0,
+            "max": 0,
+            "n": 10
+          }
+        },
+        "zoneMixA": {
+          "items": 2020,
+          "pins": {
+            "drawn": 296,
+            "hidden": 0,
+            "merged": 4,
+            "stacks": 4,
+            "clusters": 0,
+            "diameter": 26,
+            "bitmaps": 34
+          },
+          "pinDescriptors": {
+            "available-quests": 100,
+            "turn-ins": 40,
+            "flight-masters": 35,
+            "objectives": 500,
+            "dungeons": 30,
+            "transports": 27,
+            "services": 18
+          },
+          "labelsPlaced": 31,
+          "panTaskMs": {
+            "median": 19.7,
+            "p90": 24.1,
+            "max": 29.7,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 18.8,
+            "p90": 22.8,
+            "max": 27,
+            "n": 40
+          },
+          "labelsNextFrameMs": {
+            "median": 10.8,
+            "p90": 12.1,
+            "max": 14.7,
+            "n": 40
+          },
+          "hitIndexIdleMs": {
+            "median": 1.4,
+            "p90": 1.8,
+            "max": 2.2,
+            "n": 40
+          },
+          "zoomSettleTaskMs": {
+            "median": 41.1,
+            "p90": 55.2,
+            "max": 57.6,
+            "n": 20
+          },
+          "pinRefreshAtSettleMs": {
+            "median": 4.2,
+            "p90": 5.8,
+            "max": 7.7,
+            "n": 20
+          }
+        },
+        "zoneWithoutPinLayers": {
+          "items": 1270,
+          "panTaskMs": {
+            "median": 14.4,
+            "p90": 17.8,
+            "max": 21.5,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 13.6,
+            "p90": 16.8,
+            "max": 20.1,
+            "n": 40
+          }
+        },
+        "continent": {
+          "items": 1702,
+          "pins": {
+            "drawn": 242,
+            "hidden": 0,
+            "merged": 0,
+            "stacks": 0,
+            "clusters": 47,
+            "diameter": 22,
+            "bitmaps": 68
+          },
+          "pinDescriptors": {
+            "available-quests": 120,
+            "turn-ins": 30,
+            "flight-masters": 35,
+            "objectives": 80,
+            "dungeons": 30,
+            "transports": 27,
+            "services": 0
+          },
+          "panTaskMs": {
+            "median": 16.5,
+            "p90": 20.2,
+            "max": 26,
+            "n": 40
+          },
+          "updatePathsMs": {
+            "median": 15.7,
+            "p90": 18.9,
+            "max": 24.3,
+            "n": 40
+          },
+          "labelsNextFrameMs": {
+            "median": 8.9,
+            "p90": 10.8,
+            "max": 12.2,
+            "n": 40
+          },
+          "hitIndexIdleMs": {
+            "median": 0.8,
+            "p90": 1.1,
+            "max": 1.3,
+            "n": 40
+          }
+        },
+        "crossingContinentToZone": {
+          "taskMs": 49.6,
+          "pinRefreshMs": 5.9,
+          "pins": {
+            "drawn": 240,
+            "hidden": 0,
+            "merged": 2,
+            "stacks": 2,
+            "clusters": 47,
+            "diameter": 26,
+            "bitmaps": 85
+          }
+        },
+        "bitmapsAtEnd": 85
+      }
+    ],
+    "earlierSession": {
+      "note": "The same harness run 20 minutes earlier (without the no-pins variant): zone mix A pan task at 4x, median 18.8 and 18.2 ms (p90 22.3, 22.6); at 1x 3.8 and 4.6 ms. Clustering 373 givers at 4x: 11.9 and 8.1 ms median."
+    },
+    "gate": "At 4x the zone mix A pan task is 18.2 to 19.7 ms median over both sessions, above the 16 ms line of 25.7, as MP.1 measured for its prototype (19.2 to 19.7 ms, and 17.3 to 19.4 ms with the fallbacks). Without the pin layers the same mix takes 12.8 to 14.4 ms: the 300 pins and 450 objective dots cost 5.3 to 6.3 ms of the task. Not applied here: the fallbacks are the architect's call (MP.1 found they do not reach 16 ms).",
+    "entryChunk": {
+      "before": 247.67,
+      "after": 247.99,
+      "deltaKb": 0.32,
+      "stopLine": 248.5,
+      "basis": "pnpm build, the dist audit (tools/build/audit-dist.ts), 2026-09-28; before: the UR.3 to UR.6 row of ui-refresh.md 10.3",
+      "lazyParts": {
+        "before": 31.93,
+        "after": 45.02
+      },
+      "leafletChunk": {
+        "before": 65.1,
+        "after": 72.23
+      }
+    }
+  },
+  "mp5mp8mp9": {
+    "when": "2026-09-28",
+    "about": "Steps MP.5, MP.8 and MP.9: the committed client tables (public/maps/client/, build 1.60.1.70009) in the TravelGraph and the places model (src/app/map-places.ts), measured with .cache/mp8/smoke-places.ts over the full committed dataset (Node, unthrottled) and the dist audit.",
+    "travelGraph": {
+      "flightMastersMatched": 60,
+      "flightMastersUnmatched": [
+        3838,
+        11798,
+        11800
+      ],
+      "matchWithinYards": 11.5,
+      "clientOnlyNodes": 5,
+      "citedSeedsReplaced": [
+        559,
+        3203,
+        3242,
+        3275,
+        3276
+      ],
+      "taxiEdges": 286,
+      "inferredDocks": 15,
+      "seededDocks": 15,
+      "unmatchedTransportPaths": [
+        241,
+        285,
+        292,
+        301,
+        302,
+        303,
+        436
+      ]
+    },
+    "places": {
+      "character": "Orc Warrior (Horde)",
+      "dungeons": 19,
+      "raids": 4,
+      "unconfirmedRaids": 3,
+      "dungeonPins": 25,
+      "flightPoints": 35,
+      "otherFactionFlightPoints": 31,
+      "flights": 74,
+      "transportStops": 26,
+      "transportStopsInferred": 13,
+      "transportStopsServiceUnknown": 13,
+      "announcedWithoutEntrance": 11,
+      "unknownPurposeMaps": 2
+    },
+    "timingMs": {
+      "placesFirstBuild": {
+        "min": 2.6,
+        "max": 5.4,
+        "runs": 5
+      },
+      "placesPerFocusMedian": 0.24
+    },
+    "entryChunkKb": {
+      "before": 247.99,
+      "after": 246.64,
+      "index": {
+        "before": 233.71,
+        "after": 234.69
+      },
+      "sharedChunk": {
+        "before": 13.96,
+        "after": 11.62
+      },
+      "firstBuildOfTheStep": 249.76
+    },
+    "lazyChunksKb": {
+      "derivedPipeline": {
+        "before": 43.14,
+        "after": 57.19
+      },
+      "lazyParts": {
+        "before": 45.41,
+        "after": 45.69
+      },
+      "leaflet": {
+        "before": 72.88,
+        "after": 73
+      }
+    }
+  },
+  "mp6mp7mp10mp11": {
+    "when": "2026-09-28",
+    "about": "Steps MP.6 (the map popover), MP.7 (zone labels and cards with the difficulty twin, the Viewing chip, the underground cities), MP.10 (the faction overlay and the fallback zone tint) and MP.11 (services), measured over the full committed data with .cache/mp6-11/measure.mts (Node 22, unthrottled, medians of 7 runs, 5 for the rings), tests/map-labels.test.ts, tests/map-places.test.ts and the dist audit.",
+    "labels": {
+      "character": "Orc Warrior (Horde), level 12 for the ratings",
+      "zoneLabelsOnTheAtlas": 50,
+      "zoneLabelsOnMaps0And1": 49,
+      "labelsBuilt": {
+        "painted": 56,
+        "zones": 54,
+        "rated": 25
+      },
+      "placement": {
+        "method": "the labels canvas placement (placeLabels, labelForms) at the fit-both view of a 900 x 672 px panel with 24 px padding, text 0.62 em a character bold and 0.56 em regular (wider than the UI font), no obstacles (place pins are hidden below 0.0325 px/yd)",
+        "fitBoth": {
+          "pxPerYard": 0.0239,
+          "placed": 50,
+          "of": 50,
+          "withLeader": 4,
+          "skipped": []
+        },
+        "worldBandEdge": {
+          "pxPerYard": 0.022,
+          "placed": 50,
+          "of": 50,
+          "skipped": []
+        }
+      },
+      "timingMs": {
+        "zoneRingsAndPolesBothMaps": {
+          "median": 6.13,
+          "min": 5.3,
+          "max": 13.41
+        },
+        "buildMapLabels": {
+          "median": 0.15,
+          "min": 0.14,
+          "max": 1.17
+        }
+      }
+    },
+    "zoneFill": {
+      "tints": 53,
+      "untinted": [
+        "Area 876 (no painted pixel)"
+      ],
+      "factionFills": 47,
+      "patterns": {
+        "alliance": 8,
+        "horde": 7,
+        "both": 0,
+        "none": 32,
+        "sanctuary": 0
+      },
+      "sanctuaryNote": "The one sanctuary in the client table is Zephras Isle (map 2991), which has no terrain rings: no dots are drawn.",
+      "ringPoints": 6121,
+      "timingMs": {
+        "buildZoneFill": {
+          "median": 0.05,
+          "min": 0.04,
+          "max": 0.41
+        }
+      },
+      "tintNeighbours": {
+        "method": "public/maps/tint/tints.json (tools/maps/tints.ts): CIEDE2000 between neighbours sharing at least 300 yd of terrain border",
+        "before": {
+          "pairs": 106,
+          "min": 0,
+          "p10": 1.8,
+          "median": 5.5,
+          "below10": 94
+        },
+        "after": {
+          "pairs": 106,
+          "min": 8.3,
+          "p10": 10.6,
+          "median": 13.7,
+          "below10": [
+            "Alterac Mountains / Tirisfal Glades 8.3",
+            "Darkshore / Felwood 8.4",
+            "Elwynn Forest / Westfall 9.0",
+            "Western Plaguelands / Tirisfal Glades 9.4"
+          ]
+        },
+        "maxSaturation": 0.295,
+        "nearestReserved": {
+          "distance": 18,
+          "zone": "Winterspring",
+          "reserved": "verydifficult"
+        },
+        "designMock": "rev2/results/tint.json: 94 pairs, after the push median 15.2, minimum 9.1, 2 pairs under 10; nearest reserved 18.3"
+      },
+      "tintFolderGzipBytes": {
+        "NOTICE.md": 367,
+        "manifest.json": 301,
+        "tints.json": 3595
+      }
+    },
+    "services": {
+      "character": "Orc Warrior (Horde)",
+      "innkeepers": 26,
+      "warriorTrainers": 16,
+      "vendors": 59,
+      "pins": 111,
+      "noFaction": 3,
+      "noPlacedSpawn": 4,
+      "serviceNpcIdsInTheDataset": 652
+    },
+    "entryChunkKb": {
+      "before": 246.64,
+      "after": 246.11,
+      "index": {
+        "before": 234.69,
+        "after": 234.1
+      },
+      "sharedChunk": {
+        "after": 11.69
+      },
+      "anIntermediateBuildOfTheStep": 247.13,
+      "basis": "dist audit, gzip level 6; the before figures from a build of the MP.5 tree taken in this step"
+    },
+    "entryCssKb": {
+      "before": 12.8,
+      "after": 12.69
+    },
+    "lazyChunksKb": {
+      "derivedPipeline": {
+        "before": 56.55,
+        "after": 60.67
+      },
+      "lazyParts": {
+        "before": 45.3,
+        "after": 50.1
+      },
+      "leaflet": {
+        "before": 72.34,
+        "after": 73.39
+      },
+      "basis": "dist audit, gzip level 6 (the mp5mp8mp9 entry's lazy figures are Vite's)"
+    }
+  },
+  "reviewFixHalos": {
+    "when": "2026-09-30",
+    "about": "Review findings PR-02 and PR-03 (the route after the active step dashed 5-6 at 55 % on its halo; HaloPolyline: the route 2.6 px over a 5.5 px halo, the flight network and rides 1.1 px over 3 px). Contrast on RENDERED pixels of the production build (headless Chrome, minimap style), each line pixel against its own halo edge and, for comparison, against the ground beside the line: .cache/map-ui-build/fix-presentation/contrast.mjs over the screenshots in .cache/map-ui-build/fix-presentation/after/ (pr03-*.png). These replace the token-pair halo figures of mp2ArtContrast for the halos as built; p5 is noisy where lines cross pins and joins.",
+    "summary": {
+      "solidRouteRazorHill": {
+        "lineOnHaloMedian": 6.5,
+        "lineOnHaloP10": 3.04,
+        "lineOnGroundMedian": 2.27
+      },
+      "dashedRouteAfterActiveStep": {
+        "lineOnHaloMedian": 3.12,
+        "lineOnHaloP10": 1.9,
+        "lineOnGroundMedian": 1.25
+      },
+      "flightNetworkContinentBand": {
+        "lineOnHaloMedian": 7.29,
+        "lineOnHaloP10": 4.33,
+        "lineOnGroundMedian": 3.71
+      },
+      "networkOverWinterspringSnow": {
+        "lineOnHaloMedian": 7,
+        "lineOnHaloP10": 3,
+        "lineOnGroundMedian": 4.3
+      }
+    },
+    "views": {
+      "pr03-contrast-close-durotar": {
+        "layers": [
+          "route-line"
+        ],
+        "samples": 1126,
+        "onLine": 920,
+        "byDash": {
+          "5 6": {
+            "n": 920,
+            "lineOnHaloMedian": 3.12,
+            "lineOnHaloP10": 1.9,
+            "lineOnGroundMedian": 1.25,
+            "haloOnGroundMedian": 2.86
+          }
+        }
+      },
+      "pr03-contrast-close-valley": {
+        "layers": [
+          "route-line"
+        ],
+        "samples": 840,
+        "onLine": 682,
+        "byDash": {
+          "solid": {
+            "n": 38,
+            "lineOnHaloMedian": 1.46,
+            "lineOnHaloP10": 1,
+            "lineOnGroundMedian": 2.14,
+            "haloOnGroundMedian": 1.51
+          },
+          "5 6": {
+            "n": 644,
+            "lineOnHaloMedian": 3.08,
+            "lineOnHaloP10": 1.51,
+            "lineOnGroundMedian": 1.29,
+            "haloOnGroundMedian": 2.48
+          }
+        }
+      },
+      "pr03-contrast-close-durotar-last-step": {
+        "layers": [
+          "route-line"
+        ],
+        "samples": 1126,
+        "onLine": 1070,
+        "byDash": {
+          "solid": {
+            "n": 1070,
+            "lineOnHaloMedian": 6.5,
+            "lineOnHaloP10": 3.04,
+            "lineOnGroundMedian": 2.27,
+            "haloOnGroundMedian": 2.83
+          }
+        }
+      },
+      "pr03-contrast-continent-network": {
+        "layers": [
+          "flight-network",
+          "transports"
+        ],
+        "samples": 2060,
+        "onLine": 1884,
+        "byDash": {
+          "solid": {
+            "n": 1872,
+            "lineOnHaloMedian": 7.29,
+            "lineOnHaloP10": 4.33,
+            "lineOnGroundMedian": 3.71,
+            "haloOnGroundMedian": 1.97
+          },
+          "3 3": {
+            "n": 12,
+            "lineOnHaloMedian": 7.52,
+            "lineOnHaloP10": 5.85,
+            "lineOnGroundMedian": 7.13,
+            "haloOnGroundMedian": 1.12
+          }
+        }
+      },
+      "pr03-contrast-winterspring-network": {
+        "layers": [
+          "flight-network",
+          "transports",
+          "route-line"
+        ],
+        "samples": 722,
+        "onLine": 656,
+        "byDash": {
+          "solid": {
+            "n": 650,
+            "lineOnHaloMedian": 6.98,
+            "lineOnHaloP10": 3.02,
+            "lineOnGroundMedian": 4.27,
+            "haloOnGroundMedian": 1.67
+          },
+          "3 3": {
+            "n": 6,
+            "lineOnHaloMedian": 2.07,
+            "lineOnHaloP10": 1,
+            "lineOnGroundMedian": 5.81,
+            "haloOnGroundMedian": 1.19
+          }
+        }
+      }
+    },
+    "note": "The finding PR-03 measured the route at 1.73:1 on bright ground without a halo; with the halo the line reads against its own edge. The dashed part after the active step is deliberately fainter (3.1:1 median on its halo). The windowed contrast theme (MP.12) was not checked (it needs a Windows setting changed); only Chrome’s emulated forced colours were."
+  }
+}

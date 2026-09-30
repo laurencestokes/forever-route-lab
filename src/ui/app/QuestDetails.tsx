@@ -1,14 +1,17 @@
+import { selectQuestState } from '../../app/derived';
 import { CUSTOM_SHADOWED_CODE, shadowedQuest } from '../../app/project-commands';
 import { questChainPosition } from '../../app/quest-chains';
+import type { QuestStateEntry } from '../../app/quest-state';
 import type { QuestStepPart } from '../../app/quest-steps';
+import { useDerivedSelector } from '../../app/react';
 import { effectiveQuestLevel, questDifficultyAt, questOpenTo, SCALING_QUEST_LEVEL } from '../../app/shell-support';
 import type { CharacterProfile } from '../../domain/project';
 import type { DatasetView, QuestRecord } from '../../domain/dataset';
 import type { QuestId } from '../../domain/ids';
-import { characterName, entityWhereText, objectiveText, objectiveWhere, questZoneName, upstreamProvenanceText } from '../app-model';
+import { characterName, questZoneName } from '../app-model';
+import { entityWhereText, objectiveText, objectiveWhere, upstreamProvenanceText } from './detail-text';
 import {
   Button,
-  DetailList,
   DifficultyLabel,
   EmptyState,
   PanelSection,
@@ -20,6 +23,8 @@ import {
   unknownReadout,
   type DetailItem,
 } from '../kit';
+import { DetailList } from '../shell/DetailParts';
+import { ExternalLink } from '../primitives/ExternalLink';
 
 /**
  * What the Details tab can do with a quest: add its steps to the route (after the selection), and
@@ -46,13 +51,21 @@ export interface QuestDetailsProps {
 
 const NO_XP = unknownReadout<number>('No XP value in the dataset');
 
-/** The level line's hint: how the difficulty was taken, and how a scaling quest's level is found. */
-function levelHint(quest: QuestRecord, startLevel: number): string {
+/**
+ * The level line's hint: how the difficulty was taken, and how a scaling quest's level is found.
+ * With route state it is the level after the selected step, as the route rows and the Available tab
+ * take it (review UI-12); the start level is only the fallback.
+ */
+function levelHint(quest: QuestRecord, basis: { readonly kind: 'step'; readonly level: number; readonly lowerBound: boolean } | { readonly kind: 'start'; readonly level: number }): string {
   const scaling =
     quest.level === SCALING_QUEST_LEVEL
       ? `A scaling quest: its level follows the player's (at least its required level ${String(quest.minLevel ?? 1)}). `
       : '';
-  return `${scaling}Difficulty at the character's start level (${String(startLevel)}), a lower bound for this step. Era thresholds; Forever's are unknown.`;
+  const at =
+    basis.kind === 'step'
+      ? `Difficulty at the level after the selected step (${basis.lowerBound ? 'at least ' : ''}${String(basis.level)}), as the route list and the Available tab take it.`
+      : `Difficulty at the character's start level (${String(basis.level)}), a lower bound for this step: there is no route state yet.`;
+  return `${scaling}${at} Era thresholds; Forever's are unknown.`;
 }
 
 /** XP with its basis in words: Era seed values are QuestieDB's Era table, not Forever's. */
@@ -81,26 +94,48 @@ export function chainText(dataset: DatasetView, id: QuestId): string | null {
   return `Part ${String(position.index)} of ${String(position.length)}: ${names.join(' → ')}`;
 }
 
-/** The buttons that add a quest's steps after the selection. */
-function AddButtons({ quest, actions }: { readonly quest: QuestRecord; readonly actions: QuestActions }) {
+/** The quest's page on Wowhead (D-041 J): only its id goes in the address. */
+export function wowheadQuestUrl(id: QuestId): string {
+  return `https://www.wowhead.com/classic/quest=${String(id)}`;
+}
+
+/** Which of Accept, Objectives done and Turn in is the one likely next action at the step (ui-refresh.md §7.2), or null. */
+export function primaryQuestAction(entry: QuestStateEntry | null): 'accept' | 'complete' | 'turnin' | null {
+  if (entry === null) return null;
+  if (entry.cls === 'in-log') {
+    const turnIn = entry.turnIn;
+    if (turnIn === null || turnIn.failed) return null;
+    return turnIn.kind === 'ready' ? 'turnin' : turnIn.kind === 'in-progress' ? 'complete' : null;
+  }
+  return entry.cls === 'available' || entry.cls === 'low-level' || entry.cls.startsWith('uncertain') ? 'accept' : null;
+}
+
+/**
+ * The buttons that add a quest's steps after the selection (ui-refresh.md §7.2): Accept, Objectives
+ * done and Turn in, with one primary chosen by the quest's state at the step (none without route
+ * state), and Add all three (the Available rows' former + button).
+ */
+function AddButtons({ quest, actions, entry }: { readonly quest: QuestRecord; readonly actions: QuestActions; readonly entry: QuestStateEntry | null }) {
   const off = actions.unavailable !== null;
   const add = (parts: readonly QuestStepPart[], objective: number | null = null) => () => {
     if (!off) actions.add(quest.id, parts, objective);
   };
+  const primary = primaryQuestAction(entry);
   const props = { size: 'sm' as const, 'aria-disabled': off ? (true as const) : undefined, title: actions.unavailable ?? undefined };
+  const look = (part: 'accept' | 'complete' | 'turnin') => (primary === part ? ('primary' as const) : ('default' as const));
   return (
     <div className="frl-app-actions" role="group" aria-label={`Add “${quest.name}” to the route after the selection`}>
-      <Button {...props} icon="add" variant="primary" onClick={add(['accept', 'complete', 'turnin'])}>
-        Add accept, complete and turn in
-      </Button>
-      <Button {...props} onClick={add(['accept'])}>
+      <Button {...props} variant={look('accept')} onClick={add(['accept'])}>
         Accept
       </Button>
-      <Button {...props} onClick={add(['complete'])}>
-        {quest.objectives.length > 1 ? 'Complete all objectives' : 'Complete'}
+      <Button {...props} variant={look('complete')} onClick={add(['complete'])}>
+        Objectives done
       </Button>
-      <Button {...props} onClick={add(['turnin'])}>
+      <Button {...props} variant={look('turnin')} onClick={add(['turnin'])}>
         Turn in
+      </Button>
+      <Button {...props} icon="add" onClick={add(['accept', 'complete', 'turnin'])}>
+        Add all three
       </Button>
     </div>
   );
@@ -109,6 +144,8 @@ function AddButtons({ quest, actions }: { readonly quest: QuestRecord; readonly 
 /** One quest the active step acts on, or one opened in Details. */
 export function QuestDetails({ questId, dataset, character, actions, baseDataset }: QuestDetailsProps) {
   const quest = dataset.quest(questId);
+  const model = useDerivedSelector(selectQuestState);
+  const entry = model?.quests.get(questId) ?? null;
   if (quest === undefined) {
     return (
       <PanelSection title="Quest" aside={<code>#{String(questId)}</code>}>
@@ -134,7 +171,11 @@ export function QuestDetails({ questId, dataset, character, actions, baseDataset
     );
   }
   const start = character.startLevel;
-  const difficulty = questDifficultyAt(start, quest.level, quest.minLevel);
+  // With route state, the quest's level and difficulty at the selected step (the model's), else at the start level.
+  const atStep = model !== null && entry !== null;
+  const shownLevel = atStep ? entry.level : effectiveQuestLevel(start, quest.level, quest.minLevel);
+  const difficulty = atStep ? entry.difficulty : questDifficultyAt(start, quest.level, quest.minLevel);
+  const basis = atStep ? { kind: 'step' as const, level: model.level, lowerBound: model.levelLowerBound } : { kind: 'start' as const, level: start };
   const open = questOpenTo(quest, character);
   const custom = quest.provenance.source === 'custom';
   const replaced = custom && baseDataset !== undefined ? shadowedQuest(baseDataset, quest.id) : null;
@@ -147,8 +188,8 @@ export function QuestDetails({ questId, dataset, character, actions, baseDataset
       term: 'Level',
       value: (
         <span className="frl-app-stack">
-          <DifficultyLabel level={effectiveQuestLevel(start, quest.level, quest.minLevel)} difficulty={difficulty} uncertain variant="full" />
-          <span className="frl-app-hint">{levelHint(quest, start)}</span>
+          <DifficultyLabel level={shownLevel} difficulty={difficulty} uncertain={basis.kind === 'start' || basis.lowerBound} variant="full" />
+          <span className="frl-app-hint">{levelHint(quest, basis)}</span>
         </span>
       ),
     },
@@ -232,8 +273,15 @@ export function QuestDetails({ questId, dataset, character, actions, baseDataset
           </span>
         </p>
       )}
-      {actions !== undefined && <AddButtons quest={quest} actions={actions} />}
+      {actions !== undefined && <AddButtons quest={quest} actions={actions} entry={entry} />}
       <DetailList items={items} />
+      {(!custom || replaced !== null) && (
+        <p className="frl-app-hint">
+          <ExternalLink href={wowheadQuestUrl(quest.id)} title="Wowhead describes the Era quest; Forever’s changes may not be there">
+            Open on Wowhead
+          </ExternalLink>
+        </p>
+      )}
       {actions !== undefined && (
         <div className="frl-app-actions">
           {custom ? (

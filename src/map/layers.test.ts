@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SpawnPoint } from '../domain/dataset';
-import { areaId, npcId, objectId, questId, sequentialIdSource, stepId, uiMapId, worldMapId, type QuestId } from '../domain/ids';
+import { areaId, npcId, objectId, questId, sequentialIdSource, stepId, uiMapId, worldMapId, type QuestId, type WorldMapId } from '../domain/ids';
 import { worldSourcedPoint, zoneSourcedPoint, type Location, type WorldPoint } from '../domain/points';
 import {
   makeAcceptStep,
@@ -15,17 +15,29 @@ import {
   makeVendorStep,
 } from '../domain/step-factory';
 import { createMapGeometry, resolvePoint, type UiMapGeometry } from '../geo';
-import { DUROTAR, EASTERN_KINGDOMS, fixtureGeometry, FIXTURE_MAPS, KALIMDOR } from '../geo/test-fixtures';
+import { atlasHash, atlasPlacements } from '../geo/atlas';
+import { ATLAS_LAYOUT } from '../geo/atlas-layout';
+import { AZEROTH, DUROTAR, EASTERN_KINGDOMS, fixtureGeometry, FIXTURE_MAPS, KALIMDOR } from '../geo/test-fixtures';
 import type {
   AggregateDescriptor,
+  ArtDescriptor,
   ArtInput,
+  ConnectorDescriptor,
+  FrameDescriptor,
+  WorldBounds,
+  LabelDescriptor,
   LayerContent,
+  LayerId,
+  MapBand,
   LegStyle,
+  MapCategoryId,
   MapDescriptor,
   MapView,
   MarkerDescriptor,
   OutlineDescriptor,
   OutlineInput,
+  PlaceItem,
+  PlaceLayerInput,
   PointGroupInput,
   PolylineDescriptor,
   ReliefInput,
@@ -35,8 +47,16 @@ import type {
   RouteStepInput,
   SpawnLayerInput,
   StepPlacement,
+  MarkerMark,
+  ZoneFillDescriptor,
 } from './adapter';
 import {
+  atlasSurfaceOf,
+  atlasSurfacesOf,
+  createLayerJoin,
+  insetCaption,
+  joinLayerParts,
+  partBudgets,
   buildArt,
   buildCoastline,
   buildProposal,
@@ -51,9 +71,7 @@ import {
   createMapLayers,
   DEFAULT_LOD,
   groupDigits,
-  LAYER_STATS_UNITS,
   layerContextOf,
-  layerStatsNotes,
   legOf,
   lodLevelAt,
   lodProblems,
@@ -70,6 +88,19 @@ import {
   routeStepInputOf,
   subjectKey,
   surfacesOf,
+  bandOfView,
+  budgetOf,
+  buildLabels,
+  labelInBand,
+  LAYER_BAND_EDGES,
+  flightsKept,
+  spawnLayerAggregatesIn,
+  viewLodLevel,
+  type LayerCall,
+  categoryOfMarkState,
+  clusterLabel,
+  CLUSTER_LEVELS,
+  clusterLevelAt,
 } from './layers';
 
 const geometry = fixtureGeometry();
@@ -174,15 +205,20 @@ const ROUTE: RouteInput = {
 
 // =============================================================================================
 
+/** The four bands (`MAP_BANDS` in adapter.ts, whose values this module's tests may not import). */
+const MAP_BANDS: readonly MapBand[] = ['world', 'continent', 'zone', 'close'];
+
 describe('level of detail settings', () => {
-  it('defaults to zone detail at -3.5 and a 2,500-path cap (M3 review PERF-3), with budgets inside the cap', () => {
+  it('defaults to zone detail at -3.5 and a 2,500-path cap (M3 review PERF-3), with every band inside the cap', () => {
     expect(DEFAULT_LOD.zoneZoom).toBe(-3.5);
     expect(DEFAULT_LOD.pathCapPerSurface).toBe(2500);
     expect(lodProblems(DEFAULT_LOD)).toEqual([]);
-    const canvas = Object.entries(DEFAULT_LOD.budgets)
-      .filter(([layer]) => layer !== 'art' && layer !== 'relief')
-      .reduce((sum, [, budget]) => sum + budget, 0);
-    expect(canvas).toBeLessThanOrEqual(DEFAULT_LOD.pathCapPerSurface);
+    for (const band of MAP_BANDS) {
+      const canvas = Object.entries(DEFAULT_LOD.budgets[band])
+        .filter(([layer]) => layer !== 'art' && layer !== 'relief')
+        .reduce((sum, [, budget]) => sum + budget, 0);
+      expect(canvas, band).toBeLessThanOrEqual(DEFAULT_LOD.pathCapPerSurface);
+    }
   });
 
   it('switches from continent to zone detail at zoneZoom', () => {
@@ -198,7 +234,11 @@ describe('level of detail settings', () => {
     expect(() => createLod({ budgets: { 'route-steps': 1.5 } })).toThrow(/non-negative integer/);
     expect(() => createLod({ zoneZoom: Number.NaN })).toThrow(/finite/);
     // art counts images, not canvas paths
-    expect(createLod({ budgets: { art: 10_000 } }).budgets.art).toBe(10_000);
+    expect(createLod({ budgets: { art: 10_000 } }).budgets.zone.art).toBe(10_000);
+    // One band over the cap is refused on its own, and named.
+    expect(createLod({ bandBudgets: { close: { objectives: 1000 } } }).budgets.close.objectives).toBe(1000);
+    expect(() => createLod({ bandBudgets: { close: { objectives: 1100 } } })).toThrow(/close band sum to 2600/);
+    expect(() => createLod({ bandBudgets: { world: { objectives: 1100 } } })).toThrow(/world band/);
   });
 });
 
@@ -458,13 +498,14 @@ describe('buildSpawnLayer at zone zoom', () => {
 });
 
 describe('buildSpawnLayer at continent zoom', () => {
+  // Quest givers and turn-ins cluster below the zone band instead (map-presentation.md §25.2.5; clusters.test.ts).
   it('folds points into one aggregate per zone at their centroid', () => {
-    const content = buildSpawnLayer(ctx, 'available-quests', givers, view(1, CONTINENT_ZOOM));
-    expect(ids(content)).toEqual(['agg:available-quests:1411', 'agg:available-quests:1413']);
-    const durotar = byId(content, 'agg:available-quests:1411') as AggregateDescriptor;
-    expect(durotar).toMatchObject({ type: 'aggregate', layer: 'available-quests', count: 4, subjects: 2 });
-    expect(durotar.label).toBe('Durotar: 2 quest givers at 4 points; zoom in to see them');
-    expect(durotar.ref).toEqual({ kind: 'aggregate', layer: 'available-quests', mapId: 1, uiMapId: 1411, count: 4 });
+    const content = buildSpawnLayer(ctx, 'objectives', givers, view(1, CONTINENT_ZOOM));
+    expect(ids(content)).toEqual(['agg:objectives:1411', 'agg:objectives:1413']);
+    const durotar = byId(content, 'agg:objectives:1411') as AggregateDescriptor;
+    expect(durotar).toMatchObject({ type: 'aggregate', layer: 'objectives', count: 4, subjects: 2, category: 'objectives' });
+    expect(durotar.label).toBe('Durotar: 2 objective targets at 4 points; zoom in to see them');
+    expect(durotar.ref).toEqual({ kind: 'aggregate', layer: 'objectives', mapId: 1, uiMapId: 1411, count: 4 });
     const points = [many.spawns[0], many.spawns[3], many.spawns[7], gornek.spawns[0]].map((spawn) => spawn?.world);
     const mean = (pick: (p: WorldPoint) => number): number => points.reduce((sum, p) => sum + (p === null || p === undefined ? 0 : pick(p)), 0) / 4;
     expect(durotar.point.x).toBeCloseTo(mean((p) => p.x), 9);
@@ -473,9 +514,9 @@ describe('buildSpawnLayer at continent zoom', () => {
   });
 
   it('keeps the focused quest’s points raw at any zoom', () => {
-    const content = buildSpawnLayer(ctx, 'available-quests', givers, view(1, CONTINENT_ZOOM), [GORNEK_QUEST]);
-    expect(ids(content)).toEqual(['agg:available-quests:1411', 'agg:available-quests:1413', 'spawn:npc:3143:0']);
-    expect(byId(content, 'agg:available-quests:1411')).toMatchObject({ count: 3, subjects: 1 });
+    const content = buildSpawnLayer(ctx, 'objectives', givers, view(1, CONTINENT_ZOOM), [GORNEK_QUEST]);
+    expect(ids(content)).toEqual(['agg:objectives:1411', 'agg:objectives:1413', 'spawn:npc:3143:0']);
+    expect(byId(content, 'agg:objectives:1411')).toMatchObject({ count: 3, subjects: 1 });
     expect(byId(content, 'spawn:npc:3143:0')).toMatchObject({ emphasis: 'strong' });
   });
 
@@ -506,7 +547,6 @@ describe('the path cap', () => {
     // The Barrens point itself, then the entrance (3.4e6 yd² away) beats Gornek (4.4e6).
     expect(ids(content)).toEqual(['spawn:npc:100:1', 'spawn:npc:100:3']);
     expect(content.stats).toMatchObject({ drawn: 2, notDrawn: 3 });
-    expect(layerStatsNotes(content.stats, 'available-quests')[0]).toBe('3 more markers not drawn: zoom in or pan to see them');
   });
 
   it('keeps focused items first, then the nearest, and still draws them in layer order', () => {
@@ -871,13 +911,13 @@ describe('createMapLayers (memoised per layer)', () => {
 
   it('draws the zone the user jumped to raw at any zoom, and only while the layer aggregates', () => {
     const layers = createMapLayers({ geometry });
-    const continent = layers.spawns('available-quests', givers, view(1, CONTINENT_ZOOM));
-    const jumped = layers.spawns('available-quests', givers, view(1, CONTINENT_ZOOM), [], uiMapId(1411));
+    const continent = layers.spawns('objectives', givers, view(1, CONTINENT_ZOOM));
+    const jumped = layers.spawns('objectives', givers, view(1, CONTINENT_ZOOM), [], uiMapId(1411));
     expect(jumped).not.toBe(continent);
-    expect(ids(jumped)).toEqual(['agg:available-quests:1413', 'spawn:npc:100:0', 'spawn:npc:100:3', 'spawn:npc:100:7', 'spawn:npc:3143:0']);
+    expect(ids(jumped)).toEqual(['agg:objectives:1413', 'spawn:npc:100:0', 'spawn:npc:100:3', 'spawn:npc:100:7', 'spawn:npc:3143:0']);
     expect(markers(jumped).every((m) => m.emphasis === 'normal')).toBe(true);
     expect(jumped.stats).toMatchObject({ aggregated: 1 });
-    expect(buildSpawnLayer(ctx, 'available-quests', givers, view(1, CONTINENT_ZOOM), [], uiMapId(1411))).toEqual(jumped);
+    expect(buildSpawnLayer(ctx, 'objectives', givers, view(1, CONTINENT_ZOOM), [], uiMapId(1411))).toEqual(jumped);
     // At zone zoom the raw zone changes nothing.
     const zone = layers.spawns('objectives', givers, view(1));
     expect(layers.spawns('objectives', givers, view(1), [], uiMapId(1411))).toBe(zone);
@@ -940,39 +980,7 @@ describe('createMapLayers (memoised per layer)', () => {
   });
 });
 
-describe('layerStatsNotes', () => {
-  const stats = {
-    drawn: 10,
-    notDrawn: 1234,
-    aggregated: 1,
-    unresolved: 12,
-    unresolvedBy: { 'instance-without-entrance': 10, 'unmapped-area': 2 },
-    otherSurfaces: 3,
-  } as const;
-
-  it('explains what a layer leaves out, always naming the unit (M3 review MAP-HONEST-5)', () => {
-    expect(layerStatsNotes(stats, 'available-quests')).toEqual([
-      '1,234 more markers not drawn: zoom in or pan to see them',
-      '1 point shown as zone counts: zoom in to see them',
-      '12 points not placed: 10 inside an instance with no known entrance, 2 in an area no map shows',
-      '3 points on other world maps',
-    ]);
-    expect(layerStatsNotes({ drawn: 1, notDrawn: 0, aggregated: 0, unresolved: 0, unresolvedBy: {}, otherSurfaces: 0 }, 'route-steps')).toEqual([]);
-  });
-
-  it('uses each layer’s units, or one noun given for every count', () => {
-    const one = { ...stats, notDrawn: 1, unresolved: 1, unresolvedBy: { 'destination-unknown': 1 }, otherSurfaces: 1 };
-    expect(layerStatsNotes(one, 'route-steps')).toEqual([
-      '1 more step marker not drawn: zoom in or pan to see them',
-      '1 point shown as zone counts: zoom in to see them',
-      '1 step not placed: 1 moving somewhere the route does not say',
-      '1 step on other world maps',
-    ]);
-    expect(layerStatsNotes(stats, 'route-line').at(-1)).toBe('3 lines and glyphs on other world maps');
-    expect(layerStatsNotes(stats, ['quest', 'quests']).at(-1)).toBe('3 quests on other world maps');
-    for (const units of Object.values(LAYER_STATS_UNITS)) for (const [a, b] of Object.values(units)) expect(a !== '' && b !== '').toBe(true);
-  });
-
+describe('the route line’s stats', () => {
   it('counts the route line on other world maps by line, not by piece', () => {
     const long: RouteInput = { steps: Array.from({ length: 600 }, (_, i) => step(`r${String(i)}`, i, point(i, 0, 0))) };
     const content = buildRouteLine(ctx, long, view(1));
@@ -1110,11 +1118,13 @@ describe('terrain and art layers (D-032, D-033)', () => {
       expect(layers.zoneOutlines([zones], view(1, -5))).toBe(content);
     });
 
-    it('take one path each of the 2,500-path cap: the canvas budgets still sum to it', () => {
-      expect(DEFAULT_LOD.budgets).toMatchObject({ relief: 1, art: 16, coastline: 1, 'zone-outlines': 1, 'zone-frames': 98 });
-      const canvas = Object.entries(DEFAULT_LOD.budgets).reduce((sum, [layer, budget]) => sum + (layer === 'art' || layer === 'relief' ? 0 : budget), 0);
-      expect(canvas).toBe(DEFAULT_LOD.pathCapPerSurface);
-      expect(layerStatsNotes(buildZoneOutlines(ctx, [zones], view(1)).stats, 'zone-outlines')).toEqual([]);
+    it('take one path each, out of the zone frames and terrain paths’ 60 (map-presentation.md §5.2)', () => {
+      for (const band of MAP_BANDS) {
+        expect(DEFAULT_LOD.budgets[band]).toMatchObject({ relief: 1, art: 16, coastline: 1, 'zone-outlines': 1, 'zone-frames': 58 });
+        const b = DEFAULT_LOD.budgets[band];
+        expect(b['zone-frames'] + b.coastline + b['zone-outlines']).toBe(60);
+      }
+      expect(buildZoneOutlines(ctx, [zones], view(1)).stats).toMatchObject({ notDrawn: 0, aggregated: 0, unresolved: 0, otherSurfaces: 0 });
     });
   });
 
@@ -1145,10 +1155,10 @@ describe('terrain and art layers (D-032, D-033)', () => {
 
     it('are folded into their world map’s count, never an aggregate named after the world or a continent', () => {
       const input = { groups: [group(1, onAzeroth), group(2, onKalimdor), group(3, inDurotar)] };
-      const content = buildSpawnLayer(ctx, 'available-quests', input, view(1, -5));
-      expect(ids(content)).toEqual(['agg:available-quests:1411', 'agg:available-quests:map-1']);
-      expect(content.items.find((item) => item.id === 'agg:available-quests:map-1')).toMatchObject({
-        label: 'No zone: 2 quest givers at 2 points; zoom in to see them',
+      const content = buildSpawnLayer(ctx, 'objectives', input, view(1, -5));
+      expect(ids(content)).toEqual(['agg:objectives:1411', 'agg:objectives:map-1']);
+      expect(content.items.find((item) => item.id === 'agg:objectives:map-1')).toMatchObject({
+        label: 'No zone: 2 objective targets at 2 points; zoom in to see them',
         ref: { kind: 'aggregate', uiMapId: null, count: 2 },
       });
       expect(content.items.some((item) => item.label?.startsWith('Azeroth') === true)).toBe(false);
@@ -1162,7 +1172,7 @@ describe('terrain and art layers (D-032, D-033)', () => {
       expect(content.items[0]).toMatchObject({ point: world });
       // An NPC's spawns behave the same.
       const npc: PointGroupInput = { subject: { kind: 'npc', id: npcId(9) }, label: 'Npc', questIds: [], spawns: [{ source: onAzeroth, world, uiMapId: uiMapId(947) }] };
-      expect(ids(buildSpawnLayer(ctx, 'turn-ins', { groups: [npc] }, view(1, -5)))).toEqual(['agg:turn-ins:map-1']);
+      expect(ids(buildSpawnLayer(ctx, 'objectives', { groups: [npc] }, view(1, -5)))).toEqual(['agg:objectives:map-1']);
     });
   });
 });
@@ -1334,7 +1344,7 @@ describe('walking paths (MAPS §7.4)', () => {
       // Everything, with room for every piece (a budget taken from the step markers).
       const roomy = layerContextOf(geometry, createLod({ budgets: { 'route-line': 850, 'route-steps': 0 } }));
       const all = lines(buildRouteLine(roomy, route, view(), paths).items);
-      expect(all.length).toBeGreaterThan(DEFAULT_LOD.budgets['route-line']);
+      expect(all.length).toBeGreaterThan(DEFAULT_LOD.budgets.zone['route-line']);
       expect(all.every((line) => line.points.length >= 2 && line.points.length <= ROUTE_PIECE_MAX_VERTICES)).toBe(true);
       for (let i = 1; i < all.length; i += 1) expect(all[i]?.points[0]).toEqual(all[i - 1]?.points.at(-1));
       // Every step point and path point is drawn exactly once, apart from the shared ends.
@@ -1343,7 +1353,7 @@ describe('walking paths (MAPS §7.4)', () => {
       expect(new Set(all.map((line) => line.id)).size).toBe(all.length);
       // With the default budgets the layer draws its 150 paths and counts the rest.
       const capped = buildRouteLine(ctx, route, view(), paths);
-      expect(capped.stats).toMatchObject({ drawn: DEFAULT_LOD.budgets['route-line'], notDrawn: all.length - DEFAULT_LOD.budgets['route-line'] });
+      expect(capped.stats).toMatchObject({ drawn: DEFAULT_LOD.budgets.zone['route-line'], notDrawn: all.length - DEFAULT_LOD.budgets.zone['route-line'] });
       expect(lines(capped.items).every((line) => line.points.length <= ROUTE_PIECE_MAX_VERTICES)).toBe(true);
     });
 
@@ -1447,5 +1457,1003 @@ describe('walking paths (MAPS §7.4)', () => {
       layers.routeLine({ steps: [step('a', at(0, 0)), step('b', at(10, 0), 'transport')] }, view(), { pathOf, pending: false });
       expect(pathOf).not.toHaveBeenCalled();
     });
+  });
+});
+
+// =============================================================================================
+/*
+ * The atlas in map/layers (docs/research/map-atlas.md §5, §8.2, §8.5; steps ATL.4 and ATL.5): the
+ * surface, per-map building on it, connectors, the inset's card, interim art clipped at the seam,
+ * and the cap shared across the active maps' parts. The fixture geometry carries the cited 947 rows
+ * and the Zephras Isle row (src/geo/test-fixtures.ts).
+ */
+
+const atlasGeometry = fixtureGeometry();
+const atlasCtx = layerContextOf(atlasGeometry);
+const MAP_1 = worldMapId(1);
+const MAP_0 = worldMapId(0);
+const MAP_2991 = worldMapId(2991);
+const ANY_RECT: WorldBounds = { mapId: MAP_1, xMin: -1, xMax: 1, yMin: -1, yMax: 1 };
+
+/** A view on the atlas for one map's builder, with the maps the atlas view builds (their rectangles do not matter here). */
+function atlasView(mapId: WorldMapId, active: readonly WorldMapId[] = [MAP_1, MAP_0, MAP_2991], zoom = -2): MapView {
+  return { mapId, zoom, center: null, surface: 'atlas', visible: active.map((id) => ({ ...ANY_RECT, mapId: id })) };
+}
+const worldView = (mapId: WorldMapId, zoom = -2): MapView => ({ mapId, zoom, center: null });
+
+const idsIn = (partContent: LayerContent): readonly string[] => partContent.items.map((item) => item.id);
+
+const placedAt = (x: number, y: number, mapId: WorldMapId): StepPlacement => ({ kind: 'point', world: { mapId, x, y }, uiMapId: null, offFrame: false });
+const routeStep = (id: string, placement: StepPlacement, arrive: LegStyle = 'route'): RouteStepInput => ({ stepId: stepId(id), placement, arrive, departs: null, questIds: [] });
+
+describe('atlasSurfaceOf (map-atlas.md §5, §8.1)', () => {
+  it('places Kalimdor, the Eastern Kingdoms and the Zephras Isle inset from the geometry, with the layout’s hash', () => {
+    const atlas = atlasSurfaceOf(atlasGeometry);
+    if (atlas === null) throw new Error('no atlas');
+    const placements = atlasPlacements(atlasGeometry, ATLAS_LAYOUT);
+    expect(atlas).toMatchObject({ kind: 'atlas', id: 'atlas', name: 'Azeroth', mapId: MAP_1, extentSource: 'atlas', extentUiMapId: null });
+    expect(atlas.mapIds).toEqual([MAP_1, MAP_0, MAP_2991]);
+    expect(atlas.placements).toEqual(placements);
+    expect(atlas.hash).toBe(atlasHash(placements ?? [], ATLAS_LAYOUT));
+    expect(atlas.members.map((member) => [member.id, member.name])).toEqual([
+      ['world:1', 'Kalimdor'],
+      ['world:0', 'Eastern Kingdoms'],
+      ['world:2991', 'Zephras Isle'],
+    ]);
+    expect(atlas.members).toEqual(surfacesOf(atlasGeometry).filter((surface) => atlas.mapIds.includes(surface.mapId)).sort((a, b) => atlas.mapIds.indexOf(a.mapId) - atlas.mapIds.indexOf(b.mapId)));
+    expect(atlas.uiMapIds).toEqual([...new Set(atlas.members.flatMap((member) => member.uiMapIds))].sort((a, b) => a - b));
+  });
+
+  it('expresses the layout’s extent, card included, in Kalimdor’s yards (E = eOff − y, S = sOff − x)', () => {
+    const atlas = atlasSurfaceOf(atlasGeometry);
+    const kalimdor = atlas?.placements[0];
+    if (atlas === null || kalimdor === undefined) throw new Error('no atlas');
+    const { extent } = atlas;
+    expect([kalimdor.eOff - extent.yMax, kalimdor.eOff - extent.yMin, kalimdor.sOff - extent.xMax, kalimdor.sOff - extent.xMin]).toEqual([0, 30720, 0, 26112]);
+  });
+
+  it('is null when the geometry cannot place the layout, and the surfaces are then the world maps', () => {
+    const without947 = createMapGeometry({ kind: 'placeholder', product: 'wow_classic_beta', recordedFrameHash: null, maps: FIXTURE_MAPS.filter((map) => map !== AZEROTH), eraToForever: [] });
+    expect(atlasSurfaceOf(without947)).toBeNull();
+    expect(atlasSurfacesOf(without947)).toEqual(surfacesOf(without947));
+    expect(atlasSurfacesOf(atlasGeometry).map((surface) => surface.id)).toEqual(['atlas']);
+    expect(atlasCtx.atlas?.id).toBe('atlas');
+  });
+});
+
+describe('building one map of the atlas (map-atlas.md §8.2)', () => {
+  const stormwindSpawn = (): SpawnPoint => {
+    const source = zoneSourcedPoint(uiMapId(1453), 50, 50);
+    return { source, world: resolvePoint(source, atlasGeometry), uiMapId: uiMapId(1453) };
+  };
+  const durotarSpawn = (): SpawnPoint => {
+    const source = zoneSourcedPoint(uiMapId(1411), 50, 50);
+    return { source, world: resolvePoint(source, atlasGeometry), uiMapId: uiMapId(1411) };
+  };
+  const input: SpawnLayerInput = {
+    groups: [{ subject: { kind: 'npc', id: npcId(1) }, label: 'Two continents', questIds: [questId(1)], spawns: [durotarSpawn(), stormwindSpawn()] }],
+  };
+
+  it('leaves a point on another placed map to that map’s builder, never counting it as elsewhere', () => {
+    const world = buildSpawnLayer(atlasCtx, 'available-quests', input, worldView(MAP_1));
+    expect(world.stats).toMatchObject({ drawn: 1, otherSurfaces: 1 });
+    const one = buildSpawnLayer(atlasCtx, 'available-quests', input, atlasView(MAP_1));
+    const zero = buildSpawnLayer(atlasCtx, 'available-quests', input, atlasView(MAP_0));
+    expect(one.stats).toMatchObject({ drawn: 1, otherSurfaces: 0 });
+    expect(zero.stats).toMatchObject({ drawn: 1, otherSurfaces: 0 });
+    expect([...idsIn(one), ...idsIn(zero)]).toEqual(['spawn:npc:1:0', 'spawn:npc:1:1']);
+  });
+
+  it('draws no continent extents on the atlas, and the inset’s card with its caption', () => {
+    expect(idsIn(buildZoneFrames(atlasCtx, worldView(MAP_1)))).toContain('extent:1');
+    const one = buildZoneFrames(atlasCtx, atlasView(MAP_1));
+    expect(idsIn(one).filter((id) => !id.startsWith('frame:'))).toEqual([]);
+    const isle = buildZoneFrames(atlasCtx, atlasView(MAP_2991));
+    const card = isle.items.find((item): item is FrameDescriptor => item.type === 'frame' && item.kind === 'inset');
+    expect(card).toMatchObject({ id: 'inset:2991', label: insetCaption('Zephras Isle'), filled: false, ref: { kind: 'surface', mapId: MAP_2991 } });
+    expect(card?.label).toBe('Zephras Isle: separate map, not in position');
+    // The card is the placed rectangle: the 2521 row.
+    expect(card?.bounds).toEqual({ mapId: MAP_2991, xMin: 1247.9169921875, xMax: 4956.25, yMin: -1331.25, yMax: 4231.25 });
+  });
+
+  it('clips each continent’s painting to its side of the seam, and leaves the card’s painting whole (interim art)', () => {
+    const art: readonly ArtInput[] = [
+      { uiMapId: uiMapId(1414), url: '1414.webp', opacity: 1 },
+      { uiMapId: uiMapId(1415), url: '1415.webp', opacity: 1 },
+      { uiMapId: uiMapId(2521), url: '2521.webp', opacity: 1 },
+    ];
+    const image = (partContent: LayerContent): ArtDescriptor | undefined => partContent.items.find((item): item is ArtDescriptor => item.type === 'art');
+    // The seam E 16,617 is y = 5,652 − 16,617 in Kalimdor's yards and y = 22,499 − 16,617 in the Eastern Kingdoms'.
+    const one = image(buildArt(atlasCtx, art, atlasView(MAP_1)));
+    expect(one?.clip).toEqual({ ...one?.bounds, yMin: 5652 - 16617 });
+    const zero = image(buildArt(atlasCtx, art, atlasView(MAP_0)));
+    expect(zero?.clip).toEqual({ ...zero?.bounds, yMax: 22499 - 16617 });
+    expect(image(buildArt(atlasCtx, art, atlasView(MAP_2991)))?.clip).toBeUndefined();
+    // On a world surface nothing is clipped, and the other maps' images are counted elsewhere.
+    const world = buildArt(atlasCtx, art, worldView(MAP_1));
+    expect(image(world)).not.toHaveProperty('clip');
+    expect(world.stats.otherSurfaces).toBe(2);
+    expect(buildArt(atlasCtx, art, atlasView(MAP_1)).stats.otherSurfaces).toBe(0);
+  });
+});
+
+describe('connectors and transition glyphs on the atlas (map-atlas.md §8.5)', () => {
+  // s2 takes the boat from Durotar to Stormwind's harbour; s4 goes to Zephras Isle; s5 to an instance map.
+  const ACROSS_ROUTE: RouteInput = {
+    steps: [
+      routeStep('s1', placedAt(0, -3000, MAP_1)),
+      routeStep('s2', placedAt(-8500, 900, MAP_0), 'transport'),
+      routeStep('s3', placedAt(-8600, 1000, MAP_0)),
+      routeStep('s4', placedAt(3000, 1500, MAP_2991), 'transport'),
+      routeStep('s5', placedAt(100, 100, worldMapId(36))),
+    ],
+  };
+
+  it('draws a leg between the continents as one connector, from the builder of the map it leaves', () => {
+    const one = buildRouteLine(atlasCtx, ACROSS_ROUTE, atlasView(MAP_1));
+    const zero = buildRouteLine(atlasCtx, ACROSS_ROUTE, atlasView(MAP_0));
+    const connector = one.items.find((item): item is ConnectorDescriptor => item.type === 'connector');
+    expect(connector).toEqual({
+      type: 'connector',
+      id: 'connector:s1>s2',
+      from: { mapId: MAP_1, x: 0, y: -3000 },
+      to: { mapId: MAP_0, x: -8500, y: 900 },
+      style: 'transport',
+      emphasis: 'normal',
+      label: 'Transport to Eastern Kingdoms',
+      ref: { kind: 'connector', fromStepId: 's1', toStepId: 's2', fromMapId: MAP_1, toMapId: MAP_0, leg: 'transport' },
+    });
+    expect(zero.items.some((item) => item.type === 'connector')).toBe(false);
+    expect([...idsIn(one), ...idsIn(zero)].filter((id) => id.startsWith('transition:') && id.includes('s1'))).toEqual([]);
+    // When the map it leaves is not being built, the map it reaches draws it.
+    const alone = buildRouteLine(atlasCtx, ACROSS_ROUTE, atlasView(MAP_0, [MAP_0]));
+    expect(alone.items.find((item) => item.type === 'connector')?.id).toBe('connector:s1>s2');
+    // On a world surface the same leg keeps its glyph pair.
+    expect(idsIn(buildRouteLine(atlasCtx, ACROSS_ROUTE, worldView(MAP_1)))).toContain('transition:out:s1');
+  });
+
+  it('keeps transition glyph pairs for legs to the inset and to maps the atlas does not place', () => {
+    const zero = buildRouteLine(atlasCtx, ACROSS_ROUTE, atlasView(MAP_0));
+    const isle = buildRouteLine(atlasCtx, ACROSS_ROUTE, atlasView(MAP_2991));
+    // The Eastern Kingdoms draw the departure to the card, the card's builder its arrival.
+    expect(idsIn(zero)).toContain('transition:out:s3');
+    expect(idsIn(zero)).not.toContain('transition:in:s4');
+    expect(idsIn(isle)).toContain('transition:in:s4');
+    const toInset = zero.items.find((item): item is MarkerDescriptor => item.id === 'transition:out:s3');
+    expect(toInset?.label).toBe('Transport to Zephras Isle');
+    // The leg to world map 36 (an instance, not on the atlas): a departure glyph on Zephras Isle, its
+    // arrival elsewhere. It shares s4's point with the arrival from the Eastern Kingdoms: one stack.
+    const stack = isle.items.find((item): item is MarkerDescriptor => item.id === 'transition:in:s4');
+    expect(stack?.refs.map((ref) => (ref.kind === 'transition' ? `${ref.end}:${String(ref.toMapId)}` : ref.kind))).toEqual(['arrival:2991', 'departure:36']);
+    expect(isle.stats.otherSurfaces).toBe(zero.stats.otherSurfaces);
+    // Only the arrival glyph on map 36 is elsewhere: the Eastern Kingdoms' run and glyphs are the atlas's.
+    expect(isle.stats.otherSurfaces).toBe(1);
+  });
+});
+
+/** Largest-remainder shares, as `shareCap` in map/adapter (map/layers and its tests may import only its types). */
+function localShare(counts: readonly number[], cap: number): readonly number[] {
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  if (total === 0 || cap <= 0) return counts.map(() => 0);
+  const quotas = counts.map((count) => (count * cap) / total);
+  const shares = quotas.map((quota) => Math.floor(quota));
+  let left = cap - shares.reduce((sum, share) => sum + share, 0);
+  const order = quotas
+    .map((quota, index) => ({ index, rest: quota - Math.floor(quota) }))
+    .filter((entry) => (counts[entry.index] ?? 0) > 0)
+    .sort((a, b) => b.rest - a.rest || a.index - b.index);
+  for (let i = 0; left > 0 && order.length > 0; i = (i + 1) % order.length) {
+    const index = order[i]?.index ?? 0;
+    shares[index] = (shares[index] ?? 0) + 1;
+    left -= 1;
+  }
+  return shares;
+}
+
+describe('parts, shared budgets and the join (map-atlas.md §8.2)', () => {
+  const partsOf = (...entries: readonly (readonly [number, number])[]) => entries.map(([candidates, inView]) => ({ candidates, inView }));
+
+  it('gives one part the layer’s budget, and every part all of it when their candidates fit together', () => {
+    expect(partBudgets('route-steps', partsOf([5000, 10]), DEFAULT_LOD, localShare)).toEqual([700]);
+    expect(partBudgets('route-steps', partsOf([300, 300], [200, 0]), DEFAULT_LOD, localShare)).toEqual([700, 700]);
+  });
+
+  it('shares the budget by candidates in view, caps a part at its candidates and gives the room to the others', () => {
+    expect(partBudgets('route-steps', partsOf([1000, 300], [1000, 100]), DEFAULT_LOD, localShare)).toEqual([525, 175]);
+    expect(partBudgets('route-steps', partsOf([50, 50], [5000, 500]), DEFAULT_LOD, localShare)).toEqual([50, 650]);
+    // A part with nothing in view gets what the others leave, by its candidates.
+    expect(partBudgets('route-steps', partsOf([100, 100], [3000, 0]), DEFAULT_LOD, localShare)).toEqual([100, 600]);
+    // Nothing in view anywhere: by candidates.
+    expect(partBudgets('route-steps', partsOf([3000, 0], [1000, 0]), DEFAULT_LOD, localShare)).toEqual([525, 175]);
+  });
+
+  it('keeps the per-map layers per map, and takes their extra paths from the zone frames, so the cap holds', () => {
+    expect(partBudgets('relief', partsOf([1, 1], [1, 1], [0, 0]), DEFAULT_LOD, localShare)).toEqual([1, 1, 1]);
+    expect(partBudgets('zone-outlines', partsOf([1, 1], [1, 1], [0, 0]), DEFAULT_LOD, localShare)).toEqual([1, 1, 1]);
+    const frames = partBudgets('zone-frames', partsOf([60, 40], [60, 20], [5, 1]), DEFAULT_LOD, localShare);
+    expect(frames.reduce((sum, value) => sum + value, 0)).toBe(58 - 2 * 2);
+    // Every canvas layer's shares, with three maps, stay within the 2,500-path cap in every band.
+    for (const band of MAP_BANDS) {
+      const layers = (Object.keys(DEFAULT_LOD.budgets[band]) as LayerId[]).filter((layer) => layer !== 'art' && layer !== 'relief');
+      const total = layers.reduce((sum, layer) => sum + partBudgets(layer, partsOf([9000, 900], [9000, 50], [9000, 5]), DEFAULT_LOD, localShare, band).reduce((a, b) => a + b, 0), 0);
+      expect(total, band).toBeLessThanOrEqual(DEFAULT_LOD.pathCapPerSurface);
+    }
+  });
+
+  it('never hands out more than the budget', () => {
+    let seed = 12345;
+    const next = (): number => {
+      seed = (seed * 48271) % 2147483647;
+      return seed / 2147483647;
+    };
+    for (let i = 0; i < 500; i += 1) {
+      const count = 2 + Math.floor(next() * 3);
+      const entries = Array.from({ length: count }, () => {
+        const candidates = Math.floor(next() * 2000);
+        return { candidates, inView: Math.floor(next() * candidates) };
+      });
+      const band = MAP_BANDS[i % 4] ?? 'zone';
+      const budgets = partBudgets('available-quests', entries, DEFAULT_LOD, localShare, band);
+      const own = DEFAULT_LOD.budgets[band]['available-quests'];
+      const fits = entries.reduce((sum, entry) => sum + entry.candidates, 0) <= own;
+      if (!fits) expect(budgets.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(own);
+      budgets.forEach((budget, index) => {
+        expect(budget).toBeGreaterThanOrEqual(0);
+        if (!fits) expect(budget).toBeLessThanOrEqual(entries[index]?.candidates ?? 0);
+      });
+    }
+  });
+
+  const partContent = (id: string, over: Partial<LayerContent['stats']> = {}): LayerContent => ({
+    layer: 'route-line',
+    items: id === '' ? [] : [{ type: 'frame', id, bounds: ANY_RECT, kind: 'zone', label: null, emphasis: 'normal', filled: false, ref: { kind: 'zone', uiMapId: uiMapId(1) } }],
+    stats: { drawn: id === '' ? 0 : 1, notDrawn: 0, aggregated: 0, unresolved: 2, unresolvedBy: { 'destination-unknown': 2 }, otherSurfaces: 3, ...over },
+  });
+
+  it('joins the parts in order, summing what they draw and keeping the map-independent counts once', () => {
+    const a = partContent('a', { notDrawn: 4, paths: { along: 1, pending: 2, fallback: 3 } });
+    const b = partContent('b', { notDrawn: 1, paths: { along: 10, pending: 0, fallback: 1 } });
+    const joined = joinLayerParts('route-line', [a, b]);
+    expect(idsIn(joined)).toEqual(['a', 'b']);
+    expect(joined.stats).toEqual({
+      drawn: 2,
+      notDrawn: 5,
+      aggregated: 0,
+      unresolved: 2,
+      unresolvedBy: { 'destination-unknown': 2 },
+      otherSurfaces: 3,
+      paths: { along: 11, pending: 2, fallback: 4 },
+    });
+    // The relief counts each map's own images, so its unplaced images add up.
+    const relief = joinLayerParts('relief', [partContent('r0', { unresolved: 1, unresolvedBy: { 'no-geometry': 1 } }), partContent('r1', { unresolved: 1, unresolvedBy: { 'no-geometry': 1 } })]);
+    expect(relief.stats.unresolvedBy).toEqual({ 'no-geometry': 2 });
+    // One part as it is; one part drawing with the others empty: that part, identity kept.
+    expect(joinLayerParts('route-line', [a])).toBe(a);
+    expect(joinLayerParts('route-line', [a, partContent('')])).toBe(a);
+  });
+
+  it('memoises the join on the parts’ identities (the adapter skips it by reference)', () => {
+    const join = createLayerJoin();
+    const a = partContent('a');
+    const b = partContent('b');
+    const first = join('route-line', [a, b]);
+    expect(join('route-line', [a, b])).toBe(first);
+    // New parts with the same items and counts give the previous object back.
+    expect(join('route-line', [{ ...a }, { ...b }])).toBe(first);
+    expect(join('route-line', [a, partContent('c')])).not.toBe(first);
+  });
+
+  it('builds a layer as a part: its method’s result, its candidates and those in view', () => {
+    const layers = createMapLayers({ geometry: atlasGeometry });
+    const route: RouteInput = { steps: [routeStep('a', placedAt(0, -3000, MAP_1)), routeStep('b', placedAt(500, -3000, MAP_1)), routeStep('c', placedAt(9000, 9000, MAP_1))] };
+    const inView: MapView = { mapId: MAP_1, zoom: -2, center: null, bounds: { mapId: MAP_1, xMin: -100, xMax: 1000, yMin: -3100, yMax: -2900 } };
+    const part = layers.part({ layer: 'route-steps', route }, inView);
+    expect(part.candidates).toBe(3);
+    expect(part.inView()).toBe(2);
+    expect(part.finish()).toBe(layers.routeSteps(route, inView));
+    // Another budget cuts it (the view ranks from no centre, so by id).
+    expect(idsIn(part.finish(1))).toEqual(['step:a']);
+  });
+});
+
+// =============================================================================================
+// Over the atlas tiles (map-atlas.md §8.5, §8.6; ATL.7) and the idle pre-build (§8.2; ATL.8)
+
+describe('zone frames over the atlas tiles (map-atlas.md §8.5, §8.6; D-042 A8)', () => {
+  // Ironforge (1455) at Stormwind's rectangle, for the test: a city the tiles draw as a card.
+  const stormwind = FIXTURE_MAPS.find((map) => map.uiMapId === uiMapId(1453));
+  if (stormwind === undefined) throw new Error('no Stormwind');
+  const IRONFORGE: UiMapGeometry = { ...stormwind, uiMapId: uiMapId(1455), name: 'Ironforge', assignments: stormwind.assignments.map((row) => ({ ...row, id: 46765 })) };
+  const geometry = fixtureGeometry([...FIXTURE_MAPS, IRONFORGE]);
+  const frames = (content: LayerContent): readonly FrameDescriptor[] => content.items.filter((item): item is FrameDescriptor => item.type === 'frame');
+
+  it('keeps every zone rectangle but paints none, and frames the city cards only at tile levels −1 and 0', () => {
+    const layers = createMapLayers({ geometry });
+    const call: LayerCall = { layer: 'zone-frames', focusZone: uiMapId(1453), filled: true, overTiles: true };
+    const at = (zoom: number): readonly FrameDescriptor[] => frames(layers.part(call, atlasView(MAP_0, [MAP_0], zoom)).finish());
+    const coarse = at(-2);
+    expect(coarse.length).toBeGreaterThan(1);
+    expect(coarse.every((frame) => frame.kind === 'zone' && frame.hidden === true && !frame.filled)).toBe(true);
+    // Level −1 (zoom −1.5 rounds to −1) and level 0 (any zoom above it): Ironforge is a card, captioned, over the tiles.
+    for (const zoom of [-1.5, -1, 0, 1.75]) {
+      const fine = at(zoom);
+      expect(fine.find((frame) => frame.id === 'frame:1455'), String(zoom)).toMatchObject({ kind: 'card', label: 'Ironforge', overTiles: true, filled: false, emphasis: 'normal' });
+      expect(fine.find((frame) => frame.id === 'frame:1455')?.hidden).toBeUndefined();
+      expect(fine.filter((frame) => frame.id !== 'frame:1455').every((frame) => frame.hidden === true)).toBe(true);
+    }
+    expect(at(-1.51).find((frame) => frame.id === 'frame:1455')?.kind).toBe('zone');
+    // The inset's card is drawn over the tiles too.
+    const isle = frames(layers.part(call, atlasView(MAP_2991, [MAP_2991])).finish());
+    expect(isle.find((frame) => frame.kind === 'inset')).toMatchObject({ id: 'inset:2991', overTiles: true });
+  });
+
+  it('in the minimap style, frames no city card and dashes the underground cities from the zone band, uncaptioned (D-049 O19)', () => {
+    const layers = createMapLayers({ geometry });
+    const call: LayerCall = { layer: 'zone-frames', focusZone: null, filled: true, overTiles: true, minimap: true };
+    const at = (zoom: number, band?: 'continent' | 'zone' | 'close'): readonly FrameDescriptor[] => frames(layers.part(call, { ...atlasView(MAP_0, [MAP_0], zoom), ...(band === undefined ? {} : { band }) }).finish());
+    for (const zoom of [-3, -1.5, 0]) {
+      const ironforge = at(zoom).find((frame) => frame.id === 'frame:1455');
+      expect(ironforge, String(zoom)).toMatchObject({ kind: 'zone', dashed: true, label: null, filled: false });
+      expect(ironforge?.hidden).toBeUndefined();
+      expect(at(zoom).filter((frame) => frame.id !== 'frame:1455').every((frame) => frame.hidden === true && frame.dashed === undefined)).toBe(true);
+    }
+    // Below the zone band it is kept but not painted, as every rectangle over the tiles.
+    expect(at(-4, 'continent').find((frame) => frame.id === 'frame:1455')).toMatchObject({ hidden: true });
+  });
+
+  it('draws the frames as before without tiles, and on a world surface', () => {
+    const layers = createMapLayers({ geometry });
+    const plain = frames(layers.part({ layer: 'zone-frames', focusZone: null, filled: true }, atlasView(MAP_0, [MAP_0], -1)).finish());
+    expect(plain.some((frame) => frame.hidden === true || frame.overTiles === true || frame.kind === 'card')).toBe(false);
+    const world = frames(layers.part({ layer: 'zone-frames', focusZone: null, filled: true, overTiles: true }, worldView(MAP_0, -1)).finish());
+    expect(world.some((frame) => frame.hidden === true || frame.kind === 'card')).toBe(false);
+  });
+});
+
+describe('MapLayers.prebuild (map-atlas.md §8.2: the other band in idle time)', () => {
+  /** A spawn input that counts how often a builder collects it. */
+  function countedInput(): { readonly input: SpawnLayerInput; readonly reads: () => number } {
+    let reads = 0;
+    const spawn = (): SpawnPoint => {
+      const source = zoneSourcedPoint(uiMapId(1411), 50, 50);
+      return { source, world: resolvePoint(source, atlasGeometry), uiMapId: uiMapId(1411) };
+    };
+    const groups = [{ subject: { kind: 'npc' as const, id: npcId(1) }, label: 'Giver', questIds: [questId(1)], spawns: [spawn()] }];
+    const input: SpawnLayerInput = {
+      get groups() {
+        reads += 1;
+        return groups;
+      },
+    };
+    return { input, reads: () => reads };
+  }
+
+  it('collects the other band ahead of need, touching nothing drawn, and a crossing then collects nothing', () => {
+    const layers = createMapLayers({ geometry: atlasGeometry });
+    const { input, reads } = countedInput();
+    const call: LayerCall = { layer: 'objectives', input, focusQuests: [], rawZone: null };
+    const continent = worldView(MAP_1, -3.8);
+    const zone = worldView(MAP_1, -3.2);
+    const drawn = layers.part(call, continent).finish();
+    const collected = reads();
+    // Built ahead: collected once, the drawn content untouched.
+    expect(layers.prebuild(call, zone)).toBe(true);
+    expect(reads()).toBe(collected + 1);
+    expect(layers.part(call, continent).finish()).toBe(drawn);
+    // Already there: nothing to do.
+    expect(layers.prebuild(call, zone)).toBe(false);
+    expect(layers.prebuild(call, continent)).toBe(false);
+    // The crossing finds it: no collect, and the zone band's raw points.
+    const crossed = layers.part(call, zone).finish();
+    expect(reads()).toBe(collected + 1);
+    expect(crossed.items.every((item) => item.type === 'marker')).toBe(true);
+    expect(drawn.items.every((item) => item.type === 'aggregate')).toBe(true);
+    // And back across: the previous band is kept as the spare, so nothing is collected either.
+    expect(layers.part(call, continent).finish().items).toEqual(drawn.items);
+    expect(reads()).toBe(collected + 1);
+  });
+
+  // Review MR-01: the padded view doubles with each zoom level, so a band crossing on the atlas
+  // nearly always changes the maps it meets (Durotar: [1, 0] becomes [1, 0, 2991]; Feralas: [1] becomes [1, 0]).
+  it('on the atlas, keys no layer but the connectors on the maps the view meets: a crossing that brings in a map finds the prebuild', () => {
+    const layers = createMapLayers({ geometry: atlasGeometry });
+    for (const layer of ['objectives', 'available-quests', 'turn-ins'] as const) {
+      const { input, reads } = countedInput();
+      const call: LayerCall = { layer, input, focusQuests: [], rawZone: null };
+      const before = atlasView(MAP_1, [MAP_1], -3.2);
+      const after = atlasView(MAP_1, [MAP_1, MAP_0, MAP_2991], -4);
+      layers.part(call, before).finish();
+      const collected = reads();
+      // A map entering the view alone collects nothing again, at either band (the clusters' memo included).
+      layers.part(call, atlasView(MAP_1, [MAP_1, MAP_0], -3.2)).finish();
+      layers.part(call, atlasView(MAP_1, [MAP_1, MAP_0, MAP_2991], -3.2)).finish();
+      expect(reads(), layer).toBe(collected);
+      // Prebuilt for the other band with the maps of the view before the crossing…
+      expect(layers.prebuild(call, atlasView(MAP_1, [MAP_1], -4)), layer).toBe(true);
+      const prebuilt = reads();
+      // …the crossing, which brings in the Eastern Kingdoms and the inset, collects nothing.
+      const crossed = layers.part(call, after).finish();
+      expect(reads(), layer).toBe(prebuilt);
+      expect(layers.prebuild(call, after), layer).toBe(false);
+      expect(crossed.items.length, layer).toBeGreaterThan(0);
+      // The same items as a builder that never saw the other maps.
+      const fresh = createMapLayers({ geometry: atlasGeometry }).part(call, atlasView(MAP_1, [MAP_1], -4)).finish();
+      expect(crossed.items, layer).toEqual(fresh.items);
+    }
+  });
+
+  it('still keys the route line on the maps that can emit a connector, and not on the inset', () => {
+    const layers = createMapLayers({ geometry: atlasGeometry });
+    const route: RouteInput = { steps: [routeStep('s1', placedAt(0, -3000, MAP_1)), routeStep('s2', placedAt(-8500, 900, MAP_0), 'transport')] };
+    const call: LayerCall = { layer: 'route-line', route, paths: null };
+    const connectorOf = (content: LayerContent): string | undefined => content.items.find((item) => item.type === 'connector')?.id;
+    const both = layers.part(call, atlasView(MAP_0, [MAP_1, MAP_0])).finish();
+    expect(connectorOf(both)).toBeUndefined();
+    // The inset entering the view changes nothing (the same content object).
+    expect(layers.part(call, atlasView(MAP_0, [MAP_1, MAP_0, MAP_2991])).finish()).toBe(both);
+    // Kalimdor leaving it hands the connector to the Eastern Kingdoms' builder.
+    expect(connectorOf(layers.part(call, atlasView(MAP_0, [MAP_0, MAP_2991])).finish())).toBe('connector:s1>s2');
+  });
+});
+
+// =============================================================================================
+/*
+ * Zoom bands, per-band budgets and the labels layer (docs/research/map-presentation.md §5.1, §5.2,
+ * §25.7; steps MP.0c and MP.1). A view's band (`MapView.band`, the controller's, with hysteresis)
+ * chooses the level of detail and each layer's budget; the builders stay stateless.
+ */
+
+describe('per-band budgets (map-presentation.md §5.2, §25.7; D-047)', () => {
+  const PINS: readonly LayerId[] = ['available-quests', 'turn-ins', 'dungeons', 'flight-masters', 'transports', 'services'];
+  const canvasSum = (band: MapBand): number =>
+    Object.entries(DEFAULT_LOD.budgets[band]).reduce((sum, [layer, budget]) => sum + (layer === 'art' || layer === 'relief' ? 0 : budget), 0);
+
+  it('holds the design’s table: every band within the 2,500 cap, at most 300 pins per band', () => {
+    expect(MAP_BANDS.map(canvasSum)).toEqual([1510, 1812, 2020, 2000]);
+    for (const band of MAP_BANDS) expect(canvasSum(band)).toBeLessThanOrEqual(DEFAULT_LOD.pathCapPerSurface);
+    // Pins (clusters count as pins) plus the zone band's 50 counted objective pins: 160, 252, 300 and 300.
+    const pins = MAP_BANDS.map((band) => PINS.reduce((sum, layer) => sum + DEFAULT_LOD.budgets[band][layer], 0));
+    expect(pins).toEqual([160, 252, 250, 250]);
+    expect(pins.map((count, i) => count + (i >= 2 ? 50 : 0))).toEqual([160, 252, 300, 300]);
+    // Places from the continent band, services from the zone band, the zone tint zoomed out only.
+    expect(MAP_BANDS.map((band) => DEFAULT_LOD.budgets[band].dungeons)).toEqual([0, 30, 30, 30]);
+    expect(MAP_BANDS.map((band) => DEFAULT_LOD.budgets[band]['flight-masters'])).toEqual([0, 35, 35, 35]);
+    expect(MAP_BANDS.map((band) => DEFAULT_LOD.budgets[band].services)).toEqual([0, 0, 18, 18]);
+    expect(MAP_BANDS.map((band) => DEFAULT_LOD.budgets[band]['zone-fill'])).toEqual([100, 100, 0, 0]);
+    expect(MAP_BANDS.map((band) => DEFAULT_LOD.budgets[band].labels)).toEqual([60, 120, 60, 40]);
+    expect(MAP_BANDS.map((band) => DEFAULT_LOD.budgets[band]['available-quests'])).toEqual([120, 120, 100, 100]);
+    expect(MAP_BANDS.map((band) => DEFAULT_LOD.budgets[band].objectives)).toEqual([80, 80, 500, 500]);
+    expect(budgetOf(DEFAULT_LOD, 'turn-ins', 'close')).toBe(40);
+  });
+
+  it('keeps the band edges of adapter.ts (a repeated constant)', () => {
+    expect(LAYER_BAND_EDGES).toEqual({ continent: 0.022, zone: 0.088, close: 0.5 });
+    expect(bandOfView({ zoom: Math.log2(0.0219) })).toBe('world');
+    expect(bandOfView({ zoom: Math.log2(0.022) })).toBe('continent');
+    expect(bandOfView({ zoom: -3.5 })).toBe('zone');
+    expect(bandOfView({ zoom: -1 })).toBe('close');
+    expect(bandOfView({ zoom: -1, band: 'continent' })).toBe('continent');
+  });
+
+  it('cuts each layer to its own band’s budget, from the view’s band', () => {
+    const lod = createLod({ bandBudgets: { zone: { 'available-quests': 1 }, close: { 'available-quests': 3 } } });
+    const small = layerContextOf(geometry, lod);
+    const at = view(1, -2);
+    expect(buildSpawnLayer(small, 'available-quests', givers, { ...at, band: 'zone' }).stats.drawn).toBe(1);
+    expect(buildSpawnLayer(small, 'available-quests', givers, { ...at, band: 'close' }).stats.drawn).toBe(3);
+    // Without a band, the plain band of the zoom (-2: zone).
+    expect(buildSpawnLayer(small, 'available-quests', givers, at).stats.drawn).toBe(1);
+    // The memoised builders cut the same way, and give the design's defaults per band.
+    const layers = createMapLayers({ geometry, lod: { bandBudgets: { zone: { 'available-quests': 1 } } } });
+    expect(layers.part({ layer: 'available-quests', input: givers, focusQuests: [], rawZone: null }, { ...at, band: 'zone' }).finish().stats.drawn).toBe(1);
+    expect(layers.part({ layer: 'available-quests', input: givers, focusQuests: [], rawZone: null }, { ...at, band: 'close' }).finish().stats.drawn).toBeGreaterThan(1);
+  });
+
+  it('folds spawn points into counts at the world and continent bands, from the band rather than the zoom', () => {
+    const raw = buildSpawnLayer(ctx, 'objectives', givers, { ...view(1, -3.45), band: 'zone' });
+    expect(raw.stats.aggregated).toBe(0);
+    // The same zoom, still in the continent band after the hysteresis: counts.
+    const folded = buildSpawnLayer(ctx, 'objectives', givers, { ...view(1, -3.45), band: 'continent' });
+    expect(folded.stats.aggregated).toBeGreaterThan(0);
+    expect(folded.items.every((item) => item.type === 'aggregate')).toBe(true);
+    // Quest givers cluster there instead (map-presentation.md §25.2.5), and not at the zone band.
+    expect(buildSpawnLayer(ctx, 'available-quests', givers, { ...view(1, -3.45), band: 'continent' }).stats.clustered).toBeTypeOf('number');
+    expect(buildSpawnLayer(ctx, 'available-quests', givers, { ...view(1, -3.45), band: 'zone' }).stats.clustered).toBeUndefined();
+    expect(spawnLayerAggregatesIn('available-quests', { zoom: -3.45, band: 'world' })).toBe(true);
+    expect(spawnLayerAggregatesIn('available-quests', { zoom: -3.45, band: 'close' })).toBe(false);
+    expect(spawnLayerAggregatesIn('flight-masters', { zoom: -6, band: 'world' })).toBe(false);
+    expect(viewLodLevel({ zoom: -6 })).toBe('continent');
+    expect(viewLodLevel({ zoom: -6, band: 'zone' })).toBe('zone');
+    // The memo key follows the band: the same zoom in two bands gives two contents.
+    const layers = createMapLayers({ geometry });
+    const call: LayerCall = { layer: 'available-quests', input: givers, focusQuests: [], rawZone: null };
+    const zone = layers.part(call, { ...view(1, -3.45), band: 'zone' }).finish();
+    const continent = layers.part(call, { ...view(1, -3.45), band: 'continent' }).finish();
+    expect(zone).not.toBe(continent);
+    expect(layers.part(call, { ...view(1, -3.45), band: 'zone' }).finish()).toEqual(zone);
+  });
+
+  it('shares a band’s budget across the atlas’s parts', () => {
+    const parts = [
+      { candidates: 200, inView: 150 },
+      { candidates: 200, inView: 50 },
+    ];
+    expect(partBudgets('available-quests', parts, DEFAULT_LOD, localShare, 'world').reduce((a, b) => a + b, 0)).toBe(120);
+    expect(partBudgets('available-quests', parts, DEFAULT_LOD, localShare, 'zone').reduce((a, b) => a + b, 0)).toBe(100);
+    expect(partBudgets('dungeons', parts, DEFAULT_LOD, localShare, 'world')).toEqual([0, 0]);
+  });
+});
+
+describe('the new layers and the labels layer (map-presentation.md §5.2, §5.3)', () => {
+  const zoneLabel = (id: string, x: number, y: number, priority: number, mapId = 1, range: readonly [number, number | null] = [0, 0.3]): LabelDescriptor => ({
+    type: 'label',
+    id,
+    point: { mapId: worldMapId(mapId), x, y },
+    kind: 'zone',
+    text: id,
+    card: null,
+    priority,
+    minPxPerYard: range[0],
+    maxPxPerYard: range[1],
+    label: null,
+    ref: { kind: 'zone', uiMapId: uiMapId(1411) },
+  });
+
+  it('keeps the zone fills of the view’s map in their order (tints under the faction patterns), zoomed out only (MP.10; §5.2)', () => {
+    const layers = createMapLayers({ geometry });
+    const ring = (mapId: number, x: number) => [
+      { mapId: worldMapId(mapId), x, y: 0 },
+      { mapId: worldMapId(mapId), x: x + 10, y: 0 },
+      { mapId: worldMapId(mapId), x: x + 10, y: 10 },
+      { mapId: worldMapId(mapId), x, y: 0 },
+    ];
+    const fill = (id: string, mapId: number, kind: 'tint' | 'faction'): ZoneFillDescriptor => ({
+      type: 'zone-fill',
+      id,
+      mapId: worldMapId(mapId),
+      areaId: 14,
+      rings: [ring(mapId, 0)],
+      fill: kind === 'tint' ? { tint: '#886f4b' } : { pattern: 'horde' },
+      label: kind === 'tint' ? null : 'Durotar: Horde territory',
+      ref: { kind: 'zone', uiMapId: uiMapId(1411) },
+    });
+    const fills = [fill('tint:1:14', 1, 'tint'), fill('tint:0:1', 0, 'tint'), fill('faction:1:14', 1, 'faction')];
+    const content = layers.part({ layer: 'zone-fill', fills }, { ...view(1), zoom: -5, band: 'continent' }).finish();
+    expect(content.items.map((item) => item.id)).toEqual(['tint:1:14', 'faction:1:14']);
+    expect(content.stats.otherSurfaces).toBe(1);
+    // The zone and close bands' budget is 0 (§5.2): the fills are drawn zoomed out only.
+    expect(layers.part({ layer: 'zone-fill', fills }, { ...view(1), zoom: -2, band: 'zone' }).finish().items).toEqual([]);
+  });
+
+  it('keeps the labels of the view’s map whose range meets its band, in static priority order, and counts the rest elsewhere', () => {
+    const labels = [
+      zoneLabel('low', 0, 0, 1),
+      zoneLabel('high', 10, 10, 9),
+      zoneLabel('mid', 20, 20, 5),
+      // Continent band only (0.022 to 0.05): not built at the zone band, but built at the continent band.
+      zoneLabel('compact', 30, 30, 7, 1, [0.022, 0.05]),
+      // Another world map: counted as elsewhere on a world surface.
+      zoneLabel('stormwind', 0, 0, 3, 0),
+    ];
+    const zone = buildLabels(ctx, labels, { ...view(1, -2), band: 'zone' });
+    expect(ids(zone)).toEqual(['high', 'mid', 'low']);
+    expect(zone.stats).toMatchObject({ drawn: 3, otherSurfaces: 1 });
+    const continent = buildLabels(ctx, labels, { ...view(1, -4.8), band: 'continent' });
+    expect(ids(continent)).toEqual(['high', 'compact', 'mid', 'low']);
+    // A label just past its range's edge is still built (the adapter's hysteresis decides whether it shows).
+    expect(labelInBand({ minPxPerYard: 0.5 * 2 ** 0.1, maxPxPerYard: null }, 'zone')).toBe(true);
+    expect(labelInBand({ minPxPerYard: 0.5 * 2 ** 0.2, maxPxPerYard: null }, 'zone')).toBe(false);
+    expect(labelInBand({ minPxPerYard: 0, maxPxPerYard: 0.088 * 2 ** -0.2 }, 'zone')).toBe(false);
+    expect(labelInBand({ minPxPerYard: 0, maxPxPerYard: null }, 'world')).toBe(true);
+  });
+
+  it('caps the labels by the band’s budget, and the memoised builder returns the same content for the same inputs', () => {
+    const many = Array.from({ length: 150 }, (_, i) => zoneLabel(`l${String(i).padStart(3, '0')}`, i, i, i, 1, [0, null]));
+    expect(buildLabels(ctx, many, { ...view(1, -4.5, { x: 0, y: 0 }), band: 'continent' }).stats).toMatchObject({ drawn: 120, notDrawn: 30 });
+    expect(buildLabels(ctx, many, { ...view(1, -2, { x: 0, y: 0 }), band: 'zone' }).stats).toMatchObject({ drawn: 60, notDrawn: 90 });
+    expect(buildLabels(ctx, many, { ...view(1, 0, { x: 0, y: 0 }), band: 'close' }).stats).toMatchObject({ drawn: 40, notDrawn: 110 });
+    const layers = createMapLayers({ geometry });
+    const first = layers.labels(many, { ...view(1, -2), band: 'zone' });
+    expect(layers.labels(many, { ...view(1, -2), band: 'zone' })).toBe(first);
+    expect(first.stats).toMatchObject({ drawn: 60, notDrawn: 90 });
+  });
+
+  it('builds each atlas map’s labels in its own part, the inset’s included, and never counts a placed map’s as elsewhere', () => {
+    const labels = [zoneLabel('kalimdor', 0, -4000, 2, 1), zoneLabel('eastern', 0, 0, 2, 0), zoneLabel('isle', 3000, 1000, 2, 2991)];
+    const one = buildLabels(atlasCtxForLabels, labels, { ...atlasViewForLabels(worldMapId(1)), band: 'zone' });
+    const isle = buildLabels(atlasCtxForLabels, labels, { ...atlasViewForLabels(worldMapId(2991)), band: 'continent' });
+    expect(ids(one)).toEqual(['kalimdor']);
+    expect(one.stats.otherSurfaces).toBe(0);
+    expect(ids(isle)).toEqual(['isle']);
+    // A map the atlas does not show counts as elsewhere.
+    expect(buildLabels(atlasCtxForLabels, [...labels, zoneLabel('instance', 0, 0, 1, 30)], { ...atlasViewForLabels(worldMapId(1)), band: 'zone' }).stats.otherSurfaces).toBe(1);
+  });
+});
+
+const atlasCtxForLabels = layerContextOf(fixtureGeometry());
+function atlasViewForLabels(mapId: WorldMapId): MapView {
+  const rect: WorldBounds = { mapId, xMin: -1, xMax: 1, yMin: -1, yMax: 1 };
+  return { mapId, zoom: -2, center: null, surface: 'atlas', visible: [worldMapId(1), worldMapId(0), worldMapId(2991)].map((id) => ({ ...rect, mapId: id })) };
+}
+
+describe('quest state on the quest layers (map-presentation.md §7, §25.2.3; step MP.3)', () => {
+  const available = { state: 'available', difficulty: 'standard', dungeonQuest: false, progress: null } as const;
+  const locked = { state: 'locked', difficulty: null, dungeonQuest: true, progress: null } as const;
+
+  it('carries a group’s quest mark into its markers, and leaves markers without one unmarked', () => {
+    const content = buildSpawnLayer(ctx, 'available-quests', { groups: [{ ...gornek, mark: available }, many] }, view(1));
+    expect((byId(content, 'spawn:npc:3143:0') as MarkerDescriptor).mark).toEqual(available);
+    expect('mark' in byId(content, 'spawn:npc:100:0')).toBe(false);
+  });
+
+  it('gives a stack the best state of its members, with a difficulty only when they share it', () => {
+    const here = gornek.spawns;
+    const a: PointGroupInput = { subject: { kind: 'npc', id: npcId(1) }, label: 'A', questIds: [questId(1)], spawns: here, mark: locked };
+    const b: PointGroupInput = { subject: { kind: 'npc', id: npcId(2) }, label: 'B', questIds: [questId(2)], spawns: here, mark: available };
+    const c: PointGroupInput = { subject: { kind: 'npc', id: npcId(3) }, label: 'C', questIds: [questId(3)], spawns: here, mark: { ...available, difficulty: 'difficult' } };
+    const [stack] = markers(buildSpawnLayer(ctx, 'available-quests', { groups: [a, b] }, view(1)));
+    expect(stack).toMatchObject({ count: 2, mark: available });
+    const [mixed] = markers(buildSpawnLayer(ctx, 'available-quests', { groups: [a, b, c] }, view(1)));
+    expect(mixed?.mark).toEqual({ state: 'available', difficulty: null, dungeonQuest: false, progress: null });
+  });
+
+  const KALIMDOR_POINT = (x: number, y: number): WorldPoint => ({ mapId: KALIMDOR_MAP, x, y });
+  const counted = (quest: number, n: number) => ({
+    id: `count:${String(quest)}:npc:5:${String(n)}`,
+    questId: questId(quest),
+    point: KALIMDOR_POINT(-500 - n, -4000),
+    label: `Boar · kill for Q${String(quest)} · 3 spawns in Durotar`,
+    ref: { kind: 'spawn' as const, subject: { kind: 'npc' as const, id: npcId(5) }, spawnIndex: 0, questIds: [questId(quest)] },
+  });
+  const ring = [KALIMDOR_POINT(-600, -4100), KALIMDOR_POINT(-500, -4100), KALIMDOR_POINT(-550, -4000)];
+  const log = {
+    counted: [counted(7, 0), counted(8, 1)],
+    areas: [
+      { id: 'area:7:1:1411:0', questId: questId(7), mapId: KALIMDOR_MAP, ring, labelStep: stepId('s-9'), labelTurnIn: true, label: 'Objectives of Q7', uiMapId: uiMapId(1411) },
+      { id: 'area:9:0:1453:0', questId: questId(9), mapId: worldMapId(0), ring: ring.map((p) => ({ ...p, mapId: worldMapId(0) })), labelStep: null, labelTurnIn: false, label: 'Objectives of Q9', uiMapId: null },
+    ],
+  };
+  const layers = () => createMapLayers({ geometry });
+  const objectivesAt = (zoom: number, focus: readonly QuestId[] = [], logInput: typeof log | null = log) =>
+    layers().part({ layer: 'objectives', input: { groups: [] }, focusQuests: focus, rawZone: null, log: logInput }, view(1, zoom)).finish();
+
+  it('draws the log’s outlines and counted marks at the zone band only, the counted marks muted with the objective state', () => {
+    const zone = objectivesAt(ZONE_ZOOM);
+    expect(ids(zone)).toEqual(['area:7:1:1411:0', 'count:7:npc:5:0', 'count:8:npc:5:1']);
+    expect(byId(zone, 'area:7:1:1411:0')).toEqual({
+      type: 'area',
+      id: 'area:7:1:1411:0',
+      mapId: KALIMDOR_MAP,
+      ring,
+      style: 'objective-area',
+      labelStep: stepId('s-9'),
+      labelTurnIn: true,
+      label: 'Objectives of Q7',
+      ref: { kind: 'zone', uiMapId: uiMapId(1411) },
+    });
+    expect(byId(zone, 'count:7:npc:5:0')).toMatchObject({ kind: 'objective', style: 'muted', count: 1, mark: { state: 'objective' }, label: 'Boar · kill for Q7 · 3 spawns in Durotar' });
+    expect(ids(objectivesAt(CONTINENT_ZOOM))).toEqual([]);
+  });
+
+  it('leaves out a focused quest’s counted marks (its points are raw) but keeps its outline', () => {
+    expect(ids(objectivesAt(ZONE_ZOOM, [questId(7)]))).toEqual(['area:7:1:1411:0', 'count:8:npc:5:1']);
+  });
+
+  it('caps the counted marks at 50 of the budget, nearest the centre first, and counts the rest as not drawn', () => {
+    const many = { counted: Array.from({ length: 60 }, (_, n) => counted(100 + n, n)), areas: [] };
+    const content = layers().part({ layer: 'objectives', input: { groups: [] }, focusQuests: [], rawZone: null, log: many }, view(1, ZONE_ZOOM, { x: -500, y: -4000 })).finish();
+    expect(content.items).toHaveLength(50);
+    expect(content.stats.notDrawn).toBe(10);
+    // The nearest to (-500, -4000) are the ones with the smallest n.
+    expect(ids(content)).toContain('count:100:npc:5:0');
+    expect(ids(content)).not.toContain('count:159:npc:5:59');
+  });
+
+  it('rebuilds nothing when the log input is the same object', () => {
+    const builder = layers();
+    const call = { layer: 'objectives' as const, input: { groups: [] }, focusQuests: [], rawZone: null, log };
+    const first = builder.part(call, view(1)).finish();
+    expect(builder.part({ ...call }, view(1)).finish()).toBe(first);
+    expect(builder.part({ ...call, log: { ...log } }, view(1)).finish().items).toBe(first.items);
+  });
+});
+
+describe('the log’s objectives under the budget (map-presentation.md §7.4)', () => {
+  it('keeps the outlines and counted marks before a focused quest’s raw points, which fill the rest nearest first', () => {
+    const KP = (x: number, y: number): WorldPoint => ({ mapId: KALIMDOR_MAP, x, y });
+    const raw: PointGroupInput = {
+      subject: { kind: 'npc', id: npcId(77) },
+      label: 'Raw',
+      questIds: [questId(1)],
+      spawns: Array.from({ length: 520 }, (_, n) => ({ source: zoneSourcedPoint(uiMapId(1411), 50, 50), world: KP(-4000 + n, -4000), uiMapId: uiMapId(1411) })),
+    };
+    const log = {
+      counted: [{ id: 'count:2:npc:5:x', questId: questId(2), point: KP(900, 900), label: 'far', ref: { kind: 'spawn' as const, subject: { kind: 'npc' as const, id: npcId(5) }, spawnIndex: 0, questIds: [questId(2)] } }],
+      areas: [{ id: 'area:2:x:0', questId: questId(2), mapId: KALIMDOR_MAP, ring: [KP(1000, 1000), KP(1100, 1000), KP(1050, 1100)], labelStep: null, labelTurnIn: false, label: 'far', uiMapId: null }],
+    };
+    const content = createMapLayers({ geometry }).part({ layer: 'objectives', input: { groups: [raw] }, focusQuests: [questId(1)], rawZone: null, log }, view(1, ZONE_ZOOM, { x: -4000, y: -4000 })).finish();
+    expect(content.items).toHaveLength(500);
+    expect(ids(content)).toContain('area:2:x:0');
+    expect(ids(content)).toContain('count:2:npc:5:x');
+    expect(content.stats.notDrawn).toBe(22);
+  });
+});
+
+// Clusters (step MP.4a) -------------------------------------------------------------------------
+
+describe('clusters below the zone band (map-presentation.md §25.2.5)', () => {
+  /*
+   * Clusters below the zone band (docs/research/map-presentation.md §25.2.5; D-047; step MP.4a): quest
+   * givers and turn-ins fold into the cells of a nested yard grid (512, 1,024, 2,048, 4,096 yd), each
+   * cluster anchored at a member, counting quests, places and points, coloured by the group rule; the
+   * cap applies to clusters and never trims one.
+   */
+
+  const geometry = fixtureGeometry();
+  const ctx = layerContextOf(geometry);
+  const KALIMDOR = worldMapId(1);
+  const DUROTAR = uiMapId(1411);
+
+  const spawnAt = (x: number, y: number): SpawnPoint => ({
+    source: { space: 'world', mapId: KALIMDOR, x, y, uiMapId: DUROTAR, lexemes: null },
+    world: { mapId: KALIMDOR, x, y },
+    uiMapId: DUROTAR,
+  });
+
+  const mark = (state: MarkerMark['state'], difficulty: MarkerMark['difficulty'] = 'standard'): MarkerMark => ({ state, difficulty, dungeonQuest: false, progress: null });
+
+  /** A giver at (x, y) with its quests and their states. */
+  function giver(id: number, x: number, y: number, quests: readonly (readonly [number, MarkerMark | null])[]): PointGroupInput {
+    const best = quests[0]?.[1] ?? null;
+    return {
+      subject: { kind: 'npc', id: npcId(id) },
+      label: `Giver ${String(id)}`,
+      questIds: quests.map(([q]) => questId(q)),
+      spawns: [spawnAt(x, y)],
+      quests: quests.map(([q, m]) => ({ questId: questId(q), mark: m })),
+      ...(best === null ? {} : { mark: best }),
+    };
+  }
+
+  /** A continent-band view at the zoom where a level is used, centred on the points. */
+  const at = (zoom: number) => ({ mapId: KALIMDOR, zoom, center: { x: 1000, y: -4000 }, band: 'continent' as const });
+
+  const clusters = (items: readonly unknown[]): MarkerDescriptor[] => items.filter((item): item is MarkerDescriptor => (item as MarkerDescriptor).cluster !== undefined);
+
+  describe('cluster levels (§25.2.5)', () => {
+    it('uses the power of two at or above 1.25 D in yards: 1,024 over most of the continent band, 512 at its top, 2,048 or more in the world band', () => {
+      expect(CLUSTER_LEVELS).toEqual([512, 1024, 2048, 4096]);
+      expect(clusterLevelAt(Math.log2(0.022))).toBe(1024);
+      expect(clusterLevelAt(Math.log2(0.0325))).toBe(1024);
+      expect(clusterLevelAt(Math.log2(0.06))).toBe(512);
+      expect(clusterLevelAt(Math.log2(0.087))).toBe(512);
+      expect(clusterLevelAt(Math.log2(0.01))).toBe(2048);
+      expect(clusterLevelAt(Math.log2(0.004))).toBe(4096);
+      expect(clusterLevelAt(-12)).toBe(4096);
+    });
+  });
+
+  describe('clusters of quest givers and turn-ins (§25.2.5)', () => {
+    // Three givers within one 1,024 yd cell (x 0 to 1,024, y −4,096 to −3,072), one far away.
+    const input: SpawnLayerInput = {
+      groups: [
+        giver(1, 100, -3500, [
+          [11, mark('available', 'standard')],
+          [12, mark('uncertain', 'standard')],
+        ]),
+        giver(2, 200, -3600, [[21, mark('available', 'standard')]]),
+        giver(3, 320, -3400, [[11, mark('available', 'standard')]]),
+        giver(4, 9000, -3500, [[41, mark('available', 'difficult')]]),
+      ],
+    };
+    const zoom = Math.log2(0.03);
+
+    it('folds a cell’s points into one cluster anchored at the member nearest their centroid, counting quests, places and points', () => {
+      const content = buildSpawnLayer(ctx, 'available-quests', input, at(zoom));
+      const [cluster] = clusters(content.items);
+      if (cluster?.cluster === undefined) throw new Error('no cluster');
+      // Quests 11, 12 and 21: quest 11 has two givers here, and counts once.
+      expect(cluster.cluster.members.map((member) => member.questId)).toEqual([11, 21, 12]);
+      expect(cluster.cluster).toMatchObject({ places: 3, points: 3, cellYards: 1024 });
+      expect(cluster.cluster.members[0]?.subjects).toEqual(['npc:1', 'npc:3']);
+      // The anchor is a real giver's point: the one nearest the centroid (206.7, −3,500).
+      expect(cluster.point).toMatchObject({ x: 200, y: -3600 });
+      expect(cluster.ref).toMatchObject({ kind: 'cluster', layer: 'available-quests', quests: 3, places: 3, bounds: { xMin: 100, xMax: 320, yMin: -3600, yMax: -3400 } });
+      expect(cluster.refs).toEqual([cluster.ref]);
+      // Best state first: the pin's glyph and badge are the first member's, its category too.
+      expect(cluster.mark?.state).toBe('available');
+      expect(cluster.category).toBe('available');
+      // The lone far giver is its own pin, not a cluster of one.
+      expect(content.items.find((item) => item.id === 'spawn:npc:4:0')).toMatchObject({ type: 'marker', mark: { state: 'available' } });
+      expect(content.stats).toMatchObject({ clustered: 3, aggregated: 0, drawn: 2 });
+    });
+
+    it('words its hover with its quests’ states and difficulties, and its turn-ins as places', () => {
+      const content = buildSpawnLayer(ctx, 'available-quests', input, at(zoom));
+      expect(clusters(content.items)[0]?.label).toBe('3 quests at 3 givers near here: 2 available, 1 may be available; 3 standard. Zoom in to separate them.');
+      const members = [
+        { questId: questId(1), mark: mark('ready', 'standard'), category: 'turn-ins' as const, subjects: ['npc:1'] },
+        { questId: questId(2), mark: mark('in-progress', null), category: 'turn-ins' as const, subjects: ['npc:2'] },
+      ];
+      expect(clusterLabel('turn-ins', members, 2)).toBe('2 quests to turn in at 2 places near here: 1 ready, 1 in progress; 1 standard, 1 of unknown difficulty. Zoom in to separate them.');
+      // Without route state: no state words.
+      expect(clusterLabel('available-quests', [{ questId: questId(1), mark: null, category: 'available', subjects: ['npc:1'] }], 2)).toBe('1 quest at 2 givers near here. Zoom in to separate them.');
+    });
+
+    it('nests: every level’s clusters split only where a cell halves, never on a pan', () => {
+      const many: SpawnLayerInput = {
+        groups: Array.from({ length: 40 }, (_, i) => giver(100 + i, 900 + (i % 8) * 190, -4500 + Math.floor(i / 8) * 210, [[1000 + i, mark('available', 'standard')]])),
+      };
+      const memberSets = (level: number): Set<string>[] => {
+        const zoomFor = { 512: Math.log2(0.07), 1024: Math.log2(0.03), 2048: Math.log2(0.01), 4096: Math.log2(0.004) }[level] ?? 0;
+        expect(clusterLevelAt(zoomFor)).toBe(level);
+        const content = buildSpawnLayer(ctx, 'available-quests', many, { ...at(zoomFor), band: zoomFor < Math.log2(0.022) ? 'world' : 'continent' });
+        return content.items.map((item) => new Set((item as MarkerDescriptor).cluster?.members.map((member) => String(member.questId)) ?? (item as MarkerDescriptor).refs.flatMap((ref) => (ref.kind === 'spawn' ? ref.questIds.map(String) : []))));
+      };
+      for (const [fine, coarse] of [
+        [512, 1024],
+        [1024, 2048],
+        [2048, 4096],
+      ] as const) {
+        const coarser = memberSets(coarse);
+        for (const set of memberSets(fine)) expect(coarser.some((big) => [...set].every((id) => big.has(id))), `${String(fine)} in ${String(coarse)}`).toBe(true);
+      }
+      // A pan changes no cluster: the grid is fixed in yards.
+      const a = buildSpawnLayer(ctx, 'available-quests', many, at(Math.log2(0.03)));
+      const b = buildSpawnLayer(ctx, 'available-quests', many, { ...at(Math.log2(0.03)), center: { x: 5000, y: 3000 } });
+      expect([...a.items].map((item) => item.id).sort()).toEqual([...b.items].map((item) => item.id).sort());
+    });
+
+    it('applies the cap to clusters, never trimming one: every drawn cluster’s count is whole, and the note counts the rest', () => {
+      const spread: SpawnLayerInput = {
+        groups: Array.from({ length: 12 }, (_, i) => [giver(200 + 2 * i, i * 3000, -4000, [[2000 + 2 * i, mark('available')]]), giver(201 + 2 * i, i * 3000 + 50, -4000, [[2001 + 2 * i, mark('available')]])]).flat(),
+      };
+      const small = layerContextOf(geometry, createLod({ budgets: { 'available-quests': 5 } }));
+      const content = buildSpawnLayer(small, 'available-quests', spread, at(Math.log2(0.03)));
+      expect(content.items).toHaveLength(5);
+      expect(content.stats.notDrawn).toBe(7);
+      for (const item of clusters(content.items)) expect(item.cluster?.members).toHaveLength(2);
+    });
+
+    it('makes every level once per input, so a zoom across levels is a lookup (review UR-06)', () => {
+      let reads = 0;
+      const groups = input.groups;
+      const counted: SpawnLayerInput = {
+        get groups() {
+          reads += 1;
+          return groups;
+        },
+      };
+      const layers = createMapLayers({ geometry });
+      const call = { layer: 'available-quests' as const, input: counted, focusQuests: [], rawZone: null };
+      layers.part(call, at(Math.log2(0.03))).finish();
+      const after = reads;
+      for (const z of [Math.log2(0.07), Math.log2(0.01), Math.log2(0.004), Math.log2(0.03)]) layers.part(call, { ...at(z), band: z < Math.log2(0.022) ? 'world' : 'continent' }).finish();
+      expect(reads).toBe(after);
+      // Each level's content is its own: at 512 yd the three givers fall into two cells.
+      expect(clusters(layers.part(call, at(Math.log2(0.07))).finish().items).map((item) => item.cluster?.cellYards)).toEqual([512]);
+      expect(clusters(layers.part(call, at(Math.log2(0.03))).finish().items).map((item) => item.cluster?.cellYards)).toEqual([1024]);
+    });
+
+    it('keeps the focused quests’ points raw and strong, outside the clusters', () => {
+      const content = buildSpawnLayer(ctx, 'available-quests', input, at(zoom), [questId(21)]);
+      expect(content.items.find((item) => item.id === 'spawn:npc:2:0')).toMatchObject({ emphasis: 'strong' });
+      expect(clusters(content.items)[0]?.cluster?.members.map((member) => member.questId)).toEqual([11, 12]);
+    });
+
+    it('files each item under its drawer row (§25.3.2): quest givers by their state', () => {
+      // The builder's table matches the adapter's (map-categories.test.ts compares them, as map/layers may not import map/adapter).
+      expect(categoryOfMarkState('locked')).toBe('needs-prerequisite');
+      expect(categoryOfMarkState(null)).toBe('available');
+      const content = buildSpawnLayer(ctx, 'available-quests', { groups: [giver(9, 0, 0, [[9, mark('locked')]])] }, { mapId: KALIMDOR, zoom: -2, center: null });
+      expect(content.items[0]).toMatchObject({ category: 'needs-prerequisite' });
+      expect(buildSpawnLayer(ctx, 'turn-ins', { groups: [giver(9, 0, 0, [[9, mark('ready')]])] }, { mapId: KALIMDOR, zoom: -2, center: null }).items[0]).toMatchObject({ category: 'turn-ins' });
+      expect(buildSpawnLayer(ctx, 'flight-masters', { groups: [giver(9, 0, 0, [])] }, { mapId: KALIMDOR, zoom: -2, center: null }).items[0]).toMatchObject({ category: 'flight-points' });
+    });
+  });
+});
+
+
+/*
+ * The place layers (map-presentation.md §8 to §10, §25.4; steps MP.5, MP.8, MP.9): descriptors the
+ * derived pipeline's places model builds, kept by the builder to the view's map, the band's rule of
+ * the flight network, and the cap.
+ */
+describe('place layers: dungeons, flight points, the flight network, transports', () => {
+  const pin = (id: string, mapId: WorldMapId, x: number, y: number, category: MapCategoryId): MarkerDescriptor => ({
+    type: 'marker',
+    id,
+    point: { mapId, x, y },
+    kind: 'transition',
+    style: 'neutral',
+    emphasis: 'normal',
+    label: id,
+    badges: [],
+    ref: { kind: 'dungeon', dungeon: 1, entrance: 0 },
+    count: 1,
+    refs: [{ kind: 'dungeon', dungeon: 1, entrance: 0 }],
+    labels: [id],
+    mark: { state: 'dungeon', difficulty: null, dungeonQuest: false, progress: null },
+    category,
+  });
+  const flight = (a: number, b: number, mapId: WorldMapId, route = false): PlaceItem => ({
+    descriptor: {
+      type: 'polyline',
+      id: `flight:${String(a)}-${String(b)}`,
+      mapId,
+      points: [
+        { mapId, x: a, y: 0 },
+        { mapId, x: b, y: 0 },
+      ],
+      style: 'network-flight',
+      emphasis: 'normal',
+      label: 'Flight',
+      ref: { kind: 'taxi-edge', from: a, to: b },
+    },
+    nodes: [a, b],
+    ...(route ? { route: true } : {}),
+  });
+  const ride: PlaceItem = {
+    descriptor: {
+      type: 'connector',
+      id: 'ride:1:1',
+      from: { mapId: MAP_1, x: 0, y: 0 },
+      to: { mapId: MAP_0, x: 0, y: 0 },
+      style: 'transport',
+      emphasis: 'normal',
+      label: 'Boat',
+      ref: { kind: 'transport', path: 1, stop: null },
+    },
+  };
+
+  it('keeps the items of the view’s map and counts those of maps the surface does not show', () => {
+    const layers = createMapLayers({ geometry });
+    const places: PlaceLayerInput = { items: [{ descriptor: pin('a', MAP_1, 0, 0, 'dungeons') }, { descriptor: pin('b', MAP_0, 0, 0, 'raids') }], unplaced: 1 };
+    const content = layers.part({ layer: 'dungeons', places }, view(1)).finish();
+    expect(ids(content)).toEqual(['a']);
+    expect(content.stats).toMatchObject({ drawn: 1, otherSurfaces: 1 });
+    // Not built yet: nothing drawn.
+    expect(layers.part({ layer: 'transports', places: null }, view(1)).finish().items).toEqual([]);
+  });
+
+  it('draws the flight points from the places model instead of the dataset’s flight masters', () => {
+    const layers = createMapLayers({ geometry });
+    const places: PlaceLayerInput = { items: [{ descriptor: pin('flight:npc:1', MAP_1, 5, 5, 'flight-points'), node: 25 }], unplaced: 0 };
+    const call = { layer: 'flight-masters' as const, input: { groups: [] }, focusQuests: [], rawZone: null, places };
+    expect(ids(layers.part(call, view(1)).finish())).toEqual(['flight:npc:1']);
+    expect(ids(layers.part({ ...call, places: null }, view(1)).finish())).toEqual([]);
+  });
+
+  it('draws the whole network out to the continent band, and zoomed in only the focused points’ and the route’s flights (§25.4)', () => {
+    const places: PlaceLayerInput = { items: [flight(1, 2, MAP_1), flight(2, 3, MAP_1), flight(3, 4, MAP_1, true), flight(5, 6, MAP_1)], unplaced: 0 };
+    const layers = createMapLayers({ geometry });
+    const at = (zoom: number, focusNodes: readonly number[], allFlights = false) => ids(layers.part({ layer: 'flight-network', places, focusNodes, allFlights }, view(1, zoom)).finish());
+    expect(at(CONTINENT_ZOOM, [])).toEqual(['flight:1-2', 'flight:2-3', 'flight:3-4', 'flight:5-6']);
+    expect(at(ZONE_ZOOM, [])).toEqual(['flight:3-4']);
+    expect(at(ZONE_ZOOM, [2])).toEqual(['flight:1-2', 'flight:2-3', 'flight:3-4']);
+    expect(at(0, [6])).toEqual(['flight:3-4', 'flight:5-6']);
+    expect(at(ZONE_ZOOM, [], true)).toEqual(['flight:1-2', 'flight:2-3', 'flight:3-4', 'flight:5-6']);
+    expect(flightsKept('continent', [1], false)).toBeNull();
+    expect(flightsKept('zone', [1], true)).toBeNull();
+    expect(flightsKept('close', [1], false)?.(flight(1, 9, MAP_1))).toBe(true);
+  });
+
+  it('keeps the route’s flights first under the cap', () => {
+    const many: PlaceItem[] = Array.from({ length: 160 }, (_, i) => flight(i * 2, i * 2 + 1, MAP_1, i === 159));
+    const layers = createMapLayers({ geometry });
+    const content = layers.part({ layer: 'flight-network', places: { items: many, unplaced: 0 }, focusNodes: [], allFlights: false }, view(1, CONTINENT_ZOOM)).finish();
+    expect(content.items).toHaveLength(150);
+    expect(ids(content)).toContain('flight:318-319');
+    expect(content.stats.notDrawn).toBe(10);
+  });
+
+  it('draws a ride between the continents only on the atlas, once, by the map it leaves', () => {
+    const places: PlaceLayerInput = { items: [ride], unplaced: 0 };
+    const layers = createMapLayers({ geometry: atlasGeometry });
+    expect(idsIn(layers.part({ layer: 'transports', places }, atlasView(MAP_1)).finish())).toEqual(['ride:1:1']);
+    expect(idsIn(layers.part({ layer: 'transports', places }, atlasView(MAP_0)).finish())).toEqual([]);
+    // Only the Eastern Kingdoms active: it draws the arc.
+    expect(idsIn(layers.part({ layer: 'transports', places }, atlasView(MAP_0, [MAP_0])).finish())).toEqual(['ride:1:1']);
+    expect(idsIn(createMapLayers({ geometry: atlasGeometry }).part({ layer: 'transports', places }, worldView(MAP_1)).finish())).toEqual([]);
   });
 });

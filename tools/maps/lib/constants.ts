@@ -12,8 +12,8 @@ export const CONVERSION_PATH = 'data/Forever/conversion.json';
 
 export const DB2_BUILD = '1.60.1.70009';
 export const ROWS_FILE = 'tools/maps/inputs/db2-rows-1.60.1.70009.json';
-export const PLACEHOLDER_DIR = 'public/maps/placeholder';
-export const GEOMETRY_FILE = 'geometry.placeholder.json';
+/** The placeholder's folder and file and the client pin live in `shared.ts`, so the minimap tool's closure need not hold this file. */
+export { CLIENT_PIN, GEOMETRY_FILE, PLACEHOLDER_DIR } from './shared';
 export const NOTICE_FILE = 'NOTICE.md';
 
 /** D-018: the 11 UiMaps whose 12 rows come from the cited DB2 CSV (Azeroth 947 has two rows). */
@@ -109,13 +109,26 @@ export const ART_SIZE_EXCEPTIONS: Readonly<Record<number, { readonly width: numb
 };
 
 /**
- * The client build `convert.ts` and `import.ts --build` read (terrain-navigation.md §2, gate G1):
- * `LocalCasc.open({ pin })` refuses any other installed build. The committed art records it.
+ * The `art` budget, gzip level 6, decimal units (also gated by tools/build/audit-dist.ts): 1.0 MB
+ * since step ATL.10 (D-042 O5, docs/research/map-atlas.md §7.6), which superseded D-034 item 4's
+ * 12 MB when the atlas tiles replaced the per-image art of maps 0 and 1.
  */
-export const CLIENT_PIN = { product: 'wow_classic_beta', version: '1.60.1.70009', buildKey: '05215079e3905ef5922ae0b03ffefb73' } as const;
+export const ART_BUDGET_GZIP_BYTES = 1_000_000;
 
-/** D-034 item 4: the `art` budget, gzip level 6, decimal units (also gated by tools/build/audit-dist.ts). */
-export const ART_BUDGET_GZIP_BYTES = 12_000_000;
+/**
+ * The UiMaps whose painted image `convert.ts` deploys (D-042 O5; docs/research/map-atlas.md §6.1,
+ * §7.6, step ATL.10): the images still drawn one at a time. Alterac Valley (1459), Warsong Gulch
+ * (1460) and Arathi Basin (1461) and Darkspear Islands (2524, a battleground in the client) keep
+ * their own surfaces; Zephras Isle (2521) is the atlas card's picture when the tile index is refused.
+ * The zone, city and continent paintings of maps 0 and 1, Azeroth (947) and the flight maps reach the
+ * site only as the atlas tiles (`public/maps/atlas/`), so their images are composed (every UiMap keeps
+ * its `sources` record, which the atlas build checks) but not written.
+ */
+export const DEPLOYED_ART_UIMAPS: readonly number[] = [1459, 1460, 1461, 2521, 2524];
+
+/** Why only `DEPLOYED_ART_UIMAPS` are deployed, as the art manifest and NOTICE record it. */
+export const DEPLOYED_ART_REASON =
+  'D-042 O5 (step ATL.10): only the images still drawn one at a time are deployed: the battlegrounds and Darkspear Islands, which keep their own map surfaces, and Zephras Isle, the atlas card\'s picture when the tile index cannot be used. The other paintings reach the site as the atlas tiles (../atlas/, with its own NOTICE).';
 
 /** The tool directories whose tree ids the art manifest records (terrain-navigation.md §13.4). */
 export const ART_TOOL_DIRS: readonly string[] = ['tools/casc', 'tools/maps'];

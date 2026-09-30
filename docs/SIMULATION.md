@@ -62,11 +62,11 @@
    `character.riding`, or through a `train` step recognised as riding by `skill: 'riding'` or by a
    riding spell id in the ruleset (Apprentice 33388, Journeyman 33391) (TIME-3). The
    hearthstone has a 10 s cast and a 60 min cooldown (`SOURCE DATA`, both builds); a hearth used on
-   cooldown waits and warns (TIME-4). **The default flight time is straight-line distance x
-   `taxiDetourFactor` (1.4, `assumption`, a cited aggregate client statistic) / 32 yd/s (the
-   emulators' taxi speed, `era-assumed`)** (TIME-5, D-022, D-024). Per-leg times from a
-   developer's local extraction (`local-maps/taxi.local.json`, dev/preview only) replace it where
-   present (TIME-6); taxi-derived timings are local-only by default (D-022). The first draft's
+   cooldown waits and warns (TIME-4). **Flights are timed from the committed client taxi file's
+   path lengths at 32 yd/s (the emulators' taxi speed, `era-assumed`)** wherever it covers the
+   journey (TIME-6; D-039 B commits the file, which settles OD-6). **The fallback, when the file
+   fails to load or does not cover a journey, is straight-line distance x `taxiDetourFactor` (1.4,
+   `assumption`, a cited aggregate client statistic) / 32 yd/s** (TIME-5, D-024). The first draft's
    default, a model fitted against RXPGuides' flight table, is superseded (research note R-1).
    Transports cost an assumed wait plus ride. Every move between world maps needs a transport, a
    hearth, or a zero-wait instance entrance edge (TIME-7).
@@ -202,7 +202,7 @@ column means ruleset-only):
 | `ridingSpells` | 33388 Apprentice Riding = tier 1, 33391 Journeyman Riding = tier 2, as `{ spellId, tier, name }` entries (`client-data`, SpellName and SkillLineAbility rows cited as C4 in forever-game-rules.md section 6.1; the tier-to-speed mapping is `INFERRED`) | none (`client-data`: neither spell exists in Era 69722; Era riding is recognised by `skill: 'riding'` only) | TIME-3 | — |
 | `hearthCastSeconds` | 10 (`client-data`) | 10 (`client-data`) | TIME-4 | — |
 | `hearthCooldownSeconds` | 3600 (`client-data`; a server override is UNKNOWN) | 3600 (`client-data`) | TIME-4 | — |
-| `taxiModel` | `'auto'` (`assumption`: TIME-6 legs where a local `taxi.local.json` covers them, else TIME-5); `'straight-line'` forces TIME-5 | both | TIME-5, TIME-6 | — |
+| `taxiModel` | `'auto'` (`assumption`: TIME-6 legs where the committed taxi file covers the journey, else TIME-5); `'straight-line'` forces TIME-5 | both | TIME-5, TIME-6 | — |
 | `taxiSpeed` | 32 yd/s (`era-assumed`; emulator constant) | 32 yd/s (`reported`) | TIME-5, TIME-6 | `taxiSpeedYps` |
 | `taxiDetourFactor` | 1.4 (`assumption`; its value is a cited aggregate client statistic, TIME-5, allowed under D-022 and D-024) | both | TIME-5 | `taxiDetourFactor` |
 | `taxiSpeedBonusPct` | 0 (`assumption`; Frequent Flier would be 20, `client-data` C7) | 0 (`assumption`) | TIME-5, TIME-6 | — |
@@ -235,7 +235,7 @@ source, added in revision 2 so that every objective has a defined cost. They sho
 |---|---|---|
 | Ruleset ids `forever-beta`/`era-1.15`; provenance field `basis`; precedence rule; `maxLevel` overridable; `dungeonQuestXpMultiplier` | 1.2 | DSO-16, F24, D-008 |
 | Default flight time = straight line x `taxiDetourFactor` / 32 yd/s; the RXP-referenced fit becomes research note R-1 | 6.3 | LIC-07, F17, D-019, D-024 |
-| Polyline flight model only with a local DB2 extraction; taxi-derived timings local-only (the local data is now `local-maps/taxi.local.json`, section 1.4) | TIME-6 | D-022 |
+| Polyline flight model only with a local DB2 extraction; taxi-derived timings local-only (the local data is now `local-maps/taxi.local.json`, section 1.4). **Superseded by D-039 B** (section 1.6): the committed taxi file gives TIME-6 in every build | TIME-6 | D-022 |
 | Unknown XP: known-XP lower bound, `unknownXpEvents`, lower-bound levels, `-uncertain` variants | XP-4, 7.6 | DSO-05, F12 |
 | Objective time and kill XP from one assumed count | TIME-9 | DSO-05 |
 | Multi-target and partial `complete`; incidental completion at turn-in | TIME-10, TIME-11 | DSO-07, D-020 |
@@ -261,9 +261,9 @@ and `src/domain/*.ts` were patched. This file now follows those rulings:
 | `TrainStep.skillId` lets a profession `train` step raise `CharacterState.skills` | TIME-3, 7.1, 7.6 |
 | `character.priorHistory`, `priorCompletedQuests` and `priorQuestLog` seed the walker; with `priorHistory: 'unknown'`, prerequisite checks are `-unverifiable` warnings | 7.1, 7.6, 7.8; resolves 10.10 |
 | VAL-22 is an info on accept that never blocks (confirmed) | 7.2, 7.6, 7.8 |
-| TravelGraph dock positions come from dataset dock NPCs or user-entered locations | TIME-7 |
+| TravelGraph dock positions come from dataset dock NPCs or user-entered locations (**extended** in section 1.6: or the committed taxi file's matched stops, inferred) | TIME-7 |
 | Zero-wait instance entrance edges from the dungeon entrances in `zones.json` make dungeon steps reachable | TIME-7; resolves 10.12 |
-| Local per-leg taxi times live in the local extraction set as `local-maps/taxi.local.json` (dev/preview only) | TIME-6 |
+| Local per-leg taxi times live in the local extraction set as `local-maps/taxi.local.json` (dev/preview only) (**superseded** in section 1.6: the committed taxi file) | TIME-6 |
 | The `taxiDetourFactor` default is a cited aggregate client statistic, allowed under D-022 and D-024 | 1.2, TIME-5; resolves the aggregate part of 10.7 |
 | Grind level targets carry an offset (`xpInto`, `xpShort`, `fraction`) resolved with the XP table | XP-4, TIME-12, TIME-T |
 | The coefficients fitted to RXPGuides flight times appear nowhere in the repository (D-024) | R-1 (checked; one statement that bounded a fitted coefficient was removed) |
@@ -334,6 +334,35 @@ confirmed by the architect in D-040 ("Rulings").
 | **Ruled (architect, D-040):** kill, `killCredit`, object, spell and event work a `complete` step priced before the accept does not count toward the quest in game (SIM-16 says so), so it stays open after the accept and the turn-in carries it again. The route's time and XP then include the work twice, as the game would need it done twice. SIM-16 already warns on the early step. The RXP Forever guides have no such case (the 19 double-priced turn-ins before this fix were all item objectives) | TIME-10, TIME-11, TIME-T 36 | review D40-01 |
 
 ---
+
+### 1.6 The committed client taxi file (D-039 B; map presentation steps MP.8 and MP.9)
+
+The owner committed the client taxi graph (D-039 B, 2026-09-26), which settles OD-6: deployed
+builds time flights from real path lengths. Applied on 2026-09-28 with the map presentation's
+steps MP.8 and MP.9 (docs/research/map-presentation.md §9, §10).
+
+| Change | Where | Driver |
+|---|---|---|
+| TIME-6 applies in every build that loads `public/maps/client/taxi.json`: its 286 flights (`TaxiPath` with `Cost` > 0 between nodes of maps 0 and 1, build 1.60.1.70009) with their `L3D` lengths are the per-leg data. A developer's local `taxi.local.json` has the same shape; the app does not load it | TIME-6 | D-039 B, OD-6 |
+| TIME-5 is the fallback: while the file loads (the first walk), for good when it fails (HTTP, hash, format), and for a journey its flights do not cover | TIME-5, TIME-6 | D-039 B; map-presentation.md §9 |
+| The TravelGraph's nodes carry the file's `TaxiNodes` rows: a dataset flight master takes the row nearest it within 50 yd (`INFERRED`), the other rows are nodes of their own and replace the cited seeds of the same ids | TIME-5, TIME-6 | ARCHITECTURE §9.1 |
+| A seeded transport's dock takes the position of the file's transport stop it was matched to by hand (`inferred`, with its record); user docks and dock NPCs win over it. The file's other transport paths reach no TravelGraph record | TIME-7 | D-039 B, NAV-08 |
+| The flight's `model` is `taxi-path` for TIME-6 (it was `local`) | TIME-6 | `src/sim/taxi.ts` |
+
+**Travel review of the map rework (2026-09-30, findings TR-01 to TR-14).** Applied with the fixes;
+the berth rule (TR-03) is the fixer's choice among the review's options and waits for the
+architect's ruling.
+
+| Change | Where | Driver |
+|---|---|---|
+| A transport step that names no record and no dock no longer chooses its service among inferred docks: they count as unpositioned for the choice, so the step stays unknown with SIM-3, as before the file loaded, until it names its transport | TIME-7 | TR-01 |
+| A ride records its edge and where each dock's position comes from, with an inferred dock's client record (`transport-ride`, not an issue); Details words it ("dock position inferred from client transport path 11616, stop 1 of 2"). The map popover's "Add transport" adds the transport by id and no longer copies the inferred stop into `TransportRef.dock`, so the graph keeps it `inferred` | TIME-7 | TR-02; map-presentation.md §10 (MP-R32) |
+| A walk to or from an inferred dock (a client berth, in the water beside the pier) prices its swimming yards at the ground speed and raises no SIM-21: the swim stands for the walk along the pier (assumption) | TIME-7 | TR-03 |
+| The same-map transport rule fires only between navmesh components: at nav revision of 1.60.1.70009 that is Rut'theran ↔ Auberdine; Menethil and Southshore are one component (a swim across the water joins them), so the rule never fires there | TIME-7 | TR-06, NAV-08 |
+| While the taxi file loads the results are provisional (`final` false, `taxiPending` true, with the note "loading the client taxi file"); they become final with the walk after it loads or fails | TIME-5, TIME-6 | TR-07 |
+| A taxi node's factions are one source for the engine and the map: the committed row's sides when they name one, else the flight master's; a flight whose departure or destination is not open to the character's faction is still timed, with `SIM024-flight-faction` | TIME-5, TIME-6, 7.7 | TR-08 |
+| A journey the file covers only through flight points the character does not know is timed by TIME-5 with `SIM007-flight-unknown-path-journey`; one the file does not cover at all stays the ordinary fallback, without an issue | TIME-6, 7.7 | TR-09 |
+| The TravelGraph's taxi edges say which flights exist; their lengths are TIME-6's per-leg data only (`localTaxi`), and the report says which set the edges are (`edgeSource`) | TIME-6 | TR-13 |
 
 ## 2. Levels and XP required
 
@@ -1159,7 +1188,11 @@ On foot the character moves at `runSpeed`; mounted at `runSpeed x (1 + riding.sp
   `MOD_TAXI_FLIGHT_SPEED`; forever-game-rules.md section 6.4). Exposed as `taxiSpeedBonusPct`,
   default 0.
 
-#### TIME-5 Default flight time (D-024; LIC-07, F17)
+#### TIME-5 Straight-line flight time: the fallback (D-024; LIC-07, F17)
+
+TIME-5 times a flight when TIME-6 cannot: while the committed taxi file loads, when it failed to
+load or its hash did not match, for a journey its flights do not cover, and always with
+`taxiModel: 'straight-line'`. Before D-039 B it was the default in every deployed build.
 
 ```
 flightSeconds = flightMasterSeconds
@@ -1182,9 +1215,19 @@ flightSeconds = flightMasterSeconds
   the flight unknown with `SIM008-flight-unresolved` (warning).
 - A node missing from `knownFlightPaths` emits `SIM007-flight-unknown-path` (warning); the flight is
   still timed. `flight discover` adds the node and costs `flightMasterSeconds`.
-- The default model has no taxi graph, so a multi-hop journey is timed as one straight line.
+- A departure or destination node whose factions exclude the character's emits
+  `SIM024-flight-faction` (warning); the flight is still timed. A node's factions
+  (`TaxiNode.factions`) are one source for the engine and the map: with the committed file, the
+  row's side flags when they name a side (an `INFERRED` decode), else the flight master's faction in
+  the dataset; a cited node its seed's (review TR-08). Unknown factions count as open.
+- TIME-5 has no taxi graph, so a multi-hop journey is timed as one straight line.
 - Basis: `assumption` (`taxiDetourFactor`), with `eraFallback` in `forever-beta` (`taxiSpeed` is
   `era-assumed`). `breakdown.travel` takes the flight, `breakdown.interaction` the flight master.
+- The map's flight network is not drawn while TIME-5 is the only model (the file failed), and its
+  row says why (map-presentation.md §9).
+- While the committed file is still loading, results that use TIME-5 are provisional: `final` is
+  false and `taxiPending` true, and the provisional note says "loading the client taxi file"; the
+  walk after the file loads (TIME-6) or fails (TIME-5 for good) is final (review TR-07).
 
 **Evidence for `taxiDetourFactor = 1.4` (client data only; measured 2026-09-25 for revision 2; no
 RXPGuides input).** Method: for every `TaxiPath` row with `Cost > 0` whose `TaxiPathNode` points
@@ -1216,18 +1259,24 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
   so the pending taxi-timing decision (OD-6 in STATUS.md) does not cover it, and it is not derived
   from RXPGuides data (D-024). Its ruleset basis stays `assumption`, because applying one factor
   to every straight line is a modelling choice. This resolves the aggregate part of open question
-  10.7; OD-6 itself stays pending.
+  10.7. OD-6 was later settled by D-039 B (section 1.6, TIME-6).
 
-#### TIME-6 Local per-leg flight times (`local-maps/taxi.local.json`; D-022)
+#### TIME-6 Per-leg flight times from the committed taxi file (`public/maps/client/taxi.json`; D-039 B)
 
-- **Where the data lives (ARCHITECTURE §7.3, §9.1):** per-leg taxi times belong to the local
-  extraction set, as `local-maps/taxi.local.json`: gitignored, at the repository root outside
-  `public/`, served only by the dev/preview plugin, never emitted by `vite build`, and rejected by
-  `audit-dist`. It is built from the developer's own `TaxiNodes`/`TaxiPath`/`TaxiPathNode` export.
-  These taxi-derived leg timings are never committed or deployed while OD-6 is pending (D-022).
-- **When it is used:** with `taxiModel: 'auto'` (the default), a leg that the loaded file covers
-  replaces TIME-5; a leg it does not cover, a machine without the file, and every deployed build
-  use TIME-5. `taxiModel: 'straight-line'` forces TIME-5 everywhere.
+- **Where the data lives (ARCHITECTURE §9.1; D-039 B, which settles OD-6):** the committed client
+  taxi file, `public/maps/client/taxi.json`, written by `tools/maps/client-tables.ts` from the
+  client's `TaxiNodes`, `TaxiPath` and `TaxiPathNode` (build 1.60.1.70009; FileDataIDs, CKeys, the
+  WoWDBDefs commit and the tool tree hash in its manifest, with a NOTICE naming Blizzard), with
+  `--check`. The app loads it with the other client tables (`src/infra/maps/client-tables.ts`,
+  SHA-256 against the manifest), in the derived pipeline's chunk, once and never fatally, and gives
+  the walker its flights as the per-leg data (`taxiLegDataOf` in `src/sim/taxi.ts`). A developer's
+  local extraction (`local-maps/taxi.local.json`, the Milestone 6 arrangement) has the same shape
+  and only overrides it where a caller passes it; the app does not load it.
+- **When it is used:** with `taxiModel: 'auto'` (the default), a journey that the file's flights
+  cover replaces TIME-5. While the file loads (the project's first walk), when it failed (HTTP,
+  hash or format), and for a journey its flights do not cover, TIME-5 is used, and the project is
+  walked again once the file has loaded or failed. Until then the results are not final
+  (`taxiPending`, TIME-5). `taxiModel: 'straight-line'` forces TIME-5 everywhere.
 - **What the simulator needs from each leg:** its two nodes (as `taxiNodeId`s), its `L3D` length
   and the build. The leg time is computed at load, so the effective speed and bonus still apply:
 
@@ -1246,16 +1295,32 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
   server's routing is unknown).
 - A `TaxiNodeRef` with a `taxiNodeId` matches the file's legs directly. A ref with only an
   `npcId` maps to the TaxiNodes row nearest its flight master's position on the same map
-  (`INFERRED`, local), within 50 yd (Milestone 6 review: a row further away is taken to be another
-  node, and the flight falls back to TIME-5); the file lists each row's id and world position
-  beside its legs for this. Transport paths (cost 0, `Delay > 0`) are excluded.
+  (`INFERRED`), within 50 yd (Milestone 6 review: a row further away is taken to be another node,
+  and the flight falls back to TIME-5); the file lists each row's id and world position beside its
+  flights for this. With the committed file the TravelGraph already gives each flight master its
+  row (ARCHITECTURE §9.1): at 1.60.1.70009, 60 of the 63 dataset flight masters stand within
+  11.5 yd of a row; Vesprystus (Rut'theran Village) and the two Moonglade druid flight masters,
+  whose paths cost nothing, stand at no row of a paid path, so their flights use TIME-5. Transport
+  paths (cost 0, `Delay > 0`) are never legs.
 - A row is usable as an intermediate node when a node the character knows maps to it, whichever
   key form it was learned under (`npc:` or `taxi:`), and that node serves the character's faction
-  (its `factions` include it or are unknown).
+  (its `factions` include it or are unknown; the one faction source of TIME-5).
+- **No journey through known nodes (review TR-09):** when the file joins the two rows only through
+  rows the character does not know yet (open to its faction), the flight is timed by TIME-5 and
+  records `SIM007-flight-unknown-path-journey` (warning), so the straight line never stands in
+  silently. A journey the file does not cover at all (no path even through unknown nodes, or rows
+  missing) is the ordinary fallback, without an issue.
+- The TravelGraph's taxi edges say which flights exist; the lengths are only in the per-leg data
+  (`EngineContext.localTaxi`), and `report.client.edgeSource` says whether the edges are the file's
+  or the caller's (review TR-13).
 - Basis: `L3D` is client data, `taxiSpeed` is `era-assumed`, the routing is an assumption, so the
-  result is `assumption` with `eraFallback`.
-- Tests use synthetic node lists, or individual cited `TaxiPathNode` rows (D-022), never a bulk
-  table.
+  result is `assumption` with `eraFallback`. The flight's `model` is `taxi-path`.
+- **The map** (map-presentation.md §9, §25.4) draws the same flights as the flight network, each
+  pair's hover giving both directions' times by this rule from the effective `taxiSpeed`,
+  `taxiSpeedBonusPct` and `flightMasterSeconds`, and marks the route's own journeys routed as this
+  rule routes them.
+- Unit tests use synthetic node lists; the committed file is checked end to end in
+  `tests/map-places.test.ts` (a flight timed from its committed length, TIME-5 before it loads).
 
 #### Research note R-1 (not a rule): the RXPGuides-referenced fit, superseded by D-024
 
@@ -1322,7 +1387,18 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
     with their basis.
   - `transport: null`, or a `transport` with `id: null` and no `dock`: the walker picks the
     TravelGraph transport from the current map to the destination's map with the least total time,
-    ties by transport id. None: unknown with SIM-4.
+    ties by transport id. None: unknown with SIM-4. **It never chooses among inferred docks (review
+    TR-01):** which named service a client path is, is itself inferred (map-presentation.md §10), so
+    for this choice a dock whose only position is the committed file's stop counts as unpositioned,
+    and the step stays unknown with SIM-3, as before the file loaded, until it names its transport
+    (`TransportRef.id`). User docks and dock NPCs still position the choice. No UI path creates such
+    a step (the map popover names the transport, RXP import writes `auto` travel); imported or
+    hand-edited projects can.
+  - **What the ride records (review TR-02; map-presentation.md §10, MP-R32):** a named transport,
+    or a chosen one whose total is known, records the edge ridden and each dock's name and position
+    source (`transport-ride`; `inferred` with its client record, `user`, `dock-npc`, or none). It is
+    not an issue; Details words it ("from Auberdine, dock position inferred from client transport
+    path 11616, stop 1 of 2"). A user-entered dock replaces the departure's position and its record.
   - A `transport` with `id: null` and a `dock` but no matching record: the walker walks to the
     dock, waits and rides the default times, and arrives at the step's location (for a `travel`
     step the location is the destination, ARCHITECTURE §8.1). Without a step location the arrival
@@ -1336,17 +1412,47 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
   - A transport whose `factions` excludes the character's faction emits `SIM014-transport-faction`
     (warning). Faction restrictions are `UNKNOWN` in the client data (forever-game-rules.md 6.5).
   - Transports do not use the taxi model.
+  - **Client berths (review TR-03; the fixer's choice, pending the architect's ruling):** an
+    inferred dock is the ship's stop, which lies in the water beside its pier, 13 to 15 yd from the
+    nearest walkable polygon on the committed navmesh. The runtime snap puts a point over the pier
+    on the water surface below the deck (the lowest floor), so the navmesh walk to a berth ends
+    with a swim along the shore (400 yd from the Auberdine flight master to the path-11616 berth;
+    SIM-21 on every step that used such a dock). A walk to or from an
+    inferred dock (the walker's dock and onward walks, a walk from a berth where a ride left the
+    character, and the same-map rule's walks) therefore prices its swimming yards at the ground
+    speed, raises no long-swim warning (SIM-21), and is an assumption: the swim stands for the walk
+    along the pier. Measured on the committed navmesh from each dock's town flight master, against
+    the walk to the nearest point within 100 yd of the berth that the snap puts on a walkable
+    polygon plus the straight rest at the run speed: the rule is within +12 % to -14 % at five of
+    the seven berths (the swim-speed price was +8 % to +34 % there), and 38 % and 47 % short at the
+    path-11167 Auberdine berth, where the walk along the piers (419 yd) is much longer than the
+    navmesh path through the water (271 yd), and at Rut'theran, where the nearest walkable point found is 95 yd
+    away and its walk still swims 72 yd, so that comparison is the weakest
+    (`.cache/map-ui-build/fix-travel/berth-compare.json`; a research note, not a gate). Other
+    options the review named, a boarding point per dock or a snap that prefers the deck, need a
+    navigation-data change and remain open.
 - **TravelGraph seed:** the client ships the Era transports (paths 241, 285, 292, 293, 295, 301, 302,
   303, 436) and the Forever paths 11616, 11167, 11391, 11398 and 11457 (forever-game-rules.md
   section 6.5). A path in the client does not prove the transport runs on the server, so each
-  record's `basis` says what is known. **Dock positions (ARCHITECTURE §9.1)** come from dataset
-  dock NPCs (zeppelin and dock masters, at their converted spawns) or from user-entered locations
-  (`TransportRef.dock`). **Superseded (architect ruling):** revision 2 also allowed cited
-  `TaxiPathNode` dock positions; those path ids now serve only as evidence of which transports
-  exist. A dock NPC that the dataset does not ship (ARCHITECTURE §5.2 selects entities) leaves its
-  transport without a seeded position until the user enters the dock. Ride times and stop delays
-  derived from `TaxiPathNode` are taxi-derived timings and stay local-only by default (D-022,
-  OD-6).
+  record's `basis` says what is known. **Dock positions (ARCHITECTURE §9.1)** come from
+  user-entered locations (`TransportRef.dock`), dataset dock NPCs (zeppelin and dock masters, at
+  their converted spawns), or, since D-039 B, the committed taxi file's transport stops: each seed
+  names the client path its source cites and which of that path's stops each of its stops is,
+  matched by hand (map-presentation.md §10), and the dock takes that stop's position with basis
+  `inferred` and its record ("client transport path 11167, stop 2 of 3"; `TransportDock.pointFrom`
+  and `record`), in that order of precedence. At 1.60.1.70009 every one of the 15 seeded docks is
+  positioned this way. The same-map transport rule (terrain-navigation.md §9.3 case 2) fires only
+  between two navmesh components, so on the committed navmesh it applies to Rut'theran ↔ Auberdine
+  (Teldrassil is a component of its own); Menethil and Southshore are one component, joined by a
+  swim across the water (a 1,078 yd swim with SIM-21 from flight master to flight master), so it
+  never fires there (NAV-08, corrected by review TR-06; `tests/derived-navigation.test.ts`). A user
+  dock still positions only a stop on a map where its transport has one stop (`userDocksOf`): on a
+  map with two stops of one transport (Menethil and Southshore) which stop it is would be a guess,
+  and that limit remains. The file's other transport paths (241, 285, 292, 301, 302, 303,
+  436) match no seed: the map draws their stops as "service unknown", and they never reach the
+  TravelGraph. (Revision 2's cited `TaxiPathNode` dock positions, superseded by an architect
+  ruling, are not what this is: the positions are the committed file's, with their record.) Wait
+  and ride times stay the assumed defaults: the stops' `Delay` seconds are not used as ride times.
 
 ### 6.5 Interaction times (all ASSUMPTION unless stated)
 
@@ -1804,13 +1910,13 @@ Informational fields (no gate):
 - **Quest-log capacity** is the effective `questLogCapacity` of the ruleset (VAL-20).
 - **Unknown quest IDs** are warnings (`DATA002-unknown-quest`), never errors.
 
-### 7.7 Simulation checks (SIM-1..22)
+### 7.7 Simulation checks (SIM-1..24)
 
 The walker emits these while simulating (ARCHITECTURE §9.2-9.4). ARCHITECTURE §9.4 names this
 table as the authoritative SIM list and names five of its checks in words (flight to an unknown
 path, hearth on cooldown, cross-world travel without a transport, unresolved location, target
 level reached too late). Rules marked "defined here" have no ARCHITECTURE wording of their own;
-they are defined by this table. There are no SIM codes beyond SIM-23. SIM-17..21 were added in
+they are defined by this table. There are no SIM codes beyond SIM-24. SIM-17..21 were added in
 Milestone 6 for the travel warnings of TIME-2 (terrain-navigation.md §9.3, §18); the simulation
 passes each leg's warning through as data and the validator emits the code. SIM-22 and SIM-23 are
 the route-level SIM issues (`stepId` null).
@@ -1823,7 +1929,7 @@ the route-level SIM issues (`stepId` null).
 | SIM-4 | `SIM004-cross-world-no-transport` | warning | A move between world maps without a transport step, a hearth use or an instance entrance edge (TIME-7) | §9.3, §9.4 "cross-world travel without a transport" |
 | SIM-5 | `SIM005-hearth-cooldown` | warning | `hearth use` before `hearthReadyAt`; the walker waits (TIME-4). `-uncertain` variant when a step since the last cast has unknown time: the wait is unknown, at most the computed one | §9.2, §9.4 "hearth on cooldown" |
 | SIM-6 | `SIM006-hearth-unbound` | warning | `hearth use` with no bind point (TIME-4) | defined here |
-| SIM-7 | `SIM007-flight-unknown-path` | warning | A flight from or to a node not in `knownFlightPaths` (TIME-5) | §9.4 "flight to an unknown path" |
+| SIM-7 | `SIM007-flight-unknown-path` | warning | A flight from or to a node not in `knownFlightPaths` (TIME-5). `-journey` variant (warning): the committed taxi file joins the two flight points only through nodes the character does not know, so TIME-5 stands in (TIME-6; review TR-09) | §9.4 "flight to an unknown path" |
 | SIM-8 | `SIM008-flight-unresolved` | warning | A `TaxiNodeRef` or `nodeQuery` that resolves to no node, several nodes, or a node without a position (TIME-5) | defined here |
 | SIM-9 | `SIM009-mount-untrained` | warning | Travel mode `'mount'` before riding is trained (TIME-2) | defined here |
 | SIM-10 | `SIM010-riding-too-low` | warning | A riding `train` step (by `skill` or `ridingSpells`) below `mountLevels`; `-uncertain` variant (TIME-3) | defined here (DSO-16) |
@@ -1840,6 +1946,7 @@ the route-level SIM issues (`stepId` null).
 | SIM-21 | `SIM021-long-swim` | warning | The leg's longest contiguous swim is over 200 yd; fatigue is unverified (TIME-2) | defined here (terrain-navigation.md §10) |
 | SIM-22 | `SIM022-legs-pending` | info | Route level: navigation legs are still being computed; their times are the straight-line fallback until then (TIME-2). Absent from a final state | defined here (terrain-navigation.md §9.3) |
 | SIM-23 | `SIM023-start-xp-beyond-level` | warning | Route level: `character.startXp` is at or beyond what the start level holds; the walk starts at the level it reaches (7.1; Milestone 6 review) | defined here |
+| SIM-24 | `SIM024-flight-faction` | warning | A flight's departure or destination node is not open to the character's faction (`TaxiNode.factions`); the flight is still timed (TIME-5; review TR-08) | defined here |
 
 ### 7.8 Issue codes (F24)
 
@@ -1885,7 +1992,7 @@ here so the list is complete.
 | (ARCHITECTURE §5.5) | `DATA001-custom-shadowed` | info | |
 | (7.4) | `DATA002-unknown-quest` | warning | |
 | (7.4) | `DATA003-unknown-objective` | warning | |
-| SIM-1..23 | see 7.7 | see 7.7 | `SIM005-hearth-cooldown-uncertain`, `SIM010-riding-too-low-uncertain`, `SIM011-target-level-late-uncertain`, `SIM016-complete-not-in-log-unverifiable` (warnings) |
+| SIM-1..24 | see 7.7 | see 7.7 | `SIM005-hearth-cooldown-uncertain`, `SIM007-flight-unknown-path-journey`, `SIM010-riding-too-low-uncertain`, `SIM011-target-level-late-uncertain`, `SIM016-complete-not-in-log-unverifiable` (warnings) |
 
 ---
 
@@ -1929,7 +2036,7 @@ objective-kill and grind XP alike (Milestone 6 review).
 | COL-1..5 | `level`, `greenRange`, `difficultyYellowLowerBound` | none | display only; feeds LINT-3 |
 | TIME-1..3 | `runSpeed`, `swimSpeed`, `groundDetourFactor`, `mountSpeedBonus`, `mountLevels`, `ridingSpells`, `Location.radius`, the `TravelModel`'s legs (seconds, method, pending, warnings) | `location`, `timeSec`, `riding`, `skills` (profession training), `knownSpells` | `duration`, `breakdown.travel`, `breakdown.interaction`; `assumption` (straight line) or `derived` (navigation); `eraFallback` via `runSpeed`; SIM-17..21 from the leg's warnings |
 | TIME-4 | `hearthCastSeconds`, `hearthCooldownSeconds`, `bindSeconds`, the durations since the last cast | `hearth`, `hearthReadyAt`, `location`, `timeSec` | `breakdown.waiting` (cooldown), `breakdown.travel` (cast); the cast is `source` and a wait with no step since the cast `derived`; otherwise the wait takes the combined basis of the durations since the cast, and is unknown after unknown time (TIME-4) |
-| TIME-5, TIME-6 | `taxiModel`, `taxiSpeed`, `taxiDetourFactor`, `taxiSpeedBonusPct`, `flightMasterSeconds`, TravelGraph taxi nodes, local `taxi.local.json` legs (dev/preview only) | `knownFlightPaths` (discover), `location`, `timeSec` | `breakdown.travel`, `breakdown.interaction`; `assumption`; `eraFallback` via `taxiSpeed` |
+| TIME-5, TIME-6 | `taxiModel`, `taxiSpeed`, `taxiDetourFactor`, `taxiSpeedBonusPct`, `flightMasterSeconds`, TravelGraph taxi nodes, the committed taxi file's legs (`EngineContext.localTaxi`, `taxiLegDataOf`) | `knownFlightPaths` (discover), `location`, `timeSec` | `breakdown.travel`, `breakdown.interaction`; `assumption`; `eraFallback` via `taxiSpeed` |
 | TIME-7 | TravelGraph transports and instance entrance edges, `TransportRef`, `transportWaitSeconds`, `transportRideSeconds` | `location`, `timeSec` | `breakdown.waiting` (wait), `breakdown.travel` (walk and ride); `assumption` |
 | TIME-8 | interaction keys, `durationOverride` | `timeSec` | `breakdown.interaction`; `assumption` |
 | TIME-9..11 | `ObjectiveDef`, counts, objective keys, `objectiveConcurrency`; a log entry's `routeAccepted` (D-040) | `questLog` objectives (finish, an accept's items collected before it, and a turn-in's carried or incidental ones), `itemsBeforeAccept`, `xp`, `level`, `timeSec` | `breakdown.objective`, kill part of `xpGained` (a `complete` step's, or a turn-in's carried work, D-040); `assumption` |
@@ -1955,12 +2062,12 @@ objective-kill and grind XP alike (Milestone 6 review).
 | `rested` | P=10 (xpToNext 7,600): R max = 5,700; a 95 XP kill with R = 5,700 gives 190 XP and R = 5,605; quest XP unaffected; R = 0 at 60 |
 | `colour` | Every row of COL-3; a ruleset switch to `difficultyYellowLowerBound = -4` flips `Q-P = -3, -4` to yellow |
 | `ruleset` | Both ids; every key has a basis; `questLogCapacity` in `forever-beta` is 40, `client-data`, with a launch-enforcement `note`; precedence (project assumption wins and carries `basis: 'assumption'`, `source: 'project'`); only `AssumptionValues` fields are overridable, with the names of section 1.2; `maxLevel` 20 override (TIME-T 22); `eraFallback` false in `era-1.15` |
-| `travel` | TIME-T rows 1-4, 10-11 and 30; `'mount'` without training gives SIM-9; unresolved location gives SIM-3 and unknown time; `Location.radius` shortens the move; a `travel` step with a null location and a `.deathskip` note make the position unknown without SIM-3; a transport with a user-entered `dock` and no TravelGraph record; a navigation leg's warnings and pending flag pass through (SIM-17..21), and its radius shortening is proportional |
+| `travel` | TIME-T rows 1-4, 10-11 and 30; `'mount'` without training gives SIM-9; unresolved location gives SIM-3 and unknown time; `Location.radius` shortens the move; a `travel` step with a null location and a `.deathskip` note make the position unknown without SIM-3; a transport with a user-entered `dock` and no TravelGraph record; a navigation leg's warnings and pending flag pass through (SIM-17..21), and its radius shortening is proportional; a transport step with no record never chooses among inferred docks (TR-01); a ride's `transport-ride` fact with its docks' records (TR-02); walks to and from a client berth priced as walking, without SIM-21, in the walker and the same-map rule, and on the committed navmesh (TR-03, TR-06; `src/engine/walker-travel.test.ts`, `tests/derived-navigation.test.ts`) |
 | `riding` | TIME-T rows 3-4 and 23-25: recognised by `skill: 'riding'` or by `ridingSpells`; starting tier from `character.riding`; `era-1.15` has no riding spell ids |
 | `training` | A profession `train` step with a `skillId` adds the skill line at 1; a later VAL-15 check on it gives `-unverifiable`; `skillId: null` changes only `knownSpells` |
 | `grindTarget` | TIME-T rows 21 and 26-29: every offset kind, carry-over past a level, unreachable targets above `maxLevel` |
 | `hearth` | TIME-T rows 8-9; unbound hearth gives SIM-6; moving a bind step changes the later destination |
-| `taxi` | TIME-T rows 5-7 (straight-line default); `TaxiNodeRef` resolution by `npcId`, `taxiNodeId` and `name`, and SIM-8 for no match or several; leg length from a synthetic `taxi.local.json`-shaped fixture (never a real extraction); multi-hop sum over known nodes; transports excluded (`Delay > 0`); `taxiModel: 'auto'` falls back to TIME-5 without the local file or for an uncovered leg; `'straight-line'` ignores the file. **Superseded:** the first draft's "model B on three legs" test (research note R-1) |
+| `taxi` | TIME-T rows 5-7 (straight-line default); `TaxiNodeRef` resolution by `npcId`, `taxiNodeId` and `name`, and SIM-8 for no match or several; leg length from a synthetic `taxi.local.json`-shaped fixture (never a real extraction); multi-hop sum over known nodes; transports excluded (`Delay > 0`); `taxiModel: 'auto'` falls back to TIME-5 without the local file or for an uncovered leg; `'straight-line'` ignores the file; the `-journey` variant of SIM-7 only for a journey through unknown nodes; SIM-24 for an endpoint closed to the faction; results not final while the file loads (`tests/map-places.test.ts`). **Superseded:** the first draft's "model B on three legs" test (research note R-1) |
 | `objectives` | TIME-T rows 12-17 and 33-37; unknown reputation objective gives SIM-15; already-done target gives SIM-12; a turn-in carries open objectives only for a quest the route accepted (not pre-route, assumed or failed ones), priced as an explicit `complete` step without a location (the same drop NPC and kill place) and without its travel; items collected before the accept are not priced again; the known kill XP of a turn-in with unknown quest XP counts in the route's XP; a re-walk from a checkpoint equals a full walk, including one between a `complete` step and the accept that counts its items (D-040) |
 | `validator` | One fixture per VAL-1..22, built from real Forever quest IDs after corrections (e.g. the 5-quest "Sweet Amber" chain 48-53, the 2/23/24 `inGroupWith` triple); Skyborne masks 77, 178, 1; `-unverifiable` variants of VAL-15..19; VAL-22 is info only and never blocks; a repeatable quest accepted twice raises no VAL-2. The data has no record with `requiredSpell` or `availableStartingWith`, so VAL-17 and that part of VAL-18 stay synthetic |
 | `priorHistory` | TIME-T row 31; `priorCompletedQuests` satisfies VAL-8/9; `priorQuestLog` satisfies VAL-10 and lets a turn-in pass VAL-30 (with `VAL030-objectives-incidental`); the four `-unverifiable` warnings with `'unknown'`; errors with `'listed'`; VAL-2 and VAL-12 still fire on listed quests |
@@ -1980,13 +2087,14 @@ objective-kill and grind XP alike (Milestone 6 review).
    Needs in-game observation at a few (P, Q) pairs.
 4. Whether Era/Forever round **reduced** quest XP with `RoundXPValue` (default) or not.
 5. The x2.5 dungeon-elite multiplier exists only in the emulators.
-6. **Flight-time calibration.** The default (TIME-5) is an assumption on an Era speed. Calibrate it
+6. **Flight-time calibration.** Both models (TIME-6 on the committed path lengths, TIME-5 on the straight line) assume an Era speed. Calibrate it
    independently from self-timed in-game legs (the planned-vs-actual `ext` bag). The first draft's
    item "re-validate model B against our own timings" is superseded: model B is not used (R-1,
    D-024).
-7. **Taxi data in the repository.** Whether taxi-derived leg timings may be committed is pending
-   (OD-6 in STATUS.md; default local-only, D-022). Until then they live only in the local
-   `local-maps/taxi.local.json` (TIME-6). **Resolved in part (architect ruling, D-022, D-024):**
+7. **Taxi data in the repository. Resolved (owner, D-039 B):** the client taxi graph is committed
+   (`public/maps/client/taxi.json`) and deployed builds use TIME-6 from it (section 1.6); OD-6 is
+   closed. Before that it lived only in the local `local-maps/taxi.local.json`. **Resolved in part
+   earlier (architect ruling, D-022, D-024):**
    the TIME-5 detour default is a cited aggregate client statistic, allowed under D-022; it is not
    a taxi-derived leg timing, so OD-6 does not cover it. The first draft's question about
    committing values derived from client DB2 is otherwise settled by D-022 (cited individual

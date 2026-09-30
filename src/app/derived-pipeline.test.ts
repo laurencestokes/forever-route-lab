@@ -6,7 +6,7 @@ import { NavWorkerError, type NavLegQuery, type NavLegResult } from '../nav/work
 import { fixedClock } from './clock';
 import { type Command, insertNote, setStepLocation } from './commands';
 import { createDerivedStore, type DerivedResults, pendingTravelReason, pendingTravelText, provisionalNote } from './derived';
-import { createDerivedPipeline, type DerivedPipeline } from './derived-pipeline';
+import { createDerivedPipeline, type DerivedPipeline, SELECTION_SETTLE_MS } from './derived-pipeline';
 import { acceptStepsAt, MAP_TEST_DATASET, mapTestSteps, mapTestWorkspace } from './map-test-helpers';
 import { createNavigationRuntime, type DisposableNavLegService, type NavigationRuntime, type NavigationState } from './navigation-runtime';
 import { ManualTimers, testNavManifest, walkable } from './navigation-test-helpers';
@@ -92,7 +92,7 @@ interface Setup {
   readonly runtime: NavigationRuntime;
 }
 
-function setup(opts: { readonly steps?: RouteStep[]; readonly navigation?: 'checking' | 'available' | NavigationState; readonly rewalkMs?: number } = {}): Setup {
+function setup(opts: { readonly steps?: RouteStep[]; readonly navigation?: 'checking' | 'available' | NavigationState; readonly rewalkMs?: number; readonly selectionSettleMs?: number } = {}): Setup {
   const workspace = mapTestWorkspace(opts.steps ?? mapTestSteps(), T0);
   const store = createEditorStore({ project: workspace.project, ids: sequentialIdSource(1000), clock: fixedClock(T0) });
   const timers = new ManualTimers();
@@ -112,6 +112,7 @@ function setup(opts: { readonly steps?: RouteStep[]; readonly navigation?: 'chec
     timers,
     now: () => timers.now,
     ...(opts.rewalkMs === undefined ? {} : { rewalkMs: opts.rewalkMs }),
+    ...(opts.selectionSettleMs === undefined ? {} : { selectionSettleMs: opts.selectionSettleMs }),
     onPublished: (r) => {
       published.push(r);
       publishedAt.push(timers.now);
@@ -217,6 +218,84 @@ describe('derived pipeline: walks and publishing', () => {
     // Any other step's state, from the store's action.
     expect(s.handle.store.stateBefore(3)?.questLog.has(2 as never)).toBe(true);
     expect(s.handle.store.stateBefore(s.steps.length + 1)).toBeNull();
+  });
+
+  it('publishes the quest state after the focus step in a task of its own, with the zone spans, and rebuilds it only for a new walk or step (MP.3)', () => {
+    const s = setup();
+    s.timers.advance(0);
+    // No focus: no route state, but the spans are built.
+    expect(s.handle.store.getState().questState).toBeNull();
+    expect(s.handle.store.getState().zoneSpans?.size).toBeGreaterThan(0);
+    const accept = s.steps[2];
+    const turnIn = s.steps[4];
+    if (accept === undefined || turnIn === undefined) throw new Error('no step');
+    s.store.select({ kind: 'single', id: accept.id });
+    // The selection is published at once; the quest state follows in its own task.
+    expect(s.handle.store.getState().selected?.stepId).toBe(accept.id);
+    expect(s.handle.store.getState().questState).toBeNull();
+    s.timers.advance(0);
+    const model = s.handle.store.getState().questState;
+    expect(model).toMatchObject({ revision: 0, stepId: accept.id, stepIndex: 2, who: 'Orc Warrior' });
+    // Step 3 accepts Cull (2): in the log after it, with its objective open.
+    expect(model?.quests.get(2 as never)).toMatchObject({ cls: 'in-log', mark: 'in-progress' });
+    // A re-publish for the same walk and step keeps the model.
+    s.store.setView({ rightTab: 'details' });
+    s.timers.advance(0);
+    expect(s.handle.store.getState().questState).toBe(model);
+    // Another step: a new model; after the turn-in, Cull is done.
+    s.store.select({ kind: 'single', id: turnIn.id });
+    s.pipeline.flush();
+    expect(s.handle.store.getState().questState?.quests.get(2 as never)).toMatchObject({ cls: 'done', reason: 'Turned in' });
+    // An edit walks again and rebuilds it for the new revision, keeping unchanged entries.
+    const before = s.handle.store.getState().questState;
+    s.store.dispatch(insertNote({ text: 'a' }));
+    s.timers.advance(0);
+    const after = s.handle.store.getState().questState;
+    expect(after?.revision).toBe(1);
+    expect(after).not.toBe(before);
+    expect(after?.quests.get(2 as never)).toBe(before?.quests.get(2 as never));
+    s.store.select({ kind: 'none' });
+    s.timers.advance(0);
+    expect(s.handle.store.getState().questState).toBeNull();
+  });
+
+  it('hands the rows a short form of each issue that drops the step’s own quest (review UI-01)', () => {
+    const s = setup();
+    s.timers.advance(0);
+    const results = s.handle.store.getState().results;
+    const issue = results?.issues.find((entry) => entry.questId !== null && entry.message.includes(`(${String(entry.questId)})`));
+    if (results?.shortIssue === undefined || issue === undefined) throw new Error('no issue about a quest');
+    const short = results.shortIssue(issue, null);
+    expect(short).not.toBe(issue.message);
+    expect(short).not.toMatch(/\(\d+\)/);
+    // One string per issue object.
+    expect(results.shortIssue(issue, null)).toBe(short);
+  });
+
+  it('rebuilds the quest state once for a moving selection, for the step it stops on, with the app’s settle time (review UI-04)', () => {
+    const s = setup({ selectionSettleMs: SELECTION_SETTLE_MS });
+    s.timers.advance(0);
+    const [, , third, fourth, fifth] = s.steps;
+    if (third === undefined || fourth === undefined || fifth === undefined) throw new Error('no step');
+    const models = new Set<unknown>();
+    const unsubscribe = s.handle.store.subscribe(() => {
+      const model = s.handle.store.getState().questState;
+      if (model !== null) models.add(model);
+    });
+    const built = () => models.size;
+    const before = built();
+    // Three steps a held arrow key apart (its repeat is about 33 ms): no rebuild while it moves.
+    s.store.select({ kind: 'single', id: third.id });
+    s.timers.advance(30);
+    s.store.select({ kind: 'single', id: fourth.id });
+    s.timers.advance(30);
+    s.store.select({ kind: 'single', id: fifth.id });
+    s.timers.advance(SELECTION_SETTLE_MS - 1);
+    expect(built()).toBe(before);
+    s.timers.advance(1);
+    expect(built()).toBe(before + 1);
+    expect(s.handle.store.getState().questState?.stepId).toBe(fifth.id);
+    unsubscribe();
   });
 
   it('reports a walk that throws as failed and starts afresh on the next change', () => {

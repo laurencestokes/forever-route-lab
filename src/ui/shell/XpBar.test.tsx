@@ -86,7 +86,7 @@ describe('XpBar', () => {
 
 describe('StatusBar', () => {
   const props: StatusBarProps = {
-    xp: { level: 3, xp: 120, xpToNext: 1400, lowerBound: false },
+    xp: { level: 3, xp: 120, xpToNext: 1400, lowerBound: false, label: 'Level after step 4' },
     currentStep: { number: 4, total: 120, title: 'Placeholder step 4' },
     duration: knownReadout(3 * 3600 + 7 * 60 + 5, { assumed: true }),
     xpPerHour: unknownReadout('Quest XP unknown'),
@@ -98,15 +98,16 @@ describe('StatusBar', () => {
   it('shows each readout with its state', () => {
     const { container } = render(<StatusBar {...props} />);
     const region = screen.getByRole('region', { name: 'Route status' });
-    expect(region.textContent).toContain('4/120');
-    expect(region.textContent).toContain('Placeholder step 4');
+    // "Lv 3 after step 4": the level merges with the step (ui-refresh.md §8); the step's title is the level's tooltip.
+    expect(region.querySelector('.frl-xpbar__level')?.textContent).toBe('Lv 3 after step 4');
+    expect(region.querySelector('.frl-xpbar__level')?.getAttribute('title')).toBe('Step 4 of 120: Placeholder step 4');
     expect(region.textContent).toContain('3h 07m');
     expect(region.textContent).toContain('3 hours 7 minutes');
     // XP/h is unknown: "?" with the reason, never 0.
     const unknown = container.querySelector('[data-state="unknown"]');
     expect(unknown?.getAttribute('title')).toBe('Quest XP unknown');
     expect(region.textContent).toContain('Not available');
-    expect(region.textContent).toContain('Placeholder');
+    expect(region.textContent).toContain('Data placeholder');
     expect(region.textContent).toContain('forever-beta');
     expect(container.querySelector('.frl-badge [data-reason="era-fallback"]')).not.toBeNull();
   });

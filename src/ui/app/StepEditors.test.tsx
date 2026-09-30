@@ -88,7 +88,7 @@ describe('DurationEditor', () => {
     const onChange = vi.fn<(seconds: number | null) => void>();
     const { rerender } = render(<DurationEditor value={null} disabled={false} onChange={onChange} />);
     const field = screen.getByLabelText('Duration override (minutes)');
-    expect(document.getElementById(field.getAttribute('aria-describedby') ?? '')?.textContent).toMatch(/^Not set: the estimate applies/);
+    expect(document.getElementById(field.getAttribute('aria-describedby') ?? '')?.textContent).toMatch(/^Not set: the simulation’s estimate applies/);
     fireEvent.change(field, { target: { value: '12.5' } });
     fireEvent.keyDown(field, { key: 'Enter' });
     expect(onChange).toHaveBeenLastCalledWith(750);

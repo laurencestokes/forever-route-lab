@@ -1,35 +1,58 @@
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { type EditorState, type EditorStore, setMapLayerVisible, setMapWalkingPaths } from '../../app';
-import type { ActivePlacement, MapBackdrop, MapController, MapEngineSetup, MapLayerStatus, MapStatus, WalkingPathsStatus } from '../../app/map-exports';
-import { useEditor } from '../../app/react';
-import { isLayerId, LAYER_IDS, LAYER_LABELS, parseSurfaceId, type LayerId, type MapAdapterFactory, type SurfaceId, type SurfaceInfo, type UnplacedReason } from '../../map/adapter';
+import {
+  ART_NOTICE_PATH,
+  ATLAS_NOTICE_PATH,
+  atlasInstruction,
+  DEFAULT_HIDDEN_CATEGORIES,
+  EMPTY_MAP_LAYERS_RECORD,
+  isMapCategoryGroupId,
+  layerVisibility,
+  MINIMAP_NOTICE_PATH,
+  normaliseHidden,
+  type ActivePlacement,
+  type MapBackdrop,
+  type MapCategoryGroupId,
+  type MapController,
+  type MapEngineSetup,
+  type MapInsetStatus,
+  type MapPreset,
+  type MapStatus,
+} from '../../app/map-exports';
+import { type DerivedState, selectZoneSpans } from '../../app/derived';
+import { useDerivedSelector, useEditor } from '../../app/react';
+import type { UiMapId } from '../../domain/ids';
+import { isAtlasSurface, surfaceMapIds, type MapAdapterFactory, type MapCategoryId, type SurfaceInfo, type UnplacedReason } from '../../map/adapter';
 import { type ActiveRow, type RouteView } from '../app-model';
-import { formatInteger, plural } from '../kit';
+import { AssumedMarker, DifficultyLabel, formatInteger, plural, VisuallyHidden } from '../kit';
 import { isModalDialogOpen } from '../lib/modal';
-import { MapFrame, MapHoverText, type MapChoiceProps, type MapCommand, type MapEngineState, type MapLayerRow } from '../shell/MapFrame';
-import type { MapGlyphKind } from '../shell/MapLegend';
+import type { SelectOption, SelectOptionGroup } from '../primitives/Select';
+import { MapFrame, MapHoverText, useMapRegionDocking, type MapCommand, type MapEngineState } from '../shell/MapFrame';
+import type { DatasetView } from '../../domain/dataset';
+import { loadMapLayersPanel, loadMapPopover, useLazyKept } from './lazy';
 import type { Announce } from './LiveAnnouncer';
+import type { RouteActions } from './route-actions';
 import { useActiveTarget } from './selectors';
 
 /**
- * The centre panel (docs/UI.md §12; ARCHITECTURE §7): the map engine, loaded on demand in its own
- * chunk, mounted by the map controller (src/app/map-controller.ts), with the surface switcher,
- * fit route, focus step, the layer panel and key, and the status line around it
- * (src/ui/shell/MapFrame.tsx).
+ * The centre panel (docs/UI.md §12; ARCHITECTURE §7; docs/research/map-presentation.md §25.3): the
+ * map engine, loaded on demand in its own chunk, mounted by the map controller
+ * (src/app/map-controller.ts), with its controls floating on it (src/ui/shell/MapFrame.tsx) and the
+ * Map layers drawer on its left (a lazy part, `MapLayersPanel`).
  *
  * The map follows the active step of the route list (the controller brings it into view); a click
- * on a step marker selects that step, a click on a quest giver or flight master opens its quests in
- * Details, and a click on several items at one point lists them to choose from. Every one of those
- * has a keyboard path elsewhere, which the instructions say.
+ * on a step marker selects that step, a click on a cluster zooms in to it, and a click on a pin, a
+ * stack or a point of the map opens the map popover (a lazy part, `MapPopoverPanel`; §14.2, step
+ * MP.6) with what can be added there. Every one of those has a keyboard path elsewhere, which the
+ * instructions say.
  *
- * What the pointer is over comes from the controller's own hover channel and is rendered by a
- * small component of its own, so crossing markers re-renders only that line (M3 review PERF-14).
- *
- * The layer panel lists the painted art, the relief, the zone outlines and the coastline with the
- * other layers, and a "Walking paths" row after the route line (a toggle of how the route line
- * draws walked legs, not a layer). The notice says what the map shows under its markers (the
- * painted art with Blizzard Entertainment's notice, the relief, or schematic frames), and the status
- * line says when a map resource could not be loaded, without stopping anything else.
+ * **The drawer** (§25.3.1, §25.3.7; D-047): open by default where it docks (a map region of 900 px or
+ * more), closed where it would lie over the map; the choice is kept in this browser, and a kept
+ * "open" applies only where it docks. Its rows are applied here, so they hold before the drawer's
+ * code has loaded: the pin rows to the controller's mask, the layer rows to the store's layer
+ * visibility, Walking paths to the store, and all of them to the kept record (500 ms after the last
+ * change). What the pointer is over comes from the controller's own hover channel and is rendered by
+ * a small component of its own (M3 review PERF-14).
  */
 
 export interface MapPanelProps {
@@ -38,30 +61,13 @@ export interface MapPanelProps {
   readonly activeRow: ActiveRow | null;
   /** The map engine and its controller; null when there is none (tests without geometry). */
   readonly map: { readonly setup: MapEngineSetup; readonly controller: MapController } | null;
-  /** Which geometry is loaded, for the layer panel (MAPS.md §5.6 step 6); null when not known. */
+  /** Which geometry is loaded (MAPS.md §5.6 step 6); null when not known. */
   readonly geometry?: string | null | undefined;
   readonly announce: Announce;
+  /** The dataset and the route actions the map popover's actions use (step MP.6); omitted: the popover opens without them (tests). */
+  readonly dataset?: DatasetView | null | undefined;
+  readonly actions?: RouteActions | null | undefined;
 }
-
-/** The layer panel lists the topmost layer first. */
-const PANEL_ORDER: readonly LayerId[] = [...LAYER_IDS].reverse();
-
-/** Each layer's glyph in the layer panel, as the map draws it (MapLegend.tsx). */
-export const LAYER_GLYPHS: Readonly<Record<LayerId, MapGlyphKind>> = {
-  relief: 'relief',
-  art: 'art',
-  coastline: 'coast',
-  'zone-outlines': 'zone-outline',
-  'zone-frames': 'frame',
-  'available-quests': 'quest-start',
-  objectives: 'objective',
-  'turn-ins': 'quest-end',
-  'flight-masters': 'flight-master',
-  'route-line': 'line-route',
-  'route-steps': 'step',
-  proposal: 'line-proposal',
-  selection: 'halo',
-};
 
 const UNPLACED_TEXT: Readonly<Record<UnplacedReason, string>> = {
   'no-geometry': 'its map has no geometry here',
@@ -74,12 +80,12 @@ const UNPLACED_TEXT: Readonly<Record<UnplacedReason, string>> = {
 };
 
 export const MAP_INSTRUCTIONS =
-  'Drag, or use the arrow keys, to pan; plus and minus zoom. Click a step marker to select its step, and a quest giver, objective, turn-in or flight master to open its quests in Details; where several share a point, a list lets you choose. ' +
-  'The map is supplementary: the route list, the Available tab, Details and the top bar’s Jump to zone do everything it does.';
+  'Drag, or use the arrow keys, to pan; plus and minus zoom. Click a step marker to select its step, a cluster to zoom in to it, and a pin or a place on the map to open a popover of what you can add there (Escape closes it). ' +
+  'Map layers, before the map, shows and hides each kind of pin and searches the map. The map is supplementary: the route list, the Available tab, Details and the top bar’s Go to zone or view do everything it does.';
 
 export const NO_MAP_ENGINE = 'The map engine or its geometry is not available in this view.';
 
-/** The status line while a pick is in progress ("Pick on map" in Details, docs/UI.md §14). */
+/** The caption while a pick is in progress ("Pick on map" in Details, docs/UI.md §14). */
 export const pickText = (label: string): string => `Picking ${label}: click the map to place it. Escape cancels.`;
 export const SCHEMATIC_NOTICE = 'Schematic map: zone frames, not terrain';
 export const SCHEMATIC_NOTICE_SHORT = 'Schematic';
@@ -88,6 +94,8 @@ export const LOCAL_ART_NOTICE_SHORT = 'Local art';
 /** Shown with the painted art (D-033 rule 2: Blizzard's notice accompanies the art); About has the full notice. */
 export const PAINTED_ART_NOTICE = 'Painted map art © Blizzard Entertainment';
 export const PAINTED_ART_NOTICE_SHORT = 'Art © Blizzard';
+/** Shown with the minimap tiles (D-045 item 1: D-033's terms, a NOTICE naming Blizzard); About has the notice. */
+export const MINIMAP_ART_NOTICE = 'Minimap art © Blizzard Entertainment';
 export const RELIEF_NOTICE = 'Terrain relief computed from game data, not painted art';
 export const RELIEF_NOTICE_SHORT = 'Relief';
 
@@ -99,14 +107,41 @@ export const BACKDROP_NOTICES: Readonly<Record<MapBackdrop, { readonly long: str
   schematic: { long: SCHEMATIC_NOTICE, short: SCHEMATIC_NOTICE_SHORT },
 };
 
-/** The layer panel row of the walking-paths toggle (not a layer id). */
-export const WALKING_PATHS_ROW = 'walking-paths';
+/** The drawer's record is written this long after the last change (§25.3.7). */
+export const MAP_LAYERS_WRITE_DELAY_MS = 500;
 
 type Engine = { readonly kind: 'loading' } | { readonly kind: 'ready'; readonly factory: MapAdapterFactory } | { readonly kind: 'failed'; readonly message: string };
 
 const NO_STATUS_SUBSCRIBE = (): (() => void) => () => undefined;
 const NO_SURFACES: readonly SurfaceInfo[] = [];
-const NO_LINES: readonly string[] = [];
+const NO_INSETS: readonly MapInsetStatus[] = [];
+
+/** The group of switcher entries for maps the atlas does not place (map-atlas.md §8.5). */
+export const SEPARATE_MAPS_GROUP = 'Separate maps';
+
+/** The atlas's view entry: `Azeroth (both continents; Zephras Isle inset)`. */
+export function atlasSurfaceLabel(name: string, insets: readonly string[]): string {
+  return insets.length === 0 ? `${name} (both continents)` : `${name} (both continents; ${insets.join(', ')} inset${insets.length === 1 ? '' : 's'})`;
+}
+
+/**
+ * The view entries (the top bar's "Go to zone or view…" select takes the atlas's views, §25.3.0):
+ * one per world surface, each with its route steps; with the atlas, the atlas (its steps on every
+ * map it places), its presets, then the other surfaces under `SEPARATE_MAPS_GROUP`.
+ */
+export function surfaceSwitcherOptions(
+  surfaces: readonly SurfaceInfo[],
+  presets: readonly MapPreset[],
+  stepsOn: (mapIds: readonly number[]) => number,
+): readonly (SelectOption | SelectOptionGroup)[] {
+  const labelled = (value: string, name: string, steps: number): SelectOption => ({ value, label: steps > 0 ? `${name} · ${plural(steps, 'route step')}` : name });
+  const atlas = surfaces.find(isAtlasSurface);
+  if (atlas === undefined) return surfaces.map((info) => labelled(info.id, info.name, stepsOn(surfaceMapIds(info))));
+  const insets = atlas.placements.filter((placement) => placement.kind === 'inset').map((placement) => atlas.members.find((member) => member.mapId === placement.mapId)?.name ?? `World map ${String(placement.mapId)}`);
+  const main = [labelled(atlas.id, atlasSurfaceLabel(atlas.name, insets), stepsOn(atlas.mapIds)), ...presets.map((preset) => labelled(preset.id, preset.name, stepsOn([preset.mapId])))];
+  const separate = surfaces.filter((info) => info !== atlas).map((info) => labelled(info.id, info.name, stepsOn(surfaceMapIds(info))));
+  return separate.length === 0 ? main : [...main, { group: SEPARATE_MAPS_GROUP, options: separate }];
+}
 
 /** Loads the map engine's chunk once per attempt; `retry` starts another attempt. */
 function useMapEngine(load: (() => Promise<MapAdapterFactory>) | null): { readonly engine: Engine; readonly retry: () => void } {
@@ -137,7 +172,7 @@ function useMapEngine(load: (() => Promise<MapAdapterFactory>) | null): { readon
 /**
  * "Route: 34 of 40 steps on Kalimdor · 2 on other maps · 1 on maps with no surface · 1 not placed
  * · 3 without a location". Steps on world maps no surface shows are said apart from those on other
- * surfaces: the switcher reaches the latter, nothing reaches the former (MAP-UX-9).
+ * surfaces: the views reach the latter, nothing reaches the former (MAP-UX-9).
  */
 export function routeStatusText(route: MapStatus['route'], surfaceName: string | null): string {
   const where = surfaceName === null ? '' : ` on ${surfaceName}`;
@@ -171,25 +206,6 @@ export function focusUnavailable(active: MapStatus['activeStep']): string | null
   }
 }
 
-function layerRow(status: MapLayerStatus): MapLayerRow {
-  const drawn = status.stats.drawn;
-  return {
-    id: status.layer,
-    label: LAYER_LABELS[status.layer],
-    glyph: LAYER_GLYPHS[status.layer],
-    visible: status.visible,
-    unavailable: status.unavailable,
-    // A hidden layer draws nothing: its count would read as drawn.
-    count: status.unavailable === null && status.visible && drawn > 0 ? `${formatInteger(drawn)} drawn` : null,
-    notes: status.notes,
-  };
-}
-
-/** The walking-paths toggle as a layer panel row. */
-function walkingPathsRow(status: WalkingPathsStatus): MapLayerRow {
-  return { id: WALKING_PATHS_ROW, label: 'Walking paths', glyph: 'line-route', visible: status.visible, unavailable: status.unavailable, count: null, notes: status.notes };
-}
-
 /** Names the engine's focusable surface (the element the engine created inside the host) for assistive technology. */
 function labelEngineSurface(host: HTMLElement | null, label: string, describedBy: string): void {
   const surface = host?.firstElementChild;
@@ -200,21 +216,59 @@ function labelEngineSurface(host: HTMLElement | null, label: string, describedBy
   surface.setAttribute('aria-describedby', describedBy);
 }
 
-/** The status line's "Pointer on: …", subscribed to the controller's hover alone. */
+/** The caption's "Pointer on: …", subscribed to the controller's hover alone. */
 function PointerLine({ controller }: { readonly controller: MapController }) {
   const text = useSyncExternalStore(controller.subscribeHover, controller.getHover, controller.getHover);
   return <MapHoverText text={text} />;
 }
 
-const selectSurface = (s: EditorState) => s.view.map.surface;
-const selectZoomBand = (s: EditorState) => s.view.map.zoomBand;
-const selectLayersOpen = (s: EditorState) => s.view.showLayerPanel;
+const selectPaintedLabels = (state: DerivedState | null) => state?.places?.labels?.painted ?? null;
 
-export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, geometry = null, announce }: MapPanelProps) {
+/**
+ * The "Viewing" chip's content (map-presentation.md §13.5; step MP.7): "Viewing The Barrens · quests
+ * 13–25 (93 open to an Orc Warrior)" with the boxed E, or a new zone's cited text, and the real
+ * `DifficultyLabel` rating the zone's median quest level at the character's level after the step
+ * (the card's twin input, where the span allows a rating).
+ */
+export function ViewingChip({ uiMapId, minimap = false }: { readonly uiMapId: UiMapId; readonly minimap?: boolean }) {
+  const spans = useDerivedSelector(selectZoneSpans);
+  const labels = useDerivedSelector(selectPaintedLabels);
+  const span = spans?.get(uiMapId);
+  if (span === undefined) return null;
+  const card = labels?.find((label) => label.id === `zone:${String(uiMapId)}`)?.card ?? null;
+  const rated = card?.difficulty ?? null;
+  // In the minimap style an underground city says so (D-049 O19; review PR-17).
+  const name = minimap ? (span.undergroundName ?? span.name) : span.name;
+  return (
+    <>
+      <span className="frl-mapframe__viewing-text">
+        Viewing <strong>{name}</strong> · {span.viewing}
+        {card?.basis === 'derived' && <AssumedMarker reason="era-fallback" detail="the dataset's Era quest levels, counted over the quests open to the character" />}
+      </span>
+      {rated !== null && (
+        <span>
+          <VisuallyHidden>Median quest level: </VisuallyHidden>
+          <DifficultyLabel level={Number(rated.levelText)} difficulty={rated.key} uncertain={rated.lowerBound} />
+        </span>
+      )}
+    </>
+  );
+}
+
+const selectSurface = (s: EditorState) => s.view.map.surface;
+const selectMapUi = (s: EditorState) => s.view.map;
+
+/** The notices' links in the key (map-atlas.md §21.6; D-033 rule 2). */
+const NOTICE_LINKS = { painted: ATLAS_NOTICE_PATH, minimap: MINIMAP_NOTICE_PATH, art: ART_NOTICE_PATH } as const;
+
+export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, geometry = null, announce, dataset = null, actions = null }: MapPanelProps) {
   const controller = map?.controller ?? null;
+  const settings = map?.setup.mapLayers ?? null;
   const { engine, retry } = useMapEngine(map?.setup.loadAdapter ?? null);
   const hostRef = useRef<HTMLDivElement>(null);
+  const regionRef = useRef<HTMLDivElement>(null);
   const instructionsId = useId();
+  const drawerId = useId();
 
   const status = useSyncExternalStore(
     controller?.subscribe ?? NO_STATUS_SUBSCRIBE,
@@ -223,8 +277,7 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
   );
   const picking = status?.pick?.label ?? null;
   const storedSurface = useEditor(store, selectSurface);
-  const zoomBand = useEditor(store, selectZoomBand);
-  const layersOpen = useEditor(store, selectLayersOpen);
+  const mapUi = useEditor(store, selectMapUi);
   const { step: activeStep } = useActiveTarget(store, view, activeRow);
   const activeStepId = activeStep?.id ?? null;
 
@@ -233,8 +286,65 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
   const surfaceInfo = surfaces.find((info) => info.id === surfaceId) ?? null;
   const surfaceName = surfaceInfo?.name ?? null;
   const mapLabel = surfaceName === null ? 'Route map' : `Route map: ${surfaceName}`;
+  const minimapShown = status?.style.shown === 'minimap';
   const backdrop = BACKDROP_NOTICES[status?.backdrop ?? 'schematic'];
-  const notice = backdrop.long;
+  const notice = status?.backdrop === 'art' && minimapShown ? MINIMAP_ART_NOTICE : backdrop.long;
+  const insets = status?.insets ?? NO_INSETS;
+  const onAtlas = surfaceInfo?.kind === 'atlas';
+
+  // The drawer's record (§25.3.7), read once at the first render.
+  const [record] = useState(() => settings?.read() ?? EMPTY_MAP_LAYERS_RECORD);
+  const [hidden, setHidden] = useState<readonly MapCategoryId[]>(() => normaliseHidden(record.hidden ?? DEFAULT_HIDDEN_CATEGORIES));
+  const [collapsed, setCollapsed] = useState<readonly MapCategoryGroupId[]>(() => record.collapsed.filter(isMapCategoryGroupId));
+  /** This page's choice of open or closed; null until the user chooses (the default then applies). */
+  const [openChoice, setOpenChoice] = useState<boolean | null>(null);
+  const docked = useMapRegionDocking(regionRef);
+  // Open by default where it docks; a kept "open" applies only there (§25.3.1, P4).
+  const drawerOpen = openChoice ?? (docked ? (record.drawerOpen ?? true) : false);
+  const dirty = useRef(false);
+
+  // Rows apply at once, before the drawer's code has loaded (§25.3.4).
+  const hiddenSet = useMemo(() => new Set(hidden), [hidden]);
+  useEffect(() => {
+    controller?.setCategories(hidden);
+  }, [controller, hidden]);
+  useEffect(() => {
+    for (const [layer, visible] of layerVisibility(hiddenSet)) if (mapUi.layers[layer] !== visible) setMapLayerVisible(store, layer, visible);
+    const walking = !hiddenSet.has('walking-paths');
+    if (mapUi.walkingPaths !== walking) setMapWalkingPaths(store, walking);
+  }, [store, hiddenSet, mapUi.layers, mapUi.walkingPaths]);
+  // Kept 500 ms after the last change; only what the user chose.
+  useEffect(() => {
+    if (!dirty.current || settings === null) return undefined;
+    const handle = window.setTimeout(() => {
+      settings.write({ hidden, collapsed, ...(openChoice === null ? {} : { drawerOpen: openChoice }) });
+    }, MAP_LAYERS_WRITE_DELAY_MS);
+    return () => {
+      window.clearTimeout(handle);
+    };
+  }, [settings, hidden, collapsed, openChoice]);
+
+  const onHidden = useCallback(
+    (next: readonly MapCategoryId[], announcement?: string) => {
+      dirty.current = true;
+      setHidden(normaliseHidden(next));
+      if (announcement !== undefined) announce(announcement);
+    },
+    [announce],
+  );
+  const onCollapsed = useCallback((next: readonly MapCategoryGroupId[]) => {
+    dirty.current = true;
+    setCollapsed(next);
+  }, []);
+  const toggleDrawer = useCallback(() => {
+    dirty.current = true;
+    setOpenChoice(!drawerOpen);
+  }, [drawerOpen]);
+  const closeDrawer = useCallback(() => {
+    dirty.current = true;
+    setOpenChoice(false);
+    regionRef.current?.querySelector<HTMLButtonElement>('.frl-mapframe__layers-toggle')?.focus();
+  }, []);
 
   // The engine creates its surface element on every mount: name it then, and again whenever the
   // shown surface changes. The latest label is kept in a ref so a remount never waits for a render.
@@ -268,49 +378,40 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
     announced.current = unreachable;
   }, [unreachable, announce]);
 
-  const routeCounts = status?.route.maps;
-  const surfaceOptions = useMemo(
-    () =>
-      surfaces.map((info) => {
-        const steps = routeCounts?.find((entry) => entry.mapId === info.mapId)?.steps ?? 0;
-        return { value: info.id, label: steps > 0 ? `${info.name} · ${plural(steps, 'route step')}` : info.name };
-      }),
-    [surfaces, routeCounts],
-  );
-
-  const onSurfaceChange = useCallback(
-    (value: string) => {
-      if (controller === null || parseSurfaceId(value) === null) return;
-      controller.showSurface(value as SurfaceId);
-    },
-    [controller],
-  );
-  const surfaceProp = useMemo(() => ({ value: surfaceId ?? '', options: surfaceOptions, onChange: onSurfaceChange }), [surfaceId, surfaceOptions, onSurfaceChange]);
-
-  const onLayerToggle = useCallback(
-    (id: string, visible: boolean) => {
-      if (id === WALKING_PATHS_ROW) setMapWalkingPaths(store, visible);
-      else if (isLayerId(id)) setMapLayerVisible(store, id, visible);
-    },
-    [store],
-  );
-
-  const onLayersOpenChange = useCallback(
-    (open: boolean) => {
-      store.setView({ showLayerPanel: open });
-    },
-    [store],
-  );
-
   const canFit = status?.route.canFit === true;
   const focusReason = controller === null ? NO_MAP_ENGINE : focusUnavailable(active);
   const activeNumber = active?.number ?? 0;
+  const usable = controller !== null && engine.kind === 'ready';
   const commands = useMemo(
     (): readonly MapCommand[] => [
       {
+        id: 'zoom-in',
+        label: 'Zoom in',
+        icon: 'add',
+        title: 'Zoom in',
+        group: 'zoom',
+        unavailable: usable ? null : NO_MAP_ENGINE,
+        onRun: () => {
+          controller?.zoomBy(1);
+        },
+      },
+      {
+        id: 'zoom-out',
+        label: 'Zoom out',
+        icon: 'minus',
+        title: 'Zoom out',
+        group: 'zoom',
+        unavailable: usable ? null : NO_MAP_ENGINE,
+        onRun: () => {
+          controller?.zoomBy(-1);
+        },
+      },
+      {
         id: 'fit-route',
         label: 'Fit route',
+        icon: 'fit',
         title: 'Show the whole route on this map (or on the first map it reaches)',
+        group: 'view',
         unavailable: controller === null ? NO_MAP_ENGINE : canFit ? null : 'No step of the route has a map position',
         onRun: () => {
           const result = controller?.fitRoute();
@@ -323,7 +424,9 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
       {
         id: 'focus-step',
         label: 'Focus step',
+        icon: 'target',
         title: 'Centre the map on the active step',
+        group: 'view',
         unavailable: focusReason,
         onRun: () => {
           if (controller === null || activeStepId === null) return;
@@ -339,6 +442,7 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
               id: 'cancel-pick',
               label: 'Cancel pick',
               title: `Stop picking ${picking} (Escape)`,
+              group: 'view' as const,
               unavailable: null,
               onRun: () => {
                 if (controller?.cancelPick() === true) announce('Pick on map cancelled.');
@@ -346,21 +450,8 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
             },
           ]),
     ],
-    [controller, canFit, focusReason, activeStepId, activeNumber, surfaces, announce, picking],
+    [controller, usable, canFit, focusReason, activeStepId, activeNumber, surfaces, announce, picking],
   );
-
-  const layerRows = useMemo(() => {
-    if (status === null) return [];
-    const byLayer = new Map(status.layers.map((layer) => [layer.layer, layer]));
-    return PANEL_ORDER.flatMap((layer) => {
-      const entry = byLayer.get(layer);
-      if (entry === undefined) return [];
-      // Walking paths change how the route line is drawn: their toggle sits just under it.
-      return layer === 'route-line' ? [layerRow(entry), walkingPathsRow(status.walkingPaths)] : [layerRow(entry)];
-    });
-  }, [status]);
-  const footer = useMemo(() => (geometry === null ? NO_LINES : [`Geometry loaded: ${geometry}.`]), [geometry]);
-  const layersProp = useMemo(() => ({ layers: layerRows, onToggle: onLayerToggle, footer }), [layerRows, onLayerToggle, footer]);
 
   const startFailure = status?.failure ?? null;
   const frameEngine = useMemo((): MapEngineState => {
@@ -391,50 +482,90 @@ export const MapPanel = memo(function MapPanel({ store, view, activeRow, map, ge
   }, [picking, controller, announce]);
 
   const routeLine = status === null ? null : routeStatusText(status.route, surfaceName);
-  const problems = status?.problems ?? NO_LINES;
-  const statusLines = useMemo(() => {
+  const caption = useMemo(() => {
     const lines: string[] = [];
     if (picking !== null) lines.push(pickText(picking));
     if (routeLine !== null) lines.push(routeLine);
-    if (zoomBand === 'continent') lines.push('Zoomed out: quest points shown as zone counts');
     if (unreachable !== null) lines.push(unreachable);
-    lines.push(...problems);
     return lines;
-  }, [picking, routeLine, zoomBand, unreachable, problems]);
+  }, [picking, routeLine, unreachable]);
 
   const hover = useMemo(() => (controller === null ? null : <PointerLine controller={controller} />), [controller]);
 
-  const pendingChoice = status?.choice ?? null;
-  const choice = useMemo((): MapChoiceProps | null => {
-    if (controller === null || pendingChoice === null) return null;
-    return {
-      title: pendingChoice.title,
-      hint: pendingChoice.hint,
-      options: pendingChoice.options.map((option) => option.label),
-      allLabel: pendingChoice.allLabel,
-      at: pendingChoice.at,
-      onChoose: controller.choose,
-      onAll: controller.chooseAll,
-      onDismiss: controller.dismissChoice,
-    };
-  }, [controller, pendingChoice]);
+  // The map popover (§14.2; step MP.6): a lazy part, drawn while the map has a target.
+  const target = status?.popover ?? null;
+  const popoverCode = useLazyKept(loadMapPopover, target !== null && controller !== null);
+  const returnFocus = useCallback(() => {
+    const surface = hostRef.current?.firstElementChild;
+    if (surface instanceof HTMLElement) surface.focus();
+  }, []);
+  const stage = useCallback(() => hostRef.current, []);
+  const popover =
+    target === null || controller === null || dataset === null || actions === null || popoverCode.kind !== 'ready' ? null : (
+      <popoverCode.value.MapPopoverPanel target={target} controller={controller} store={store} dataset={dataset} actions={actions} returnFocus={returnFocus} stage={stage} />
+    );
+
+  // The drawer is a lazy part (§25.3.1): its code loads the first time it opens (the production
+  // build preloads it when idle), and a stand-in says so meanwhile.
+  const panel = useLazyKept(loadMapLayersPanel, drawerOpen && controller !== null);
+  let drawerContent;
+  if (controller === null)
+    drawerContent = (
+      <div className="frl-mapframe__drawer-note">
+        <p>{NO_MAP_ENGINE}</p>
+        {geometry !== null && <p>{`Geometry loaded: ${geometry}.`}</p>}
+      </div>
+    );
+  else if (panel.kind === 'ready') {
+    const { MapLayersPanel } = panel.value;
+    drawerContent = (
+      <MapLayersPanel
+        id={drawerId}
+        docked={docked}
+        controller={controller}
+        store={store}
+        hidden={hidden}
+        onHidden={onHidden}
+        collapsed={collapsed}
+        onCollapsed={onCollapsed}
+        onClose={closeDrawer}
+        announce={announce}
+        notices={NOTICE_LINKS}
+        geometry={geometry}
+      />
+    );
+  } else if (panel.kind === 'failed') {
+    drawerContent = (
+      <div className="frl-mapframe__drawer-note" role="alert">
+        <p>{`Map layers could not be loaded (${panel.message}).`}</p>
+        <button type="button" className="frl-button frl-button--default frl-button--sm" onClick={panel.retry}>
+          Try again
+        </button>
+      </div>
+    );
+  } else {
+    drawerContent = (
+      <p className="frl-mapframe__drawer-note" role="status">
+        Loading map layers…
+      </p>
+    );
+  }
 
   return (
     <MapFrame
-      surface={surfaceProp}
+      drawer={{ id: drawerId, open: drawerOpen, docked, onToggle: toggleDrawer, content: drawerContent }}
       commands={commands}
-      layersOpen={layersOpen}
-      onLayersOpenChange={onLayersOpenChange}
-      layers={layersProp}
       notice={notice}
-      noticeShort={backdrop.short}
+      noticeShort={status?.backdrop === 'art' && minimapShown ? MINIMAP_ART_NOTICE.replace('Minimap art', 'Art') : backdrop.short}
       engine={frameEngine}
       stageRef={hostRef}
+      regionRef={regionRef}
       instructionsId={instructionsId}
-      instructions={`${notice}. ${mapLabel}. ${MAP_INSTRUCTIONS}`}
-      status={statusLines}
+      instructions={onAtlas ? `${notice}. ${mapLabel}. ${atlasInstruction(insets)} ${MAP_INSTRUCTIONS}` : `${notice}. ${mapLabel}. ${MAP_INSTRUCTIONS}`}
+      caption={caption}
       hover={hover}
-      choice={choice}
+      popover={popover}
+      viewing={status === null || status.viewing === null ? null : <ViewingChip uiMapId={status.viewing} minimap={minimapShown} />}
     />
   );
 });

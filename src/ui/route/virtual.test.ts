@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   ROUTE_ROW_HEIGHT,
+  ROUTE_ROW_HEIGHT_TWO_LINE,
+  ROW_DENSITIES,
+  routeRowHeight,
   clampScrollTop,
   computeVirtualWindow,
   dropSlotAtOffset,
@@ -240,5 +243,25 @@ describe('selectionModeForClick', () => {
     expect(selectionModeForClick({ shiftKey: false, ctrlKey: true, metaKey: false })).toBe('toggle');
     expect(selectionModeForClick({ shiftKey: false, ctrlKey: false, metaKey: true })).toBe('toggle');
     expect(selectionModeForClick({ shiftKey: true, ctrlKey: true, metaKey: false })).toBe('range');
+  });
+});
+
+describe('row densities (ui-refresh.md §6, §10.1)', () => {
+  it('gives each density one fixed height: 40px two-line rows (the default), 28px one-line rows', () => {
+    expect(routeRowHeight('two-line')).toBe(ROUTE_ROW_HEIGHT_TWO_LINE);
+    expect(routeRowHeight('one-line')).toBe(ROUTE_ROW_HEIGHT);
+    expect(ROUTE_ROW_HEIGHT_TWO_LINE).toBe(40);
+    expect(ROW_DENSITIES).toEqual(['two-line', 'one-line']);
+  });
+
+  it('windows, pages and reveals by the density’s height', () => {
+    const tall = ROUTE_ROW_HEIGHT_TWO_LINE;
+    // 13 two-line rows in the mock's 519px list; 8 rows of overscan each side mid-list.
+    const view = computeVirtualWindow({ scrollTop: 100 * tall, viewportHeight: 519, rowHeight: tall, rowCount: 10_000, overscan: 8 });
+    expect(view.start).toBe(92);
+    expect(view.end).toBe(121);
+    expect(view.offsetTop).toBe(92 * tall);
+    expect(pageSize(519, tall)).toBe(11);
+    expect(scrollTopToReveal(200, 0, 519, tall)).toBe(201 * tall - 519);
   });
 });

@@ -2,10 +2,10 @@ import type { Estimated } from '../domain/estimate';
 import type { WorldMapId } from '../domain/ids';
 import type { WorldPoint } from '../domain/points';
 import type { TravelEndpoint } from '../domain/travel';
-import { type EntranceEdge, entrancesOf, isInstanceMap, nearestEntrance, type TravelGraph } from '../rules/travel-graph';
+import { type EntranceEdge, entrancesOf, inferredBerths, isBerthIn, isInstanceMap, nearestEntrance, type TravelGraph } from '../rules/travel-graph';
 import type { TimePart } from '../sim/estimate';
 import type { UnknownPositionCause } from '../sim/facts';
-import { type GroundTravel, groundTravel, type StepSpeeds } from '../sim/travel';
+import { berthTravel, type GroundTravel, groundTravel, type StepSpeeds } from '../sim/travel';
 import type { StepWork, WalkEnv } from './env';
 import type { WalkMemo } from './state';
 import type { CharacterState, LegPurpose } from './types';
@@ -63,6 +63,21 @@ export function commitGround(work: StepWork, move: GroundTravel, from: TravelEnd
   }
 }
 
+/** Whether a move starts or ends at one of the graph's inferred berths (TIME-7, `inferredBerths`). */
+export function touchesBerth(graph: TravelGraph, from: TravelEndpoint | null, to: TravelEndpoint | null): boolean {
+  const berths = inferredBerths(graph);
+  if (berths.length === 0) return false;
+  return (from !== null && isBerthIn(berths, from.point)) || (to !== null && isBerthIn(berths, to.point));
+}
+
+/**
+ * A ground move priced by the travel model (TIME-2); one that starts or ends at an inferred berth
+ * prices its swim as the walk along the pier (TIME-7, `berthTravel`).
+ */
+export function groundMove(env: WalkEnv, from: TravelEndpoint | null, to: TravelEndpoint | null, radius: number | null, speeds: StepSpeeds): GroundTravel {
+  return (touchesBerth(env.graph, from, to) ? berthTravel : groundTravel)(from, to, radius, speeds, env.model, env.rules);
+}
+
 /** One ground leg on one world map (TIME-2), `radius` yards short of `to`. */
 export function groundLeg(
   env: WalkEnv,
@@ -73,7 +88,7 @@ export function groundLeg(
   speeds: StepSpeeds,
   purpose: LegPurpose,
 ): void {
-  commitGround(work, groundTravel(from, to, radius, speeds, env.model, env.rules), from, to, purpose);
+  commitGround(work, groundMove(env, from, to, radius, speeds), from, to, purpose);
 }
 
 /**

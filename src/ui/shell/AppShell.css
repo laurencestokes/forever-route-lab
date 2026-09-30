@@ -15,6 +15,8 @@
 }
 
 .frl-shell {
+  /* The containing block of the handles, which are placed on the centre's grid area. */
+  position: relative;
   display: grid;
   grid-template-areas:
     'top top top'
@@ -48,6 +50,12 @@
 
 .frl-shell__centre {
   position: relative;
+  /*
+   * A stacking context of its own: Leaflet's panes (z-index 400 and up) stay inside the map, so the
+   * panel handles and the splitters' overhang (z-index sticky, drawn over the map's edges) are on
+   * top and take the pointer (a container query container is not a stacking context).
+   */
+  isolation: isolate;
   grid-area: centre;
   display: flex;
   flex-direction: column;
@@ -72,7 +80,93 @@
   min-width: 0;
 }
 
-/* Splitter on the route panel's right edge: 7px hit area, 2px visible line on hover/focus. */
+/* A collapsed panel is not drawn; its grid column goes with it (below). */
+.frl-shell__left[hidden],
+.frl-shell__right[hidden] {
+  display: none;
+}
+
+/* The steps the panels collapse by (ui-refresh.md §4.3). */
+.frl-shell.is-left-hidden {
+  grid-template-areas:
+    'top top'
+    'centre right'
+    'bottom bottom';
+  grid-template-columns: minmax(0, 1fr) var(--frl-right-width);
+}
+
+.frl-shell.is-right-hidden {
+  grid-template-areas:
+    'top top'
+    'left centre'
+    'bottom bottom';
+  grid-template-columns: var(--frl-left-width) minmax(0, 1fr);
+}
+
+.frl-shell.is-left-hidden.is-right-hidden {
+  grid-template-areas:
+    'top'
+    'centre'
+    'bottom';
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/*
+ * The panel handles (ui-refresh.md §4.3): 18 × 44px tabs on the map's left and right edges, below
+ * the map's top row of controls, drawn over the map (placed on the centre's grid area). Their DOM
+ * places them after the route panel and before the side panel, so they take a hidden panel's place
+ * in the tab order.
+ */
+.frl-shell__handle.frl-icon-button {
+  position: absolute;
+  grid-area: centre;
+  z-index: var(--frl-z-sticky);
+  top: calc(var(--frl-panel-header-height) + 10px);
+  width: 18px;
+  min-width: 18px;
+  height: 44px;
+  padding: 0;
+}
+
+.frl-shell__handle--left.frl-icon-button {
+  left: 0;
+  border-left: 0;
+  border-radius: 0 var(--frl-radius-control) var(--frl-radius-control) 0;
+}
+
+/*
+ * The Map layers drawer opens on the map's left edge, docked or over the stage: the route panel's
+ * handle then sits on the drawer's outer edge, not over its content ("lap style", review PR-08,
+ * UI-10, QA-11). The width is the drawer's own (MapFrame.css: 300px, or less in a narrow map).
+ */
+.frl-shell:has(.frl-mapframe.is-drawer-open.is-docked) .frl-shell__handle--left.frl-icon-button {
+  left: var(--frl-map-drawer-width);
+}
+
+.frl-shell:has(.frl-mapframe.is-drawer-open.is-over) .frl-shell__handle--left.frl-icon-button {
+  left: min(var(--frl-map-drawer-width), 100% - 56px);
+}
+
+.frl-shell__handle--right.frl-icon-button {
+  right: 0;
+  justify-self: end;
+  border-right: 0;
+  border-radius: var(--frl-radius-control) 0 0 var(--frl-radius-control);
+}
+
+/*
+ * Map focus (ui-refresh.md §4.3; the map's top right, map-presentation.md §25.3.0). The map's chrome
+ * (`MapFrame`) claims it and floats it with its own controls; this is where the shell draws it for a
+ * centre without a map frame.
+ */
+.frl-shell__map-focus.frl-icon-button {
+  position: absolute;
+  z-index: var(--frl-z-sticky);
+  top: 10px;
+  right: 10px;
+}
+
+/* Splitters on the panels' inner edges: 7px hit area, 2px visible line on hover/focus. */
 .frl-shell__resize {
   position: absolute;
   top: 0;
@@ -82,6 +176,11 @@
   width: 7px;
   cursor: col-resize;
   touch-action: none;
+}
+
+.frl-shell__resize--right {
+  right: auto;
+  left: -4px;
 }
 
 .frl-shell__resize::after {
@@ -130,6 +229,54 @@
   .frl-shell__resize {
     display: none;
   }
+
+  /*
+   * Here the quests and details panel sits under the map: its handle goes on the map's bottom edge,
+   * the panel's own top edge, with its chevron turned to point down to hide it and up to show it
+   * (review QA-21). It stays clear of the Map view toolbar (bottom right, 146px wide with its
+   * margin) and of the caption (bottom left, which ends 230px before the right edge).
+   */
+  .frl-shell__handle--right.frl-icon-button {
+    top: auto;
+    right: 156px;
+    bottom: 0;
+    width: 44px;
+    min-width: 44px;
+    height: 18px;
+    border-right: 1px solid var(--frl-border-strong);
+    border-bottom: 0;
+    border-radius: var(--frl-radius-control) var(--frl-radius-control) 0 0;
+  }
+
+  .frl-shell__handle--right.frl-icon-button :where(svg) {
+    transform: rotate(90deg);
+  }
+
+  /* Collapsed below 1024px, the side panel no longer moves under the map: the map takes its row. */
+  .frl-shell.is-right-hidden {
+    grid-template-areas:
+      'top top'
+      'left centre'
+      'bottom bottom';
+    grid-template-rows: var(--frl-topbar-height) minmax(0, 1fr) minmax(var(--frl-statusbar-height), auto);
+  }
+
+  .frl-shell.is-left-hidden {
+    grid-template-areas:
+      'top'
+      'centre'
+      'right'
+      'bottom';
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .frl-shell.is-left-hidden.is-right-hidden {
+    grid-template-areas:
+      'top'
+      'centre'
+      'bottom';
+    grid-template-rows: var(--frl-topbar-height) minmax(0, 1fr) minmax(var(--frl-statusbar-height), auto);
+  }
 }
 
 /* Narrow windows: stack everything and let the page scroll. */
@@ -150,5 +297,18 @@
 
   .frl-shell__right {
     min-height: 360px;
+  }
+
+  .frl-shell.is-left-hidden,
+  .frl-shell.is-right-hidden,
+  .frl-shell.is-left-hidden.is-right-hidden {
+    grid-template-areas:
+      'top'
+      'centre'
+      'left'
+      'right'
+      'bottom';
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 280px auto auto auto;
   }
 }

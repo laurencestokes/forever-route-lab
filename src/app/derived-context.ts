@@ -13,7 +13,7 @@ import type { NavManifest } from '../nav/manifest';
 import { effectiveRules, type EffectiveRules } from '../rules/precedence';
 import { rulesetById } from '../rules/ruleset';
 import { createStraightLineTravelModel } from '../rules/straight-line';
-import { sameMapTransports, seedTravelGraph, type TransportDock, type TravelGraph, type TravelGraphSource, type UserDock } from '../rules/travel-graph';
+import { type CommittedTaxi, sameMapTransports, seedTravelGraph, type TransportDock, type TravelGraph, type TravelGraphSource, type UserDock } from '../rules/travel-graph';
 import { TRANSPORT_SEEDS, type TransportSeed } from '../rules/travel-seeds';
 import { ruleInput, sumEstimates, withBasis } from '../sim/provenance';
 import { uiMapZoneHint } from './navigation-hints';
@@ -56,10 +56,22 @@ export function travelGraphSourceOf(view: Pick<DatasetView, 'npc' | 'spawns' | '
 
 /**
  * The TravelGraph for a project's view and rules (transport wait and ride come from the rules),
- * with the dock positions the project's transport steps give (`userDocksOf`).
+ * with the dock positions the project's transport steps give (`userDocksOf`) and, once it has
+ * loaded, the committed client taxi file (D-039 B): its nodes, its flights with their path lengths
+ * (TIME-6) and the inferred docks of the seeded transports (TIME-7, map-presentation.md §10). Null
+ * while it loads or when it failed: the dataset's flight masters, the cited seeds and TIME-5.
  */
-export function projectTravelGraph(view: Pick<DatasetView, 'npc' | 'spawns' | 'zone'>, flightMasterIds: readonly NpcId[], rules: EffectiveRules, userDocks: readonly UserDock[] = []): TravelGraph {
-  return seedTravelGraph(travelGraphSourceOf(view, flightMasterIds), rules, userDocks.length === 0 ? {} : { userDocks });
+export function projectTravelGraph(
+  view: Pick<DatasetView, 'npc' | 'spawns' | 'zone'>,
+  flightMasterIds: readonly NpcId[],
+  rules: EffectiveRules,
+  userDocks: readonly UserDock[] = [],
+  taxi: CommittedTaxi | null = null,
+): TravelGraph {
+  return seedTravelGraph(travelGraphSourceOf(view, flightMasterIds), rules, {
+    ...(userDocks.length === 0 ? {} : { userDocks }),
+    ...(taxi === null ? {} : { taxi }),
+  });
 }
 
 /**
@@ -100,8 +112,9 @@ export const userDocksKey = (docks: readonly UserDock[]): string =>
 /**
  * Why the navigation model's same-map transport rule (terrain-navigation.md §9.3 case 2, D-034
  * item 2) cannot apply on the navigation maps, in words; null when some same-map transport has
- * both docks positioned. No dataset NPC positions a dock yet (TIME-7), so it applies only where the
- * user entered both docks on transport steps.
+ * both docks positioned. No dataset NPC positions a dock (TIME-7): the docks are the committed taxi
+ * file's inferred stops once it has loaded (NAV-08), else only those the user entered on transport
+ * steps.
  */
 export function sameMapTransportNote(graph: TravelGraph, mapIds: readonly number[]): string | null {
   const maps = new Set(mapIds);
@@ -112,7 +125,7 @@ export function sameMapTransportNote(graph: TravelGraph, mapIds: readonly number
     if (edge.from.point !== null && edge.to.point !== null) return null;
   }
   if (seeded === 0) return null;
-  return 'Boats and zeppelins between two docks on one continent are not used for walking legs that have no walking path: no dock has a known position (enter both docks on transport steps to use one).';
+  return 'Boats and zeppelins between two docks on one continent are not used for walking legs that have no walking path: no dock has a known position (the client taxi file gives them once it has loaded; or enter both docks on transport steps).';
 }
 
 /**
@@ -146,7 +159,8 @@ function dockEndpoint(dock: TransportDock, spawns: DatasetView['spawns'], hints:
  * The same-map transports of a TravelGraph for the navigation model (terrain-navigation.md §9.3
  * case 2, D-034 item 2): edges with both docks positioned on one world map, open to the faction
  * (unknown factions count as open, as TIME-7 treats them), with wait plus ride carrying the
- * rules' provenance. Per map, computed once.
+ * rules' provenance, and which docks are client berths (inferred stops, whose walks count their
+ * swim as the walk along the pier, TIME-7). Per map, computed once.
  */
 export function sameMapTransportsOf(graph: TravelGraph, faction: Faction, spawns: DatasetView['spawns'], hints: ZoneHintResolver): SameMapTransports {
   const byMap = new Map<WorldMapId, readonly SameMapTransport[]>();
@@ -160,7 +174,9 @@ export function sameMapTransportsOf(graph: TravelGraph, faction: Faction, spawns
         const to = dockEndpoint(edge.to, spawns, hints);
         if (from === null || to === null) continue;
         const seconds = sumEstimates([withBasis(edge.waitS.value, ruleInput(edge.waitS)), withBasis(edge.rideS.value, ruleInput(edge.rideS))]);
-        out.push({ id: edge.id, from, to, seconds });
+        // Inferred docks are client berths in the water beside the pier (TIME-7): their walks count as walking.
+        const berths = { from: edge.from.pointFrom === 'inferred', to: edge.to.pointFrom === 'inferred' };
+        out.push({ id: edge.id, from, to, seconds, ...(berths.from || berths.to ? { berths } : {}) });
       }
       list = out;
       byMap.set(mapId, list);

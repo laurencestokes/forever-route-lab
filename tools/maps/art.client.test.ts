@@ -17,7 +17,7 @@ import { ART_DIR, ART_MANIFEST_FILE, parseArtManifest, type ParsedArtManifest } 
 import { planArt, planFileDataIds, type PlanReport } from './lib/art-plan';
 import { readClientMapTables, type ClientMapTables } from './lib/client-tables';
 import { composeArt } from './lib/compose';
-import { GEOMETRY_FILE, PLACEHOLDER_DIR, REFERENCE_FRAME_HASH } from './lib/constants';
+import { DEPLOYED_ART_UIMAPS, GEOMETRY_FILE, PLACEHOLDER_DIR, REFERENCE_FRAME_HASH } from './lib/constants';
 import { DEFAULT_WEBP, encodeWebp, encoderIdentity } from './lib/encode';
 import { lfBytes, sha256Hex } from './lib/hash';
 import { formatJson } from './lib/json';
@@ -88,27 +88,32 @@ describe.skipIf(!status.available)('map art on the pinned Forever client', () =>
     expect(report.plans.reduce((n, p) => n + p.overlays.reduce((k, o) => k + o.tiles.length, 0), 0)).toBe(972);
   });
 
-  it('composes every image to the pixels and inputs the committed manifest records', () => {
+  it('composes every image to the pixels and inputs the committed manifest records (its sources, deployed or not: D-042 O5)', () => {
     const tableInputs = tables.inputs.map((t) => ({ fileDataId: t.fileDataId, ckey: t.ckey }));
     let oversized = 0;
+    expect(committed.sources).toHaveLength(report.plans.length);
     for (const plan of report.plans) {
       const { image, stats } = composeArt(plan, (id) => casc.file(id).data);
       oversized += stats.oversizedEdgeTiles;
-      const entry = committed.files.find((f) => f.uiMapId === plan.uiMapId && f.layer === plan.layerIndex);
-      expect(entry?.pixelsSha256, `UiMap ${String(plan.uiMapId)}`).toBe(rasterSha256(image));
+      const record = committed.sources.find((s) => s.uiMapId === plan.uiMapId && s.layer === plan.layerIndex);
+      expect(record?.pixelsSha256, `UiMap ${String(plan.uiMapId)}`).toBe(rasterSha256(image));
       const inputs = [...planFileDataIds(plan).map((id) => ({ fileDataId: id, ckey: casc.ckeyOf(id) ?? '' })), ...tableInputs];
-      expect(entry?.inputHash, `UiMap ${String(plan.uiMapId)}`).toBe(inputHash(inputs));
+      expect(record?.inputHash, `UiMap ${String(plan.uiMapId)}`).toBe(inputHash(inputs));
+      // A deployed image's entry agrees with its sources record.
+      const entry = committed.files.find((f) => f.uiMapId === plan.uiMapId && f.layer === plan.layerIndex);
+      if (entry !== undefined) expect([entry.pixelsSha256, entry.inputHash]).toEqual([record?.pixelsSha256, record?.inputHash]);
     }
+    expect(committed.files.map((f) => f.uiMapId)).toEqual([...DEPLOYED_ART_UIMAPS]);
     expect(oversized).toBe(19);
   }, 120_000);
 
-  it('re-encodes to the committed bytes with the recorded encoder (Durotar, Kalimdor, 1463)', async () => {
+  it('re-encodes to the committed bytes with the recorded encoder (the deployed Zephras Isle, Darkspear Islands and Alterac Valley)', async () => {
     const same = JSON.stringify(committed.encoder) === JSON.stringify(encoderIdentity()) && JSON.stringify(committed.webp) === JSON.stringify(DEFAULT_WEBP);
     if (!same) {
       announceSkip('art byte reproducibility', `the committed art was encoded by ${JSON.stringify(committed.encoder)}, this machine has ${JSON.stringify(encoderIdentity())}`);
       return;
     }
-    for (const id of [1411, 1414, 1463]) {
+    for (const id of [2521, 2524, 1459]) {
       const plan = report.plans.find((p) => p.uiMapId === id);
       if (plan === undefined) throw new Error(`no plan for ${String(id)}`);
       const bytes = await encodeWebp(composeArt(plan, (fdid) => casc.file(fdid).data).image, DEFAULT_WEBP);

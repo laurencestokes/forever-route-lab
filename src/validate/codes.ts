@@ -46,8 +46,8 @@ export interface IssueCodeSpec {
 const LEVEL = ['level', 'levelBasis', 'levelEraFallback'] as const;
 
 /**
- * VAL-1..22, VAL-30..33, LINT-1..4 (SIMULATION §7.2, §7.5, §7.8), SIM-1..21 (§7.7) plus the
- * route-level SIM-22 and SIM-23, and DATA001-003. VAL-3, VAL-31 and VAL-33 define behaviour and
+ * VAL-1..22, VAL-30..33, LINT-1..4 (SIMULATION §7.2, §7.5, §7.8), SIM-1..21 and SIM-24 (§7.7)
+ * plus the route-level SIM-22 and SIM-23, and DATA001-003. VAL-3, VAL-31 and VAL-33 define behaviour and
  * have no code.
  */
 export const ISSUE_CODES = [
@@ -554,6 +554,16 @@ export const ISSUE_CODES = [
     explanation: 'A flight needs both flight paths discovered, in the profile or by an earlier step.',
   },
   {
+    code: 'SIM007-flight-unknown-path-journey',
+    rule: 'SIM-7',
+    severity: 'warning',
+    variantOf: 'SIM007-flight-unknown-path',
+    params: [],
+    message: 'Every flight journey between these flight points needs a flight path the character does not know yet; the flight is timed as a straight line instead.',
+    explanation:
+      'The client taxi file joins the two flight points only through flight points the character has not discovered, so its per-leg times cannot be used and the straight-line estimate stands in. Discover the flight points on the way, or add them to the known flight paths.',
+  },
+  {
     code: 'SIM008-flight-unresolved',
     rule: 'SIM-8',
     severity: 'warning',
@@ -633,6 +643,15 @@ export const ISSUE_CODES = [
     params: ['transportId'],
     message: "Transport {transportId} does not serve the character's faction.",
     explanation: "The transport's known factions exclude the character.",
+  },
+  {
+    code: 'SIM024-flight-faction',
+    rule: 'SIM-24',
+    severity: 'warning',
+    variantOf: null,
+    params: ['end', 'node'],
+    message: "The flight's {endText} node, {nodeText}, is not open to the character's faction; the flight is still timed.",
+    explanation: "The flight point's factions (the client file's side flags, else the flight master's faction) exclude the character.",
   },
   {
     code: 'SIM015-time-unknown',

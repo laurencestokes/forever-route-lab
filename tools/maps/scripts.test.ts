@@ -33,12 +33,17 @@ describe('command line', () => {
     expect(tsx(['tools/maps/convert.ts', '--bogus'])).toMatchObject({ status: 1, output: expect.stringContaining('unknown option --bogus') as unknown });
   }, 60_000);
 
+  // The minimap tiles' checks (M6, M8, M11: about 25 s over 6,647 tiles) are minimap-files.test.ts's; this
+  // test is about the command line, so it skips them, and the tool tree hash, which any edit of the
+  // minimap tool's closure changes until the tool is rerun (MD-07; the timeout had failed 2 runs of 3).
   it.skipIf(!hasPinnedCheckout())('import --check and validate --skip-tracking pass on the committed files (needs the QuestieDB checkout)', () => {
     const check = tsx(['tools/maps/import.ts', '--placeholder', '--check']);
     expect(check.output).toContain('placeholder up to date');
     expect(check.status).toBe(0);
-    const validate = tsx(['tools/maps/validate.ts', '--skip-tracking']);
+    const validate = tsx(['tools/maps/validate.ts', '--skip-tracking', '--skip-tool-tree', '--skip-minimap-tiles']);
     expect(validate.output).not.toContain('FAIL');
+    expect(validate.output).toMatch(/SKIP M6 .*--skip-minimap-tiles/);
+    expect(validate.output).toMatch(/SKIP MT .*--skip-tool-tree/);
     expect(validate.status).toBe(0);
-  }, 60_000);
+  }, 180_000);
 });

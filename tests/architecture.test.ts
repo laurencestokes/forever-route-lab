@@ -45,6 +45,7 @@ const MODULES = [
   'infra',
   'map/adapter',
   'map/layers',
+  'map/marks',
   'map/leaflet',
   'app',
   'ui',
@@ -66,12 +67,14 @@ const PURE_MODULES: readonly ModuleName[] = [
   'nav',
   'map/adapter',
   'map/layers',
+  'map/marks',
 ];
 const isPure = (module: ModuleName): boolean => PURE_MODULES.includes(module);
 
 /**
  * §4 "May import (values)". A module may always import from itself. Third-party packages are in
- * PACKAGE_RULES; file-level additions (optimizer/types, the composition root) are below.
+ * PACKAGE_RULES; file-level additions (optimizer/types, the composition root) and the one file-level
+ * restriction (the atlas files, map-atlas.md §8.1) are below.
  */
 const MAY_IMPORT: Readonly<Record<ModuleName, readonly ModuleName[]>> = {
   domain: [],
@@ -93,14 +96,28 @@ const MAY_IMPORT: Readonly<Record<ModuleName, readonly ModuleName[]>> = {
   'nav/worker': ['nav'],
   infra: PURE_MODULES,
   'map/adapter': ['domain', 'geo'],
-  'map/layers': ['domain', 'geo'],
-  'map/leaflet': ['map/adapter'],
+  // map-presentation.md §25.2.2 (step MP.2b): the one path set and state table imports nothing;
+  // map/layers (states) and map/leaflet (pins) import it directly, ui through app/map-exports, and
+  // app and infra by their own rules.
+  'map/layers': ['domain', 'geo', 'map/marks'],
+  'map/marks': [],
+  'map/leaflet': ['map/adapter', 'map/marks'],
   app: MODULES.filter((module) => module !== 'ui' && module !== 'map/leaflet' && module !== 'app'),
   ui: ['app', 'map/adapter'],
 };
 
 /** §4: optimizer/worker may import `optimizer/types` (which belongs to the optimizer/index module). */
 const OPTIMIZER_TYPES_FILE = 'src/optimizer/types.ts';
+
+/**
+ * docs/research/map-atlas.md §8.1 (MA-14; D-042 A9): the atlas files hold atlas coordinates, which
+ * are display only (D-017). Their values may be imported only by these modules, by tests and by the
+ * two files themselves (and by tools/, which this test does not scan); every other module, geo's
+ * own index included, may import their types only. Atlas units therefore cannot reach a distance,
+ * a simulation or a saved project.
+ */
+const ATLAS_FILES: readonly string[] = ['src/geo/atlas.ts', 'src/geo/atlas-layout.ts'];
+const ATLAS_VALUE_IMPORTERS: readonly ModuleName[] = ['map/adapter', 'map/layers', 'infra', 'app'];
 
 /** §4: ui imports map/leaflet "only in the composition root" (the app entry). */
 const COMPOSITION_ROOTS: readonly string[] = ['src/main.ts', 'src/main.tsx', 'src/ui/main.ts', 'src/ui/main.tsx'];
@@ -176,6 +193,8 @@ function moduleOf(file: string): ModuleName | null {
         const name = second === undefined ? '' : stem(second);
         if (name === 'adapter') return 'map/adapter';
         if (name === 'layers') return 'map/layers';
+        // marks-pins.ts is the pins' half of map/marks, split off for the entry chunk (ui-refresh.md §10.3).
+        if (name === 'marks' || name === 'marks-pins') return 'map/marks';
         return null;
       }
       return second === 'leaflet' ? 'map/leaflet' : null;
@@ -575,6 +594,15 @@ function importViolation(source: SourceInfo, record: ImportRecord, target: Impor
   const what = `${record.typeOnly ? 'type' : 'value'} import "${record.specifier}"`;
   switch (target.kind) {
     case 'module': {
+      if (
+        ATLAS_FILES.includes(target.file) &&
+        !record.typeOnly &&
+        !source.isTest &&
+        !ATLAS_FILES.includes(source.file) &&
+        !ATLAS_VALUE_IMPORTERS.includes(source.module)
+      ) {
+        return `${what}: ${target.file} holds atlas coordinates (display only, D-017); only ${ATLAS_VALUE_IMPORTERS.join(', ')}, tests and the atlas files may import its values (docs/research/map-atlas.md §8.1); \`import type\` is allowed`;
+      }
       if (target.module === source.module) return null;
       if (record.typeOnly && isPure(target.module)) return null;
       if (MAY_IMPORT[source.module].includes(target.module)) return null;
@@ -852,6 +880,9 @@ describe('architecture scanner (self-test)', () => {
     expect(moduleOf('src/optimizer/helpers.ts')).toBeNull();
     expect(moduleOf('src/map/adapter.ts')).toBe('map/adapter');
     expect(moduleOf('src/map/layers.test.ts')).toBe('map/layers');
+    expect(moduleOf('src/map/marks.ts')).toBe('map/marks');
+    expect(moduleOf('src/map/marks.test.ts')).toBe('map/marks');
+    expect(moduleOf('src/map/marks-pins.ts')).toBe('map/marks');
     expect(moduleOf('src/map/leaflet/LeafletMapAdapter.ts')).toBe('map/leaflet');
     expect(moduleOf('src/map/other.ts')).toBeNull();
     expect(moduleOf('src/infra/persistence/db.ts')).toBe('infra');
@@ -944,6 +975,84 @@ describe('architecture scanner (self-test)', () => {
     expect(check('src/ui/a.ts', "import { openMap } from '../nav';")[0]).toMatch(/ui may not import nav/);
     expect(isPure('nav')).toBe(true);
     expect(isPure('nav/worker')).toBe(false);
+  });
+
+  it('applies the map/marks rows (docs/research/map-presentation.md §25.2.2, step MP.2b)', () => {
+    const files = new Set(['src/domain/index.ts', 'src/geo/index.ts', 'src/map/marks.ts', 'src/map/adapter.ts', 'src/app/map-exports.ts']);
+    const exists = (file: string): boolean => files.has(file);
+    const check = (file: string, code: string): readonly string[] => {
+      const module = moduleOf(file);
+      if (module === null) throw new Error(`test file ${file} has no module`);
+      const report = { info: { file, module, isTest: TEST_FILE.test(file) }, scan: scanSource(file, code) };
+      return importViolations(report, exists).map((line) => line.replace(/^[^ ]+ /, ''));
+    };
+    // The one path set imports nothing: not even domain or geo, and no package.
+    expect(check('src/map/marks.ts', "import { x } from '../domain';")[0]).toMatch(/map\/marks may not import domain \(allowed: nothing/);
+    expect(check('src/map/marks.ts', "import { x } from './adapter';")[0]).toMatch(/map\/marks may not import map\/adapter/);
+    expect(check('src/map/marks.ts', "import type { Difficulty } from '../domain';")).toEqual([]);
+    expect(check('src/map/marks.ts', "import L from 'leaflet';")[0]).toMatch(/"leaflet" is not allowed in map\/marks/);
+    // Its readers: map/layers (states) and map/leaflet (pins) directly, app (and infra) by their rules.
+    expect(check('src/map/layers.ts', "import { MARK_STATES } from './marks';")).toEqual([]);
+    expect(check('src/map/leaflet/pins.ts', "import { QUEST_GLYPH } from '../marks';")).toEqual([]);
+    expect(check('src/app/map-exports.ts', "export { QUEST_GLYPH } from '../map/marks';")).toEqual([]);
+    expect(check('src/infra/a.ts', "import { MARK_STATES } from '../map/marks';")).toEqual([]);
+    // ui reads it only through app/map-exports (as it reads the rules through app/rules-exports).
+    expect(check('src/ui/markers/QuestMark.tsx', "import { QUEST_GLYPH } from '../../map/marks';")[0]).toMatch(/ui may not import map\/marks/);
+    expect(check('src/ui/markers/QuestMark.tsx', "import type { MarkState } from '../../map/marks';")).toEqual([]);
+    expect(check('src/ui/markers/QuestMark.tsx', "import { QUEST_GLYPH } from '../../app/map-exports';")).toEqual([]);
+    // map/adapter does not take it (only types, like any pure module); other pure modules neither.
+    expect(check('src/map/adapter.ts', "import { MARK_STATES } from './marks';")[0]).toMatch(/map\/adapter may not import map\/marks/);
+    expect(check('src/engine/a.ts', "import { MARK_STATES } from '../map/marks';")[0]).toMatch(/engine may not import map\/marks/);
+    expect(isPure('map/marks')).toBe(true);
+  });
+
+  it('applies the atlas file-level rule (docs/research/map-atlas.md §8.1, MA-14)', () => {
+    const files = new Set(['src/geo/atlas.ts', 'src/geo/atlas-layout.ts', 'src/geo/index.ts', 'src/geo/distance.ts']);
+    const exists = (file: string): boolean => files.has(file);
+    const check = (file: string, code: string): readonly string[] => {
+      const module = moduleOf(file);
+      if (module === null) throw new Error(`test file ${file} has no module`);
+      const report = { info: { file, module, isTest: TEST_FILE.test(file) }, scan: scanSource(file, code) };
+      return importViolations(report, exists).map((line) => line.replace(/^[^ ]+ /, ''));
+    };
+    const values = (from: string): string => [`import { atlasPlacements } from '${from}/atlas';`, `import { ATLAS_LAYOUT } from '${from}/atlas-layout';`].join('\n');
+    const types = (from: string): string =>
+      [`import type { AtlasPlacement } from '${from}/atlas';`, `import type { AtlasLayout } from '${from}/atlas-layout';`].join('\n');
+    // Value importers: map/adapter, map/layers, infra, app, tests and the atlas files themselves.
+    expect(check('src/map/adapter.ts', values('../geo'))).toEqual([]);
+    expect(check('src/map/layers.ts', values('../geo'))).toEqual([]);
+    expect(check('src/infra/maps/atlas-index.ts', values('../../geo'))).toEqual([]);
+    expect(check('src/app/map-controller.ts', values('../geo'))).toEqual([]);
+    expect(check('src/engine/walk.test.ts', values('../geo'))).toEqual([]);
+    expect(check('src/geo/atlas.ts', "import { ATLAS_LAYOUT } from './atlas-layout';")).toEqual([]);
+    expect(check('src/geo/atlas-layout.ts', "import { partition } from './atlas';")).toEqual([]);
+    // Every other module that may import geo gets the types only.
+    for (const file of [
+      'src/engine/walk.ts',
+      'src/sim/time.ts',
+      'src/validate/rules.ts',
+      'src/rxp/lower.ts',
+      'src/nav/legs.ts',
+      'src/optimizer/core/search.ts',
+      'src/optimizer/index.ts',
+    ]) {
+      const from = posix.relative(posix.dirname(file), 'src/geo');
+      const found = check(file, values(from));
+      expect(found, file).toHaveLength(2);
+      for (const line of found) expect(line, file).toMatch(/holds atlas coordinates \(display only, D-017\)/);
+      expect(check(file, types(from)), file).toEqual([]);
+    }
+    // Modules that may not import geo at all are refused too, and may still import the types.
+    for (const file of ['src/domain/route.ts', 'src/rules/tables.ts', 'src/diff/diff.ts', 'src/project/schema.ts', 'src/optimizer/worker/w.ts', 'src/ui/Map.tsx', 'src/map/leaflet/a.ts']) {
+      const from = posix.relative(posix.dirname(file), 'src/geo');
+      expect(check(file, values(from)), file).toHaveLength(2);
+      expect(check(file, types(from)), file).toEqual([]);
+    }
+    // Inside geo: no re-export from the index, no use by the rest of the module.
+    expect(check('src/geo/index.ts', "export * from './atlas';")[0]).toMatch(/holds atlas coordinates/);
+    expect(check('src/geo/index.ts', "export type { AtlasPlacement } from './atlas';")).toEqual([]);
+    expect(check('src/geo/distance.ts', "import { worldToAtlas } from './atlas';")[0]).toMatch(/holds atlas coordinates/);
+    expect(check('src/geo/distance.ts', "import { distanceYards } from './index';")).toEqual([]);
   });
 
   it('keeps the matrix complete, consistent and acyclic', () => {
@@ -1045,9 +1154,9 @@ describe('pure set (ARCHITECTURE §17)', () => {
     };
     expect(config.compilerOptions.lib).toEqual(['ES2023']);
     expect(config.compilerOptions.types).toEqual([]);
-    // map/adapter and map/layers are single files; every other pure module is a directory, and
-    // nav/worker (not pure) sits inside the pure nav directory, so it is excluded.
-    const expected = PURE_MODULES.map((module) => (module.startsWith('map/') ? `src/${module}.ts` : `src/${module}`));
+    // map/adapter and map/layers are single files, map/marks two (marks.ts and marks-pins.ts); every other
+    // pure module is a directory, and nav/worker (not pure) sits inside the pure nav directory, so it is excluded.
+    const expected = [...PURE_MODULES.map((module) => (module.startsWith('map/') ? `src/${module}.ts` : `src/${module}`)), 'src/map/marks-pins.ts'];
     expect([...config.include].sort()).toEqual([...expected].sort());
     expect(config.exclude).toEqual(['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/nav/worker']);
   });

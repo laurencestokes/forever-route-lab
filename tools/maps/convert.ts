@@ -1,21 +1,35 @@
 /**
- * tools/maps convert (docs/MAPS.md §5.4 (b); terrain-navigation.md §13.4, §15; D-033, D-034 item 4).
+ * tools/maps convert (docs/MAPS.md §5.4 (b); terrain-navigation.md §13.4, §15; D-033, D-042 O5).
  *
  * Extracts the painted world-map art of every UiMap with art from the local Forever client and
- * writes the committed `public/maps/art/`: one WebP per UiMap and style layer (the fully explored
- * map: base tiles plus every explored-area overlay), `manifest.json` (pin, build, tool tree
+ * writes the committed `public/maps/art/`: one WebP per deployed UiMap and style layer (the fully
+ * explored map: base tiles plus every explored-area overlay), `manifest.json` (pin, build, tool tree
  * hashes, encoder, and per file its SHA-256, pixel size, UiMap, world rectangle, tile FileDataIDs
  * and input hash) and `NOTICE.md` (Blizzard Entertainment as the owner, non-affiliation, D-033).
+ *
+ * Since step ATL.10 (docs/research/map-atlas.md §7.6; D-042 O5) only the images still drawn one at a
+ * time are deployed (`DEPLOYED_ART_UIMAPS`: Alterac Valley, Warsong Gulch, Arathi Basin, Zephras Isle
+ * and Darkspear Islands), within the 1.0 MB `art` budget; the other paintings reach the site as the
+ * atlas tiles. `--all` writes every composed image to another folder, as before ATL.10 (for
+ * `tools/maps/tints.ts --art <dir>` and local review; never deployed).
+ *
+ * The manifest also keeps a `sources` record for every UiMap it composes, deployed or not: the
+ * pixel hash of the lossless fully explored image and of its explored-overlay union, and the input
+ * hash (docs/research/map-atlas.md §7.4, §7.5 T5). The atlas build (`tools/maps/atlas.ts`) reads the
+ * same rasters from the client and refuses to run unless they match these records; `--check`
+ * recomputes them from the client like everything else.
  *
  * Client access: `tools/casc` only (read-only, `.build.info` and `Data/` under `WOW_INSTALL`),
  * pinned to `CLIENT_PIN`; nothing is fetched and no client file is written anywhere. The full
  * input lists (FileDataID, CKey), compose statistics and sizes go to the gitignored report.
  *
- * Usage: pnpm tsx tools/maps/convert.ts [--out <dir>] [--report <file>] [--check]
+ * Usage: pnpm tsx tools/maps/convert.ts [--out <dir>] [--report <file>] [--check] [--all]
  *   --out     output folder (default public/maps/art)
  *   --report  report file (default generated/maps-art-report.json)
  *   --check   rebuild in memory and compare with the folder instead of writing (exit 1 on a
  *             difference; a file whose pixels match but whose bytes differ is an encoder difference)
+ *   --all     every composed image, not only the deployed ones; needs --out naming a folder other
+ *             than public/maps/art, and is not held to the art budget
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -27,7 +41,7 @@ import { parseArgs } from './lib/args';
 import { buildArtSet, type ArtBuild } from './lib/art-build';
 import { ART_DIR, ART_FILE_NAME, ART_MANIFEST_FILE, ART_NOTICE_FILE, parseArtManifest } from './lib/art-manifest';
 import { readClientMapTables } from './lib/client-tables';
-import { ART_BUDGET_GZIP_BYTES, ART_TOOL_DIRS, CLIENT_PIN } from './lib/constants';
+import { ART_BUDGET_GZIP_BYTES, ART_TOOL_DIRS, CLIENT_PIN, DEPLOYED_ART_REASON, DEPLOYED_ART_UIMAPS } from './lib/constants';
 import { DEFAULT_WEBP, encoderIdentity } from './lib/encode';
 import { gzipSize } from '../build/lib/audit';
 import { formatJson } from './lib/json';
@@ -84,9 +98,11 @@ function write(outDir: string, build: ArtBuild): void {
 }
 
 async function main(argv: readonly string[]): Promise<number> {
-  const args = parseArgs(argv, { values: ['--out', '--report'], flags: ['--check'] });
+  const args = parseArgs(argv, { values: ['--out', '--report'], flags: ['--check', '--all'] });
   if (args.positional.length > 0) throw new Error(`unexpected argument ${args.positional.join(' ')}`);
   const outDir = resolve(REPO_ROOT, args.values.get('--out') ?? ART_DIR);
+  const all = args.flags.has('--all');
+  if (all && outDir === resolve(REPO_ROOT, ART_DIR)) throw new Error(`--all writes every composed image, which ${ART_DIR} does not deploy (D-042 O5); name another folder with --out`);
   const reportPath = resolve(REPO_ROOT, args.values.get('--report') ?? DEFAULT_REPORT);
   const started = performance.now();
   const casc = LocalCasc.open({ install: resolveInstall(), product: CLIENT_PIN.product, pin: CLIENT_PIN });
@@ -96,7 +112,13 @@ async function main(argv: readonly string[]): Promise<number> {
     const tables = readClientMapTables(casc);
     build = await buildArtSet(
       { tables, read: (id) => { const file = casc.file(id); return { data: file.data, ckey: file.ckey }; } },
-      { client: { product: casc.build.product, version: casc.build.version, buildKey: casc.build.buildKey }, toolTrees: toolTrees(REPO_ROOT, ART_TOOL_DIRS), encoder: encoderIdentity(), webp: DEFAULT_WEBP },
+      {
+        client: { product: casc.build.product, version: casc.build.version, buildKey: casc.build.buildKey },
+        toolTrees: toolTrees(REPO_ROOT, ART_TOOL_DIRS),
+        encoder: encoderIdentity(),
+        webp: DEFAULT_WEBP,
+        deploy: all ? undefined : { uiMaps: DEPLOYED_ART_UIMAPS, reason: DEPLOYED_ART_REASON },
+      },
     );
   } finally {
     casc.close();
@@ -123,7 +145,7 @@ async function main(argv: readonly string[]): Promise<number> {
     if (problems.length === 0) console.log(`convert: ${toPosix(relative(REPO_ROOT, outDir))} is up to date: ${summary}`);
     return problems.length === 0 ? 0 : 1;
   }
-  if (gzip > ART_BUDGET_GZIP_BYTES) throw new Error(`the art is ${formatBytes(gzip)} gzip-6, over the ${formatBytes(ART_BUDGET_GZIP_BYTES)} budget (D-034 item 4); nothing written`);
+  if (!all && gzip > ART_BUDGET_GZIP_BYTES) throw new Error(`the art is ${formatBytes(gzip)} gzip-6, over the ${formatBytes(ART_BUDGET_GZIP_BYTES)} budget (D-042 O5); nothing written`);
   write(outDir, build);
   console.log(`convert: wrote ${toPosix(relative(REPO_ROOT, outDir))}: ${summary}; built in ${((built - started) / 1000).toFixed(1)} s`);
   console.log(`convert: report ${toPosix(relative(REPO_ROOT, reportPath))}`);

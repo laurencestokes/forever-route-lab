@@ -18,6 +18,19 @@ import type { FrameDescriptor, WorldBounds } from '../adapter';
  * and a world rectangle maps to `[[south, west], [north, east]] = [[xMin, −yMax], [xMax, −yMin]]`.
  * Negation is written `0 − v`, so a world `0` never becomes `−0`. The transform is exact (negation
  * and identity only), so a round trip returns the same numbers.
+ *
+ * **Through a placement** (docs/research/map-atlas.md §5.1, §8.1; step ATL.3): a surface draws each
+ * world map through its placement, a translation `E = eOff − y`, `S = sOff − x` into the surface's
+ * plane (atlas yards, E east, S south), with `latLng = (−S, E)`:
+ *
+ *   forward:  lat = x − sOff,  lng = eOff − y
+ *   inverse:  x = lat − (0 − sOff),  y = eOff − lng
+ *
+ * A world surface's identity placement (`eOff = sOff = 0`) gives exactly the numbers above, `−0`
+ * included (`x − 0` is `x`), so one code path serves both kinds of surface. Through an atlas
+ * placement the round trip is exact for whole yards and within 10⁻⁹ yd otherwise, and exact after
+ * the app's 0.1-yd pick rounding (the same arithmetic as src/geo/atlas.ts, map-atlas.md §5.4).
+ * Atlas positions are display only (D-017): nothing here measures a distance across maps.
  */
 
 /** `[lat, lng]` for Leaflet. */
@@ -49,6 +62,124 @@ export function boundsToLatLngBounds(bounds: WorldBounds): LatLngBoundsPair {
 /** The inverse of `boundsToLatLngBounds`: south/west/north/east edges back to a world rectangle. */
 export function latLngBoundsToWorld(south: number, west: number, north: number, east: number, mapId: WorldMapId): WorldBounds {
   return { mapId, xMin: south, xMax: north, yMin: 0 - east, yMax: 0 - west };
+}
+
+/** A placement's translation (`SurfacePlacement` in adapter.ts): only its offsets move a point. */
+export interface Translation {
+  readonly eOff: number;
+  readonly sOff: number;
+}
+
+/** The identity placement of a world surface. */
+export const IDENTITY: Translation = { eOff: 0, sOff: 0 };
+
+/** `worldToLatLng` through a placement: `[x − sOff, eOff − y]`. */
+export function placedLatLng(placement: Translation, x: number, y: number): LatLngPair {
+  return [x - placement.sOff, placement.eOff - y];
+}
+
+/** `boundsToLatLngBounds` through a placement. */
+export function placedLatLngBounds(placement: Translation, bounds: WorldBounds): LatLngBoundsPair {
+  return [
+    [bounds.xMin - placement.sOff, placement.eOff - bounds.yMax],
+    [bounds.xMax - placement.sOff, placement.eOff - bounds.yMin],
+  ];
+}
+
+/** The inverse of `placedLatLng`, on world map `mapId` (whatever the partition would say there). */
+export function latLngOnMap(placement: Translation, lat: number, lng: number, mapId: WorldMapId): WorldPoint {
+  return { mapId, x: lat - (0 - placement.sOff), y: placement.eOff - lng };
+}
+
+/** The inverse of `placedLatLngBounds`: south/west/north/east edges back to a rectangle of `mapId`'s yards. */
+export function latLngBoundsOnMap(placement: Translation, south: number, west: number, north: number, east: number, mapId: WorldMapId): WorldBounds {
+  return { mapId, xMin: south - (0 - placement.sOff), xMax: north - (0 - placement.sOff), yMin: placement.eOff - east, yMax: placement.eOff - west };
+}
+
+/** An atlas position (E east, S south) of a Leaflet point: `E = lng`, `S = −lat`. */
+export function latLngToAtlas(lat: number, lng: number): { readonly e: number; readonly s: number } {
+  return { e: lng, s: 0 - lat };
+}
+
+/** A placement's world rectangle as Leaflet bounds: where the map lies on the surface. */
+export function placementLatLngBounds(placement: Translation & { readonly rect: WorldBounds }): LatLngBoundsPair {
+  return placedLatLngBounds(placement, placement.rect);
+}
+
+/** Two `[[south, west], [north, east]]` rectangles overlap (edges included). */
+export function latLngBoundsMeet(a: LatLngBoundsPair, b: LatLngBoundsPair): boolean {
+  return a[0][0] <= b[1][0] && a[1][0] >= b[0][0] && a[0][1] <= b[1][1] && a[1][1] >= b[0][1];
+}
+
+/** A rectangle grown by `fraction` of its size on every side (Leaflet's `LatLngBounds.pad`). */
+export function padLatLngBounds(bounds: LatLngBoundsPair, fraction: number): LatLngBoundsPair {
+  const dLat = (bounds[1][0] - bounds[0][0]) * fraction;
+  const dLng = (bounds[1][1] - bounds[0][1]) * fraction;
+  return [
+    [bounds[0][0] - dLat, bounds[0][1] - dLng],
+    [bounds[1][0] + dLat, bounds[1][1] + dLng],
+  ];
+}
+
+/**
+ * A connector's arc (map-atlas.md §8.5) in Leaflet coordinates: a quadratic Bézier from `from` to
+ * `to` whose control point sits `2 × bulge` of the chord to the left of travel (north when the leg
+ * runs east), so the curve's apex bulges `bulge` of the chord; `segments + 1` points, the ends
+ * exact. The surface's plane is isotropic (one unit is one yard both ways), so the bulge is the
+ * same on screen. Display only: its length is never a distance (D-017).
+ */
+export function connectorArc(from: LatLngPair, to: LatLngPair, bulge = 0.12, segments = 24): readonly LatLngPair[] {
+  const [lat0, lng0] = from;
+  const [lat2, lng2] = to;
+  const dLat = lat2 - lat0;
+  const dLng = lng2 - lng0;
+  // Left of the travel direction (dLng east, dLat north): rotate it a quarter turn anticlockwise.
+  const lat1 = (lat0 + lat2) / 2 + 2 * bulge * dLng;
+  const lng1 = (lng0 + lng2) / 2 - 2 * bulge * dLat;
+  const out: LatLngPair[] = [from];
+  const n = Math.max(2, Math.floor(segments));
+  for (let i = 1; i < n; i += 1) {
+    const t = i / n;
+    const a = (1 - t) * (1 - t);
+    const b = 2 * (1 - t) * t;
+    const c = t * t;
+    out.push([a * lat0 + b * lat1 + c * lat2, a * lng0 + b * lng1 + c * lng2]);
+  }
+  out.push(to);
+  return out;
+}
+
+/** The point halfway along `connectorArc` (t = 0.5), where its transition glyph sits. */
+export function connectorMidpoint(from: LatLngPair, to: LatLngPair, bulge = 0.12): LatLngPair {
+  const [lat0, lng0] = from;
+  const [lat2, lng2] = to;
+  const lat1 = (lat0 + lat2) / 2 + 2 * bulge * (lng2 - lng0);
+  const lng1 = (lng0 + lng2) / 2 - 2 * bulge * (lat2 - lat0);
+  return [0.25 * lat0 + 0.5 * lat1 + 0.25 * lat2, 0.25 * lng0 + 0.5 * lng1 + 0.25 * lng2];
+}
+
+/**
+ * How much of an image over `bounds` to cut away on each side so only `clip` shows, as fractions
+ * of its height (top, bottom) and width (right, left) on screen (north up, east right: world x
+ * down the image is decreasing, world y across it is decreasing). Null when the image has no area,
+ * the clip is on another map, or the clip covers the whole image; a clip that misses the image
+ * cuts it all away.
+ */
+export function clipInset(
+  bounds: WorldBounds,
+  clip: WorldBounds,
+): { readonly top: number; readonly right: number; readonly bottom: number; readonly left: number } | null {
+  const height = bounds.xMax - bounds.xMin;
+  const width = bounds.yMax - bounds.yMin;
+  if (clip.mapId !== bounds.mapId || !(height > 0) || !(width > 0)) return null;
+  const part = (value: number): number => Math.min(1, Math.max(0, value));
+  const inset = {
+    top: part((bounds.xMax - clip.xMax) / height),
+    bottom: part((clip.xMin - bounds.xMin) / height),
+    left: part((bounds.yMax - clip.yMax) / width),
+    right: part((clip.yMin - bounds.yMin) / width),
+  };
+  return inset.top === 0 && inset.bottom === 0 && inset.left === 0 && inset.right === 0 ? null : inset;
 }
 
 /** Yards per screen pixel at a `CRS.Simple` zoom (`2^zoom` pixels per yard). */

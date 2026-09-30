@@ -1,10 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { MapController, MapStatus } from '../../app/map-exports';
+import type { MapController, MapStatus, ZoneGroup } from '../../app/map-exports';
 import type { DatasetView } from '../../domain/dataset';
 import type { UiMapId } from '../../domain/ids';
 import type { Location } from '../../domain/points';
 import { locationDetail } from '../app-model';
 import { Button, Select, TextInput, formatDurationLong, formatInteger } from '../kit';
+import type { SelectOption, SelectOptionGroup } from '../primitives/Select';
 import { minutesText, parseMinutes, parseNumber } from './field-parse';
 import type { Announce } from './LiveAnnouncer';
 import './Editing.css';
@@ -51,6 +52,41 @@ function typedFieldsOf(value: Location | null): { readonly zone: string; readonl
   return source === null ? { zone: '', x: '', y: '' } : { zone: String(source.uiMapId), x: String(source.x), y: String(source.y) };
 }
 
+/** Why a UiMap is offered with its id only: the data has no validated name for it. */
+export const UNNAMED_ZONE_NOTE = 'no validated name in the data';
+
+const byLabel = (a: SelectOption, b: SelectOption): number => (a.label < b.label ? -1 : a.label > b.label ? 1 : Number(a.value) - Number(b.value));
+
+/**
+ * The Zone select's choices (fix QA-22): with a map, the zones of each world map as the top bar's
+ * "Go to zone" offers them (a zone frame each, grouped by world map, with the same names), so
+ * continents, the world and maps without a name are not offered as zones. Without a map, every
+ * named zone. A point already set on another UiMap (a continent, an unnamed map) stays choosable, in
+ * "Other maps", and an unnamed one says why it has only its id.
+ */
+export function zoneChoices(dataset: DatasetView, groups: readonly ZoneGroup[] | null, value: Location | null): readonly (SelectOption | SelectOptionGroup)[] {
+  const nameOf = (id: UiMapId): string | null => dataset.zone(id)?.name ?? null;
+  const offered = new Set<string>();
+  const out: (SelectOption | SelectOptionGroup)[] = [];
+  if (groups !== null && groups.length > 0) {
+    for (const group of groups) {
+      const options = group.zones.map((zone) => ({ value: String(zone.uiMapId), label: zone.label })).sort(byLabel);
+      for (const option of options) offered.add(option.value);
+      if (options.length > 0) out.push({ group: group.label, options });
+    }
+  } else {
+    const options = dataset.zones().flatMap((zone) => (zone.name === null ? [] : [{ value: String(zone.uiMapId), label: zone.name }])).sort(byLabel);
+    for (const option of options) offered.add(option.value);
+    out.push(...options);
+  }
+  const current = value?.source.space === 'zone' ? value.source.uiMapId : null;
+  if (current !== null && !offered.has(String(current))) {
+    const name = nameOf(current);
+    out.push({ group: 'Other maps', options: [{ value: String(current), label: name ?? `UiMap ${String(current)} (${UNNAMED_ZONE_NOTE})` }] });
+  }
+  return out;
+}
+
 /** Why Clear does nothing: there is no value. */
 export const NOTHING_TO_CLEAR = 'Nothing to clear: no value is set';
 
@@ -94,14 +130,7 @@ export function LocationEditor({ label, value, dataset, disabled, onChange, pick
     pickRef.current = pick;
   }, [pick]);
 
-  const zoneOptions = useMemo(
-    () =>
-      dataset
-        .zones()
-        .map((z) => ({ value: String(z.uiMapId), label: z.name ?? `UiMap ${String(z.uiMapId)}` }))
-        .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : Number(a.value) - Number(b.value))),
-    [dataset],
-  );
+  const zoneOptions = useMemo(() => zoneChoices(dataset, controller?.zoneGroups ?? null, value), [dataset, controller, value]);
 
   // A pick this editor started ends with it (another step selected, the panel closed).
   useEffect(
@@ -175,7 +204,7 @@ export function LocationEditor({ label, value, dataset, disabled, onChange, pick
         <Button
           size="sm"
           icon="map-pin"
-          aria-pressed={picking}
+          pressed={picking}
           aria-disabled={unavailable === null && !disabled ? undefined : true}
           title={unavailable ?? (picking ? 'Picking: press again or Escape to cancel' : `The next click on the map sets ${pick?.what ?? 'the point'}`)}
           onClick={startPick}
@@ -250,7 +279,7 @@ export function DurationEditor({ value, disabled, onChange, announce }: Duration
   };
   const hint =
     value === null
-      ? 'Not set: the estimate applies (unknown until simulation, Milestone 6).'
+      ? 'Not set: the simulation’s estimate applies.'
       : `Set: ${formatDurationLong(value)} (stored as ${formatInteger(value)} ${value === 1 ? 'second' : 'seconds'}), replacing the estimate.`;
   return (
     <div className="frl-app-duration">

@@ -1,5 +1,6 @@
 import type { DatasetView } from '../domain/dataset';
-import type { StepId } from '../domain/ids';
+import { createIssueShortener } from './issue-short';
+import type { StepId, UiMapId } from '../domain/ids';
 import type { ValidationIssue } from '../domain/issues';
 import type { ProjectV1 } from '../domain/project';
 import type { RouteStep } from '../domain/route';
@@ -7,8 +8,18 @@ import type { TravelModel } from '../domain/travel';
 import type { WalkVisitor, ZoneHintResolver } from '../engine/types';
 import { createRouteWalker, type RouteWalker, walkMetrics } from '../engine/walker';
 import type { MapGeometry } from '../geo/types';
+import { datasetDungeons } from '../infra/data/dungeons';
+import { createClientTables, type ClientDungeons, type ClientTables, type ClientTaxi, type ClientZones } from '../infra/maps/client-tables';
+import { createMapResources, type MapResources, type MapResourcesOptions } from '../infra/maps/map-resources';
+import type { TerrainArcs } from '../infra/maps/terrain';
+import { createZoneTints, type ZoneTintsLoad } from '../infra/maps/tints';
+import type { WorldMapId } from '../domain/ids';
+import type { WorldPoint } from '../domain/points';
+import { surfacesOf } from '../map/layers';
 import type { EffectiveRules } from '../rules/precedence';
 import type { TravelGraph, UserDock } from '../rules/travel-graph';
+import { type TaxiLegData, taxiLegDataOf } from '../sim/taxi';
+import { createAcceptChecks } from '../validate/availability';
 import { createRouteValidator, type RouteValidator } from '../validate/validator';
 import {
   type ComputePathsResult,
@@ -25,10 +36,18 @@ import { projectRules, projectTravelGraph, sameMapTransportNote, selectTravelMod
 import { type DatasetSource, datasetViewInputOf } from './dataset-source';
 import { cachedDatasetSource, datasetBaseView } from './dataset-views';
 import type { NavUnavailable } from './navigation-legs';
+import { type ClientTableState, createPlacesBuilder, type PlacesModel } from './map-places';
+import { buildMapLabels, zoneShapesOf, type ZoneShapes } from './map-labels';
+import { buildZoneFill } from './map-zone-fill';
+import { zoneOfPoint } from './map-viewing';
 import type { NavigationTravelModel } from './navigation-model';
 import { NAVIGATION_CHECKING, type NavigationRuntime, type NavigationState } from './navigation-runtime';
 import { defaultNavTimers, type NavigationBatch, type NavTimers } from './navigation-scheduler';
+import { type QuestStateModel, questStateModel } from './quest-state';
+import { knownNodeKeys } from '../engine/state';
+import { questsForCharacter } from './shell-support';
 import type { EditorStore } from './store';
+import { zoneSpans, type ZoneSpans } from './zone-levels';
 
 /**
  * The derived-result pipeline (docs/ARCHITECTURE.md §12.1, §9.2-§9.4; terrain-navigation.md §9.3,
@@ -57,6 +76,19 @@ import type { EditorStore } from './store';
  *   again).
  * - **Selection.** The state before and after the selection's focus step comes from the walker's
  *   checkpoints (`stateBefore`) and is republished when the focus changes.
+ * - **Quest state** (map-presentation.md §7.1; step MP.3): after each publish of a new walk or a
+ *   new focus, a task of its own classifies every quest open to the character at the state after
+ *   the focus step (`questStateModel`) and publishes it with the zones' level spans, so the
+ *   selection paints first and the map's sync never waits for it. It is rebuilt only for a new
+ *   project walked or a new focus step: a re-walk for navigation results changes times, not quests.
+ * - **Client tables** (D-039 B, E; map-presentation.md §8 to §10; steps MP.5, MP.8, MP.9): the
+ *   committed taxi file and dungeon table load once, lazily and never fatally, beside the first
+ *   walk. Once the taxi file has loaded, the TravelGraph is seeded with it (its nodes, its flights
+ *   with their path lengths, the seeded transports' inferred docks) and flights are timed by TIME-6
+ *   from its lengths, so the project is walked again; while it loads, and for good if it fails,
+ *   flights use TIME-5. With the quest state, the same task builds the map's places
+ *   (`createPlacesBuilder`): dungeon entrances, flight points with their state after the focus step
+ *   and the flights, and transport stops.
  *
  * Exports never wait for any of this: they contain no times.
  */
@@ -76,10 +108,45 @@ export interface DerivedPipelineOptions {
   readonly now?: () => number;
   /** The least time between the end of one walk and a re-walk for navigation results (default 100 ms, §9.3). */
   readonly rewalkMs?: number;
+  /**
+   * How long after the selection last moved the quest state, places and labels are rebuilt for it
+   * (review UI-04): arrowing through the list rebuilds them once, for the step it stops on, and a
+   * single change paints its selection before the rebuild. The app passes `SELECTION_SETTLE_MS`;
+   * default 0 (the next task).
+   */
+  readonly selectionSettleMs?: number;
   /** Called after each publish of new results (the composition root measures them). */
   readonly onPublished?: (results: DerivedResults) => void;
   /** Called whenever the navigation model changes (null: none), with the runtime and hints (the map's walking paths). */
   readonly onNavigationModel?: (model: NavigationTravelModel | null, runtime: NavigationRuntime | null, hints: ZoneHintResolver) => void;
+  /**
+   * The committed client tables (`public/maps/client/`): a loader (tests), or where to fetch them
+   * from (`createClientTables` over these options, in this chunk). Omitted: none, so flights stay on
+   * TIME-5 and the map's places have no taxi file or dungeon table.
+   */
+  readonly clientTables?: ClientTableLoaders | { readonly resources: MapResourcesOptions } | null;
+}
+
+/**
+ * The committed map tables the pipeline loads (tests pass their own): the client taxi file and
+ * dungeon table, and each world map's terrain zone arcs (`public/maps/terrain/<map>/zones.json`,
+ * D-032), whose rings anchor the zone labels (map-presentation.md §13.2; step MP.7).
+ */
+export interface ClientTableLoaders extends Pick<ClientTables, 'taxi' | 'dungeons'> {
+  /** The zone arcs of every world map that has them; omitted: none (the labels sit at their frames' centres). */
+  readonly zoneArcs?: () => Promise<readonly TerrainArcs[]>;
+  /** The client zone table (the faction overlay, MP.10); omitted: none. */
+  readonly zones?: ClientTables['zones'];
+  /** The committed zone tints (`public/maps/tint/`, MP.10); omitted: none. */
+  readonly tints?: () => Promise<ZoneTintsLoad>;
+}
+
+/** Every world map's zone arcs that load and verify; a map whose file fails is left out (its labels sit at their frames' centres). */
+async function loadZoneArcs(resources: MapResources): Promise<readonly TerrainArcs[]> {
+  const manifest = await resources.terrain();
+  if (manifest.kind !== 'loaded') return [];
+  const loads = await Promise.all(manifest.manifest.maps.filter((map) => map.zones !== null).map((map) => resources.arcs(map.mapId, 'zones')));
+  return loads.flatMap((load) => (load.kind === 'loaded' ? [load.arcs] : []));
 }
 
 export interface DerivedPipeline extends DerivedActions {
@@ -151,6 +218,8 @@ interface Context {
   readonly baseView: DatasetView;
   readonly rules: EffectiveRules;
   readonly graph: TravelGraph;
+  /** TIME-6's per-leg data (the committed taxi file), or null for TIME-5. */
+  readonly legs: TaxiLegData | null;
   readonly travel: TravelSelection;
   readonly walker: RouteWalker;
   readonly validator: RouteValidator;
@@ -197,6 +266,23 @@ interface Run {
   readonly promise: Promise<{ readonly requested: number }>;
 }
 
+/**
+ * The quest state's wait after a selection change (review UI-04; ASSUMPTION: under the 100 ms at
+ * which a delay starts to be noticed, and longer than a held arrow key's repeat of about 33 ms).
+ */
+export const SELECTION_SETTLE_MS = 60;
+
+/** One issue shortener per dataset view (review UI-01): the rows' line 2. */
+const shorteners = new WeakMap<object, ReturnType<typeof createIssueShortener>>();
+function shortenerOf(view: DatasetView): ReturnType<typeof createIssueShortener> {
+  let shortener = shorteners.get(view);
+  if (shortener === undefined) {
+    shortener = createIssueShortener(view);
+    shorteners.set(view, shortener);
+  }
+  return shortener;
+}
+
 export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedPipeline {
   const { store, geometry, output } = options;
   // Two views per context (the project's and the one without its custom quests, DATA001): four
@@ -205,6 +291,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   const source = cachedDatasetSource(options.data, 4);
   const timers = options.timers ?? defaultNavTimers;
   const now = options.now ?? (() => 0);
+  const selectionSettleMs = options.selectionSettleMs ?? 0;
   const rewalkMs = options.rewalkMs ?? 100;
 
   let navigation: NavigationState = options.navigation ?? NAVIGATION_CHECKING;
@@ -227,19 +314,67 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   let runFailure: NavUnavailable | null = null;
   let editTimer: unknown = null;
   let rewalkTimer: unknown = null;
+  /** The quest state's own task, and what the published model was built from. */
+  let questTimer: unknown = null;
+  let lastSelected: SelectedStepState | null = null;
+  let publishedQuestState: QuestStateModel | null = null;
+  let questKey: { readonly project: ProjectV1; readonly stepId: StepId; readonly view: DatasetView; readonly rules: EffectiveRules } | null = null;
   let changeAt: number | null = null;
   let rewalkFrom = Number.POSITIVE_INFINITY;
   let lastWalkEnd = Number.NEGATIVE_INFINITY;
   let walks = 0;
   let disposed = false;
   let lastModel: NavigationTravelModel | null | undefined;
+  /** The committed client tables as loaded so far (checking until each resolves). */
+  let taxiState: ClientTableState<ClientTaxi> = { kind: 'checking' };
+  let dungeonState: ClientTableState<ClientDungeons> = { kind: 'checking' };
+  const placesOf = createPlacesBuilder();
+  /** The zone rings and label anchors per world map, once the terrain zone arcs are in (MP.7). */
+  let zoneShapes: ReadonlyMap<WorldMapId, ZoneShapes> = new Map();
+  let anchors: ReadonlyMap<WorldMapId, ReadonlyMap<number, WorldPoint>> = new Map();
+  /** The client zone table and the zone tints (MP.10), as loaded so far. */
+  let zonesState: ClientTableState<ClientZones> = { kind: 'checking' };
+  let tintsState: ZoneTintsLoad | null = null;
+  const zoneFillOf = lastOf((shapes: ReadonlyMap<WorldMapId, ZoneShapes>, zones: ClientTableState<ClientZones>, tints: ZoneTintsLoad | null) =>
+    buildZoneFill({
+      geometry,
+      shapes,
+      zones: zones.kind === 'loaded' ? zones.table : null,
+      zonesFailure: zones.kind === 'failed' ? zones.reason : null,
+      tints: tints?.kind === 'loaded' ? tints.tints : null,
+      tintsFailure: tints?.kind === 'failed' ? tints.detail : null,
+    }),
+  );
+  /** The "Viewing" chip's zone lookup over the rings loaded so far (`zoneOfPoint`; the frames where no ring holds a point), once per rings object. */
+  const zoneAtOf = lastOf((shapes: ReadonlyMap<WorldMapId, ZoneShapes>) => (point: WorldPoint): UiMapId | null => zoneOfPoint(point, shapes, geometry));
+  const labelsOf = lastOf(
+    (spans: ZoneSpans, level: number | null, lowerBound: boolean, rules: EffectiveRules, at: typeof anchors, dungeons: PlacesModel['dungeons'], flightPoints: PlacesModel['flightPoints']) =>
+      buildMapLabels({ geometry, spans, level: level === null ? null : { level, lowerBound }, rules, anchors: at, dungeons, flightPoints }),
+  );
 
   const rulesOf = lastOf(projectRules);
-  const graphOf = lastOf((view: DatasetView, rules: EffectiveRules, docks: readonly UserDock[]) => projectTravelGraph(view, source.flightMasterIds, rules, docks));
+  const graphOf = lastOf((view: DatasetView, rules: EffectiveRules, docks: readonly UserDock[], taxi: ClientTaxi | null) => projectTravelGraph(view, source.flightMasterIds, rules, docks, taxi));
+  /** TIME-6's per-leg data from the loaded taxi file (null: TIME-5). */
+  const legsOf = lastOf((taxi: ClientTaxi | null): TaxiLegData | null => (taxi === null ? null : taxiLegDataOf(taxi)));
+  const loadedTaxi = (): ClientTaxi | null => (taxiState.kind === 'loaded' ? taxiState.table : null);
+  const dungeonsOf = lastOf((faction: ProjectV1['character']['faction']) => {
+    const rows = options.data.dungeonRows?.(faction);
+    return rows === undefined ? [] : datasetDungeons(rows.zones, rows.dungeons, rows.geometry);
+  });
+  const mapNames = new Map(surfacesOf(geometry).map((surface) => [surface.mapId as number, surface.name]));
+  const mapName = (mapId: number): string => mapNames.get(mapId) ?? `World map ${String(mapId)}`;
+  const startKnownOf = lastOf((character: ProjectV1['character'], graph: TravelGraph) => knownNodeKeys(character, graph));
   // Keyed on the runtime only when navigation is available: "checking" and "unavailable" both
   // give the straight-line model, so learning that navigation is unavailable re-walks nothing.
   const travelOf = lastOf((nav: NavigationRuntime | null, detour: number, graph: TravelGraph, faction: ProjectV1['character']['faction'], view: DatasetView) =>
     selectTravelModel({ navigation: nav === null ? NAVIGATION_CHECKING : { kind: 'available', runtime: nav }, detourFactor: detour, graph, faction, dataset: view, geometry }),
+  );
+  const checksOf = lastOf((view: DatasetView, rules: EffectiveRules) => createAcceptChecks({ dataset: view, rules }));
+  const openOf = lastOf((view: DatasetView, race: ProjectV1['character']['race'], cls: ProjectV1['character']['class']) => questsForCharacter(view, { race, class: cls }).open);
+  // A subzone's quests count for the zone its area is routed to (the Valley of Trials for Durotar; QA-02).
+  let areaZones: ReadonlyMap<number, UiMapId> | undefined;
+  const spansOf = lastOf((view: DatasetView, race: ProjectV1['character']['race'], cls: ProjectV1['character']['class']) =>
+    zoneSpans(view, geometry, { race, class: cls }, (areaZones ??= options.data.areaZones?.())),
   );
   const noteOf = lastOf((graph: TravelGraph, rt: NavigationRuntime) =>
     sameMapTransportNote(
@@ -269,10 +404,11 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
     const view = source.view(input);
     const baseView = datasetBaseView(source, { faction: input.faction, class: input.class, questOverrides: input.questOverrides });
     const rules = rulesOf(project.rulesetId, project.assumptions);
-    const graph = graphOf(view, rules, docksOf(project));
+    const graph = graphOf(view, rules, docksOf(project), loadedTaxi());
+    const legs = legsOf(loadedTaxi());
     const travel = travelOf(runtime(), rules.values.groundDetourFactor.value, graph, project.character.faction, view);
     const c = context;
-    if (c !== null && c.view === view && c.baseView === baseView && c.rules === rules && c.graph === graph && c.travel === travel) return c;
+    if (c !== null && c.view === view && c.baseView === baseView && c.rules === rules && c.graph === graph && c.travel === travel && c.legs === legs) return c;
     const tracker = createPendingTracker();
     const validator = createRouteValidator({ dataset: view, rules, baseDataset: baseView, graph });
     const walker = createRouteWalker({
@@ -283,8 +419,9 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       graph,
       zoneHints: travel.hints,
       acceptPolicy: validator.acceptPolicy,
+      localTaxi: legs,
     });
-    return { view, baseView, rules, graph, travel, walker, validator, tracker };
+    return { view, baseView, rules, graph, legs, travel, walker, validator, tracker };
   }
 
   function computeTravelStatus(): TravelStatus {
@@ -343,6 +480,170 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
     if (rewalkTimer !== null) timers.clear(rewalkTimer);
     editTimer = null;
     rewalkTimer = null;
+  }
+
+  /**
+   * The quest state for the published walk and focus, in a task of its own (after the selection has
+   * painted). `delay` > 0 (a selection change) restarts a timer already set, so a moving selection
+   * rebuilds once it stops (review UI-04); a 0 ms request keeps whichever timer is set.
+   */
+  function scheduleQuestState(delay = 0): void {
+    if (disposed) return;
+    if (questTimer !== null) {
+      if (delay === 0) return;
+      timers.clear(questTimer);
+    }
+    questTimer = timers.set(runQuestState, delay);
+  }
+
+  function runQuestState(): void {
+    if (questTimer !== null) timers.clear(questTimer);
+    questTimer = null;
+    const c = context;
+    const r = results;
+    const project = walkedProject;
+    if (disposed || c === null || r === null || project === null) return;
+    const character = project.character;
+    try {
+      const spans = spansOf(c.view, character.race, character.class);
+      const selected = lastSelected;
+      if (selected === null) {
+        questKey = null;
+        output.publish({ questState: null, zoneSpans: spans, places: buildPlaces(c, r, null, null, spans) });
+        return;
+      }
+      const key = questKey;
+      if (key !== null && key.project === r.project && key.stepId === selected.stepId && key.view === c.view && key.rules === c.rules) {
+        output.publish({ zoneSpans: spans, places: buildPlaces(c, r, selected, publishedQuestState, spans) });
+        return;
+      }
+      const questState = questStateModel({
+        revision: r.revision,
+        stepId: selected.stepId,
+        stepIndex: selected.index,
+        state: selected.after,
+        records: r.records,
+        dataset: c.view,
+        geometry,
+        rules: c.rules,
+        character,
+        checks: checksOf(c.view, c.rules),
+        open: openOf(c.view, character.race, character.class),
+        spans,
+        previous: publishedQuestState,
+      });
+      publishedQuestState = questState;
+      questKey = { project: r.project, stepId: selected.stepId, view: c.view, rules: c.rules };
+      output.publish({ questState, zoneSpans: spans, places: buildPlaces(c, r, selected, questState, spans) });
+    } catch {
+      // The quests stay "open by race and class" (the shell says there is no route state), never a guess.
+      questKey = null;
+      output.publish({ questState: null });
+    }
+  }
+
+  /**
+   * The map's places and names for the published walk and focus (steps MP.5, MP.7, MP.8, MP.9): the
+   * places model, with the labels canvas's names (their cards rated at the character's level after
+   * the step); null when they cannot be built (the map then draws none).
+   */
+  function buildPlaces(c: Context, r: DerivedResults, selected: SelectedStepState | null, questState: QuestStateModel | null, spans: ZoneSpans): PlacesModel | null {
+    const project = r.project;
+    try {
+      const model = placesOf({
+        // Until the walk has taken up the loaded file (a new graph), the places say it is loading, so they never mix the two.
+        taxi: taxiState.kind === 'loaded' && c.legs === null ? { kind: 'checking' } : taxiState,
+        dungeons: dungeonState,
+        graph: c.graph,
+        legs: c.legs,
+        view: c.view,
+        datasetDungeons: dungeonsOf(project.character.faction),
+        character: project.character,
+        rules: c.rules,
+        mapName,
+        selected: selected === null ? null : { stepId: selected.stepId, after: selected.after },
+        records: r.records,
+        startKnown: startKnownOf(project.character, c.graph),
+        questState,
+        serviceNpcIds: options.data.serviceNpcIds?.() ?? [],
+      });
+      const labels = labelsOf(spans, questState?.level ?? null, questState?.levelLowerBound ?? false, c.rules, anchors, model.dungeons, model.flightPoints);
+      // The zone lookup too: the rings name the zone the view is on (review QA-01).
+      return { ...model, labels, zoneFill: zoneFillOf(zoneShapes, zonesState, tintsState), zoneAt: zoneAtOf(zoneShapes) };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Loads the committed client tables once (never fatally); the taxi file re-seeds the graph and re-walks, the dungeon table rebuilds the places. */
+  function loadClientTables(): void {
+    const given = options.clientTables ?? null;
+    if (given === null) {
+      taxiState = { kind: 'failed', reason: 'this build loads no client tables' };
+      dungeonState = { kind: 'failed', reason: 'this build loads no client tables' };
+      return;
+    }
+    const tables: ClientTableLoaders =
+      'resources' in given
+        ? { ...createClientTables(given.resources), zoneArcs: () => loadZoneArcs(createMapResources(given.resources)), tints: createZoneTints(given.resources) }
+        : given;
+    void tables.zones?.().then(
+      (load) => {
+        if (disposed) return;
+        zonesState = load.kind === 'loaded' ? { kind: 'loaded', table: load.table } : { kind: 'failed', reason: load.detail };
+        scheduleQuestState();
+      },
+      (error: unknown) => {
+        if (disposed) return;
+        zonesState = { kind: 'failed', reason: messageOf(error) };
+        scheduleQuestState();
+      },
+    );
+    void tables.tints?.().then(
+      (load) => {
+        if (disposed) return;
+        tintsState = load;
+        scheduleQuestState();
+      },
+      () => undefined,
+    );
+    void tables.zoneArcs?.().then(
+      (files) => {
+        if (disposed || files.length === 0) return;
+        zoneShapes = new Map(files.map((file) => [file.mapId, zoneShapesOf(file.mapId, file.lines, file.sides)]));
+        anchors = new Map([...zoneShapes].map(([mapId, shapes]) => [mapId, shapes.anchors]));
+        scheduleQuestState();
+      },
+      () => undefined,
+    );
+    void tables.taxi().then(
+      (load) => {
+        if (disposed) return;
+        taxiState = load.kind === 'loaded' ? { kind: 'loaded', table: load.table } : { kind: 'failed', reason: load.detail };
+        // A new graph and TIME-6 (or the final TIME-5): the next walk starts a new walker; the places follow it.
+        changeAt ??= now();
+        scheduleWalk();
+      },
+      (error: unknown) => {
+        if (disposed) return;
+        taxiState = { kind: 'failed', reason: messageOf(error) };
+        // TIME-5 is now final: walk again so the results say so (`final`, `taxiPending`).
+        changeAt ??= now();
+        scheduleWalk();
+      },
+    );
+    void tables.dungeons().then(
+      (load) => {
+        if (disposed) return;
+        dungeonState = load.kind === 'loaded' ? { kind: 'loaded', table: load.table } : { kind: 'failed', reason: load.detail };
+        scheduleQuestState();
+      },
+      (error: unknown) => {
+        if (disposed) return;
+        dungeonState = { kind: 'failed', reason: messageOf(error) };
+        scheduleQuestState();
+      },
+    );
   }
 
   function scheduleWalk(): void {
@@ -407,9 +708,12 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
         travelModel: c.travel.model.id,
         pendingLegs: metrics.pendingLegs,
         pendingSteps,
-        final: pendingSteps === 0 && metrics.pendingLegs === 0 && travel.model !== 'checking',
+        // TIME-5, TIME-6: while the taxi file loads, flights are straight lines until the walk after it (TR-07).
+        taxiPending: taxiState.kind === 'checking',
+        final: pendingSteps === 0 && metrics.pendingLegs === 0 && travel.model !== 'checking' && taxiState.kind !== 'checking',
         walkedFrom: walk.fromIndex,
         timing: { walkMs: walked - start, metricsMs: measured - walked, sinceChangeMs: 0 },
+        shortIssue: shortenerOf(c.view),
       };
       results = walkedResults;
       selectedFocus = state.selection.focus;
@@ -421,6 +725,8 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       const published = results;
       changeAt = null;
       output.publish({ status: 'ready', failure: null, results: published, selected, travel, paths });
+      lastSelected = selected;
+      scheduleQuestState();
       lastWalkEnd = now();
       options.onPublished?.(published);
       notifyModel(c);
@@ -430,7 +736,9 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       context = null;
       changeAt = null;
       lastWalkEnd = now();
-      output.publish({ status: 'failed', failure: `The route could not be simulated: ${messageOf(error)}` });
+      lastSelected = null;
+      questKey = null;
+      output.publish({ status: 'failed', failure: `The route could not be simulated: ${messageOf(error)}`, questState: null });
     }
   }
 
@@ -565,7 +873,9 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
     }
     if (state.selection.focus !== selectedFocus) {
       selectedFocus = state.selection.focus;
-      output.publish({ selected: selectedOf(selectedFocus) });
+      lastSelected = selectedOf(selectedFocus);
+      output.publish({ selected: lastSelected });
+      scheduleQuestState(selectionSettleMs);
     }
   }
 
@@ -662,6 +972,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
     },
   };
   output.attach(actions);
+  loadClientTables();
   // The first walk.
   changeAt = now();
   scheduleWalk();
@@ -683,6 +994,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
     },
     flush() {
       if (editTimer !== null || rewalkTimer !== null) walkNow();
+      if (questTimer !== null) runQuestState();
     },
     checkpointIndices: () => context?.walker.checkpointIndices() ?? [],
     get walks() {
@@ -692,6 +1004,8 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       if (disposed) return;
       disposed = true;
       clearTimers();
+      if (questTimer !== null) timers.clear(questTimer);
+      questTimer = null;
       cancelStart();
       unsubscribeStore();
       unsubscribeBatches?.();

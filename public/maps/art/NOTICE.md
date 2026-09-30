@@ -6,12 +6,16 @@ maps:validate`.
 
 ## What these files are
 
-60 WebP images of the World of Warcraft world map's painted art (1 world map, 4 continent maps, 51
-zone or city maps, 4 battleground or small area maps), one per UiMap that has art in the World of
-Warcraft: Forever client (`wow_classic_beta` 1.60.1.70009). Each is stitched from the client's
-`UiMapArtTile` textures with every `WorldMapOverlay` explored-area piece drawn in, so it shows the
-fully explored map (1659 textures, 572 overlays in all). `manifest.json` lists every image with its
-SHA-256, pixel size, UiMap, world rectangle and input hash.
+5 WebP images of the World of Warcraft world map's painted art (1 zone or city map, 4 battleground
+or small area maps), of the 60 UiMaps that have art in the World of Warcraft: Forever client
+(`wow_classic_beta` 1.60.1.70009). D-042 O5 (step ATL.10): only the images still drawn one at a time
+are deployed: the battlegrounds and Darkspear Islands, which keep their own map surfaces, and
+Zephras Isle, the atlas card's picture when the tile index cannot be used. The other paintings reach
+the site as the atlas tiles (../atlas/, with its own NOTICE). Each image is stitched from the
+client's `UiMapArtTile` textures with every `WorldMapOverlay` explored-area piece drawn in, so it
+shows the fully explored map (95 textures, 18 overlays in all). `manifest.json` lists every image
+with its SHA-256, pixel size, UiMap, world rectangle and input hash, and keeps the pixel hash of
+every composed UiMap's image (`sources`), deployed or not.
 
 ## Owner of the artwork
 

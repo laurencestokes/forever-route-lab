@@ -9,6 +9,7 @@ import { sequentialIdSource } from '../../app/shell-support';
 import type { MapAdapterFactory } from '../../map/adapter';
 import { buildRouteView, mapStepLabel } from '../app-model';
 import { createAnnouncer } from './LiveAnnouncer';
+import { createRouteActions } from './route-actions';
 import {
   MAP_INSTRUCTIONS,
   MapPanel,
@@ -55,7 +56,10 @@ interface Setup {
 
 /**
  * The map panel over the map test workspace (or `steps`), with a fake engine (loaded by `load`,
- * immediate by default), and optionally the committed map resources.
+ * immediate by default), and optionally the committed map resources. It shows one world surface per
+ * world map (`atlas: false`): since step ATL.10 (docs/research/map-atlas.md §11) the app shows maps
+ * 0, 1 and 2991 on the atlas, and this path remains for the instances, battlegrounds and Darkspear
+ * Islands, and for a geometry without the 947 rows. The atlas, the default, is MapPanel.atlas.test.tsx.
  */
 function setup(load?: () => Promise<MapAdapterFactory>, steps?: RouteStep[], resources?: MapResources): Setup {
   const workspace = mapTestWorkspace(steps, NOW);
@@ -70,12 +74,15 @@ function setup(load?: () => Promise<MapAdapterFactory>, steps?: RouteStep[], res
     timing: null,
     objectUrls: null,
     resources: resources ?? null,
+    atlas: false,
+    smoothWheel: false,
   });
   const setupMap: MapEngineSetup = { geometry: workspace.geometry, art: null, resources: resources ?? null, loadAdapter: loader };
   const map = { setup: setupMap, controller };
   const announce = vi.fn<(message: string) => void>();
   const view = () => buildRouteView(store.getState().project.route, workspace.dataset, 1);
-  const tree = () => <MapPanel store={store} view={view()} activeRow={null} map={map} geometry="fixture geometry" announce={announce} />;
+  const actions = createRouteActions(store, announce, { geometry: workspace.geometry });
+  const tree = () => <MapPanel store={store} view={view()} activeRow={null} map={map} geometry="fixture geometry" announce={announce} dataset={workspace.dataset} actions={actions} />;
   const { rerender } = render(tree());
   return {
     store,
@@ -103,8 +110,14 @@ const adapterOf = (s: Setup): FakeAdapter => {
   return adapter;
 };
 
-const commands = () => within(screen.getByRole('toolbar', { name: 'Map commands' }));
-const surfaceSelect = () => screen.getByRole('combobox', { name: 'Map surface' });
+const commands = () => within(screen.getByRole('toolbar', { name: 'Map view' }));
+const captionLines = (): (string | null)[] => [...document.querySelectorAll('.frl-mapframe__caption-line')].map((item) => item.textContent);
+
+/** Opens the Map layers drawer (closed where it would lie over the map, as in happy-dom, which lays nothing out) and waits for its lazy part. */
+async function openDrawer() {
+  fireEvent.click(screen.getByRole('button', { name: 'Map layers' }));
+  return within(await screen.findByRole('region', { name: 'Map layers' }));
+}
 
 describe('MapPanel: the engine', () => {
   it('says it is loading, then mounts the engine and names its surface for assistive technology', async () => {
@@ -185,72 +198,47 @@ describe('MapPanel: the engine', () => {
 });
 
 describe('MapPanel: surfaces, layers and commands', () => {
-  it('switches surfaces from the select, which lists the route’s steps per surface', async () => {
+  it('shows another surface when asked (the top bar’s views), naming it and the route there', async () => {
     const s = setup();
     await settle();
-    const options = [...surfaceSelect().querySelectorAll('option')].map((option) => option.textContent);
-    expect(options).toEqual(['Eastern Kingdoms · 1 route step', 'Kalimdor · 4 route steps', 'Zephras Isle']);
-    fireEvent.change(surfaceSelect(), { target: { value: 'world:0' } });
+    // The surface select went to the top bar's "Go to zone or view…" (map-presentation.md §25.3.0).
+    expect(screen.queryByRole('combobox', { name: 'Map surface' })).toBeNull();
+    act(() => {
+      s.controller.showSurface('world:0');
+    });
     expect(adapterOf(s).getSurface()).toBe('world:0');
-    expect((surfaceSelect() as HTMLSelectElement).value).toBe('world:0');
     expect(document.querySelector('.fake-map')?.getAttribute('aria-label')).toBe('Route map: Eastern Kingdoms');
-    expect(screen.getByText('Route: 1 of 7 steps on Eastern Kingdoms · 4 on other maps · 1 not placed · 1 without a location')).toBeTruthy();
+    expect(captionLines()).toContain('Route: 1 of 7 steps on Eastern Kingdoms · 4 on other maps · 1 not placed · 1 without a location');
   });
 
-  it('opens the layer panel, toggles a layer, and says why art and the proposal are unavailable', async () => {
+  it('opens the Map layers drawer, hides a row by the mask or the store, and says why the unavailable rows are', async () => {
     const s = setup();
     await settle();
-    const toggle = commands().getByRole('button', { name: 'Layers' });
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
-    expect(s.store.getState().view.showLayerPanel).toBe(true);
-    const panel = within(screen.getByRole('group', { name: 'Layers' }));
-    const givers = panel.getByRole('checkbox', { name: /Available quests/ });
-    expect(givers).toHaveProperty('checked', true);
-    fireEvent.click(givers);
-    expect(s.store.getState().view.map.layers['available-quests']).toBe(false);
-    // The coastline is hidden from the start (UI.md §12).
-    expect(adapterOf(s).callsOf('toggleLayer')).toEqual([
-      { kind: 'toggleLayer', layer: 'coastline', visible: false },
-      { kind: 'toggleLayer', layer: 'available-quests', visible: false },
-    ]);
-    const art = panel.getByRole('checkbox', { name: /Painted map art/ });
-    expect(art).toHaveProperty('disabled', true);
-    expect(document.getElementById(art.getAttribute('aria-describedby') ?? '')?.textContent).toMatch(/^No local map set/);
-    expect(panel.getByRole('checkbox', { name: /Proposal overlay/ })).toHaveProperty('disabled', true);
-    // Counts and notes: what is drawn and what is not, with its unit.
-    expect(panel.getByRole('checkbox', { name: /Step markers/ }).closest('li')?.textContent).toContain('4 drawn');
-    expect(panel.getByText('1 step on other world maps', { exact: false })).toBeTruthy();
-    expect(panel.getByText('Geometry loaded: fixture geometry.')).toBeTruthy();
-    // Each layer shows its glyph, as the map draws it, and the key says what every glyph means.
-    const glyphOf = (name: RegExp) => panel.getByRole('checkbox', { name }).closest('label')?.querySelector('svg')?.getAttribute('data-glyph');
-    expect(glyphOf(/Available quests/)).toBe('quest-start');
-    expect(glyphOf(/Route line/)).toBe('line-route');
-    const key = within(screen.getByRole('group', { name: 'Key' }));
-    expect(key.getByText('Flight: dotted')).toBeTruthy();
-    expect(key.getByText('Leg unknown: an earlier step could not be placed')).toBeTruthy();
-    // The topmost layer is listed first.
-    expect(panel.getAllByRole('checkbox').map((box) => box.closest('label')?.textContent)).toEqual([
-      'Selection',
-      'Proposal overlay',
-      'Step markers4 drawn',
-      'Route line1 drawn',
-      'Walking paths',
-      'Flight masters1 drawn',
-      'Turn-ins',
-      'Objectives',
-      'Available quests',
-      'Zone frames6 drawn',
-      'Zone outlines',
-      'Coastline',
-      'Painted map art',
-      'Relief',
-    ]);
-    // Without map resources the terrain layers and walking paths say why they are unavailable.
-    const reason = (name: RegExp) => document.getElementById(panel.getByRole('checkbox', { name }).getAttribute('aria-describedby') ?? '')?.textContent;
+    const toggle = screen.getByRole('button', { name: 'Map layers' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    const drawer = await openDrawer();
+    expect(screen.getByRole('button', { name: 'Map layers' }).getAttribute('aria-expanded')).toBe('true');
+    // A pin row: the adapter's mask, no layer hidden.
+    const available = drawer.getByRole('checkbox', { name: /^Available: / });
+    expect(available).toHaveProperty('checked', true);
+    fireEvent.click(available);
+    expect(adapterOf(s).callsOf('setMask').at(-1)?.mask).toEqual({ hidden: ['available', 'unlocks-soon', 'low-level', 'unconfirmed-raids', 'other-faction-flights'], only: null });
+    expect(s.store.getState().view.map.layers['available-quests']).toBe(true);
+    // A layer row: the store's layer visibility.
+    const route = drawer.getByRole('checkbox', { name: /^Route line/ });
+    fireEvent.click(route);
+    expect(s.store.getState().view.map.layers['route-line']).toBe(false);
+    expect(adapterOf(s).callsOf('toggleLayer').at(-1)).toEqual({ kind: 'toggleLayer', layer: 'route-line', visible: false });
+    // The places' and services' rows (steps MP.5, MP.8, MP.9, MP.11) are available: their layers draw once the places model is built.
+    expect(drawer.getByRole('checkbox', { name: /^Dungeons/ }).getAttribute('aria-disabled')).not.toBe('true');
+    expect(drawer.getByRole('checkbox', { name: /^Innkeepers/ }).getAttribute('aria-disabled')).not.toBe('true');
+    // Without map resources the terrain rows and walking paths say why they are unavailable.
+    const reason = (name: RegExp) => document.getElementById(drawer.getByRole('checkbox', { name }).getAttribute('aria-describedby') ?? '')?.textContent;
     expect(reason(/^Relief/)).toMatch(/^No terrain data in this build/);
-    expect(reason(/Walking paths/)).toMatch(/^No walking paths are available yet/);
+    expect(reason(/^Walking paths/)).toMatch(/^No walking paths are available yet/);
+    // The key names the pins, badges and lines.
+    expect(drawer.getByText('Flight: dotted')).toBeTruthy();
+    expect(drawer.getByText('Dashed edge: not sure (may be available, may be known, record unknown)')).toBeTruthy();
   });
 
   it('fits the route, and focuses the active step once there is one', async () => {
@@ -293,7 +281,7 @@ describe('MapPanel: surfaces, layers and commands', () => {
     expect(adapterOf(s).callsOf('focus')).toHaveLength(0);
   });
 
-  it('shows what the pointer is over, and the zoom band when points are folded into zone counts', async () => {
+  it('shows in the caption what the pointer is over', async () => {
     const s = setup();
     await settle();
     const adapter = adapterOf(s);
@@ -302,7 +290,7 @@ describe('MapPanel: surfaces, layers and commands', () => {
     act(() => {
       adapter.emit({ type: 'hover', point: giver.point, hit: { layer: 'available-quests', id: giver.id, ref: giver.ref, refs: giver.refs, segment: null } });
     });
-    expect(document.querySelector('.frl-mapframe__hover')?.textContent).toBe('Pointer on: Gornek: starts 2 quests (Gather and Cull)');
+    expect(document.querySelector('.frl-mapframe__hover')?.textContent).toBe('Pointer on: Gornek: starts 2 quests (Gather and Cull) · quests open to an Orc Warrior (no route state yet)');
     // Step markers read their number from the route order, as the tooltip does.
     const step = adapter.contents.get('route-steps')?.items[0];
     if (step === undefined) throw new Error('step missing');
@@ -314,13 +302,9 @@ describe('MapPanel: surfaces, layers and commands', () => {
       adapter.emit({ type: 'hover', point: null, hit: null });
     });
     expect(document.querySelector('.frl-mapframe__hover')).toBeNull();
-    act(() => {
-      adapter.pan({ zoom: -5 });
-    });
-    expect(screen.getByText('Zoomed out: quest points shown as zone counts')).toBeTruthy();
   });
 
-  it('lists the items of a clicked stack near it, and runs the one chosen from the keyboard (MAP-UX-3)', async () => {
+  it('opens the map popover on a clicked stack, runs the action chosen from the keyboard, and closes on Escape (MP.6; UI.md §9 rule 15)', async () => {
     const s = setup();
     await settle();
     const adapter = adapterOf(s);
@@ -330,28 +314,47 @@ describe('MapPanel: surfaces, layers and commands', () => {
       { kind: 'step', stepId: gather.id },
       { kind: 'step', stepId: cull.id },
     ] as const;
-    act(() => {
-      adapter.emit({ type: 'click', point: { mapId: 1 as never, x: 0, y: -4000 }, hit: { layer: 'route-steps', id: `step:${gather.id}`, ref: refs[0], refs, segment: null }, zones: [] });
-    });
-    const dialog = screen.getByRole('dialog', { name: '2 steps here' });
-    expect(within(dialog).getByText('Choose one to select its step.')).toBeTruthy();
-    const options = within(dialog).getAllByRole('button').filter((button) => button.classList.contains('frl-mapchoice__option'));
-    expect(options.map((button) => button.textContent)).toEqual(['2 · Accept quest: Gather', '3 · Accept quest: Cull']);
-    expect(document.activeElement).toBe(options[0]);
-    fireEvent.keyDown(options[0] as HTMLElement, { key: 'ArrowDown' });
-    expect(document.activeElement).toBe(options[1]);
-    fireEvent.keyDown(options[1] as HTMLElement, { key: 'ArrowDown' });
-    expect(document.activeElement?.textContent).toBe('Select all 2 steps');
-    fireEvent.click(options[1] as HTMLElement);
+    const click = () => {
+      act(() => {
+        adapter.emit({ type: 'click', point: { mapId: 1 as never, x: 0, y: -4000 }, hit: { layer: 'route-steps', id: `step:${gather.id}`, ref: refs[0], refs, segment: null }, zones: [] });
+      });
+    };
+    click();
+    const dialog = await screen.findByRole('dialog', { name: '2 steps here' });
+    expect(dialog.getAttribute('aria-modal')).toBe('false');
+    const actions = [...dialog.querySelectorAll<HTMLElement>('[data-popover-action]')];
+    expect(actions.map((button) => button.textContent)).toEqual(['Select step 2', 'Select step 3', 'Select all 2 steps']);
+    expect(document.activeElement).toBe(actions[0]);
+    fireEvent.keyDown(actions[0] as HTMLElement, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(actions[1]);
+    fireEvent.click(actions[1] as HTMLElement);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(s.store.getState().selection.focus).toBe(cull.id);
+    expect(document.activeElement).toBe(document.querySelector('.fake-map'));
     // Escape closes it and gives focus back to the map.
-    act(() => {
-      adapter.emit({ type: 'click', point: { mapId: 1 as never, x: 0, y: -4000 }, hit: { layer: 'route-steps', id: `step:${gather.id}`, ref: refs[0], refs, segment: null }, zones: [] });
-    });
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    click();
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(document.querySelector('.fake-map'));
+  });
+
+  it('opens a quest giver’s popover and accepts its quest after the selection, announced as an insert (MP.6)', async () => {
+    const s = setup();
+    await settle();
+    const adapter = adapterOf(s);
+    const giver = adapter.contents.get('available-quests')?.items[0];
+    if (giver?.type !== 'marker') throw new Error('no giver');
+    act(() => {
+      adapter.emit({ type: 'click', point: giver.point, hit: { layer: 'available-quests', id: giver.id, ref: giver.ref, refs: giver.refs, segment: null }, zones: [] });
+    });
+    const dialog = await screen.findByRole('dialog', { name: /^Quests at / });
+    const before = s.store.getState().project.route.steps.length;
+    const accept = within(dialog).getAllByRole('button').find((button) => button.textContent?.startsWith('Accept') === true);
+    if (accept === undefined) throw new Error('no Accept');
+    fireEvent.click(accept);
+    expect(s.store.getState().project.route.steps.length).toBe(before + 1);
+    expect(s.announce).toHaveBeenLastCalledWith(expect.stringMatching(/: accept quest added as step \d+\./));
+    expect(within(document.body).queryByRole('dialog')).toBeNull();
   });
 
   it('says, shows and announces that the active step is on a world map with no surface (MAP-UX-9)', async () => {
@@ -361,13 +364,13 @@ describe('MapPanel: surfaces, layers and commands', () => {
     ]);
     const s = setup(undefined, steps);
     await settle();
-    expect(screen.getByText('Route: 1 of 2 steps on Kalimdor · 1 on maps with no surface')).toBeTruthy();
+    expect(captionLines()).toContain('Route: 1 of 2 steps on Kalimdor · 1 on maps with no surface');
     act(() => {
       s.store.select({ kind: 'single', id: steps[1]?.id ?? ('' as never) });
     });
     s.rerender();
     const text = 'Step 2 is on world map 36, which this map cannot show';
-    expect([...document.querySelectorAll('.frl-mapframe__status-item')].map((item) => item.textContent)).toContain(text);
+    expect(captionLines()).toContain(text);
     expect(s.announce).toHaveBeenCalledWith(`${text}.`);
     const focus = commands().getByRole('button', { name: 'Focus step' });
     expect(focus.getAttribute('aria-disabled')).toBe('true');
@@ -441,31 +444,30 @@ describe('MapPanel: painted art, terrain and walking paths', () => {
     expect(document.getElementById(surface?.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
       `${PAINTED_ART_NOTICE}. Route map: Kalimdor. ${MAP_INSTRUCTIONS}`,
     );
-    // No terrain: said in the status line, without stopping the map.
-    const status = [...document.querySelectorAll('.frl-mapframe__status-item')].map((item) => item.textContent);
-    expect(status).toContain('Terrain data could not be loaded: no relief, zone outlines or coastline');
+    // No terrain: said in the Map layers drawer's notices (it replaces the status line, D-047), without stopping the map.
+    const drawer = await openDrawer();
+    expect(drawer.getByText('Terrain data could not be loaded: no relief, zone outlines or coastline')).toBeTruthy();
   });
 
-  it('says in the status line when the painted art could not be loaded, and shows the schematic notice', async () => {
+  it('says in the drawer when the painted art could not be loaded, and shows the schematic notice', async () => {
     setup(undefined, undefined, resources({ kind: 'failed', reason: 'unavailable', detail: 'maps/art/manifest.json: HTTP 404' }));
     await settle();
     await settle();
     expect(screen.getByText(SCHEMATIC_NOTICE)).toBeTruthy();
-    const status = [...document.querySelectorAll('.frl-mapframe__status-item')].map((item) => item.textContent);
-    expect(status).toContain('Painted map art could not be loaded: the map shows zone frames instead');
+    const drawer = await openDrawer();
+    expect(drawer.getByText('Painted map art could not be loaded: the map shows zone frames instead')).toBeTruthy();
   });
 
-  it('toggles walking paths from their row under the route line, once the navigation model gives paths', async () => {
+  it('toggles walking paths from their row in Route and map, once the navigation model gives paths', async () => {
     const s = setup();
     await settle();
-    fireEvent.click(commands().getByRole('button', { name: 'Layers' }));
-    const panel = within(screen.getByRole('group', { name: 'Layers' }));
-    const row = () => panel.getByRole('checkbox', { name: /Walking paths/ });
-    expect(row()).toHaveProperty('disabled', true);
+    const panel = await openDrawer();
+    const row = () => panel.getByRole('checkbox', { name: /^Walking paths/ });
+    expect(row().getAttribute('aria-disabled')).toBe('true');
     act(() => {
       s.controller.setRoutePaths({ pending: false, pathOf: (leg) => [leg.from, leg.to] });
     });
-    expect(row()).toHaveProperty('disabled', false);
+    expect(row().hasAttribute('aria-disabled')).toBe(false);
     expect(row()).toHaveProperty('checked', true);
     expect(row().closest('li')?.textContent).toContain('3 walked legs follow their paths on this map.');
     fireEvent.click(row());

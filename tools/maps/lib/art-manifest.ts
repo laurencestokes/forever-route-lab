@@ -50,11 +50,41 @@ export interface ArtFileEntry {
   readonly assignments: readonly number[];
 }
 
+/**
+ * One composed UiMap's lossless identity (docs/research/map-atlas.md §7.4, §7.5 T5; ATL.6): the
+ * pixel hash of the fully explored image and of its explored-overlay union (the overlays alone,
+ * source-over on a transparent canvas; null when the plan has no overlays), both before encoding.
+ * `convert.ts` keeps one record for every UiMap it composes, whether or not its image is deployed,
+ * so the atlas build (tools/maps/atlas.ts), which reads the same rasters from the client, can prove
+ * its inputs are these, and `validate.ts` T5 can check the atlas manifest against them offline.
+ */
+export interface ArtSourceEntry {
+  readonly uiMapId: number;
+  readonly layer: number;
+  readonly name: string;
+  readonly width: number;
+  readonly height: number;
+  readonly pixelsSha256: string;
+  readonly overlaysSha256: string | null;
+  readonly inputHash: string;
+}
+
 export interface ArtTableEntry {
   readonly table: string;
   readonly fileDataId: number;
   readonly ckey: string;
   readonly rows: number;
+}
+
+/**
+ * Which composed images are deployed, and why (D-042 O5; docs/research/map-atlas.md §7.6, step
+ * ATL.10): the manifest's `files` are the listed UiMaps' images; every composed UiMap keeps its
+ * `sources` record. Null in a manifest whose every composed image is written (a local `--all` folder).
+ */
+export interface ArtDeployment {
+  /** UiMap ids, ascending. */
+  readonly uiMaps: readonly number[];
+  readonly reason: string;
 }
 
 export interface ArtManifestFacts {
@@ -67,6 +97,8 @@ export interface ArtManifestFacts {
   readonly skippedUiMaps: readonly { readonly uiMapId: number; readonly reason: string }[];
   readonly skippedOverlays: readonly { readonly uiMapId: number; readonly overlayId: number; readonly reason: string }[];
   readonly files: readonly ArtFileEntry[];
+  readonly sources: readonly ArtSourceEntry[];
+  readonly deployment: ArtDeployment | null;
 }
 
 export const ART_RULES = {
@@ -77,6 +109,8 @@ export const ART_RULES = {
   decoding: 'BLP2 mip 0 (tools/maps/lib/blp.ts, this project\'s decoder); straight alpha',
   inputHash: 'SHA-256 over "<FileDataID> <CKey>\\n" lines, ascending, of the BLP tiles and the DB2 tables (tools/casc/input-hash.ts)',
   pixelsSha256: 'SHA-256 of "frl-rgba8 <width> <height>\\n" + the RGBA bytes before encoding (tools/maps/lib/raster.ts)',
+  sources:
+    'one record per composed UiMap and layer, deployed or not: pixelsSha256 of the fully explored image and overlaysSha256 of its explored-overlay union (every overlay source-over on a transparent canvas; null without overlays), both before encoding; the atlas build (tools/maps/atlas.ts) checks the rasters it reads from the client against them (docs/research/map-atlas.md §7.5 T5)',
 } as const;
 
 export function buildArtManifest(facts: ArtManifestFacts): Readonly<Record<string, unknown>> {
@@ -105,6 +139,7 @@ export function buildArtManifest(facts: ArtManifestFacts): Readonly<Record<strin
     rules: ART_RULES,
     tables: facts.tables,
     skipped: { uiMaps: facts.skippedUiMaps, overlays: facts.skippedOverlays },
+    deployment: facts.deployment,
     totals: {
       files: facts.files.length,
       bytes: facts.files.reduce((sum, file) => sum + file.bytes, 0),
@@ -113,6 +148,7 @@ export function buildArtManifest(facts: ArtManifestFacts): Readonly<Record<strin
       overlayTiles: facts.files.reduce((sum, file) => sum + file.overlays.reduce((n, o) => n + o.tiles.length, 0), 0),
     },
     files: facts.files,
+    sources: facts.sources,
   };
 }
 
@@ -126,6 +162,10 @@ export interface ParsedArtManifest {
   readonly toolTreeHash: Readonly<Record<string, string>>;
   readonly tables: readonly ArtTableEntry[];
   readonly files: readonly ArtFileEntry[];
+  /** The lossless identity of every composed UiMap (`sources`), in (uiMapId, layer) order. */
+  readonly sources: readonly ArtSourceEntry[];
+  /** Which composed images are deployed (`files`), and why; null when every composed image is. */
+  readonly deployment: ArtDeployment | null;
   /** UiMaps the build left without an image (`skipped.uiMaps[].uiMapId`). */
   readonly skippedUiMaps: readonly number[];
   readonly skippedOverlays: number;
@@ -248,6 +288,62 @@ export function parseArtManifest(value: unknown): { readonly manifest: ParsedArt
   if (new Set(paths).size !== paths.length) errors.push('files lists a path twice');
   const sorted = [...files].sort((a, b) => a.uiMapId - b.uiMapId || a.layer - b.layer);
   if (sorted.some((f, i) => f !== files[i])) errors.push('files must be in (uiMapId, layer) order');
+  const sources: ArtSourceEntry[] = [];
+  if (!Array.isArray(value['sources'])) errors.push('sources must be an array');
+  else {
+    (value['sources'] as readonly unknown[]).forEach((entry, i) => {
+      const where = `sources[${String(i)}]`;
+      if (!isRecord(entry)) {
+        errors.push(`${where}: must be an object`);
+        return;
+      }
+      const problems: string[] = [];
+      for (const key of ['uiMapId', 'width', 'height']) if (!isInt(entry[key], 1)) problems.push(`${key} must be a positive integer`);
+      if (!isInt(entry['layer'])) problems.push('layer must be a non-negative integer');
+      if (typeof entry['name'] !== 'string') problems.push('name must be a string');
+      for (const key of ['pixelsSha256', 'inputHash']) if (!isHex(entry[key], 64)) problems.push(`${key} must be a lowercase hex SHA-256`);
+      if (entry['overlaysSha256'] !== null && !isHex(entry['overlaysSha256'], 64)) problems.push('overlaysSha256 must be a lowercase hex SHA-256 or null');
+      if (problems.length > 0) {
+        errors.push(...problems.map((p) => `${where}: ${p}`));
+        return;
+      }
+      sources.push({
+        uiMapId: entry['uiMapId'] as number,
+        layer: entry['layer'] as number,
+        name: entry['name'] as string,
+        width: entry['width'] as number,
+        height: entry['height'] as number,
+        pixelsSha256: entry['pixelsSha256'] as string,
+        overlaysSha256: entry['overlaysSha256'] as string | null,
+        inputHash: entry['inputHash'] as string,
+      });
+    });
+  }
+  const sortedSources = [...sources].sort((a, b) => a.uiMapId - b.uiMapId || a.layer - b.layer);
+  if (sortedSources.some((entry, i) => entry !== sources[i])) errors.push('sources must be in (uiMapId, layer) order');
+  if (new Set(sources.map((entry) => `${String(entry.uiMapId)}-${String(entry.layer)}`)).size !== sources.length) errors.push('sources lists a UiMap and layer twice');
+  for (const file of files) {
+    const record = sources.find((entry) => entry.uiMapId === file.uiMapId && entry.layer === file.layer);
+    if (record === undefined) errors.push(`${file.path}: no sources record`);
+    else if (record.pixelsSha256 !== file.pixelsSha256 || record.inputHash !== file.inputHash) errors.push(`${file.path}: its sources record disagrees with its pixelsSha256 or inputHash`);
+  }
+  let deployment: ArtDeployment | null = null;
+  const deploymentValue = value['deployment'];
+  if (deploymentValue !== null && deploymentValue !== undefined) {
+    if (!isRecord(deploymentValue) || !intList(deploymentValue['uiMaps'], 1) || typeof deploymentValue['reason'] !== 'string' || deploymentValue['reason'] === '') {
+      errors.push('deployment must be null or name its UiMaps and a reason');
+    } else {
+      const uiMaps = deploymentValue['uiMaps'];
+      if (uiMaps.some((id, i) => i > 0 && id <= (uiMaps[i - 1] ?? 0))) errors.push('deployment.uiMaps must be ascending, without repeats');
+      deployment = { uiMaps, reason: deploymentValue['reason'] };
+      const composed = new Set(sources.map((entry) => entry.uiMapId));
+      const wanted = uiMaps.filter((id) => composed.has(id));
+      const written = [...new Set(files.map((file) => file.uiMapId))];
+      if (written.length !== wanted.length || written.some((id) => !wanted.includes(id))) {
+        errors.push(`files must be exactly the images of deployment.uiMaps that were composed (${wanted.join(', ')}), not ${written.join(', ')}`);
+      }
+    }
+  }
   const skipped = value['skipped'];
   const skippedOverlays = isRecord(skipped) && Array.isArray(skipped['overlays']) ? skipped['overlays'].length : 0;
   const skippedUiMaps: number[] = [];
@@ -267,6 +363,8 @@ export function parseArtManifest(value: unknown): { readonly manifest: ParsedArt
       toolTreeHash: trees as Readonly<Record<string, string>>,
       tables,
       files,
+      sources,
+      deployment,
       skippedUiMaps,
       skippedOverlays,
     },

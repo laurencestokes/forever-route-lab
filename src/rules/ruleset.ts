@@ -32,7 +32,7 @@ export type QuestXpRounding = 'trinity-steps' | 'vmangos-ceil';
 /** SIMULATION KXP-4: which level of an NPC's level range stands for its mobs. */
 export type MobLevelChoice = 'midpoint-floor' | 'min' | 'max';
 
-/** SIMULATION TIME-5, TIME-6: `auto` uses local per-leg times where present, `straight-line` never. */
+/** SIMULATION TIME-5, TIME-6: `auto` uses per-leg path lengths (the committed taxi file) where they cover a journey, `straight-line` never. */
 export type TaxiModel = 'auto' | 'straight-line';
 
 /** A riding spell and the riding tier it grants (SIMULATION TIME-3). */

@@ -1,5 +1,7 @@
 import type {
+  ZoneFillDescriptor,
   AggregateDescriptor,
+  ConnectorDescriptor,
   Emphasis,
   FrameDescriptor,
   LineStyle,
@@ -34,6 +36,13 @@ export interface MapPalette {
   readonly frameFill: string;
   readonly frameStrong: string;
   readonly frameLabel: string;
+  /**
+   * Frames and captions over the atlas tiles (an inset's card, a city card): 3:1 or more against
+   * both sea colours, the deep sea rgb(61, 55, 41) and the coastal water rgb(131, 118, 88), in both
+   * themes (map-atlas.md §8.8); captions carry a halo in `frameAtlasHalo`.
+   */
+  readonly frameAtlas: string;
+  readonly frameAtlasHalo: string;
   /** Neutral markers (quest givers, turn-ins, flight masters). */
   readonly ink: string;
   /** Muted markers and badges. */
@@ -55,6 +64,19 @@ export interface MapPalette {
   readonly aggregateFill: string;
   readonly aggregateEdge: string;
   readonly aggregateText: string;
+  /**
+   * The labels canvas (map-presentation.md §13.1, §25.4): names and step numbers in `labelInk` on a
+   * 3 px `labelHalo`. In the painted style they follow the theme (`--frl-fg` on
+   * `--frl-map-label-halo`); in the minimap style, whose base is dark in both themes, the map's
+   * stylesheet points them at the minimap ink set (map.css, `data-map-style`).
+   */
+  readonly labelInk: string;
+  readonly labelHalo: string;
+  /**
+   * The zone faction overlay's hatching (map-presentation.md §12.6, §25.4; `--frl-map-hatch`): black at
+   * 35 % in the light theme, white at 35 % in the dark theme and in the minimap style. Never a hue.
+   */
+  readonly hatch: string;
 }
 
 export type PaletteRole = keyof MapPalette;
@@ -79,6 +101,8 @@ export const PALETTE_SOURCES: Readonly<Record<PaletteRole, PaletteSource>> = {
   frameFill: { token: '--frl-surface', fallback: '#ffffff' },
   frameStrong: { token: '--frl-accent', fallback: '#3a4fc4' },
   frameLabel: { token: '--frl-fg-muted', fallback: '#4b5563' },
+  frameAtlas: { token: '--frl-map-frame-atlas', fallback: '#e8dfc8' },
+  frameAtlasHalo: { token: '--frl-map-sea-deep', fallback: '#3d3729' },
   ink: { token: '--frl-fg', fallback: '#14181e' },
   inkMuted: { token: '--frl-fg-muted', fallback: '#4b5563' },
   accent: { token: '--frl-accent', fallback: '#3a4fc4' },
@@ -95,6 +119,11 @@ export const PALETTE_SOURCES: Readonly<Record<PaletteRole, PaletteSource>> = {
   aggregateFill: { token: '--frl-surface-raised', fallback: '#f5f6f8' },
   aggregateEdge: { token: '--frl-border-strong', fallback: '#737d8b' },
   aggregateText: { token: '--frl-fg', fallback: '#14181e' },
+  // Role `labelHalo` reads --frl-map-label-halo first (the role token, tokens.css).
+  labelInk: { token: '--frl-fg', fallback: '#14181e' },
+  labelHalo: { token: '--frl-surface', fallback: 'rgba(255, 255, 255, 0.85)' },
+  // Role `hatch` reads --frl-map-hatch (the role token, tokens.css; map.css points the minimap style at white).
+  hatch: { token: '--frl-fg-subtle', fallback: 'rgba(0, 0, 0, 0.35)' },
 };
 
 const ROLES = Object.keys(PALETTE_SOURCES) as PaletteRole[];
@@ -154,7 +183,8 @@ const EMPHASIS_ALPHA: Readonly<Record<Emphasis, number>> = { normal: 1, strong: 
 
 /**
  * Line styles. The dash pattern is the non-colour cue: route solid, transport dashed, flight
- * dotted, hearth dash-dot, proposal long dashes, highlight a thick solid line; and, with walking
+ * dotted, hearth dash-dot, proposal long dashes, highlight a thick solid line, the flight network
+ * a thin solid muted line and a transport ride a thin 3-3 dash in it; and, with walking
  * paths, a walked leg whose path is still being computed in short even dashes (faded), and one
  * with no path, drawn straight in its place, dash-dot-dot. Every pattern differs from the others
  * by more than colour.
@@ -162,7 +192,8 @@ const EMPHASIS_ALPHA: Readonly<Record<Emphasis, number>> = { normal: 1, strong: 
 const LINE_STYLES: Readonly<
   Record<LineStyle, { readonly role: PaletteRole; readonly weight: number; readonly dash: string | null; readonly cap: PathStyle['lineCap']; readonly opacity: number }>
 > = {
-  route: { role: 'route', weight: 3, dash: null, cap: 'round', opacity: 0.9 },
+  // The route (map-presentation.md §25.4): 2.6 px over a 5.5 px halo (`lineHalo`).
+  route: { role: 'route', weight: 2.6, dash: null, cap: 'round', opacity: 0.9 },
   transport: { role: 'transport', weight: 3, dash: '10 6', cap: 'butt', opacity: 0.9 },
   flight: { role: 'flight', weight: 2.5, dash: '1 6', cap: 'round', opacity: 0.9 },
   hearth: { role: 'hearth', weight: 2.5, dash: '12 5 2 5', cap: 'butt', opacity: 0.9 },
@@ -170,23 +201,58 @@ const LINE_STYLES: Readonly<
   'route-fallback': { role: 'route', weight: 3, dash: '10 3 2 3 2 3', cap: 'butt', opacity: 0.9 },
   highlight: { role: 'highlight', weight: 6, dash: null, cap: 'round', opacity: 0.85 },
   proposal: { role: 'proposal', weight: 3, dash: '14 7', cap: 'butt', opacity: 0.9 },
+  // The travel network (map-presentation.md §25.4): thin muted ink, a flight solid, a transport ride dashed 3-3.
+  'network-flight': { role: 'inkMuted', weight: 1.1, dash: null, cap: 'round', opacity: 0.9 },
+  'network-transport': { role: 'inkMuted', weight: 1.1, dash: '3 3', cap: 'butt', opacity: 0.9 },
 };
 
-export function polylineStyle(style: LineStyle, emphasis: Emphasis, palette: MapPalette): PathStyle {
+/**
+ * The route after the active step (map-presentation.md §13.6, §25.4; review PR-02): at 55 %, and a
+ * solid leg dashed 5-6, so the dash, not the fade, is the cue; a leg with its own dashes (transport,
+ * flight, hearth, pending, fallback) keeps them, so what the leg is stays said.
+ */
+export const ROUTE_AFTER = { opacity: 0.55, dash: '5 6' } as const;
+
+/** A step bead after the active step (§13.6): at 60 %. */
+export const BEAD_AFTER_ALPHA = 0.6;
+
+/** `after`: a route piece after the active step (`PolylineDescriptor.after`, `ROUTE_AFTER`). */
+export function polylineStyle(style: LineStyle, emphasis: Emphasis, palette: MapPalette, after = false): PathStyle {
   const spec = LINE_STYLES[style];
   const color = palette[spec.role];
   return {
     stroke: true,
     color,
     weight: emphasis === 'strong' ? spec.weight + 2 : spec.weight,
-    opacity: spec.opacity * EMPHASIS_ALPHA[emphasis],
+    opacity: (after ? ROUTE_AFTER.opacity : spec.opacity) * EMPHASIS_ALPHA[emphasis],
     fill: false,
     fillColor: color,
     fillOpacity: 0,
-    dashArray: spec.dash,
+    dashArray: after && spec.dash === null ? ROUTE_AFTER.dash : spec.dash,
     lineCap: spec.cap,
     lineJoin: 'round',
   };
+}
+
+/** A line's halo: a wider stroke under it in the halo colour, along the same dashes. */
+export interface LineHalo {
+  readonly color: string;
+  readonly weight: number;
+}
+
+/**
+ * The halo under a line (map-presentation.md §25.4, §25.6; review PR-03): the route's legs a 5.5 px
+ * halo under their 2.6 px line (their width plus 2.9 px), the travel network a 3 px halo under its
+ * 1.1 px line, in the label halo (`--frl-map-minimap-halo` in the minimap style, the theme's
+ * `--frl-map-label-halo` in the painted style), so a line keeps a dark (or light) edge on any
+ * ground. The highlight and the proposal have none (they are drawn over the route, which has one).
+ */
+export function lineHalo(style: LineStyle, emphasis: Emphasis, palette: MapPalette): LineHalo | null {
+  if (style === 'highlight' || style === 'proposal') return null;
+  const spec = LINE_STYLES[style];
+  const weight = emphasis === 'strong' ? spec.weight + 2 : spec.weight;
+  const network = style === 'network-flight' || style === 'network-transport';
+  return { color: palette.labelHalo, weight: network ? 3 : Math.round((weight + 2.9) * 10) / 10 };
 }
 
 /**
@@ -195,7 +261,45 @@ export function polylineStyle(style: LineStyle, emphasis: Emphasis, palette: Map
  * chosen for 3:1 against the map background, and a translucent stroke would fall below it (M3
  * review MAP-A11Y-6).
  */
-export function frameStyle(kind: FrameDescriptor['kind'], emphasis: Emphasis, palette: MapPalette, filled = true): PathStyle {
+export function frameStyle(
+  kind: FrameDescriptor['kind'],
+  emphasis: Emphasis,
+  palette: MapPalette,
+  filled = true,
+  look: { readonly hidden?: boolean; readonly overTiles?: boolean; readonly dashed?: boolean } = {},
+): PathStyle {
+  if (look.hidden === true) {
+    // Kept for `MapEvent.zones`, not painted: a zone rectangle over the atlas tiles (D-042 A8).
+    return {
+      stroke: false,
+      color: palette.frame,
+      weight: 0,
+      opacity: 0,
+      fill: false,
+      fillColor: palette.frameFill,
+      fillOpacity: 0,
+      dashArray: null,
+      lineCap: 'butt',
+      lineJoin: 'miter',
+    };
+  }
+  if (kind === 'inset' || kind === 'card') {
+    // An inset's card on the atlas (map-atlas.md §5.5, §8.5), or a city card over the tiles: a
+    // solid vector frame, heavier than a zone frame, so the box reads as "shown apart", not as a
+    // zone. Over the tiles it takes the atlas frame colour (3:1 or more on both sea colours).
+    return {
+      stroke: true,
+      color: look.overTiles === true ? palette.frameAtlas : palette.extent,
+      weight: 2,
+      opacity: 1,
+      fill: false,
+      fillColor: palette.extent,
+      fillOpacity: 0,
+      dashArray: null,
+      lineCap: 'butt',
+      lineJoin: 'miter',
+    };
+  }
   if (kind === 'extent') {
     return {
       stroke: true,
@@ -211,18 +315,62 @@ export function frameStyle(kind: FrameDescriptor['kind'], emphasis: Emphasis, pa
     };
   }
   const strong = emphasis === 'strong';
+  const dashed = look.dashed === true;
   return {
     stroke: true,
-    color: strong ? palette.frameStrong : palette.frame,
-    weight: strong ? 2.5 : 1,
+    // An underground city's frame keeps the frame colour when it is the jumped-to zone (review PR-17): the route's colour is the route's.
+    color: strong && !dashed ? palette.frameStrong : palette.frame,
+    weight: strong ? 2.5 : dashed ? 1.5 : 1,
     opacity: EMPHASIS_ALPHA[emphasis],
     fill: filled,
     fillColor: palette.frameFill,
     fillOpacity: filled ? (strong ? 0.45 : 0.25) : 0,
-    dashArray: null,
+    // An underground city's frame in the minimap style (D-049 O19): dashed, in the frame colour.
+    dashArray: dashed ? '5 4' : null,
     lineCap: 'butt',
     lineJoin: 'miter',
   };
+}
+
+/**
+ * A connector's arc (map-atlas.md §8.5): the leg's own line style (transport dashed, flight dotted,
+ * hearth dash-dot, the proposal's long dashes), so it reads as the same kind of leg as on a map;
+ * the arc shape and its mid-arc ring glyph say it crosses between world maps.
+ */
+export function connectorStyle(style: ConnectorDescriptor['style'], emphasis: Emphasis, palette: MapPalette): PathStyle {
+  return polylineStyle(style, emphasis, palette);
+}
+
+/**
+ * A connector's halo: a network ride's (`network-transport`, review PR-11) is the travel network's
+ * 3 px halo under its 1.1 px line, as on a map; the route's own connectors and the proposal's have
+ * none (as before).
+ */
+export function connectorHalo(style: ConnectorDescriptor['style'], emphasis: Emphasis, palette: MapPalette): LineHalo | null {
+  return style === 'network-transport' ? lineHalo(style, emphasis, palette) : null;
+}
+
+/**
+ * The transition glyph at a connector's mid-arc: the ring of `transition` markers, in the accent
+ * for the route's own connectors (the proposal's colour in the overlay), and neutral for a ride of
+ * the travel network (review PR-11), so the route colour marks only the route.
+ */
+export function connectorGlyph(descriptor: ConnectorDescriptor, palette: MapPalette): GlyphSpec {
+  const marker: MarkerDescriptor = {
+    type: 'marker',
+    id: descriptor.id,
+    point: descriptor.from,
+    kind: 'transition',
+    style: descriptor.style === 'proposal' ? 'proposal' : descriptor.style === 'network-transport' ? 'neutral' : 'accent',
+    emphasis: descriptor.emphasis,
+    label: descriptor.label,
+    badges: [],
+    ref: descriptor.ref,
+    count: 1,
+    refs: [descriptor.ref],
+    labels: [descriptor.label],
+  };
+  return markerGlyph(marker, palette);
 }
 
 /**
@@ -243,6 +391,55 @@ export function outlineStyle(kind: OutlineDescriptor['kind'], palette: MapPalett
     dashArray: null,
     lineCap: 'round',
     lineJoin: 'round',
+  };
+}
+
+/**
+ * An objective outline of a log quest (map-presentation.md §7.4, §6.4): a 1.2 px line in the muted
+ * ink at full opacity, over a 3 px halo in the label halo (drawn by `AreaOutline`), never filled.
+ */
+export function areaStyle(palette: MapPalette): PathStyle {
+  return {
+    stroke: true,
+    color: palette.inkMuted,
+    weight: 1.2,
+    opacity: 1,
+    fill: false,
+    fillColor: palette.inkMuted,
+    fillOpacity: 0,
+    dashArray: null,
+    lineCap: 'round',
+    lineJoin: 'round',
+  };
+}
+
+/**
+ * The fallback tint's opacity over the relief (map-presentation.md §12.4): the relief's shading shows
+ * through, as the design's multiply at 55 % would give it (an ASSUMPTION, drawn as alpha on the path
+ * canvas, which cannot multiply with the relief image below it).
+ */
+export const TINT_OPACITY = 0.55;
+
+/**
+ * A zone fill (§12.4, §12.6): the tint as a fill at `TINT_OPACITY`; the faction overlay's pattern in
+ * the hatch colour (the pattern itself is drawn by `ZoneFillShape`; this colour stands in where a
+ * canvas pattern cannot be made); "no faction" with no fill at all, but still its hover words. No
+ * stroke: the zone borders are the outlines' and the frames'.
+ */
+export function zoneFillStyle(fill: ZoneFillDescriptor['fill'], palette: MapPalette): PathStyle {
+  const tint = 'tint' in fill;
+  const colour = tint ? fill.tint : palette.hatch;
+  return {
+    stroke: false,
+    color: colour,
+    weight: 0,
+    opacity: 0,
+    fill: tint || fill.pattern !== 'none',
+    fillColor: colour,
+    fillOpacity: tint ? TINT_OPACITY : 1,
+    dashArray: null,
+    lineCap: 'butt',
+    lineJoin: 'miter',
   };
 }
 
@@ -295,7 +492,7 @@ export function markerGlyph(descriptor: MarkerDescriptor, palette: MapPalette, e
     fill: descriptor.kind === 'halo' ? null : color,
     stroke: ring ? color : palette.markerEdge,
     strokeWidth: (ring ? 2.5 : 1.5) + (emphasis === 'strong' ? 0.5 : 0),
-    alpha: EMPHASIS_ALPHA[emphasis],
+    alpha: EMPHASIS_ALPHA[emphasis] * (descriptor.after === true ? BEAD_AFTER_ALPHA : 1),
     badges: descriptor.badges,
     badgeColor: palette.ink,
     edge: palette.markerEdge,

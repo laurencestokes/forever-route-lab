@@ -1219,7 +1219,7 @@ describe('real data: a move between world maps at the start of the exit chain (r
       if (firstStep === undefined || lastStep === undefined) throw new Error('the route is too short');
       const store = createEditorStore({ project, ids: sequentialIdSource(700_000), clock: fixedClock(NOW) });
       const revision = store.getState().revision;
-      const host = createOptimizationHost({ project, revision, data: workspace.data, geometry: workspace.geometry.geometry, navigation: { kind: 'unavailable', reason: 'test' } });
+      const host = createOptimizationHost({ project, revision, data: workspace.data, geometry: workspace.geometry.geometry, navigation: { kind: 'unavailable', reason: 'test' }, taxi: null });
       const { optimizer } = inProcessOptimizer();
       try {
         const result = await startOptimization(

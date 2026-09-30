@@ -29,6 +29,12 @@ export const selectSelection = (s: EditorState) => s.selection;
 export const selectFocus = (s: EditorState) => s.selection.focus;
 export const selectSelectionCount = (s: EditorState) => s.selection.stepIds.size;
 export const selectEditingLocked = (s: EditorState) => s.editingLocked;
+/**
+ * Why the Details editors and quest actions are unavailable while editing is locked. Here, in the
+ * entry chunk, because the side panel's quest actions say it while the Details panel itself is a
+ * lazy part (`lazy-parts.ts`, ui-refresh.md §10.3 step UR.1a).
+ */
+export const DETAILS_LOCKED = 'Unavailable while the optimiser runs or a proposal is open';
 export const selectHistory = (s: EditorState) => s.history;
 export const selectRightTab = (s: EditorState) => s.view.rightTab;
 export const selectClipboardCount = (s: EditorState) => s.clipboard.steps.length;

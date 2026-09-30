@@ -1,5 +1,5 @@
 import { gzipSize } from '../../build/lib/audit';
-import { buildArtManifest, parseArtManifest, type ArtBounds, type ArtFileEntry, type ArtManifestFacts } from './art-manifest';
+import { buildArtManifest, parseArtManifest, type ArtBounds, type ArtDeployment, type ArtFileEntry, type ArtManifestFacts, type ArtSourceEntry } from './art-manifest';
 import { artNoticeText } from './art-notice';
 import { artFileName, planArt, planFileDataIds, type ArtPlan } from './art-plan';
 import type { AssignmentRow, ClientMapTables } from './client-tables';
@@ -7,7 +7,7 @@ import { composeArt, type ComposeStats } from './compose';
 import { encodeWebp, type EncoderIdentity, type WebpSettings } from './encode';
 import { inputHash, type ClientInput } from '../../casc/input-hash';
 import { formatJson } from './json';
-import { rasterSha256 } from './raster';
+import { rasterSha256, type Rgba } from './raster';
 import { sha256Hex } from './hash';
 import type { ToolTrees } from './tool-tree';
 
@@ -29,6 +29,13 @@ export interface ArtBuildOptions {
   readonly toolTrees: ToolTrees;
   readonly encoder: EncoderIdentity;
   readonly webp: WebpSettings;
+  /**
+   * The UiMaps whose images are written, and why (D-042 O5; step ATL.10): `convert.ts` passes
+   * `DEPLOYED_ART_UIMAPS`. Every plan is still composed and keeps its `sources` record, which the
+   * atlas build checks its client rasters against. Omitted: every composed image is written (the
+   * set before ATL.10; `convert.ts --all` for a local folder).
+   */
+  readonly deploy?: ArtDeployment | undefined;
 }
 
 export interface BuiltArtFile {
@@ -82,23 +89,63 @@ function entryOf(plan: ArtPlan, file: { bytes: Buffer; pixelsSha256: string; inp
   };
 }
 
+/**
+ * The explored-overlay union of a plan: every overlay drawn source-over, in ID order, on a
+ * transparent canvas without the base tiles (the atlas's painted-ground mask, map-atlas.md §6.2),
+ * or null when the plan has no overlays.
+ */
+export function composeOverlayUnion(plan: ArtPlan, read: (fileDataId: number) => Uint8Array): Rgba | null {
+  return plan.overlays.length === 0 ? null : composeArt({ ...plan, tiles: [] }, read).image;
+}
+
+/** A plan's lossless rasters and their inputs (what `convert.ts` records in `sources` and the atlas build reads). */
+export interface SourceRasters {
+  readonly plan: ArtPlan;
+  readonly full: Rgba;
+  readonly overlays: Rgba | null;
+  readonly stats: ComposeStats;
+  readonly inputs: readonly ClientInput[];
+  readonly record: ArtSourceEntry;
+}
+
+/** Composes one plan's fully explored image and its overlay union, with the `sources` record of both. */
+export function composeSourceRasters(plan: ArtPlan, source: ArtSource): SourceRasters {
+  const tableInputs: ClientInput[] = source.tables.inputs.map((t) => ({ fileDataId: t.fileDataId, ckey: t.ckey }));
+  const ckeys = new Map<number, string>();
+  const read = (fileDataId: number): Uint8Array => {
+    const file = source.read(fileDataId);
+    ckeys.set(fileDataId, file.ckey);
+    return file.data;
+  };
+  const { image, stats } = composeArt(plan, read);
+  const overlays = composeOverlayUnion(plan, read);
+  const inputs = [...planFileDataIds(plan).map((id) => ({ fileDataId: id, ckey: ckeys.get(id) ?? '' })), ...tableInputs];
+  const record: ArtSourceEntry = {
+    uiMapId: plan.uiMapId,
+    layer: plan.layerIndex,
+    name: plan.name,
+    width: plan.width,
+    height: plan.height,
+    pixelsSha256: rasterSha256(image),
+    overlaysSha256: overlays === null ? null : rasterSha256(overlays),
+    inputHash: inputHash(inputs),
+  };
+  return { plan, full: image, overlays, stats, inputs: [...inputs].sort((a, b) => a.fileDataId - b.fileDataId), record };
+}
+
 export async function buildArtSet(source: ArtSource, options: ArtBuildOptions): Promise<ArtBuild> {
   const report = planArt(source.tables.art);
-  const tableInputs: ClientInput[] = source.tables.inputs.map((t) => ({ fileDataId: t.fileDataId, ckey: t.ckey }));
   const files: BuiltArtFile[] = [];
+  const sources: ArtSourceEntry[] = [];
+  const deployed = options.deploy === undefined ? null : new Set(options.deploy.uiMaps);
   for (const plan of report.plans) {
-    const ckeys = new Map<number, string>();
-    const read = (fileDataId: number): Uint8Array => {
-      const file = source.read(fileDataId);
-      ckeys.set(fileDataId, file.ckey);
-      return file.data;
-    };
-    const { image, stats } = composeArt(plan, read);
-    const inputs = [...planFileDataIds(plan).map((id) => ({ fileDataId: id, ckey: ckeys.get(id) ?? '' })), ...tableInputs];
-    const bytes = await encodeWebp(image, options.webp);
+    const composed = composeSourceRasters(plan, source);
+    sources.push(composed.record);
+    if (deployed !== null && !deployed.has(plan.uiMapId)) continue;
+    const bytes = await encodeWebp(composed.full, options.webp);
     const assignments = source.tables.assignments.filter((r) => r.uiMapId === plan.uiMapId).sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id);
-    const entry = entryOf(plan, { bytes, pixelsSha256: rasterSha256(image), inputHash: inputHash(inputs) }, assignments);
-    files.push({ entry, bytes, gzipBytes: gzipSize(bytes), stats, inputs: [...inputs].sort((a, b) => a.fileDataId - b.fileDataId) });
+    const entry = entryOf(plan, { bytes, pixelsSha256: composed.record.pixelsSha256, inputHash: composed.record.inputHash }, assignments);
+    files.push({ entry, bytes, gzipBytes: gzipSize(bytes), stats: composed.stats, inputs: composed.inputs });
   }
   const facts: ArtManifestFacts = {
     client: options.client,
@@ -110,6 +157,8 @@ export async function buildArtSet(source: ArtSource, options: ArtBuildOptions): 
     skippedUiMaps: report.skippedUiMaps,
     skippedOverlays: report.skippedOverlays,
     files: files.map((f) => f.entry),
+    sources: [...sources].sort((a, b) => a.uiMapId - b.uiMapId || a.layer - b.layer),
+    deployment: options.deploy === undefined ? null : { uiMaps: [...options.deploy.uiMaps].sort((a, b) => a - b), reason: options.deploy.reason },
   };
   const manifestText = formatJson(buildArtManifest(facts));
   const parsed = parseArtManifest(JSON.parse(manifestText) as unknown);

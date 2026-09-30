@@ -1,0 +1,9 @@
+{
+  "asset": "minimap-tiles-42b33cc815cd-2a05fc565d2d.tar",
+  "tag": "minimap-1.60.1.70009-42b33cc815cd-2a05fc565d2d",
+  "bytes": 58071040,
+  "sha256": "2a05fc565d2dbc58d15ea5fd345829b8f3e506ca075f8cd210b1b8fe508e3327",
+  "treeHash": "42b33cc815cda9ec8287af204513f525735740506e4a21cd29a6377310cef935",
+  "client": "1.60.1.70009",
+  "contents": ["NOTICE.md", "manifest.json", "t/"]
+}

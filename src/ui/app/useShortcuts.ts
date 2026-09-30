@@ -4,9 +4,9 @@ import { isModalDialogOpen } from '../lib/modal';
 import type { RouteActions } from './route-actions';
 
 /**
- * Keyboard shortcuts of the shell, in two scopes. Undo, redo and Ctrl+K (search) are global: they
- * work wherever focus is, except in text fields (which keep their own undo) and while a dialog is
- * open. The route commands (Delete, Alt+↑/↓, Ctrl+D, Ctrl+A, Ctrl+X, Ctrl+C, Ctrl+V, J, Escape)
+ * Keyboard shortcuts of the shell, in two scopes. Undo, redo, Ctrl+K (search) and Alt+M (map focus,
+ * docs/research/ui-refresh.md §4.3) are global: they work wherever focus is, except in text fields
+ * (which keep their own undo) and while a dialog is open. The route commands (Delete, Alt+↑/↓, Ctrl+D, Ctrl+A, Ctrl+X, Ctrl+C, Ctrl+V, J, Escape)
  * act on the route selection only while focus is inside the route editor: Delete on a side-panel
  * tab deletes nothing, and Ctrl+A or Ctrl+C there select and copy text as usual. The route list
  * handles some of the same keys itself first and marks them handled (`defaultPrevented`), so
@@ -15,13 +15,15 @@ import type { RouteActions } from './route-actions';
 
 export interface ShortcutKey {
   readonly key: string;
+  /** The physical key (`KeyboardEvent.code`): Alt+M is read from it, so Option+M on a Mac (which types "µ") works. */
+  readonly code?: string | undefined;
   readonly ctrlKey: boolean;
   readonly metaKey: boolean;
   readonly altKey: boolean;
   readonly shiftKey: boolean;
 }
 
-export type GlobalShortcut = 'undo' | 'redo' | 'search';
+export type GlobalShortcut = 'undo' | 'redo' | 'search' | 'mapFocus';
 export type RouteEditorShortcut = 'selectAll' | 'duplicate' | 'delete' | 'moveUp' | 'moveDown' | 'clearSelection' | 'cut' | 'copy' | 'paste' | 'join';
 
 export function isEditableTarget(target: EventTarget | null): boolean {
@@ -34,6 +36,7 @@ const keyOf = (input: ShortcutKey): string => (input.key.length === 1 ? input.ke
 
 export function globalShortcutFor(input: ShortcutKey): GlobalShortcut | null {
   const mod = input.ctrlKey || input.metaKey;
+  if (input.altKey && !mod && !input.shiftKey && input.code === 'KeyM') return 'mapFocus';
   if (!mod || input.altKey) return null;
   const key = keyOf(input);
   if (key === 'z') return input.shiftKey ? 'redo' : 'undo';
@@ -69,6 +72,8 @@ export function routeEditorShortcutFor(input: ShortcutKey): RouteEditorShortcut 
 export interface GlobalShortcutOptions {
   readonly actions: RouteActions;
   readonly focusSearch: () => void;
+  /** Alt+M: map focus on or off; omitted: Alt+M is left to the browser. */
+  readonly toggleMapFocus?: (() => void) | undefined;
   /** False while a dialog the shell owns is open. */
   readonly enabled: boolean;
 }
@@ -78,24 +83,25 @@ export interface GlobalShortcutOptions {
  * whoever owns it: the keys may reach the window from the page body when a control inside the
  * dialog removed itself, and undo must not change the route behind a dialog (UI-F1).
  */
-export function useGlobalShortcuts({ actions, focusSearch, enabled }: GlobalShortcutOptions): void {
+export function useGlobalShortcuts({ actions, focusSearch, toggleMapFocus, enabled }: GlobalShortcutOptions): void {
   useEffect(() => {
     if (!enabled) return undefined;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented || isEditableTarget(event.target)) return;
       if (isModalDialogOpen()) return;
       const shortcut = globalShortcutFor(event);
-      if (shortcut === null) return;
+      if (shortcut === null || (shortcut === 'mapFocus' && toggleMapFocus === undefined)) return;
       event.preventDefault();
       if (shortcut === 'undo') actions.undo();
       else if (shortcut === 'redo') actions.redo();
+      else if (shortcut === 'mapFocus') toggleMapFocus?.();
       else focusSearch();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [actions, focusSearch, enabled]);
+  }, [actions, focusSearch, toggleMapFocus, enabled]);
 }
 
 /**

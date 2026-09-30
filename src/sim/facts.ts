@@ -32,6 +32,11 @@ export type SimFact =
   | { readonly kind: 'hearth-unbound' }
   /** SIM-7 (TIME-5), engine: a flight from or to a node not in `knownFlightPaths`. */
   | { readonly kind: 'flight-unknown-path'; readonly end: 'from' | 'to'; readonly node: string }
+  /**
+   * SIM-7 variant (TIME-6): the committed taxi file has both flight points, but no journey between
+   * them uses only nodes the character knows and may use, so the flight is timed by TIME-5.
+   */
+  | { readonly kind: 'flight-no-known-journey' }
   /** SIM-8 (TIME-5), engine: a node ref or query that resolves to no node, several, or one without a position. */
   | { readonly kind: 'flight-unresolved'; readonly end: 'from' | 'to'; readonly reason: 'no-node' | 'several-nodes' | 'no-position' }
   /** SIM-9 (TIME-2): travel mode `'mount'` before riding is trained. */
@@ -52,6 +57,23 @@ export type SimFact =
   | { readonly kind: 'condition-unknown' }
   /** SIM-14 (TIME-7): a transport whose known factions exclude the character. */
   | { readonly kind: 'transport-faction'; readonly transportId: string }
+  /** SIM-24 (TIME-5), engine: a flight's departure or destination node is not open to the character's faction. */
+  | { readonly kind: 'flight-faction'; readonly end: 'from' | 'to'; readonly node: string }
+  /**
+   * TIME-7, engine: the transport a step rode, and where its docks' positions come from. Not an
+   * issue: Details says it. An inferred dock carries its client record (map-presentation.md §10,
+   * MP-R32), and a berth's walk is priced as walking (`berthWalk`, `berthTravel`).
+   */
+  | {
+      readonly kind: 'transport-ride';
+      readonly transportId: string;
+      /** The TravelGraph edge (`${transportId}:${from}>${to}`). */
+      readonly edgeId: string;
+      readonly name: string;
+      readonly docks: readonly TransportDockFact[];
+      /** Whether a walk to or from an inferred berth was priced as walking (TIME-7). */
+      readonly berthWalk: boolean;
+    }
   /** SIM-15 (TIME-9, TIME-12): objective or grind time that cannot be estimated. */
   | {
       readonly kind: 'time-unknown';
@@ -112,6 +134,16 @@ export type SimFact =
    * issue: TIME-2 raises none for it, and `cause` says why the position was unknown.
    */
   | { readonly kind: 'position-unknown'; readonly cause: UnknownPositionCause };
+
+/** One dock of a `transport-ride` fact: its name and where its position comes from (TIME-7). */
+export interface TransportDockFact {
+  readonly end: 'departure' | 'arrival';
+  readonly name: string;
+  /** `inferred`: a committed client transport stop (with `record`); `user`, `dock-npc`; null: no position. */
+  readonly pointFrom: 'dock-npc' | 'user' | 'inferred' | null;
+  /** For an inferred dock, "client transport path 11167, stop 2 of 3"; null otherwise. */
+  readonly record: string | null;
+}
 
 /**
  * Why the position is unknown (TIME-2, TIME-4, TIME-5, TIME-7):

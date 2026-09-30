@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { NpcId, StepId, WorldMapId } from '../../domain/ids';
-import type { AggregateDescriptor, LineStyle, MarkerDescriptor, MarkerKind } from '../adapter';
+import type { AggregateDescriptor, ConnectorDescriptor, LineStyle, MarkerDescriptor, MarkerKind } from '../adapter';
 import {
   aggregateGlyph,
   compactCount,
+  connectorGlyph,
+  connectorHalo,
+  connectorStyle,
   DEFAULT_MAP_PALETTE,
   frameStyle,
   glyphExtent,
@@ -14,6 +17,8 @@ import {
   PALETTE_SOURCES,
   polylineStyle,
   stackText,
+  TINT_OPACITY,
+  zoneFillStyle,
   type GlyphShape,
 } from './style';
 
@@ -81,6 +86,18 @@ describe('palette', () => {
         expect(token.startsWith('--frl-forever')).toBe(false);
       }
     }
+  });
+});
+
+describe('zone fills (map-presentation.md §12.4, §12.6; step MP.10)', () => {
+  it('fills a tint at its opacity over the relief, a faction pattern in the hatch colour, and "no faction" not at all; never stroked', () => {
+    const tint = zoneFillStyle({ tint: '#886f4b' }, DEFAULT_MAP_PALETTE);
+    expect(tint).toMatchObject({ stroke: false, fill: true, fillColor: '#886f4b', fillOpacity: TINT_OPACITY });
+    const horde = zoneFillStyle({ pattern: 'horde' }, DEFAULT_MAP_PALETTE);
+    expect(horde).toMatchObject({ stroke: false, fill: true, fillColor: DEFAULT_MAP_PALETTE.hatch, fillOpacity: 1 });
+    expect(zoneFillStyle({ pattern: 'none' }, DEFAULT_MAP_PALETTE).fill).toBe(false);
+    // The hatch is its own token, achromatic in both themes (tokens.css), read as the role token.
+    expect(paletteFrom((property) => (property === '--frl-map-hatch' ? 'rgb(255 255 255 / 0.35)' : '')).hatch).toBe('rgb(255 255 255 / 0.35)');
   });
 });
 
@@ -197,5 +214,36 @@ describe('glyph specs', () => {
     const spec = aggregateGlyph(aggregate, DEFAULT_MAP_PALETTE);
     expect(spec).toMatchObject({ shape: 'aggregate', text: '4.3k', fill: DEFAULT_MAP_PALETTE.aggregateFill });
     expect(spec.size).toBeGreaterThan(aggregateGlyph({ ...aggregate, count: 5 }, DEFAULT_MAP_PALETTE).size);
+  });
+});
+
+describe('connectors of the travel network (map-presentation.md §10, §25.4; review PR-11)', () => {
+  const connector = (style: ConnectorDescriptor['style']): ConnectorDescriptor => ({
+    type: 'connector',
+    id: 'ride:11616:1',
+    from: { mapId: 1 as WorldMapId, x: 6548, y: 942 },
+    to: { mapId: 0 as WorldMapId, x: -8654, y: 1344 },
+    style,
+    emphasis: 'normal',
+    label: 'Stormwind Harbor – Auberdine ship: Kalimdor to Eastern Kingdoms',
+    ref: { kind: 'transport', path: 11616, stop: null },
+  });
+  const palette = DEFAULT_MAP_PALETTE;
+
+  it('draws a network ride thin, dashed 3-3 in the muted ink over its 3 px halo, with a neutral ring', () => {
+    expect(connectorStyle('network-transport', 'normal', palette)).toMatchObject({ color: palette.inkMuted, weight: 1.1, dashArray: '3 3' });
+    expect(connectorHalo('network-transport', 'normal', palette)).toEqual({ color: palette.labelHalo, weight: 3 });
+    const ring = connectorGlyph(connector('network-transport'), palette);
+    const routeRing = connectorGlyph(connector('transport'), palette);
+    // Not the route colour: the accent ring stays for the route's own connectors.
+    expect(ring).not.toEqual(routeRing);
+    expect(JSON.stringify(ring)).not.toContain(palette.accent);
+    expect(JSON.stringify(routeRing)).toContain(palette.accent);
+  });
+
+  it('keeps the route’s own connectors as before: the leg style, no halo, the accent ring', () => {
+    expect(connectorStyle('transport', 'normal', palette)).toMatchObject({ weight: 3, dashArray: '10 6' });
+    expect(connectorHalo('transport', 'normal', palette)).toBeNull();
+    expect(connectorHalo('proposal', 'normal', palette)).toBeNull();
   });
 });

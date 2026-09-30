@@ -1,65 +1,23 @@
 /*
- * The map panel (docs/UI.md §12): a 32px toolbar, the stage the map engine fills, the layer panel
- * beside it (never over it, except in a panel too narrow for both), and a one-line status. Tokens
- * only; the canvas colours come from the same tokens through the map engine (docs/MAPS.md §7.5).
+ * The map panel (docs/UI.md §12; docs/research/map-presentation.md §25.3.0, §25.3.1): the stage takes
+ * the whole map region and the controls float on it; the Map layers drawer (300 px) docks on the
+ * stage's left from a 900 px map region and lies over its left edge below that (a container query).
+ * Tokens only; the canvas colours come from the same tokens through the map engine (MAPS.md §7.5).
+ * Every floating control has the tile's backplate and a 1 px `--frl-border-strong` edge, so it reads
+ * over any base (the edge is 3:1 or more on the tile, and the backplate carries the text).
  */
 
 .frl-mapframe {
   position: relative;
   display: flex;
   flex: 1 1 auto;
-  flex-direction: column;
   min-width: 0;
   min-height: 0;
   container: frl-mapframe / inline-size;
   background: var(--frl-surface-sunken);
 }
 
-.frl-mapframe__bar {
-  position: relative;
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--frl-space-1);
-  height: var(--frl-panel-header-height);
-  min-width: 0;
-  padding: 0 var(--frl-space-1);
-  border-bottom: 1px solid var(--frl-border);
-  background: var(--frl-surface-raised);
-}
-
-.frl-mapframe__surface {
-  flex: 0 1 220px;
-  min-width: 120px;
-}
-
-.frl-mapframe__surface .frl-select {
-  width: 100%;
-}
-
-.frl-mapframe__commands {
-  flex: none;
-}
-
-.frl-mapframe__spacer {
-  flex: 1 1 0;
-}
-
-.frl-mapframe__notice {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The notice's short form ("Schematic") replaces it in a narrow panel; it is never hidden. */
-.frl-mapframe__notice-short {
-  display: none;
-}
-
-.frl-mapframe__body {
+.frl-mapframe__region {
   position: relative;
   display: flex;
   flex: 1 1 auto;
@@ -78,6 +36,21 @@
 .frl-mapframe__host {
   position: absolute;
   inset: 0;
+}
+
+/*
+ * The map surface's focus ring (review QA-08; WCAG 2.4.7): the surface's own outline is painted
+ * under Leaflet's panes, so the stage draws it on a layer above them (and under the floating
+ * controls), inset, and lets every press through. An outline, not a shadow, so forced colours keep it.
+ */
+.frl-mapframe__stage:has(.leaflet-container:focus-visible)::after {
+  content: '';
+  position: absolute;
+  z-index: 1140;
+  inset: 0;
+  outline: var(--frl-focus-width) solid var(--frl-focus);
+  outline-offset: calc(-1 * var(--frl-focus-width));
+  pointer-events: none;
 }
 
 /* Until the engine is ready the stage shows the kit's neutral grid, never an empty hole. */
@@ -114,230 +87,241 @@
   line-height: 20px;
 }
 
-.frl-mapframe__side {
+/* The Map layers drawer: docked beside the stage (the default), or over its left edge in a narrow region. */
+.frl-mapframe__drawer {
   position: relative;
-  flex: 0 0 260px;
+  display: flex;
+  flex: 0 0 var(--frl-map-drawer-width);
+  flex-direction: column;
+  width: var(--frl-map-drawer-width);
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
-  border-left: 1px solid var(--frl-border);
+  overflow: hidden;
+  border-right: 1px solid var(--frl-border);
   background: var(--frl-surface);
 }
 
-/* Too narrow for the map and the panel side by side: the panel lies over the map's right edge. */
-@container frl-mapframe (width < 560px) {
-  .frl-mapframe__side {
+/* The drawer's stand-in while its code loads, or when it could not. */
+.frl-mapframe__drawer-note {
+  padding: var(--frl-space-3);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-sm);
+}
+
+/* The floating controls, above Leaflet's panes and controls (z-index 400 to 1000). */
+.frl-mapframe__layers-toggle.frl-icon-button {
+  position: absolute;
+  z-index: 1150;
+  top: 10px;
+  left: 10px;
+}
+
+/* Open, the toggle sits just right of the drawer (§25.3.0). */
+.frl-mapframe.is-drawer-open .frl-mapframe__layers-toggle.frl-icon-button {
+  left: calc(var(--frl-map-drawer-width) + 10px);
+}
+
+/* The "Viewing" chip (map-presentation.md §13.5): the zone at the view centre, right of Map layers. */
+.frl-mapframe__viewing {
+  position: absolute;
+  z-index: 1100;
+  top: 10px;
+  left: 52px;
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+  max-width: calc(100% - 52px - 52px);
+  min-height: 32px;
+  overflow: hidden;
+  padding: 3px var(--frl-space-2);
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius-control);
+  background: color-mix(in srgb, var(--frl-surface) 92%, transparent);
+  color: var(--frl-fg);
+  font-size: var(--frl-text-sm);
+}
+
+.frl-mapframe__viewing-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Beside a drawer over the map it keeps to the room between Map layers and Map focus, ellipsised
+   (review PR-08, QA-13); its words stay whole in the accessibility tree. */
+.frl-mapframe.is-drawer-open.is-over .frl-mapframe__viewing {
+  left: calc(var(--frl-map-drawer-width) + 52px);
+  max-width: calc(100% - var(--frl-map-drawer-width) - 52px - 52px);
+}
+
+.frl-mapframe__focus {
+  position: absolute;
+  z-index: 1150;
+  top: 10px;
+  right: 10px;
+}
+
+/* The shell's toggle, claimed into the map's chrome (AppShell `MapFocusContext`). */
+.frl-mapframe__focus .frl-shell__map-focus.frl-icon-button {
+  position: static;
+}
+
+.frl-mapframe__view {
+  position: absolute;
+  z-index: 1150;
+  right: 10px;
+  bottom: 10px;
+}
+
+.frl-mapframe__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--frl-space-2);
+}
+
+/* One group per row of joined 32 px buttons: zoom, then fit and focus. */
+.frl-mapframe__group {
+  display: flex;
+}
+
+.frl-mapframe__command.frl-icon-button,
+.frl-mapframe__command.frl-button {
+  min-width: 32px;
+  height: 32px;
+}
+
+.frl-mapframe__command.frl-icon-button {
+  width: 32px;
+}
+
+.frl-mapframe__group > .frl-mapframe__command + .frl-mapframe__command {
+  margin-left: -1px;
+}
+
+.frl-mapframe__group > .frl-mapframe__command:not(:first-child) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.frl-mapframe__group > .frl-mapframe__command:not(:last-child) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Leaflet's yard scale sits above the Map view toolbar. */
+.frl-mapframe .leaflet-bottom.leaflet-right {
+  bottom: 48px;
+}
+
+/* The caption: what the map shows, the route note and the pointer's text; never a live region. */
+.frl-mapframe__caption {
+  position: absolute;
+  z-index: 1050;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: calc(100% - 20px - 220px);
+  padding: 3px var(--frl-space-2);
+  border: 1px solid var(--frl-border-strong);
+  border-radius: var(--frl-radius-control);
+  background: color-mix(in srgb, var(--frl-surface) 92%, transparent);
+  color: var(--frl-fg-muted);
+  font-size: var(--frl-text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--frl-leading-tight);
+  pointer-events: none;
+}
+
+.frl-mapframe.is-drawer-open.is-docked .frl-mapframe__caption {
+  max-width: calc(100% - 20px - 220px);
+}
+
+.frl-mapframe__notice,
+.frl-mapframe__caption-line,
+.frl-mapframe__hover {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-mapframe__notice {
+  color: var(--frl-fg);
+}
+
+.frl-mapframe__hover {
+  display: block;
+  color: var(--frl-fg);
+}
+
+/* The notice's short form ("Art © Blizzard") replaces it in a narrow map; it is never hidden. */
+.frl-mapframe__notice-short {
+  display: none;
+}
+
+/* A map region too narrow for the drawer beside the stage: it lies over the stage's left edge. */
+@container frl-mapframe (width < 900px) {
+  .frl-mapframe__drawer {
     position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
     z-index: 1100;
-    width: min(260px, 85%);
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(var(--frl-map-drawer-width), calc(100% - 56px));
     box-shadow: var(--frl-shadow);
   }
 
+  .frl-mapframe.is-drawer-open .frl-mapframe__layers-toggle.frl-icon-button {
+    left: calc(min(var(--frl-map-drawer-width), 100% - 56px) + 10px);
+  }
+}
+
+/*
+ * A drawer over the stage covers the caption's corner: the caption moves to the drawer's right, as
+ * Map layers does, and its lines wrap there rather than hide the pick's instructions (review QA-12).
+ */
+@container frl-mapframe (560px <= width < 900px) {
+  .frl-mapframe.is-drawer-open .frl-mapframe__caption {
+    left: calc(min(var(--frl-map-drawer-width), 100% - 56px) + 10px);
+    max-width: calc(100% - min(var(--frl-map-drawer-width), 100% - 56px) - 20px - 220px);
+  }
+
+  .frl-mapframe.is-drawer-open .frl-mapframe__caption-line,
+  .frl-mapframe.is-drawer-open .frl-mapframe__hover {
+    white-space: normal;
+  }
+}
+
+@container frl-mapframe (width < 560px) {
   .frl-mapframe__notice.has-short .frl-mapframe__notice-long {
     display: none;
+  }
+
+  /* An open drawer covers most of a narrow map (review QA-14): the Map view toolbar, the scale bar
+     and the Viewing chip, which would draw over it or be cut by it, give way until it closes. */
+  .frl-mapframe.is-drawer-open .frl-mapframe__view,
+  .frl-mapframe.is-drawer-open .frl-mapframe__viewing,
+  .frl-mapframe.is-drawer-open .leaflet-bottom.leaflet-right {
+    visibility: hidden;
   }
 
   .frl-mapframe__notice-short {
     display: inline;
   }
-}
 
-.frl-mapframe__status {
-  position: relative;
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--frl-space-3);
-  height: 24px;
-  min-width: 0;
-  padding: 0 var(--frl-space-3);
-  overflow: hidden;
-  border-top: 1px solid var(--frl-border);
-  background: var(--frl-surface-raised);
-  color: var(--frl-fg-subtle);
-  font-size: var(--frl-text-xs);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.frl-mapframe__status-item {
-  flex: none;
-}
-
-.frl-mapframe__hover {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--frl-fg-muted);
-  text-align: right;
-  text-overflow: ellipsis;
-}
-
-/* Layer panel */
-
-.frl-layers {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--frl-space-2);
-  min-width: 0;
-  margin: 0;
-  padding: var(--frl-space-2) var(--frl-space-3) var(--frl-space-3);
-  border: 0;
-  font-size: var(--frl-text-sm);
-}
-
-.frl-layers__title {
-  float: left;
-  width: 100%;
-  margin-bottom: var(--frl-space-1);
-  padding: 0;
-  color: var(--frl-fg-muted);
-  font-size: var(--frl-text-xs);
-  font-weight: var(--frl-weight-bold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.frl-layers__list {
-  display: flex;
-  clear: both;
-  flex-direction: column;
-  gap: var(--frl-space-1);
-}
-
-.frl-layers__label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 22px;
-  color: var(--frl-fg);
-}
-
-.frl-layers__label input {
-  flex: none;
-  margin: 0;
-}
-
-.frl-layers__label input:focus-visible {
-  outline: var(--frl-focus-width) solid var(--frl-focus);
-  outline-offset: 2px;
-}
-
-.frl-layers__glyph {
-  margin: 0 -2px;
-}
-
-.frl-layers__name {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.frl-layers__count {
-  flex: none;
-  color: var(--frl-fg-subtle);
-  font-size: var(--frl-text-xs);
-}
-
-.frl-layers__row.is-unavailable .frl-layers__label {
-  color: var(--frl-fg-muted);
-}
-
-.frl-layers__notes {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-left: 20px;
-  color: var(--frl-fg-subtle);
-  font-size: var(--frl-text-xs);
-  line-height: var(--frl-leading-tight);
-}
-
-.frl-layers__footer {
-  padding-top: var(--frl-space-2);
-  border-top: 1px solid var(--frl-border);
-  color: var(--frl-fg-subtle);
-  font-size: var(--frl-text-xs);
-  line-height: var(--frl-leading-tight);
-  overflow-wrap: anywhere;
-}
-
-/* Items at a clicked point (a merged marker): a small list beside the point, inside the stage. */
-
-.frl-mapchoice {
-  position: absolute;
-  z-index: 1100;
-  display: flex;
-  flex-direction: column;
-  gap: var(--frl-space-1);
-  width: 260px;
-  max-width: calc(100% - 2 * var(--frl-space-2));
-  max-height: min(320px, calc(100% - 2 * var(--frl-space-2)));
-  padding: var(--frl-space-2);
-  overflow: auto;
-  border: 1px solid var(--frl-border-strong);
-  border-radius: var(--frl-radius-lg);
-  background: var(--frl-surface);
-  box-shadow: var(--frl-shadow);
-  font-size: var(--frl-text-sm);
-}
-
-.frl-mapchoice__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--frl-space-2);
-}
-
-.frl-mapchoice__title {
-  color: var(--frl-fg);
-  font-weight: var(--frl-weight-bold);
-}
-
-.frl-mapchoice__hint {
-  color: var(--frl-fg-muted);
-  font-size: var(--frl-text-xs);
-}
-
-.frl-mapchoice__list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.frl-mapchoice__option {
-  width: 100%;
-  padding: 4px 6px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--frl-fg);
-  font: inherit;
-  line-height: var(--frl-leading-tight);
-  text-align: left;
-  cursor: pointer;
-}
-
-.frl-mapchoice__option:hover {
-  background: var(--frl-surface-hover);
-}
-
-.frl-mapchoice__all {
-  align-self: flex-start;
+  .frl-mapframe__caption {
+    max-width: calc(100% - 20px);
+    bottom: 52px;
+  }
 }
 
 @media (forced-colors: active) {
-  .frl-mapframe__card {
+  .frl-mapframe__card,
+  .frl-mapframe__caption,
+  .frl-mapframe__drawer {
     border-color: CanvasText;
-  }
-
-  .frl-mapchoice {
-    border-color: CanvasText;
-  }
-
-  .frl-mapchoice__option {
-    border-color: ButtonText;
   }
 }

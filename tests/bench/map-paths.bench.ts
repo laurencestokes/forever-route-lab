@@ -35,6 +35,7 @@ import type { RouteStep } from '../../src/domain/route';
 import { testNavManifest } from '../../src/app/navigation-test-helpers';
 import type { NavLegQuery } from '../../src/nav/worker/protocol';
 import { fakeServer, nodeSha256, publicSite } from '../support/fake-fetch';
+import { MAP_WORDING } from '../../src/app/map-wording';
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string): string => {
@@ -148,7 +149,7 @@ const graph = projectTravelGraph(view, workspace.data.flightMasterIds, rules);
 const selection = selectTravelModel({ navigation: { kind: 'available', runtime }, detourFactor: rules.values.groundDetourFactor.value, graph, faction: project.character.faction, dataset: view, geometry });
 const feed = createRoutePathFeed({ store, geometry, timers, now: () => performance.now(), minIntervalMs: 0 });
 const { factory, adapters } = fakeAdapterFactory();
-const controller = createMapController({ store, data: workspace.data, geometry, describeStep: (step, index) => `${String(index + 1)} · ${step.kind}`, paths: feed, timing: null, objectUrls: null });
+const controller = createMapController({ wording: MAP_WORDING, store, data: workspace.data, geometry, describeStep: (step, index) => `${String(index + 1)} · ${step.kind}`, paths: feed, timing: null, objectUrls: null });
 controller.attach(factory, { nodeType: 1, ownerDocument: null });
 controller.jumpToZone(DUROTAR);
 feed.setModel(selection.navigation, runtime, selection.hints);

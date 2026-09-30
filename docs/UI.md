@@ -8,13 +8,16 @@ store. Related: [ARCHITECTURE.md](ARCHITECTURE.md) §12.4 (layout and visual rul
 
 ## 1. Principles
 
-1. **Original.** The product is "Forever Route Lab". The information architecture follows common
+1. **Ours in look.** The product is "Forever Route Lab". The information architecture follows common
    route-planner practice: a dense numbered route list on the left, a large map in the centre,
-   quests and details on the right, a toolbar at the top and a status bar at the bottom. No name,
-   branding, parchment or gold look, icons or assets are taken from any other planner or from the
-   game. Every icon and glyph here is an original inline SVG.
-2. **Dense and desktop-first.** 13px interface text, 28px one-line route rows, 26px controls. The
-   layout degrades in steps below 1280px and stacks below 720px.
+   quests and details on the right, a toolbar at the top and a status bar at the bottom. The layout
+   and affordances may follow WoWF-QRP (D-046: the route's quests with "!" and "?" marks, the quest
+   lists, the buttons); the glyphs, the code and the palette are ours (warm neutrals, D-048 E). No
+   name, branding, parchment or gold look, icons or assets are taken from any other planner or from
+   the game. Every icon and glyph here is an original inline SVG; the "!" and "?" are our own paths
+   (`src/map/marks.ts`).
+2. **Dense and desktop-first.** 13px interface text, 28px one-line route rows, 28px controls (24px
+   small). The layout degrades in steps below 1280px and stacks below 720px.
 3. **Meaning is never carried by colour alone.** Every coloured signal also has a shape, a glyph
    or text, and a spoken form.
 4. **Reserved hues mean one thing each.** The five difficulty colours mean quest difficulty and
@@ -68,19 +71,27 @@ token.
 
 ### 3.1 Colour (theme-dependent)
 
+The neutrals are **warm** (D-048 E; ui-refresh.md §9.5): low saturation (every surface's channels
+within 6%, hue 30° to 45°), never parchment or gold. The accent, severity, difficulty and provenance
+colours are unchanged, so the difficulty colours still sit on near-neutral ground.
+`tests/ui-tokens.test.ts` checks the surfaces stay neutral.
+
 | Token | Light | Dark | Purpose |
 |---|---|---|---|
-| `--frl-bg` | `#dfe3e9` | `#0b0d11` | App backdrop; shows as 1px gutters between panels |
-| `--frl-surface` | `#ffffff` | `#151920` | Panel and row background |
-| `--frl-surface-raised` | `#f5f6f8` | `#1b2029` | Top bar, panel headers, tab strip, status bar, group rows |
-| `--frl-surface-hover` | `#eceff3` | `#232a35` | Row and button hover |
-| `--frl-surface-sunken` | `#e9ecf0` | `#11151b` | Map area |
-| `--frl-border` | `#d5dae1` | `#2a313c` | Hairlines and row separators (decorative) |
-| `--frl-border-strong` | `#737d8b` | `#707c8e` | Control edges and the dashed edge of an uncertain difficulty chip (3:1 on every surface, hovered row and selected row, and against the difficulty well) |
-| `--frl-fg` | `#14181e` | `#e5e8ed` | Primary text |
-| `--frl-fg-muted` | `#4b5563` | `#a7b0bd` | Secondary text, labels, glyphs |
-| `--frl-fg-subtle` | `#5f6978` | `#8d97a5` | Tertiary text: step numbers, details (still 4.5:1) |
-| `--frl-fg-disabled` | `#9aa2ad` | `#58616e` | Disabled controls only (exempt from contrast) |
+| `--frl-bg` | `#e3ded5` | `#0f0e0c` | App backdrop; shows as 1px gutters between panels |
+| `--frl-surface` | `#fdfcfa` | `#1a1815` | Panel and row background |
+| `--frl-surface-raised` | `#f6f4f0` | `#201e1a` | Top bar, panel headers, tab strip, status bar, group rows |
+| `--frl-surface-hover` | `#eeebe5` | `#2a2722` | Row and ghost-button hover |
+| `--frl-surface-sunken` | `#ebe7e0` | `#141210` | Map area |
+| `--frl-surface-later` | `#ebe7e0` | `#11100d` | The band under the route steps after the selection (D-048 B; drawn by UR.3). Decorative: 1.19:1 and 1.10:1 against the surface; every text pair on it passes |
+| `--frl-tile` | `#e2ddd4` | `#2d2a24` | The default button's fill, segmented controls, step discs (visibly filled: 1.2 to 1.3:1 on the panels; the edge carries the shape) |
+| `--frl-tile-hover` | `#d8d2c7` | `#36322b` | The default button's fill on hover, when its edge takes `--frl-fg-muted` |
+| `--frl-border` | `#dcd6cc` | `#35312a` | Hairlines and row separators (decorative) |
+| `--frl-border-strong` | `#777064` | `#827a6d` | Control edges, the hollow and dashed quest-mark rings and badge rims, and the dashed edge of an uncertain difficulty chip (3:1 on every surface, the tile, hovered, selected and later rows, and against the difficulty well) |
+| `--frl-fg` | `#1b1916` | `#ebe7e0` | Primary text |
+| `--frl-fg-muted` | `#4f4a42` | `#b4ac9f` | Secondary text, labels, glyphs; the default button's edge on hover (5:1 or more on the hover tile) |
+| `--frl-fg-subtle` | `#635d53` | `#9c9487` | Tertiary text: step numbers, details (still 4.5:1) |
+| `--frl-fg-disabled` | `#a39c90` | `#5f584e` | Disabled controls only (exempt from contrast) |
 | `--frl-accent` | `#3a4fc4` | `#8ea2ff` | Interactive accent: primary buttons, links, selected tab, brand mark |
 | `--frl-accent-hover` | `#2e40a8` | `#a9b8ff` | Hover of the above |
 | `--frl-accent-fg` | `#ffffff` | `#0d1014` | Text on accent |
@@ -91,11 +102,14 @@ token.
 | `--frl-severity-error` | `#b0157f` | `#ff7ac8` | Error (magenta) |
 | `--frl-severity-warning` | `#7a3fc2` | `#c3a2ff` | Warning (violet) |
 | `--frl-severity-info` | `#2560b0` | `#7fb0ff` | Info (blue) |
+| `--frl-danger` | `#b0157f` | `#ff7ac8` | Destructive actions (the danger button's text and edge). The error hue on purpose: destructive and error share one meaning, "this loses or breaks something" |
+| `--frl-danger-bg-hover` | `#fbe9f3` | `#3b1731` | The danger button's hover fill |
 | `--frl-forever` | `#006d7d` | `#3ccfe0` | **Reserved:** Forever provenance glyphs and text |
 | `--frl-forever-bg` | `#e0f3f6` | `#0f2f35` | Background of the full provenance badge |
-| `--frl-assumed` | `#5f6978` | `#a7b0bd` | Assumed and Era-fallback markers (neutral on purpose) |
-| `--frl-xp-track` | `#dde2ea` | `#262d38` | XP and progress bar track |
+| `--frl-assumed` | `#635d53` | `#b4ac9f` | Assumed and Era-fallback markers (neutral on purpose) |
+| `--frl-xp-track` | `#e2ddd4` | `#2d2a24` | XP and progress bar track |
 | `--frl-xp-fill` | `#3a4fc4` | `#8ea2ff` | XP and progress bar fill |
+| `--frl-xp-tick` | white at 60% | page ink at 60% | The XP bar's 20 tick marks (drawn by UR.5; decorative, dropped under forced colours) |
 | `--frl-xp-hatch` | accent at 35% | accent at 35% | Lower-bound hatching beyond the known XP (supplementary: the notch and `≥` carry the lower bound) |
 | `--frl-unknown-hatch` | `#737d8b` | `#707c8e` | Hatching of unknown bars: unknown XP, and indeterminate progress under reduced motion (3:1 on the track, so an unknown bar never passes for an empty one) |
 | `--frl-placeholder-stripe` | ink at 6% | ink at 5% | Hatching of the Placeholder label (decorative: the dashed edge and the word carry it) |
@@ -104,6 +118,8 @@ token.
 | `--frl-overlay` | ink at 45% | black at 60% | Dialog backdrop |
 | `--frl-shadow` | soft | deeper | Floating cards and dialogs |
 | `--frl-difficulty-well-border` | `#101216` | `#3a4350` | Edge of the difficulty chip |
+| `--frl-map-label-halo` | white at 85% | near-black at 85% | The painted map style's label halo, laid under its labels and the selection ring (map-presentation.md §25.5, §25.6) |
+| `--frl-map-hatch` | black at 35% | white at 35% | The map's optional faction hatching (D-039 C; decorative: the words carry it) |
 
 ### 3.2 Colour (theme-independent)
 
@@ -114,9 +130,24 @@ token.
 | `--frl-difficulty-difficult` | `#ffff00` | **Reserved:** difficult (yellow) |
 | `--frl-difficulty-verydifficult` | `#ff8040` | **Reserved:** very difficult (orange) |
 | `--frl-difficulty-impossible` | `#ff1a1a` | **Reserved:** impossible (red) |
-| `--frl-difficulty-well` | `#101216` | Dark chip behind difficulty colours, in both themes |
+| `--frl-difficulty-well` | `#101216` | Dark chip behind difficulty colours, in both themes; the glyph and keyline of a filled quest mark, drawn on the difficulty-coloured disc (the same pair, 4.75 to 17.46:1) |
 | `--frl-difficulty-pip-off` | `#2a3039` | Unlit difficulty pips (every lit pip reaches 3:1 against it) |
-| `--frl-difficulty-unknown` | `#c9ced6` | Level text when difficulty is unknown (not a difficulty) |
+| `--frl-difficulty-unknown` | `#c9ced6` | Level text when difficulty is unknown (not a difficulty); the fill of a filled quest mark whose difficulty is unknown |
+
+The map's own tokens are theme-independent because the map's bases are (map-atlas.md §6.2, §19.3;
+map-presentation.md §25.5; `tests/ui-tokens.test.ts` checks their contrast and hue distances):
+
+| Token | Value | Purpose |
+|---|---|---|
+| `--frl-map-sea-deep`, `--frl-map-sea-coast` | `#3d3729`, `#837658` | The painted atlas's water, deep offshore and at the coast (D-042 O3) |
+| `--frl-map-frame-atlas` | `#e8dfc8` | Frames and captions over the atlas tiles (the Zephras Isle card, the city cards) |
+| `--frl-map-sea-navy` | `#0d1b30` | The minimap style's one even navy sea (D-045 item 4, D-049 O12), 15 or more (CIEDE2000) from both cyan tokens |
+| `--frl-map-pin`, `--frl-map-pin-glyph` | `#101216`, `#f2f2f2` | The pins' dark body (the difficulty well) and light keyline; the light family (services) swaps them (D-047) |
+| `--frl-map-minimap-ink`, `-ink-muted`, `-halo`, `-route` | `#f2f2f2`, `#c8cdd4`, near-black at 85%, `#8ea2ff` | The minimap style's ink set: labels and borders, network lines, the halo under both, the route line and the selection ring |
+| `--frl-map-drawer-width` | 300px | The Map layers drawer (map-presentation.md §25.3.1) |
+
+The difficulty colours are drawn **on or under the well**: on it in the chip, and under it in a
+filled quest mark, whose disc takes the colour beneath the well's "!" or "?" (ui-refresh.md §5.1).
 
 The five difficulty values **mirror `DIFFICULTY_COLORS` in `src/rules/difficulty.ts`** (the
 Era client's `QuestDifficultyColors`, SIMULATION.md COL-1). A stylesheet cannot import a
@@ -139,12 +170,15 @@ is the same object, kept for the kit's export list).
 | `--frl-weight-regular` / `-medium` / `-bold` | 400 / 500 / 650 | |
 | `--frl-space-half`, `--frl-space-1` … `-6` | 2, 4, 8, 12, 16, 24, 32px | 4px grid with a 2px half step |
 | `--frl-row-height` | 28px | Route rows (fixed; the virtualiser relies on it) |
-| `--frl-control-height` / `-sm` | 26 / 22px | Buttons, inputs, selects / small buttons and in-row affordances |
+| `--frl-row-height-two-line` | 40px | Two-line route rows, the default density from UR.3 (D-048 A); `ROUTE_ROW_HEIGHT_TWO_LINE` will equal it |
+| `--frl-control-height` / `-sm` | 28 / 24px | Buttons, inputs, selects / small buttons and each segment of a segmented control. 24px meets WCAG 2.2 target size (2.5.8) without relying on spacing; a small button leaves 4px above and below in the 32px status bar for the ring. The route rows' in-row affordances are 20 × 16px under 2.5.8's equivalent exception (§9 rule 13) |
 | `--frl-topbar-height`, `--frl-statusbar-height` | 44px, 32px | Shell bars |
-| `--frl-tab-height`, `--frl-panel-header-height` | 32px, 32px | Tab strip, panel headers |
+| `--frl-tab-height`, `--frl-panel-header-height` | 36px, 32px | Tab strip, panel headers |
 | `--frl-left-width`, `--frl-right-width` | 340px, 340px | Route panel (320-380px, set by `AppShell`), side panel |
 | `--frl-gap` | 1px | Panel gutters |
-| `--frl-radius-sm` / `--frl-radius` / `-lg` | 3 / 4 / 8px | Badges / controls / cards and dialogs |
+| `--frl-radius-sm` / `--frl-radius` / `-lg` | 3 / 4 / 8px | Badges / fields and panels / cards and dialogs |
+| `--frl-radius-control` | 6px | Buttons, icon buttons, segmented controls, search fields |
+| `--frl-mark-size` / `-compact` | 22 / 18px | Quest and step marks in two-line and one-line rows and in quest lists |
 | `--frl-focus-width` | 2px | Focus ring width |
 | `--frl-duration-fast` / `--frl-duration` / `--frl-ease` | 90 / 140ms, ease-out | Transitions; 0 under reduced motion |
 | `--frl-z-sticky` / `--frl-z-drag` | 10 / 20 | Splitter / drop line |
@@ -158,6 +192,11 @@ is the same object, kept for the kit's export list).
 | Signal | Colour | Non-colour cue | Text |
 |---|---|---|---|
 | Quest difficulty | the five reserved colours, on the dark difficulty well | 1-5 filled pips (trivial 1 … impossible 5): 2px bars with 1px gaps on whole pixels, crisp edges, lit 3:1 against unlit | "Difficult (yellow)" in the tooltip and screen-reader text; visible word in `full` variant |
+| Quest-mark difficulty (`QuestMark`) | the reserved colour fills the disc under the well's "!" or "?", with a well keyline; only on a disc of 11px or more (22 and 18px, so always in rows), D-041 G as D-047 words it | the pips on the chip beside the mark | the row's or list item's name |
+| Quest-mark state (the one table, map-presentation.md §25.2.3) | none | filled or hollow; a dashed ring for "not sure"; the lock, level or progress-pie badge top right, the dungeon-quest arch top left; "!" or "?" | "May be available: …", "Needs …", "Ready to turn in", "1 of 3 objectives done" |
+| Step kind (`StepMark`) | none | the glyph on a neutral disc (the tile, a hairline edge); the map's flight point, vendor and innkeeper pins are the filled forms of the same glyphs (one symbol per concept) | the kind in the row's name |
+| Destructive action | `--frl-danger` (the error hue, by design) | the delete icon or the words "Delete …" | the label |
+| Pressed toggle, expanded disclosure | accent | the doubled accent edge and bold text (a 2px `Highlight` edge under forced colours) | `aria-pressed`, `aria-expanded` |
 | Difficulty from a lower-bound level | same | dashed chip edge in `--frl-border-strong` (3:1 on every row state) | "…from a lower-bound level: may be easier" |
 | New in Forever | cyan | ◆ glyph | "New in Forever (per the dataset)" |
 | Changed in Forever | cyan | ◇ glyph | "Changed in Forever (per the dataset)" |
@@ -176,11 +215,16 @@ is the same object, kept for the kit's export list).
 
 Rules:
 
-- Difficulty colours appear only through `DifficultyLabel` (or components built on it).
+- Difficulty colours appear only through `DifficultyLabel` or components built on its rating: the
+  quest mark (`QuestMark`) and the map's pins. `tests/ui-tokens.test.ts` allows only the chip's and
+  the mark's rules (`.frl-difficulty--*`, `.frl-quest-mark--*` in `markers/markers.css`) to read
+  `--frl-difficulty-*`, and no component to set them in a style attribute.
+- The "!" is never in a triangle (the warning shape) and never in a gold of its own: its only
+  colours are the five difficulty colours, on a disc.
 - Cyan appears only through `ProvenanceBadge`.
-- Severity, accent and provenance hues sit at least 30° of hue away from every difficulty hue, and
-  the severity, accent and XP hues at least 25° away from the provenance cyan; `tests/ui-tokens.test.ts`
-  checks both in each theme.
+- Severity, danger, accent and provenance hues sit at least 30° of hue away from every difficulty
+  hue, and the severity, danger, accent and XP hues at least 25° away from the provenance cyan;
+  `tests/ui-tokens.test.ts` checks both in each theme.
 - Validation never borrows difficulty red or orange, and difficulty never uses the severity icons.
 - *Milestone 6:* the issue indicators, the Validation tab's counts and its issues use the three
   severity tokens above (§3.1, unchanged since Milestone 1, already checked for hue distance and
@@ -192,9 +236,10 @@ Rules:
 - Interface text is 13px on an 18px line; secondary text 12px; small caps labels (panel
   sections, status bar labels) 11px bold with letter spacing.
 - Numbers that line up use tabular figures (`frl-num`).
-- Route rows are exactly 28px and one line: long titles ellipsise, details live in the right
-  panel. Group headers are rows of the same height.
-- Controls are 26px (22px inside rows). Icon buttons are square.
+- Route rows have one fixed height per list (D-048 A): two lines of 40px by default, one line of
+  28px as View's compact choice. Line 1 starts with the verb ("Accept", "Turn in", "Travel"); long
+  titles ellipsise and details live in the right panel. Group headers are rows of the same height.
+- Controls are 28px (24px small and inside rows). Icon buttons are square.
 - Panels are separated by 1px gutters of `--frl-bg`, not by borders, so the panel edges stay crisp
   in both themes.
 
@@ -204,7 +249,7 @@ Rules:
 
 ```
 ┌────────────────────────── top (44px) ──────────────────────────┐
-│ left 320-380px  │           centre (flexible)       │ right 340px │
+│ left 300-460px  │           centre (flexible)       │ right 300-460px │
 │ route editor    │           map / placeholder       │ side panel  │
 ├────────────────────────── bottom (32px) ───────────────────────┤
 ```
@@ -213,16 +258,17 @@ Rules:
 |---|---|
 | > 1440px | Everything visible; action buttons show icon and word |
 | ≤ 1440px | The status bar's route XP total hides (the route summary keeps it, §16); the optimiser item, while it is unavailable, leaves the view (still in the page, so still spoken) |
-| ≤ 1280px | Status bar gaps tighten to 8px; the identity badges drop their key words from view ("65c377bc", "forever-beta"; "Data" and "Ruleset" are still spoken and in the tooltips) |
-| ≤ 1200px | Top-bar action words become visually hidden (icon buttons with names and tooltips) |
+| ≤ 1280px | Status bar gaps tighten to 8px; the identity badges drop their key words from view ("65c377bc", "forever-beta"; "Data" and "Ruleset" are still spoken and in the tooltips); "In log" leaves the status bar (the Quest log tab and its name say it) |
+| ≤ 1200px | Top-bar action words become visually hidden (icon buttons with names and tooltips); the character button drops "· Horde" and keeps "Orc Warrior" |
 | ≤ 1180px | XP numbers in the status bar hide (the bar and its spoken value stay, and an unknown value keeps its visible "XP ?") |
-| ≤ 1100px | The status bar's step title hides (the active row and the Step item's tooltip name it) and the XP track narrows to 64px |
-| ≤ 1024px | Two columns: the route panel keeps the full height (36%, min 280px); the side panel moves under the map; the splitter hides (the map's layer panel stays a toggle, §12); the status bar may take a second line rather than cut anything, and its grid row follows it |
+| ≤ 1100px | The XP track narrows to 64px; the character button shows its settings glyph alone (its name stays "Orc Warrior · Horde, settings") |
+| ≤ 1024px | Two columns: the route panel keeps the full height (36%, min 280px); the side panel moves under the map; the splitter hides (the map's Map layers drawer lies over the stage there, §12); the status bar may take a second line rather than cut anything, and its grid row follows it |
 | ≤ 900px | The product name hides (the mark stays) |
 | ≤ 720px | One column; the page scrolls; top and status bars wrap; the open route summary is laid out in the flow under its button |
 
-**Status bar priorities** (Milestone 6 review UI-01, UI-02). Items never shrink except the step
-title, which is its own flex item and gives way first. The Step item keeps its label and number;
+**Status bar priorities** (Milestone 6 review UI-01, UI-02; ui-refresh.md §8). Items never shrink.
+The level and its place ("Lv 4 after step 12") replace the Step item and its title: the active
+step's number and title are the level's tooltip, and the selected row names the step;
 the simulation item (§16) keeps its label, progress bar, count and Cancel or Resume whole, its
 words capped at 160px (the longest state, "Some straight-line estimates", is 151px). The bar clips
 sideways only (`overflow-x: clip`): it is never a scroll container, so focusing an item cannot
@@ -233,9 +279,53 @@ at 721, 800, 900, 1024, 1100, 1200, 1280, 1366, 1440 and 1600px, in both themes,
 content ends inside it, no item's content is cut, every state's words are whole, and Cancel and
 Resume, focused by keyboard, lie inside the bar with a complete ring (and under forced colours).
 
-The route panel is resizable-ready: pass `leftWidth` and `onLeftWidthChange` and `AppShell`
-renders a `separator` on its right edge (pointer drag; ←/→ by 4px, Shift for 20px, Home/End for
-the limits). Widths are clamped to 320-380px (`clampLeftWidth`).
+**Side panels** (ui-refresh.md §4.1 to §4.3). Both panels are resizable: pass `leftWidth` and
+`onLeftWidthChange` (or `rightWidth` and `onRightWidthChange`) and `AppShell` renders a
+`separator` on the panel's inner edge (pointer drag; ←/→ move the splitter by 4px, Shift for 20px,
+so ← widens the right panel; Home/End for the limits). Widths are clamped to 300-460px
+(`clampLeftWidth`, `clampRightWidth`), 340px by default. With `layout` and `onLayoutChange` either
+panel collapses and comes back three ways: its **handle**, an 18 × 44px tab on the map's edge below
+the map's top row ("Hide the route panel" ‹ / "Show the route panel" ›, and the same for "the quests
+and details panel"); **Enter on its separator** (the window splitter's collapse key,
+`aria-keyshortcuts="Enter"`); and **map focus**, a pressed toggle at the map's top right ("Map
+focus", Alt+M) that hides both and restores them as they were. Showing one panel from map focus ends
+map focus with that panel alone. A collapsed panel is not drawn (`hidden`) and its grid column goes;
+below 1024px a collapsed side panel no longer moves under the map. Focus never stays on something
+hidden: collapsing from a handle or a separator puts focus on the handle that now shows it,
+restoring from a handle puts it into the panel (the route list, or the selected tab), and when Alt+M
+hides the panel that has focus, focus moves to the Map focus toggle. As built (review UI-18), the
+Map focus toggle keeps focus when it ends map focus, as a toggle button does (ui-refresh.md §4.3's
+"restoring moves focus into it" holds for the handles); and a separator, hidden with its panel,
+cannot restore it: Enter on a separator collapses, and the handle restores. The handles sit in the
+DOM after the route panel and before the side panel, so each takes its hidden panel's place in the
+tab order. While the Map layers drawer is open, the route panel's handle sits on the drawer's outer
+edge rather than over its first row (review PR-08, UI-10, QA-11). At 1024px and below, where the
+side panel sits under the map, its handle is on the map's bottom edge (the panel's own top edge),
+left of the Map view toolbar, with its chevron turned down to hide the panel and up to show it
+(review QA-21). When a panel beside the map collapses or comes back, the map pans by as much as its
+edge moved, so what is on the map stays where it was on the screen and the new room shows more map
+(review QA-16). The centre is a stacking context of its own (`isolation: isolate`), so the map's panes
+stay inside it and the handles and the separators' overhang are drawn over the map and take the
+pointer. The widths, the collapse flags and map focus are kept per browser (§11). Until MP.4b
+floats the map's controls, the Map focus toggle sits at the right end of the map's toolbar row,
+which keeps room for it.
+
+**Route panel** (ui-refresh.md §4.1). One job, no tabs: a 36px header (the open project's name,
+which opens the Projects menu and which Rename… changes, §13; View; Undo and Redo), a meta line ("55
+steps · 1 selected · Orc Warrior from level 1", and a second line for a sample route or
+placeholder data, which carries its Sample or Placeholder tag, so the name keeps about 200px of the
+header; review UI-07), the list, the step toolbar and the Add footer ("Add after step 12": Grind,
+Travel, Hearth, Train, Buy, Note; the buttons wrap onto a second line in a narrow panel). **View**
+is a non-modal disclosure like the status bar's Summary (Escape, the button, a press outside or
+focus leaving it closes it; Escape returns focus to the button): "Rows" (Two lines, One line),
+the two-line rows' "Top number" (XP gained, Step time) or the one-line rows' "Rows show", and the key
+to the marks, which replaces the banner's always-visible key. Its popup is placed in the header,
+right-aligned with a 6px gutter and at most the panel's width less 12px, so it stays inside the
+panel at every width from 300 to 460px (review UI-03, QA-07).
+
+**Side panel tabs** fill the strip (equal shares of the room their words leave) and are 36px tall;
+the selected tab has body-colour bold text and the 2px accent bar. A tab's name starts with its
+visible label: "Quest log, 4 quests after step 12", "Validation, 1 error" (WCAG 2.5.3).
 
 Landmarks: the top bar is a `header` (banner); the route editor is `main` ("Route editor"); the
 map is a region ("Map"); the side panel is an `aside` ("Quests and details"); the status bar is a
@@ -250,19 +340,29 @@ containing blocks, absolutely positioned content such as `.frl-visually-hidden` 
 the initial containing block and lengthens the page (the M1 review measured a 176px page scroll
 at 1366×657 with Details open). At 720px and below the page scrolls as a whole.
 
-**Map panel.** The centre is the map (§12): a 32px toolbar, the stage the map engine fills, the
-layer panel and the map key beside the stage when it is open (never over it), and a 24px status
-line. Below 560px of panel width (a container query) the open layer panel lies over the stage's
-right edge instead of squeezing it, and the toolbar's "Schematic map: zone frames, not terrain"
-badge shows its short form, "Schematic" (the full text stays its tooltip and starts the map's
-instructions, M3 review MAP-A11Y-13).
+**Map panel.** The centre is the map (§12; map-presentation.md §25.3.0): the stage takes the whole
+region and its controls float on it (Map layers at the top left, Map focus at the top right, the
+Map view toolbar at the bottom right, the caption at the bottom left). The 300px Map layers drawer
+docks on the stage's left from a 900px map region (a container query) and lies over the stage's
+left edge below that. Below 560px the caption's "Schematic map: zone frames, not terrain" shows its
+short form, "Schematic" (the full text stays its tooltip and starts the map's instructions, M3
+review MAP-A11Y-13). Beside a drawer that lies over the stage, the caption moves to the drawer's
+right, as Map layers does, and its lines wrap there, so a pick's instructions stay visible (review
+QA-12); the Viewing chip keeps to the room between Map layers and Map focus, ellipsised (its words
+stay whole for assistive technology; review PR-08, QA-13); and in a map under 560px an open drawer
+hides the Map view toolbar, the scale and the Viewing chip until it closes, rather than have them
+draw over it (review QA-14). "Both continents" in the top bar's "Go to zone or view…" fits the
+whole atlas, the inset card included, on every choice, also when the atlas is already shown
+(review QA-03).
 
 **Checked by hand.** happy-dom has no layout, so the tests check the mechanism (containing blocks,
 overflow, grid areas; `tests/ui-tokens.test.ts`) and these results are checked in a browser after
-layout changes: at 1920×1080, 1366×657, 1280×600, 1201×700, 1100×700 and 1024×768, in both
+layout changes (UR.3 to UR.6 add: with either panel collapsed and in map focus, the page still
+never scrolls and every bar keeps its controls inside it): at 1920×1080, 1366×657, 1280×600, 1201×700, 1100×700 and 1024×768, in both
 themes, with Details open on a quest step, `document.documentElement.scrollHeight` equals
-`innerHeight`, `window.scrollTo(0, 500)` moves nothing, and with the layer panel open the bounding
-rectangles of `.frl-mapframe__stage` and `.frl-mapframe__side` do not intersect. *Milestone 3:*
+`innerHeight`, `window.scrollTo(0, 500)` moves nothing, and with the drawer docked the bounding
+rectangles of `.frl-mapframe__stage` and `.frl-mapframe__drawer` do not intersect (MP.4b: not yet
+checked in a browser; the tests check the order and classes only). *Milestone 3:*
 checked at 1366×768 in the built-in browser, light theme only (the page does not scroll with the
 layer panel open; stage 424px and panel 260px wide, side by side); the other sizes and the dark
 theme are still to check.
@@ -273,46 +373,55 @@ All exported from `src/ui/kit.ts`.
 
 | Component | File | Purpose and key props |
 |---|---|---|
-| `AppShell` | `shell/AppShell.tsx` | Grid frame: `top`, `left`, `centre`, `right`, `bottom`; `leftWidth`, `onLeftWidthChange` |
-| `TopBar` | `shell/TopBar.tsx` | Product, project › route (with `placeholder` label; `placeholderLabel` "Sample" for the generated sample route), quest search (`search`), jump to zone (`zones`), Import, Export, Settings, theme toggle, About |
-| `RouteList` | `route/RouteList.tsx` | Virtualised listbox of `RouteRowModel`s; controlled `activeIndex` and `selectedKeys`; selection, editing and drag callbacks by index (§8); `deriveRow(row, index)` fills a step row's derived values as it renders (only mounted rows ask) and `estimateColumn` picks the estimate the rows show (§8, §16) |
-| `StepRow`, `GroupRow` | `route/StepRow.tsx` | One 28px row: number, step glyph, title and detail, provenance, difficulty, issue marker (worst severity's shape and the total), one estimate (`estimateColumn`: level after, XP gained or step time, with its markers) and the pending hourglass, lock toggle; duplicate and delete on hover or when active (pointer-only affordances, §8); `groupLabel` for the spoken "in group …". `describeStepRow` says every estimate, pending travel and the issues by severity; `formatXpGained` (`+450`) |
-| `StepTypeGlyph` | `markers/StepTypeGlyph.tsx` | Original glyphs for accept, complete, turnin, abandon, travel, grind, hearth, flight, train, vendor, note |
+| `AppShell` | `shell/AppShell.tsx` | Grid frame: `top`, `left`, `centre`, `right`, `bottom`; `leftWidth`, `onLeftWidthChange`, `rightWidth`, `onRightWidthChange` (300-460px); `layout` (`ShellLayout`: `leftCollapsed`, `rightCollapsed`, `mapFocus`) and `onLayoutChange`, which add the panel handles, Enter on the separators and the Map focus toggle (§6) |
+| `TopBar` | `shell/TopBar.tsx` | Product, quest search (`search`), "Go to zone or view…" (`zones`), the character button (`character`: "Orc Warrior · Horde", opens Settings, D-048 D), Import, Export, theme toggle, About (ui-refresh.md §8) |
+| `RouteList` | `route/RouteList.tsx` | Virtualised listbox of `RouteRowModel`s; controlled `activeIndex` and `selectedKeys`; selection, editing and drag callbacks by index (§8); `density` (`two-line`, the default, or `one-line`); `deriveRow(row, index)` and `deriveGroup` fill a row's derived values as it renders (only mounted rows ask); `topNumber` (two-line rows) and `estimateColumn` (one-line rows) pick the numbers (§8, §16); `insertAt`, the row boundary where new steps go, draws the insertion line and the later band |
+| `StepRow`, `GroupRow` | `route/StepRow.tsx` | One route row (§8): two lines of 40px (the number, which is the drag handle; the mark; line 1 with the verb, title, chain, provenance, issue marker and lock; line 2 with the chip and where, or the worst issue in words, and the row actions; the top number over the level after) or one line of 28px (`density="one-line"`: the 18px mark, the verb and title, one estimate by `estimateColumn`, the lock; duplicate and delete on hover or when active). `groupLabel` for the spoken "in group …". `describeStepRow` says the row in a fixed order (number, kind, title with its chain part and where, group, the mark's state, difficulty, provenance, every estimate with a level-up, the issues and the worst one's words, the lock), never doubling a full stop; `formatXpGained` (`+450`) |
+| `StepTypeGlyph` | `markers/StepTypeGlyph.tsx` | Original glyphs for accept, complete, turnin, abandon, travel, grind, hearth, flight, train, vendor, note (16, 14 or 12px) |
+| `QuestMark` | `markers/QuestMark.tsx` | A quest's "!" or "?" in a row or a quest list (ui-refresh.md §5.1), 22px (`md`) or 18px (`compact`), in one of the eight quest-mark states of the one table (`src/map/marks.ts`, read through `app/map-exports` as the same objects the map's pins draw). Filled states take the difficulty colour on the disc with a well glyph and keyline (an unknown difficulty takes the neutral `--frl-difficulty-unknown`); hollow states are a strong ring with an ink glyph; "not sure" is a dashed ring; badges sit in the map's slots (`progress` fills the pie, `unlockLevel` the level pill, `dungeonQuest` the arch). `questMarkColour` says when the mark is coloured, so the caller draws the chip's pips beside it. Decorative (`aria-hidden`) |
+| `StepMark` | `markers/StepMark.tsx` | The other step kinds on a neutral disc (the tile, a hairline edge) with `StepTypeGlyph` in the muted ink, 22 or 18px; decorative |
 | `DifficultyLabel` | `markers/DifficultyLabel.tsx` | Quest level chip with difficulty colour, pips and text; `uncertain` for lower-bound levels |
 | `ProvenanceBadge` | `markers/ProvenanceBadge.tsx` | ◆ / ◇ in cyan, user-declared variant; `compact` or `full`. `foreverProvenanceOf(record.provenance)` derives its input |
 | `AssumedMarker` | `markers/AssumedMarker.tsx` | `≈` (assumption) or `E` (Era fallback) with text |
 | `PendingMarker` | `markers/PendingMarker.tsx` | The neutral hourglass of a provisional number, with its words (`detail`, default `PENDING_TRAVEL_TEXT`; `PENDING_TRAVEL_TEXTS` by `PendingTravel`: `path`, `retrying`, `paused`, `failed` or `checking`, from the route-wide `pendingTravelReason`, Milestone 6 review UI-04); `silent` inside a route row, whose name says it |
 | `ReadoutValue` | `markers/ReadoutValue.tsx` | Renders a `Readout<T>`: `≥` (lower bound, "at least"), `≤` (upper bound, "at most"), markers, `?` with reason; `pending` (a sentence) draws the value in italics with the pending marker |
 | `SeverityIcon` | `markers/SeverityIcon.tsx` | Error, warning, info shapes |
-| `SidePanel` | `shell/SidePanel.tsx` | Tabs Available, Quest log, Details, Validation with counts; one content node per tab |
+| `SidePanel` | `shell/SidePanel.tsx` | Tabs Available, Quest log, Details, Validation with counts (`questLog`: the tab's count and its words); one content node per tab |
 | `Tabs` | `shell/Tabs.tsx` | Accessible tablist, controlled, automatic activation; one tabpanel that every tab controls |
-| `PanelSection`, `EmptyState`, `DetailList`, `IssueList`, `QuestListItem` | `shell/PanelContent.tsx` | Side-panel building blocks; `QuestListItem` takes `onOpen` ("Show in Details: <quest>", the info icon) and `onAdd`. `IssueList`: severity shape and word, message, where (step or "Route"), code and the code's `explanation`; with `onSelect` the issues about a step are buttons named in words (`describeIssue`: "Error, step 12: … (VAL004-min-level)", described by the explanation) forming one composite: one tab stop, ↑ ↓ Home End between them (§16) |
-| `StatusBar` | `shell/StatusBar.tsx` | XP bar, current step, the route's duration, XP (`xpGained`) and XP/hour with the pending marker while `provisional`, the `summary` and `simulation` slots, optimiser state and progress, data and ruleset badges |
+| `PanelSection`, `EmptyState` | `shell/PanelContent.tsx` | Side-panel building blocks |
+| `QuestGrid`, `QuestGroupHeader`, `QuestListItem`, `QuestObjectiveRow` | `shell/PanelContent.tsx` | The quest lists as WAI-ARIA layout grids (ui-refresh.md §5.4, §5.5, §9.3): one tab stop that remembers its item (moved through the DOM, not React state); ↑ ↓ between rows, group headings included; ← → along a row; Home and End; Ctrl+Home and Ctrl+End; PageUp and PageDown by ten rows (`gridKeyTarget`); described by `QUEST_GRID_KEYS`. `QuestGroupHeader`: a sticky 28px row whose one `rowheader` takes focus and says the group ("Razor Hill, Durotar 5-12, 6 quests"). `QuestListItem` (memoised): the `QuestMark` in its state, the name as a button that opens Details (`nameLabel` says the row), the chain and provenance; line 2 with the chip beside a coloured mark and the giver or reason; `needs` ("Needs <prerequisite>" as a link and Accept first as the next cell); `actions` at the row's end (Accept; Objectives done and Turn in), `aria-disabled` with their reason when unavailable. `QuestObjectiveRow`: ○, ✓ or ? with its words, and Done here while it is open |
+| `DetailList`, `IssueList` | `shell/DetailParts.tsx` | Term/value pairs for Details; `IssueList`: severity shape and word, message, where (step or "Route"), code and the code's `explanation`; with `onSelect` the issues about a step are buttons named in words (`describeIssue`: "Error, step 12: … (VAL004-min-level)", described by the explanation) forming one composite: one tab stop, ↑ ↓ Home End between them (§16). Only the lazy parts use them, so they are imported from their file (the kit exports their types only, §11) |
+| `StatusBar` | `shell/StatusBar.tsx` | "Lv 4 after step 12" and the XP bar (the level merges with `currentStep`, whose title is the level's tooltip), the route's duration, XP (`xpGained`) and XP/hour with the pending marker while `provisional`, "In log 4 / 40" (`questLog`), the `summary` and `simulation` slots, optimiser state and progress, data and ruleset badges |
 | `RouteSummary` | `shell/RouteSummary.tsx` | The "Summary" disclosure in the status bar: a table of the route metrics (`rows`: term, value, basis in words), `notes` and every parameter the route reads (`parameters`, each with its origin), opened above the status bar (in the flow at 720px and below); Escape, the button, a press outside or focus leaving it closes it (§16) |
 | `SimulationStatus` | `shell/SimulationStatus.tsx` | The simulation's item in the status bar (`SimulationStatusModel`): loading, failed, checking navigation data, computing walking paths (progress bar, or counting while the total is unknown; `onCancel`), paused (`onResume`), straight-line travel with the reason; nothing when there is nothing to say, unless it holds keyboard focus (§16) |
-| `XpBar` | `shell/XpBar.tsx` | Level and XP progressbar with lower-bound, unknown and cap states |
-| `MapFrame`, `LayerPanel`, `MapHoverText` | `shell/MapFrame.tsx` | The map panel's frame (§12), memoised: surface `Select`, a `Toolbar` of `MapCommand`s (unavailable ones `aria-disabled` with their reason) and the Layers toggle, the always-visible map-kind `notice` (with `noticeShort` for narrow panels), the `stageRef` host the engine mounts into, the visually hidden instructions (`instructionsId`), the layer panel (`MapLayerRow`s: checkbox, the layer's `glyph`, count, notes, disabled with a reason) with the map key under it, the `status` line and the `hover` text (a string, or an element that renders `MapHoverText` so only it re-renders), and `choice`: the items at a clicked point where several share it (a `dialog` beside the point, `mapChoicePosition`; focus on the first item, arrows, Home and End between items, Escape or a press outside closes, focus back to the map); `engine` shows loading, failed (with "Try again") or unavailable over the stage |
-| `MapGlyph`, `MapLegend` | `shell/MapLegend.tsx` | The map key (§12): `MapGlyph` draws one canvas glyph, line style or badge as a 20 × 16 inline SVG (`aria-hidden`, kit colours, the canvas geometry and dash patterns); `MapLegend` lists `MAP_KEY` (markers, route lines, badges, each with its meaning) and `MAP_GRID_NOTE` (the grid's axes) |
+| `XpBar` | `shell/XpBar.tsx` | Level and XP progressbar (200 × 12px, 20 decorative ticks in `--frl-xp-tick`) with lower-bound, unknown and cap states; `after` ("after step 12") shown small after the level |
+| `MapFrame`, `MapHoverText`, `useMapRegionDocking` | `shell/MapFrame.tsx` | The map panel's frame (§12), memoised: the stage takes the region and the controls float on it: the Map layers toggle (a disclosure, `aria-expanded`), the claimed Map focus toggle, the Map view `Toolbar` of `MapCommand`s in groups (zoom; fit and focus; unavailable ones `aria-disabled` with their reason), the caption (the always-visible map-kind `notice` with `noticeShort` for narrow maps, the `caption` lines and the `hover` text, a string or an element that renders `MapHoverText` so only it re-renders; never a live region), the `stageRef` host the engine mounts into, the visually hidden instructions (`instructionsId`), the `drawer` (docked from a 900 px region, `useMapRegionDocking`, else over the stage), and `choice`: the items at a clicked point where several share it (a `dialog` beside the point, `mapChoicePosition`; focus on the first item, arrows, Home and End, Escape or a press outside closes); `engine` shows loading, failed (with "Try again") or unavailable over the stage |
+| `MapCategoryDrawer`, `DrawerIconView`, `MapKey` | `shell/MapCategoryDrawer.tsx`, `shell/MapKey.tsx` | The Map layers drawer (§12), a lazy part: the style `SegmentedControl`, the notices, the `SearchField` with its results (a roving tabindex, Up from the first back to the field), Show all, Hide all and Defaults, the groups (each one stop: a roving tabindex over the group's mixed-state `Checkbox` and its rows; unavailable rows `aria-disabled` with their reason), and `MapKey` (pins, badges, route lines, the atlas's arcs and insets, the base maps' notices and which is shown, `MAP_GRID_NOTE`) in a closed disclosure. `DrawerIconView` draws a row's pin in monochrome with the map's own paths, or a line or area swatch, as an inline SVG in `currentColor` (`aria-hidden`) |
 | `MapPlaceholder` | `shell/MapPlaceholder.tsx` | *Milestone 1-2 centre panel, no longer rendered by the app (Milestone 3).* Kept, with its CSS, because `tests/ui-tokens.test.ts` checks its card-and-stub grid; it can go once that check moves to `MapFrame` |
-| `AboutDialog` | `shell/AboutDialog.tsx` | Licence (GPL-3.0-or-later) and no-warranty line, data notice (D-016, with the LIC-10 carve-out verbatim; with `dataUpstreamCommit` set it is the real-data notice with the pinned commit, `dataIdentity`'s revision and frame build, and the "Full data notice" link to `data/NOTICE.md`), non-affiliation, source commit link |
+| `AboutDialog` | `shell/AboutDialog.tsx` (a lazy part: the kit exports its props type only) | Licence (GPL-3.0-or-later) and no-warranty line, data notice (D-016, with the LIC-10 carve-out verbatim; with `dataUpstreamCommit` set it is the real-data notice with the pinned commit, `dataIdentity`'s revision and frame build, and the "Full data notice" link to `data/NOTICE.md`), non-affiliation, source commit link |
 | `LoadingScreen`, `LoadErrorScreen` | `shell/BootScreen.tsx` | The screens before the shell (Milestone 2): loading the dataset and geometry, with a progress bar and a `status` line ("Fetching and verifying data files: 3 of 7 (2.9 MB of 9.0 MB)"), then "placing … on the map geometry"; a failed start as an `alert` with title, message, a details disclosure and what can fix it (`remedy`): "Try again" for `reload`, or a sentence instead of the button for `redeploy` ("the deployed files need to be regenerated and redeployed") and `open-over-https` (no WebCrypto: "open the site over https (or on localhost)"). The heading takes focus. `src/ui/Boot.tsx` drives them |
-| `Button`, `IconButton` | `primitives/` | Text and icon buttons; `IconButton` requires `label`, supports `pressed` and `shortcut` (tooltip text and `aria-keyshortcuts`, §9 rule 3). Both style `disabled` and `aria-disabled="true"` alike |
+| `Button`, `IconButton` | `primitives/` | Text and icon buttons (ui-refresh.md §7.1). `Button` variants: `default` (the tile fill with a strong edge that darkens and takes the muted ink on hover), `secondary` (an alias of `default`, kept while `MapFrame` and `ProjectMenu` use it), `primary` (one per context), `danger`, `ghost`, `link` (an inline action drawn as a link); `pressed` makes it a toggle (`aria-pressed`) drawn with the selection tint, bold accent text and a doubled accent edge, and `aria-expanded="true"` draws a disclosure the same way; the name never changes. `IconButton` requires `label`, supports `pressed`, `shortcut` (tooltip text and `aria-keyshortcuts`, §9 rule 3) and `variant` `ghost` or `tile` (`secondary` its alias). Both style `disabled` and `aria-disabled="true"` alike |
+| `ExternalLink` | `primitives/ExternalLink.tsx` (imported from its file) | A link to another site (D-041 J): the external glyph after the words, "(opens in a new tab)" visually hidden in its name, `target="_blank"`, `rel="noopener noreferrer"`, no referrer |
+| `SegmentedControl` | `primitives/SegmentedControl.tsx` (imported from its file) | Native radios in a fieldset with a visually hidden `legend` (arrow keys and one tab stop from the browser); the checked option has the selection tint, a 2px accent underline and bold text; an option with an `unavailable` reason is disabled with it as the tooltip. For View's rows choice and the map's style control |
+| `SearchField` | `primitives/SearchField.tsx` | A `searchbox` with the search icon and a clear button while there is text (`clearLabel`, "Clear search"; it puts focus back in the field); Escape clears text and is left alone in an empty field, so a drawer or dialog around it can close on it; `onArrowDown` moves to the first result. For the Map layers drawer |
 | `Select`, `TextInput` | `primitives/` | Native controls, restyled, always labelled (`hideLabel` keeps the label for assistive technology). `TextInput` also takes `inputMode` (the on-screen keyboard; the value stays text), `describedBy`, `invalid` (`aria-invalid`, with the reason in a described-by element), `readOnly` (focusable and copyable, drawn with a dashed edge on the raised surface) and `onBlur` |
-| `Checkbox` | `primitives/Checkbox.tsx` | A native checkbox with its label after it (`label`, `checked`, `onChange`, `describedBy`) |
+| `Checkbox` | `primitives/Checkbox.tsx` | A native checkbox with its label after it (`label`, `checked`, `onChange`, `describedBy`); `checked="mixed"` is a group heading whose rows differ: the box's `indeterminate` flag (the dash) with `aria-checked="mixed"`, and a press checks it |
 | `Toolbar`, `ToolbarSeparator` | `primitives/Toolbar.tsx` | `role="toolbar"` with one tab stop and arrow-key movement |
 | `PanelHeader` | `primitives/PanelHeader.tsx` | 32px header: title, meta, actions |
 | `Badge`, `PlaceholderTag`, `VisuallyHidden` | `primitives/Badge.tsx` | Identity badges; the "Placeholder" label (`label` "Sample" for stand-in content built from real data, same style) |
-| `Icon` | `primitives/Icon.tsx` | Interface icons in `currentColor` |
+| `Icon` | `primitives/Icon.tsx` | Interface icons in `currentColor`; the refresh adds `undo`, `redo`, `up` and `down` (Move up and down), `left` and `right` (the panel handles), `external` and `map-focus` |
 
 The project-storage components (§13) are not kit components: they read the project session, so
 they live in `src/ui/app/` beside the other store-bound panels and are not exported from the kit.
 
 | Component | File | Purpose and key props |
 |---|---|---|
-| `ProjectBar` | `app/ProjectMenu.tsx` | The project strip: the Projects button (described by the full save status), the save status in words with the warning shape when nothing is kept, "Data changed" (the drift report) and a notices button; owns `ProjectMenuDialog` and `DriftDialog` |
-| `ProjectMenuDialog` | `app/ProjectMenu.tsx` | The Projects dialog: notices, the open project (status, conflict and retry actions, Rename, Duplicate, Export, Delete), the other stored projects (Open, Rename, Duplicate, Export, Delete; a project that cannot be opened says why, path by path, and can still be exported and deleted), New project, and Recently deleted with Restore |
-| `DriftDialog` | `app/ProjectMenu.tsx` | The drift report (ARCHITECTURE §5.5): old and new data revision, missing quests, quests whose objectives or prerequisites changed (named from the loaded data), "unknown" where nothing can be compared; Keep the report / Dismiss the report |
-| `ImportDialog`, `ExportDialog` | `app/ImportExport.tsx` | Native project files: pick or drop a `.frl.json` file (opened as a new project; refused with every problem by path, never repaired), or download the open project; an `rxp` slot each, which the top bar fills with `RxpImportEntry` and `RxpExportEntry` (§15) |
+| `ProjectBar` | `app/ProjectMenu.tsx` | The project strip: the save status in words (its full sentence visually hidden beside it) with the warning shape when nothing is kept, "Data changed" (the drift report, which it owns) and a notices button (`onOpenProjects`) |
+| `ProjectsMenu` | `app/ProjectMenu.tsx` | The route's name as a WAI-ARIA menu button (ui-refresh.md §4.1), "Durotar start, route: open the projects menu": Enter, Space or ↓ opens the menu on its first item, ↑ on its last; its content, `ProjectsMenuPopup` (`app/ProjectMenuPopup.tsx`, a lazy part), lists the routes in this browser (the open one checked) and New route…, Rename…, Duplicate, Recently deleted…, Projects… and Delete route… (the danger item); ↑ ↓ Home End move, Enter or Space runs, Escape closes to the name, Tab or a press outside closes |
+| `ProjectsDialogHost` | `app/ProjectMenu.tsx` | Renders the lazy Projects dialog in a step (`ProjectsDialogMode`: `list`, `new`, `rename`, `delete`, `deleted`), for the menu and the notices |
+| `ProjectMenuDialog` | `app/ProjectDialogs.tsx` (a lazy part) | The Projects dialog (`initial`: the step it opens in, focus in it): notices, the open project (status, conflict and retry actions, Rename, Duplicate, Export, Delete), the other stored projects (Open, Rename, Duplicate, Export, Delete; a project that cannot be opened says why, path by path, and can still be exported and deleted), New project, and Recently deleted with Restore |
+| `DriftDialog` | `app/ProjectDialogs.tsx` (a lazy part) | The drift report (ARCHITECTURE §5.5): old and new data revision, missing quests, quests whose objectives or prerequisites changed (named from the loaded data), "unknown" where nothing can be compared; Keep the report / Dismiss the report |
+| `ImportDialog`, `ExportDialog` | `app/ImportExport.tsx` (lazy parts) | Native project files: pick or drop a `.frl.json` file (opened as a new project; refused with every problem by path, never repaired), or download the open project; an `rxp` slot each, which the top bar fills with `RxpImportEntry` and `RxpExportEntry` (§15) |
 | `RxpImportDialog` | `app/RxpImportDialog.tsx` | "Import RXP custom guide" (§15): paste or open a `.lua`/`.txt` file, target (new project or the end of the route), percent frame of the four changed zone maps, check, diagnostics, quests the data lacks, import. Loaded on first use (§11) |
 | `RxpExportDialog` | `app/RxpExportDialog.tsx` | "Export RXP custom guide" (§15): byte-identical or canonical in words, `.txt` or `.lua`, preview, Copy (with a visible "Copied" for a few seconds), Download, what the export cannot keep. Loaded on first use (§11) |
 | `RxpImportEntry`, `RxpExportEntry` | `app/RxpEntries.tsx` | The Import and Export dialogs' RXP sections: a sentence and the button that opens the RXP dialog (in the entry chunk; the dialogs are not) |
@@ -329,7 +438,11 @@ The route editor's store-bound components (§14) live in `src/ui/app/` for the s
 | `CustomQuestEditor` | `app/CustomQuestEditor.tsx` | Create, edit or replace-a-dataset-quest form (`edit`: `new` with an optional id, `edit`, `replace`), in the Details tab; DATA001 info; Save, Cancel, Delete (saying how many steps use the quest); the id is read-only except for a new quest. `onClose` says how it closed (`saved`, `cancelled`, `deleted`). Loaded on first use (§11) |
 | `FormProblems` | `app/FormProblems.tsx` | The problems that stop a form's save, at its top, focused after every failed save (`useFocusProblems`); `fieldProblemProps` gives each field it names `aria-invalid` and the problems as its description |
 | `SettingsDialog` | `app/SettingsDialog.tsx` | The Settings dialog (`ModalDialog`, not closed by a backdrop press): character and route profile as a draft; Cancel and "Save settings" (one command) in the footer. Loaded on first use (§11) |
-| `QuestDetails` | `app/QuestDetails.tsx` | One quest in Details; with `actions` it adds the quest's steps and opens the custom quest editor, with `baseDataset` it says when a custom quest replaces a dataset quest |
+| `QuestDetails` | `app/QuestDetails.tsx` | One quest in Details; with `actions` it adds the quest's steps (Accept, Objectives done, Turn in, with the one primary chosen by the quest's state at the step, `primaryQuestAction`; and Add all three) and opens the custom quest editor, with `baseDataset` it says when a custom quest replaces a dataset quest; "Open on Wowhead" (`ExternalLink`, `wowheadQuestUrl`: only the id goes in the address) for a dataset quest |
+| `RoutePanel`, `RowViewPanel` | `app/RoutePanel.tsx`, `app/RouteView.tsx` (a lazy part) | The route panel (§6, §8); View's content: the rows' choices (`RowPrefs`) and the key |
+| `AvailableQuests` | `app/AvailableQuests.tsx` | The Available tab (§14): the filter row, the summary line with New custom quest, and one `QuestGrid` of the quests after the active step by MP.3's groups, or by race and class without route state |
+| `QuestLogPanel` | `app/QuestLogPanel.tsx` (a lazy part) | The Quest log tab (ui-refresh.md §5.5): the log after the active step (`selected.after.questLog`), "Quest log after step 12" with the count, capacity and basis; each quest's "?" (`logQuestState`: never ready while its record or progress is unknown), Objectives done and Turn in; each objective with Done here. Without route state it says why and lists nothing |
+| view preferences | `app/view-prefs.ts` | `readShellPrefs`, `writeShellPrefs`: the rows' density and numbers, the panel widths, the collapse flags and map focus, per browser (§11) |
 
 The simulation's store-bound parts (§16), in `src/ui/app/` for the same reason:
 
@@ -337,12 +450,14 @@ The simulation's store-bound parts (§16), in `src/ui/app/` for the same reason:
 |---|---|---|
 | `ValidationPanel` | `app/ValidationPanel.tsx` | The Validation tab: counts by severity, the "Show" filter, the issues (`IssueList` with explanations from the registry) in pages of 100; choosing an issue selects its step and focuses it in the route list. Loaded on first use (§11) |
 | `AppStatusBar` | `app/AppStatusBar.tsx` | The status bar over the derived store: the XP bar at the active step, the route metrics with their markers, `RouteSummary`, `SimulationStatus` with Cancel and Resume (announced) |
-| derived view | `app/derived-view.ts` | Pure: `createRowDeriver` (the rows' `deriveRow`), `stepDerivedAt`, `stepNumbersOf` and `sameStepNumbers` (Details), `routeMetricsView`, `xpBarAt`, `simulationStatusOf`, `validationCounts`, the reasons for unknown numbers (`NOT_SIMULATED`, `SIMULATION_LOADING`, `STEP_NOT_WALKED`, `unknownTimeReason`, `unknownXpReason`) |
+| derived view | `app/derived-view.ts` | Pure: `createRowDeriver` (the rows' `deriveRow`: the numbers, the mark's state from the step's issues with `rowMarkOf` and `isDoubtCode`, the worst issue with `worstIssue`, the level-up, and line 2's words from `lineTwoOf`, cached by dataset view and step), `createGroupDeriver` (a group's level span), `questLogCountOf` and `questLogWords` (the log after the step, its capacity and basis), `stepDerivedAt`, `stepNumbersOf` and `sameStepNumbers` (Details), `routeMetricsView`, `xpBarAt`, `simulationStatusOf`, `validationCounts`, the reasons for unknown numbers (`NOT_SIMULATED`, `SIMULATION_LOADING`, `STEP_NOT_WALKED`, `unknownTimeReason`, `unknownXpReason`) |
 | test helpers | `app/derived-test-helpers.ts` | Hand-built derived results for the ui's tests (`derivedResults`, `readyState`, `derivedStoreWith`, `issue`) |
 
-View-model types: `StepRowModel`, `GroupRowModel`, `RouteRowModel`, `EstimateColumn`
-(`route/rows.ts`, with `routeRowContext` for step positions and group membership, and
-`ESTIMATE_COLUMNS`, `ESTIMATE_COLUMN_LABELS`),
+View-model types: `StepRowModel` (`verb`, `title`, `chain`, `detail`, the readouts, `issues` and the
+worst `issue`, `mark`, `levelUp`), `GroupRowModel` (`imported`, `levelSpan`), `RouteRowModel`,
+`EstimateColumn`, `TopNumber`, `RowMarkState` (`route/rows.ts`, with `routeRowContext` for step
+positions and group membership, and `ESTIMATE_COLUMNS`, `ESTIMATE_COLUMN_LABELS`), `RowDensity`
+(`route/virtual.ts`, with `routeRowHeight`),
 `Readout<T>` (`lib/readout.ts`, with `knownReadout`, `unknownReadout`, `readoutFromEstimate`),
 `IssueCounts` (`lib/issues.ts`, with `countIssues`), `ForeverProvenance`, `OptimizerStatus`,
 `SimulationStatusModel`, `RouteSummaryRow`, `SidePanelTabId`, `ThemePreference`. Formatting
@@ -352,19 +467,58 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
 
 ## 8. Route list
 
-- **Virtualisation.** Index arithmetic over a fixed 28px row (`route/virtual.ts`):
-  `computeVirtualWindow` renders the visible rows plus 8 rows of overscan each side; the canvas
-  is `rows × 28px` tall and rows are absolutely positioned at `index × 28px`. The active row is
-  always mounted, even when scrolled away, so `aria-activedescendant` never dangles.
+- **Virtualisation.** Index arithmetic over one fixed row height per list (`route/virtual.ts`):
+  `ROUTE_ROW_HEIGHT_TWO_LINE` (40px, the default density, equal to `--frl-row-height-two-line`) or
+  `ROUTE_ROW_HEIGHT` (28px, one-line rows, equal to `--frl-row-height`); `routeRowHeight(density)`
+  gives it for the window, drag, auto-scroll and paging. `computeVirtualWindow` renders the visible
+  rows plus 8 rows of overscan each side; the canvas is `rows × height` tall and rows are
+  absolutely positioned at `index × height`. The active row is always mounted, even when scrolled
+  away, so `aria-activedescendant` never dangles.
+- **Two-line rows** (the default, D-048 A; ui-refresh.md §6.1). The number (its width follows the
+  route's longest number) is also the drag handle; the mark (`QuestMark` for an accept or a turn-in
+  in its state, `StepMark` for the other kinds); line 1: **the verb** in the muted ink ("Accept",
+  "Turn in", "Complete", "Travel", "Grind", "Hearth", "Buy"), the title, the chain part ("1/2",
+  spoken "1 of 2"), provenance, the issue marker and the lock when locked; line 2: the quest's chip
+  (always beside a coloured mark, so the colour never stands alone) and where the step happens,
+  short: who and the zone ("Kaltunk · Durotar"; the NPC gives way first, so the zone shows at a
+  340px panel; the coordinates are in the tooltip and the row's name; a travel step's time with its
+  hourglass), **or the worst issue at the step in words**, in its severity colour with its shape,
+  in a short form that drops the step's own quest, which line 1 names ("Needs Cutting Teeth turned
+  in first", "No step finishes objective 1"; the whole message is in the tooltip and the name;
+  review UI-01); on the right the top number (XP
+  gained, or the step time, a View choice) over the level after. **A known zero is muted and
+  regular** (a gain is bold; an unknown stays "?", a lower bound "≥"). **A level-up** (the level
+  after crosses a whole level) reads "↑4.6" in bold and the name adds "reaches level 4".
+- **Marks at the walk** (ui-refresh.md §5.2). An accept or turn-in with an error at the step is
+  locked (hollow, the lock badge; line 2 names the error); a doubt (the accept checks'
+  `-uncertain` and `-unverifiable` codes, VAL013, VAL021) makes it "may be" (a dashed ring, colour
+  kept); otherwise available or ready, in the difficulty colour at the level the step starts at. A
+  turn-in whose objectives are carried (D-040) stays ready and line 2 says the warning. Before the
+  walk an accept is "may be" and a turn-in's readiness unknown. A turn-in keeps its "?" in every
+  state.
+- **One-line rows** (View's compact choice): today's row with the 18px mark, the verb first and one
+  estimate, chosen with "Rows show" (level after, XP gained or step time).
+- **Where new steps go, and the later steps** (D-048 B). The list draws two single elements outside
+  the rows (`insertAt`, `aria-hidden`): a 2px dashed insertion line with a caret at the boundary
+  after the selection's last step, and **a band in `--frl-surface-later` under every row after it**;
+  rows have no background at rest, so the band shows through. A selection change moves them and
+  re-renders at most the two rows whose flags changed (PERF-11). Under forced colours the band is
+  not drawn and the line is `Highlight`. The Add footer's caption and name say the place ("Add after
+  step 12").
 - **Derived values** (Milestone 6, §16). The row models are built once per route change from the
-  route and the dataset (`buildRouteView`), with every estimate unknown. The walk's numbers are
-  filled in as a row renders, through `deriveRow` (`createRowDeriver` in `app/derived-view.ts`),
-  so only the mounted rows (the window, about 40) do any work when new results arrive; a walk
-  never rebuilds the row models. The deriver reads memoised results only: an index lookup, three
-  readouts, the step's issue counts and the quest chip at the level the step starts at.
-- **Estimates.** A row has room for one estimate: the level after the step (default), the XP it
-  gains (`+450`) or the time it takes (`2m 05s`), chosen with "Rows show" beside the key in the
-  banner (not persisted). The row's name and the cell's tooltip always give all three. Each
+  route and the dataset (`buildRouteView`), with every estimate unknown and no place names. The
+  walk's numbers are filled in as a row renders, through `deriveRow` (`createRowDeriver` in
+  `app/derived-view.ts`), so only the mounted rows (the window, about 30) do any work when new
+  results arrive; a walk never rebuilds the row models. The deriver reads memoised results only: an
+  index lookup, three readouts, the step's issue counts, the mark's state and the worst issue, the
+  level-up, and the quest chip at the level the step starts at. Line 2's words are formatted when a
+  row first mounts and cached per dataset view, then per step object (`lineTwoOf`), so a route edit
+  formats nothing and a new view starts afresh. A row whose fields a new walk left as they were
+  keeps its model object, so the memoised row does not re-render.
+- **Estimates.** A two-line row shows the XP gained (or the step time) over the level after; a
+  one-line row has room for one estimate: the level after the step (default), the XP it gains
+  (`+450`) or the time it takes (`2m 05s`), chosen with "Rows show" in View (kept per browser,
+  §11). The row's name and the cell's tooltip always give all three. Each
   carries its basis: `≈` when it depends on assumptions (the tooltip names the ruleset parameters
   the step read and whether each is the user's, the ruleset's or an Era value), `E` for Era values
   standing in for Forever ones (dense rows fold both into one `≈` whose words say both), `≥` for a
@@ -398,7 +552,10 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
   - **In-row affordances.** Option children are presentational, so duplicate, delete and the
     lock toggle are not buttons: they are `aria-hidden` spans with pointer handlers and a
     tooltip, never focusable, and pressing one keeps focus on the list without selecting the
-    row. Every action also has a list key (below) and a route-toolbar button. Component tests
+    row. In two-line rows they sit on **every row, muted** (D-048 F), at the right end of line 2,
+    whose words end before them, on the row's own background (the band shows through at rest; `Canvas`
+    under forced colours), never over a fade; in one-line rows duplicate and delete appear on hover
+    or when active. Every action also has a list key (below) and a route-toolbar button. Component tests
     assert that no option contains focusable or interactive content (axe-core's
     nested-interactive rule; axe itself is not a dependency yet, so the planned Playwright
     smoke test is where it will run).
@@ -426,14 +583,17 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
   (`useShortcuts.ts`), so they act only while focus is inside the route editor and never in a text
   field. Global keys: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redo, Ctrl/Cmd+K quest
   search (not in text fields, and not while any modal dialog is open, whoever owns it and wherever
-  focus is: `isModalDialogOpen`, `lib/modal.ts`). Every key also has a button: the
-  route toolbar has Note, Travel, Grind, Duplicate, Lock, Delete, Cut, Copy, Paste and Join, each
+  focus is: `isModalDialogOpen`, `lib/modal.ts`), and Alt+M map focus (read from
+  `KeyboardEvent.code`, so Option+M on a Mac works; not in text fields). Every key also has a
+  button: the step toolbar ("Selected steps", under the list) has Move up, Move down, Duplicate,
+  Lock (a toggle, pressed while every selected step is locked), Delete, Cut, Copy, Paste and Join;
+  the Add footer ("Add after step 12") Grind, Travel, Hearth, Train, Buy and Note; each
   `aria-disabled` while it cannot run (Copy stays available while editing is locked).
 
   Click selects (`replace`), Ctrl/Cmd+click toggles, Shift+click extends. The caller owns the
   selection anchor and applies `range`. `readOnly` (optimiser running, proposal open) turns off
   every editing key and affordance; navigation keeps working.
-- **Drag.** Pointer drag from the grip. The preview is local: the dragged row dims and an
+- **Drag.** Pointer drag from the step number (the grip icon went). The preview is local: the dragged row dims and an
   insertion line follows the nearest gap; the list auto-scrolls near its edges. On release,
   `onDrop(from, to)` receives the final index (`move(from, to)` semantics); Escape, pointer
   cancel or a drop in place calls `onDragCancel`. Keyboard users move steps with Alt+↑/↓.
@@ -447,7 +607,13 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
    surface, raised, hovered and selected backgrounds; `--frl-border-strong` on those, on the
    sunken map area and on the difficulty well (the uncertain chip's dashes and gaps);
    `--frl-unknown-hatch` and the fills on the XP track; the difficulty colours on the well and
-   on an unlit pip. Add a pair there when you draw a new foreground on a new background.
+   on an unlit pip. The UI refresh adds (ui-refresh.md §9.5): text and icons on the tile and its
+   hover, the button edge at rest (on the tile and every panel) and on hover (`--frl-fg-muted` on the
+   hover tile), the focus ring on both tiles, `--frl-danger` on the panels, the tile and its hover
+   fill, every text colour on the later band, the rings and the insertion line on every row state,
+   the well glyph on each difficulty disc, and a filled disc's silhouette (its keyline or the disc
+   itself) at 3:1 on every row state. Add a pair there when you draw a new foreground on a new
+   background.
 2. Visible focus everywhere: the 2px accent ring from `base.css`; components that manage focus
    themselves (route rows, tabs, splitter) draw the same ring.
 3. No meaning by colour alone (§4). Every icon-only control has an accessible name and a tooltip;
@@ -458,7 +624,10 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
    The shortcut is exposed as `aria-keyshortcuts` too, converted from the `shortcut` text by
    `lib/keys.ts` (`'Ctrl+D'` → `'Control+D'`, `'Alt+↑'` → `'Alt+ArrowUp'`).
 4. Everything works from the keyboard: one tab stop per composite widget (list, tablist,
-   toolbar), arrow keys inside, documented shortcuts for row actions.
+   toolbar, quest grid), arrow keys inside, documented shortcuts for row actions. The quest lists
+   (Available, Quest log) are layout grids whose group headings take focus, so ↓ lands on them and
+   the group change is heard; a sticky heading never hides the focused row (the tab panel keeps a
+   28px scroll padding, WCAG 2.2 2.4.11).
 5. `prefers-reduced-motion` zeroes the duration tokens and suppresses animations and smooth
    scrolling. Nothing may freeze into a false value when its animation stops: the indeterminate
    optimiser bar then shows the unknown hatching across the whole track instead of a still 40%
@@ -516,29 +685,74 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
    the XP track has, and an unknown count with reduced motion is that edge dashed around an empty
    track (the hatching would otherwise fall back to a full `Highlight` bar that reads as done);
    issue severity bars become `CanvasText` borders (the icon shape and word still say which);
-   pressed toggles get a `Highlight` edge; severity marks are cut out of their shapes in
-   `Canvas`; disabled controls are `GrayText`. The difficulty chip opts out
+   pressed icon toggles get a `Highlight` edge, and pressed or expanded text buttons and the checked
+   segment a 2px `Highlight` edge; the one primary button keeps a 2px edge; severity marks are cut
+   out of their shapes in `Canvas`; disabled controls are `GrayText`. The difficulty chip opts out
    (`forced-color-adjust: none`): its reserved colours and pips carry the meaning and its own
-   dark well gives them their contrast. Unknown XP loses its hatching there but keeps the
-   dashed edge and "XP ?".
+   dark well gives them their contrast; a filled quest mark opts out the same way, while hollow
+   marks, rings, badges and the pie take `CanvasText` (badges on `Canvas`) and a step disc's edge
+   and glyph `CanvasText`. Unknown XP loses its hatching there but keeps the dashed edge and "XP ?".
 10. Tabs have one `tabpanel` element with a stable id whose content changes with the selection;
     every tab names it in `aria-controls`, and it is labelled by the selected tab.
 11. A long name in a list ellipsises in its own element and never pushes out the signal after
     it: in `QuestListItem` the name is `.frl-quest-item__label` (with the full name as its
     tooltip) and the provenance badge after it does not shrink.
 12. **The map is supplementary.** Everything it does has a keyboard path elsewhere: select a step
-    (the route list), open a quest in Details (the Available tab's "Show in Details"), jump to a
-    zone (the top bar), fit the route and focus the active step (the map toolbar), switch surface
-    (the surface select), show and hide layers (the layer panel's checkboxes). The engine's
+    (the route list), open a quest in Details (a quest's name in the Available tab), jump to a
+    zone (the top bar), fit the route and focus the active step (the Map view toolbar), switch
+    surface (the top bar's "Go to zone or view…"), show and hide each kind of pin and search the
+    map (the Map layers drawer, before the map in the keyboard order). The engine's
     focusable surface is named ("Route map: Kalimdor", `role="application"`,
     `aria-roledescription="map"`) and described by instructions that start with the map's kind
     ("Schematic map: zone frames, not terrain.") and say so; its own arrow-key panning and +/−
     zoom stay on, and Tab leaves it (no trap). Every glyph, line style and badge is named in the
-    layer panel's key, and hover text says what a marker's badges mean. Hover text also shows in
-    the status line, never in a live region. Only results of explicit map commands are announced
+    drawer's rows or its key, and hover text says what a marker's badges mean. Hover text also
+    shows in the map's caption, never in a live region. Only results of explicit map commands are announced
     ("Map shows Durotar.", "Map centred on step 12."), and the one thing the map cannot do on its
     own: follow the active step to a world map it has no surface for ("Step 6 is on world map 36,
     which this map cannot show.").
+13. **Toggles and disclosures keep their names.** A pressed text button (`aria-pressed`) and an
+    expanded disclosure (`aria-expanded`) are drawn with the selection tint, bold accent text and a
+    doubled accent edge, so the state is not only a change of fill; a pressed icon button (Map focus,
+    the toolbar's Lock) takes the same accent edge and inset accent ring, ghost or tile (review
+    UI-09). The name does not change with the state. Targets are at least 24px (the small control
+    height); each segment of a segmented control is 24px on its own (UI-14). Three targets are
+    smaller, under WCAG 2.2 2.5.8's exceptions, recorded here (review UI-14): the route rows'
+    duplicate, delete and lock affordances (20 × 16px, 2px apart) are pointer-only (`aria-hidden`),
+    and each has an equivalent that meets the size, its list key and the step toolbar's 24px button
+    (the "equivalent" exception); the panel handles (18 × 44px, ui-refresh.md §4.3) and the 7px
+    separators have Enter on the separator, the handles and map focus (Alt+M) as equivalents, and
+    nothing else lies within 24px of a handle (the "spacing" exception).
+14. **Nothing focused is ever hidden.** Collapsing a side panel or map focus (Alt+M) moves focus
+    to the handle that shows the panel again, or to the Map focus toggle; restoring a panel from its
+    handle moves focus into it, while the Map focus toggle keeps focus when it ends map focus (§6;
+    review UI-18). The route name's menu and View return focus to their button on Escape. When a
+    quest grid's focused item leaves the page (Accept moved its quest into the log, the list
+    re-grouped for the new step), focus goes to the same item of the row now at that place, else to
+    that row's heading, never to the page body (review QA-06). The map surface's focus ring is
+    drawn on a layer above the map's panes, inset, so it shows over the art (review QA-08; WCAG
+    2.4.7).
+15. **The map popover** (map-presentation.md §14.2; step MP.6). A click on a pin, on a stack whose
+    items do different things, or on empty map at the zone band or closer opens one non-modal
+    `dialog` (`aria-modal="false"`) beside the point, named after its subject ("Quests at Gornek",
+    "2 quests at Mahren Skyseer and Islen Waterseer" for a stack of several givers, "Flight point:
+    Orgrimmar", "Here: Durotar"). It is never taller than the room on its side of the point (its
+    body scrolls) and lies over the floating map controls while open, so every action stays in the
+    stage and reachable (review PR-07). A quest's actions are named with the quest ("Accept Isha Awak
+    after step 28", "Show Isha Awak in Details"), so a stack's buttons differ (review QA-18); the
+    Wowhead link says "(Era page)" beside it and in its description (review PR-21). Choosing a map
+    search result opens its pin's popover the same way (review PR-05). Opening it moves focus to its
+    first action. Its
+    actions, the external "Open on Wowhead" link included, form one list with one tab stop: Up and
+    Down move, Home and End jump, Enter or Space activates. Tab and Shift+Tab leave the popover and
+    close it, with focus where it went. Escape closes it and returns focus to the map surface; a
+    press outside it closes it and leaves focus where the press put it (a press on the map is the
+    map's own click, which closes it); a move of the map closes it too. It announces nothing when
+    it opens: its name is read with the focus. Each action closes it, returns focus to the map and
+    announces its result as the route's insert commands do; an unavailable action is `aria-disabled`
+    with its reason as its description (rule 6). It holds no draft, so closing loses nothing, and
+    everything in it has a keyboard path elsewhere (rule 12): the Available and Quest log tabs,
+    Details, the Add footer and the step editors.
 
 ## 10. Adding a component
 
@@ -557,13 +771,20 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
    every coloured signal its non-colour cue.
 5. Test it next to the file (`// @vitest-environment happy-dom` for components): behaviour,
    keyboard, accessible names, and the unknown and lower-bound states where they apply.
-6. Export it from `src/ui/kit.ts` and add it to §7.
+6. Export it from `src/ui/kit.ts` and add it to §7. A part that only the lazy parts use is
+   imported from its own file and the kit exports its types only: a value export from the kit keeps
+   the module in the entry chunk (§11).
 
 ## 11. Wiring the kit (for `src/ui/App.tsx`)
 
 - Import from `src/ui/kit.ts`. Rendering `AppShell` loads `tokens.css` and `base.css`.
 - Apply the stored theme at startup with `applyThemePreference(document.documentElement, pref)`
   and again from `TopBar`'s `onThemeChange`; persist it in the settings store.
+- *UI refresh (UR.4, UR.5):* the shell's other per-browser choices (the rows' density, top number
+  and column; both panel widths; the collapse flags and map focus) are one `localStorage` record,
+  `forever-route-lab:shell` (`app/view-prefs.ts`), beside the theme's and the map style's keys:
+  not in the project, not exported, not undone. Every access is guarded, and an absent or
+  unreadable field takes its default. `App` takes `prefsStorage` (default the browser's).
 - Map each route step to a `StepRowModel` (and each RXP group to a `GroupRowModel` header row):
   `number` is the 1-based step number, `title` one line, `projectedLevel` a `Readout<number>`
   (`unknownReadout(reason)` until the walk fills it in through `deriveRow`; never 0), `duration`
@@ -610,7 +831,8 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
   yd"), with RXP's written `Y, X` order swapped back.
 - *Milestone 2:* the map panel's geometry line says why a local map set is not used ("local set:
   refused (… changed after the set was activated …)"), except when there is none at all.
-  *Milestone 3:* the line is the layer panel's footer ("Geometry loaded: …").
+  *Milestone 3:* the line is the layer panel's footer ("Geometry loaded: …"); from MP.4b it is in
+  the Map layers drawer's key (and its stand-in when there is no map engine).
 - *Milestone 4:* `src/main.tsx` opens project storage beside the data load, restores the last open
   project (`loadWorkspace`), creates the project session (`createProjectSession`) and provides it
   with `ProjectSessionProvider` (`src/ui/app/ProjectMenuContext.tsx`). `App`'s `projectName` and
@@ -642,9 +864,12 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
   part once loaded (a dialog then stays mounted, so its native focus return works); while one
   loads, `LazyDialogFallback` shows the dialog's title with "Loading…", and a failed load says why
   with "Try again". Production builds fetch the chunk once the page is idle (`preloadLazyParts`).
-  The Projects dialog, Import and Export are still in the entry chunk: `ProjectMenu.tsx` holds
-  both the always-visible project strip and the Projects dialog, and imports `downloadFile` from
-  `ImportExport.tsx`. Measured by `pnpm build`'s dist audit on 2026-09-26: the entry and its static
+  *UI refresh:* the lazy parts now also hold the Details panel (UR.1a), the Projects dialog and the
+  drift report (UR.4, the ledger's reserve), the Projects menu's content, View's content, the
+  About, Import and Export dialogs and the Quest log tab (UR.3 to UR.6), in the same chunk. A part
+  that only the lazy parts use is imported from its own file, not through the kit, because a value
+  export from the kit (in the entry chunk) keeps the module there. `useLazyKept` keeps a dialog
+  wanted once opened, so it stays mounted after it closes. Measured by `pnpm build`'s dist audit on 2026-09-26: the entry and its static
   imports 205.96 kB gzip of the 250 kB budget (210.74 kB before; M3 141.88 kB; the growth since
   M3 is Milestones 4 and 5: project storage and its dialogs, the editors, zod-validated autosave,
   the RXP sections), the lazy parts 12.40 kB gzip plus 1.50 kB of CSS.
@@ -673,6 +898,16 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
   Resume). Outside a provider (component tests) the selector gets null and every estimate says
   "Not simulated: no route simulation is connected"; the Validation tab says "Not checked yet"
   and claims no absence of issues.
+- *UI refresh (UR.1a):* the Details tab's panel is a lazy part too (`loadDetailsPanel`, the same
+  chunk: `StepDetails`, `QuestDetails`, `StepEditors` and `field-parse` leave the entry), preloaded
+  when the page is idle with the other parts; Available is the tab shown at start, so Details is not
+  needed for the first paint. Until it loads the tab says "Loading the details panel…", and a failed
+  load says why with "Try again". `useLazy` draws a part its loader already holds (`peek`) on the
+  first render that wants it, so a preloaded Details never flashes "Loading…". `DETAILS_LOCKED`
+  lives in `selectors.ts`, in the entry, for the quest actions. Measured by `pnpm build`'s dist audit
+  on 2026-09-27: the entry and its static imports 248.98 → 243.81 kB gzip (−5.17 kB); the lazy parts
+  13.92 → 19.62 kB gzip (docs/measurements/ui-refresh.json, and the shared ledger in
+  docs/research/ui-refresh.md §10.3).
 - *Milestone 6:* the Validation tab's panel is a lazy part (`loadValidationPanel`, the same chunk
   as the dialogs, §11 CR-19), so the issue-code registry (`src/app/issue-codes.ts` over
   `src/validate/codes.ts`) stays out of the entry chunk; until it loads the tab says "Loading the
@@ -684,124 +919,273 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
 
 ## 12. Map panel
 
-The centre panel (ARCHITECTURE §7, §12.4; MAPS.md §7). By the §4 import rules the logic lives in
-`app` and the ui only renders it:
+The centre panel (ARCHITECTURE §7, §12.4; MAPS.md §7; map-presentation.md §25). By the §4 import
+rules the logic lives in `app` and the ui only renders it:
 
 | Where | What |
 |---|---|
-| `src/app/map-view.ts` | The map's view state in the store (`ViewState.map`): `surface`, `zoomBand` (`zone`/`continent`), `layers` (visibility: every layer on by default but the coastline), `walkingPaths` (on by default) and `zone` (the zone last jumped to, cleared once it is panned out of view or the surface changes). Not persisted. Hover is not in the store (below). `patchMapUi` keeps the object when nothing changes, so a no-op write notifies nobody. `ViewState.openedQuests` holds quests opened in Details with the selection they were opened under (`shownOpenedQuests`). `openQuestsInDetails`, `closeOpenedQuests`, `setMapUi`, `setMapLayerVisible` and `setMapWalkingPaths` write them |
+| `src/app/map-view.ts` | The map's view state in the store (`ViewState.map`): `surface`, `zoomBand` (`zone`/`continent`), `layers` (visibility: every layer on by default but the coastline; the drawer's rows set them at the first render), `walkingPaths` (on by default) and `zone` (the zone last jumped to, cleared once it is panned out of view or the surface changes). Not persisted: the Map layers drawer keeps its own record (below). Hover is not in the store. `patchMapUi` keeps the object when nothing changes, so a no-op write notifies nobody. `ViewState.openedQuests` holds quests opened in Details with the selection they were opened under (`shownOpenedQuests`). `openQuestsInDetails`, `closeOpenedQuests`, `setMapUi`, `setMapLayerVisible` and `setMapWalkingPaths` write them |
 | `src/app/map-model.ts` | Pure view models: `questGiverModel` (the Available tab's rule: quests open by race and class), `objectiveModel` and `turnInModel` (the focused quests), `flightMasterModel` (the faction's, unknown-faction ones labelled so, each with the open quests it starts), `createRouteInputBuilder` (cached by step id) and `mapRouteInput`, `createDrawnRouteFilter` and `focusWithin` (what the route layers draw from), `routeMapSummary`, `stepsWithoutSurface`, `legUnknownAt`, `routeBoundsOn`, `routeStepIndex`, `zoneBounds`, `zoneGroups`, `focusQuestIds`, `stepFocusOf`. What has no map position (item starters, reputation objectives) or no spawn in the dataset is counted, never placed |
-| `src/app/map-controller.ts` | `createMapController`. Store to layers: memoised inputs, `createMapLayers`, `setLayer` only for a changed `LayerContent`, visibility from the store. The adapter's label provider (`labelFor`). Adapter events to the store; hover kept here (`getHover`, `subscribeHover`); a merged marker's choice (`getStatus().choice`, `choose`, `chooseAll`, `dismissChoice`). The commands `focusStep`, `fitRoute`, `jumpToZone`, `showSurface` and `hoverSteps`. The committed art and terrain (`MapControllerOptions.resources`, a `MapResources`): the manifests loaded at the first mount, the image of the map being viewed, the relief, and the zone outlines and coastline of the shown world map once their layer is visible. Local art: only the images drawn at this level of detail, verified, drawn through object URLs, revoked on detach. Walking paths: `setRoutePaths`. `getStatus` (per-layer stats and notes, the route summary, the active step's placement, the choice, the `backdrop` for the notice, the `walkingPaths` row, and `problems` for the status line) and the `frl:map:sync` User Timing measure (at most `MAX_SYNC_MEASURES` kept) |
-| `src/app/map-exports.ts` | Re-exports for the ui: the controller and its types, `BADGE_TEXT`, `MAP_ART_OWNER_NOTE`, `layerStatsNotes`, `DEFAULT_LOD`, `lodLevelAt`, `RELIEF_OPACITY`, `routeLegsOf`, the local-art types, and for the composition root `createMapResources` with the deployed notice paths |
-| `src/ui/shell/MapFrame.tsx`, `MapLegend.tsx` | The kit's frame, `LayerPanel`, the choice list and the map key (§7): markers, the map (painted art, relief, zone outline, coastline), route lines (with the pending and fallback walked legs) and badges |
-| `src/ui/app/MapPanel.tsx` | Loads the engine (loading, or failed with a retry), attaches and detaches the controller, names the engine's surface, reports the active step to it, maps its status to the frame's props (the notice from `backdrop`, the "Walking paths" row under the route line, `problems` in the status line), and renders the pointer line from the controller's hover alone |
-| `src/ui/shell/AboutDialog.tsx` | Its "Map art" section (D-033): Blizzard Entertainment owns the painted art, non-affiliation, non-commercial, removal on request, and the terrain line (D-032), with links to the deployed `maps/art/NOTICE.md` and `maps/terrain/NOTICE.md` |
+| `src/app/map-categories.ts` | The drawer's rows as data (map-presentation.md §25.3.2 to §25.3.4): `MAP_CATEGORY_ROWS` (27 rows in five groups, each with its default and how it applies), `DEFAULT_HIDDEN_CATEGORIES`, `normaliseHidden`, `SHOW_ALL`, `hideAll`, `groupState`, `setGroup`, `setCategory`, `maskOf`, `questRowsShown` and `layerVisibility`. Small and framework-free, because the map panel (entry chunk) applies the rows at the first render |
+| `src/app/map-controller.ts` | `createMapController`. Store to layers: memoised inputs, `createMapLayers`, `setLayer` only for a changed `LayerContent`, visibility from the store. The adapter's label provider (`labelFor`). Adapter events to the store; hover kept here (`getHover`, `subscribeHover`); the map popover's target (`getStatus().popover`, `closePopover`; step MP.6 replaced the merged marker's choice list). The atlas (the `atlas` option, on unless a test passes false, since ATL.10) and the smooth wheel (`smoothWheel`, likewise). The commands `focusStep`, `fitRoute`, `jumpToZone`, `showSurface`, `showPreset`, `zoomBy` and `hoverSteps`. The drawer's side: `setCategories` (the adapter's mask, the step numbers, the givers of Unlocks soon and Low level only while shown), `setSearchFilter`, `showResult`, `fitPoints`, `setMapStyle` and `setWording`. The committed art and terrain (`MapControllerOptions.resources`) and local art as before (Milestone 3b). `getStatus`: per-layer stats, notes and reasons, the route summary, the active step's placement, the choice, the `backdrop` for the notice, the `walkingPaths` row, `problems`, the style, the drawer's `counts`, `hidden` and `searching`; the `frl:map:sync` User Timing measure (at most `MAX_SYNC_MEASURES` kept) |
+| `src/app/map-wording.ts` | The words and counts only the drawer shows: each layer's notes (`layerNotesOf`, with `layerStatsNotes` and its units), the walking paths' notes, why a layer is unavailable, the map's problems, the rows' names (`MAP_CATEGORY_LABELS`, `MAP_CATEGORY_GROUP_LABELS`), the counts and the "in view" counts. A lazy part with the drawer: the controller gathers the facts (`MapNotesSource`, `MapResourceFacts`) and the drawer installs the words (`setWording`, before its first paint); until then the notes, reasons, problems and counts are empty. Tests pass `wording: MAP_WORDING` |
+| `src/app/map-popover.ts` | The map popover's content (map-presentation.md §14.2, §8.5, §11; step MP.6), a lazy part with the popover: from the controller's target (`MapPopoverTarget`), the dataset, the quest state and the places, each quest with its state, chips and actions (Accept, Complete objectives, Turn in, the likely one primary; Show in Details; Open on Wowhead, external), flight points ("Add flight from here"), a dungeon's quests inside, transport stops ("Add transport", unavailable for a stop of unknown service), services (Set hearth, Train, Buy here), any point ("Go here", "Fly from the nearest known flight point") and a stack of steps ("Select step N", "Select all"). Each insert is the editor's insert-after-selection command |
+| `src/app/map-labels.ts` | The labels canvas's names (map-presentation.md §13; D-049 O19; step MP.7), built with the places in the lazy derived pipeline: zones and cities with their cards (`zoneCardOf` in `zone-levels.ts`), anchored at the pole of inaccessibility of their terrain rings (`src/geo/pole.ts`, `src/geo/zone-rings.ts`) or their frame's centre; continent names at the world band; dungeon and flight point names from 0.05 px a yard; static priority; the minimap style's list names Ironforge and the Undercity "(underground city)" |
+| `src/app/map-zone-fill.ts` | The zone fills (map-presentation.md §12.4, §12.6; step MP.10), built in the lazy derived pipeline: the fallback tint per zone (`public/maps/tint/`) and the faction overlay (the client zone table), with their notes |
+| `src/app/map-search.ts` | The map search's index (`createMapSearchIndex`): quests, the NPCs and objects the quests name, flight masters and named zones, folded (`foldText`: case and accents), prefix matches first; `resultPoint`, `resultZone`, `searchFilterOf` |
+| `src/app/map-exports.ts` | Re-exports for the ui: the controller and its types, the rows, `BADGE_TEXT`, `CLUSTER_MAX_ZOOM`, `DEFAULT_LOD`, `lodLevelAt`, `RELIEF_OPACITY`, `routeLegsOf`, the marks' paths and table, the local-art types, and for the composition root `createMapResources`, `createMapLayersSetting` and the notices' paths. Nothing lazy is re-exported here: a value re-exported from a lazy module would pull it into the entry |
+| `src/infra/maps/map-style-setting.ts` | The drawer's record in this browser (`createMapLayersSetting`) and its style part for the controller (`createMapStyleSetting`) |
+| `src/ui/shell/MapFrame.tsx` | The kit's frame (map-presentation.md §25.3.0): the stage takes the region, and the controls float on it: Map layers at the top left, Map focus (the shell's toggle, claimed through `MapFocusContext`) at the top right, the Map view toolbar at the bottom right, the caption at the bottom left; the drawer docked or over the stage (`useMapRegionDocking`); the "Viewing" chip and the map popover in the stage |
+| `src/ui/shell/MapPopover.tsx` | The map popover, presentational (rule 15 of §9): a non-modal dialog beside the point, its sections (a quest's `DifficultyLabel`, XP with its basis marker, `ProvenanceBadge`, state words) and one list of actions, the Wowhead link included |
+| `src/ui/app/MapPopoverPanel.tsx` | The popover's container (a lazy part): builds the content (`app/map-popover.ts`) and runs the chosen action through the route actions (`addQuest`, `insertCommand`), Details or the selection; closes and gives focus back to the map |
+| `src/ui/shell/MapCategoryDrawer.tsx`, `MapKey.tsx` | The drawer, presentational: the style control, the notices, the search and its results, Show all, Hide all and Defaults, the groups of rows, and the key |
+| `src/ui/app/MapLayersPanel.tsx` | The drawer's container (a lazy part, `lazy-parts.ts`): words the controller's counts and notes into rows, applies them through the map panel, runs the search, offers the style, installs the wording |
+| `src/ui/app/MapPanel.tsx` | Loads the engine (loading, or failed with a retry), attaches and detaches the controller, names the engine's surface, reports the active step, reads and writes the drawer's record, applies the rows before the drawer loads, maps the status to the frame's props (the notice from `backdrop`, the caption, the commands), renders the pointer line from the controller's hover alone, the "Viewing" chip (`ViewingChip`) and the map popover (a lazy part) while the controller has a target |
+| `src/ui/shell/AboutDialog.tsx` | Its "Map art" section (D-033): Blizzard Entertainment owns the art, non-affiliation, non-commercial, removal on request, the terrain line (D-032), the two base maps of the seamless atlas and which is shown (`BASE_MAPS_NOTICE`, `baseMapShownText`), with links to `maps/minimap/NOTICE.md`, `maps/atlas/NOTICE.md`, `maps/art/NOTICE.md` and `maps/terrain/NOTICE.md` |
 
-**Behaviour.**
+**The atlas** (map-atlas.md §5, §8; D-042; on by default since step ATL.10). The map opens on one
+surface for both continents, with Zephras Isle in a captioned box between them ("not in position":
+the game does not place it). `world:0`, `world:1` and `world:2991` are retired. The top bar's "Go to
+zone or view…" lists the views first ("Both continents", then the presets "Kalimdor" and "Eastern
+Kingdoms", which fit the atlas to a continent), then the zones by world map; a zone on a separate map
+(Darkspear Islands, a battleground) opens that map's own surface. The surface's accessible name is
+"Route map: Azeroth". The
+inset's note ("Zephras Isle: shown in a box, not in position; no quest data yet" while the dataset
+has none there) is in the drawer's notices, the key and the map's instructions, which read "Route
+map: Azeroth. Both continents; Zephras Isle is shown in a box between them, because the game does
+not place it; it has no quest data yet." after the art notice. The key notes that the continents'
+relative position is a layout choice. A geometry that cannot place the continents keeps one surface
+per world map, and the drawer says why ("The atlas could not be placed from this geometry: the map
+shows one world map at a time").
+
+**The wheel** (map-atlas.md §8.4; on since ATL.10). Every wheel event changes the zoom (about half a
+level per 100 px of scrolling, at most one level per event), eased around the pointer, and a gesture
+settles once; the view never springs back from the edge. The zoom buttons and the + and − keys move
+one level. Under reduced motion the wheel jumps without easing and the tiles do not fade. The two
+wheel rates are the design's starting values until ATL.9 calibrates them.
+
+**The frame** (§25.3.0). The map takes the whole region; nothing sits in a bar above or below it.
+
+- **Map layers** (top left) opens and closes the drawer: a disclosure (`aria-expanded`,
+  `aria-controls`), drawn pressed while open, sitting just right of an open drawer.
+- **Map focus** (top right) is the shell's toggle (Alt+M), placed in the map's chrome so the
+  keyboard order is Map layers, the drawer, the map surface, Map focus, the toolbar.
+- **The Map view toolbar** (bottom right, 32 px buttons in two joined groups): Zoom in and Zoom
+  out (whole levels, `zoomBy`), Fit route and Focus step, and Cancel pick while a pick lasts.
+  Unavailable commands stay focusable, `aria-disabled`, with their reason as description and
+  tooltip. Leaflet's yard scale sits above it.
+- **The caption** (bottom left, never a live region): what kind of map this is (the notice, with a
+  short form in a narrow map: "Art © Blizzard", "Relief", "Schematic"), the pick in progress, the
+  route on this surface ("Route: 54 of 55 steps on Kalimdor · 1 without a location"; steps on maps
+  no surface shows are counted apart, "1 on maps with no surface"), the active step the map cannot
+  follow, and "Pointer on:" with the hover text.
+- The surface select moved to the top bar's "Go to zone or view…" (the atlas's views, then the
+  zones); the problems the status line gave are the drawer's notices.
+
+**The Map layers drawer** (§25.3.1 to §25.3.8; D-047).
+
+- **Where.** 300 px (`--frl-map-drawer-width`). From a map region of 900 px it docks beside the
+  stage, which narrows; below that it lies over the stage's left edge, with a shadow, a close
+  button and Escape to close (focus returns to the toggle). It is open by default where it docks
+  and closed where it would lie over the map; a kept "open" applies only where it docks. It is a
+  lazy part in `lazy-parts`: its code loads the first time it opens (the production build preloads
+  it when idle), with a stand-in meanwhile and "Try again" if the chunk fails.
+- **What.** From the top: "Map style" (below), the map's notices (what could not be loaded and
+  what the map shows instead; the atlas's insets), "Search the map", a toolbar with Show all, Hide
+  all and Defaults, the five groups (Quests, headed "after step N"; Instances; Travel; Services,
+  headed "zoomed in"; Route and map) and the key in a closed disclosure.
+- **Rows.** A checkbox, the category's pin in monochrome (the map's own paths) or a line or area
+  swatch, the name, and the count right-aligned in tabular figures ("209 · 118 givers",
+  "8 · 4 ready"). The accessible name carries the count with its unit and the state ("Available:
+  209 quests at 118 givers after step 1425, shown"); the tooltip says how many are in view. Notes
+  (MAP-HONEST-5) are one muted line under the row: the first note, ellipsised, and "+2 more" when
+  there are more (review PR-09). The whole notes open under it while the row's box has keyboard
+  focus and on a press of the line, are its tooltip, and are always the checkbox's description.
+  A row that cannot be used now is `aria-disabled`, named for it ("Portals, unavailable: none
+  recorded yet: …"; review PR-21), with its reason as its first note ("Not drawn yet: …", "No
+  terrain data in this build", "Painted style only"), stays in the arrow order and does nothing; a
+  hidden row is unticked and struck through. Without route state the quest rows say "open to an Orc
+  Warrior (no route state yet)".
+- **How a row applies** (`MapCategoryRow.apply`): a pin row by the adapter's mask (a redraw, never
+  a rebuild); a whole-layer row by the store's layer visibility (route line, zone names, borders,
+  faction, relief, coastline, flight network); Walking paths and Step numbers as their own
+  switches. Rows apply at once, before the drawer's code has loaded. Unlocks soon and Low level,
+  off by default, join the givers' input only while shown, so they cost no budget until then.
+- **Show all** shows every row, the defaults' hidden ones too; **Hide all** hides every pin row and
+  leaves Route and map as they were, so the route is never lost; **Defaults** restores the rows'
+  defaults. Each is announced ("All map categories shown.", "All map categories hidden; the route
+  stays.", "Map categories back to their defaults."); a single row is not.
+- **Keyboard** (UI.md §9 rule 4): the style control (native radios: one stop, arrows inside); the
+  search field (Down moves to the first result); the toolbar (one stop, arrows inside); each group
+  one stop, a roving tabindex over the group's own box and its rows (Up and Down move, Home and End
+  jump, Space toggles; on the group's box Enter, or Left and Right, collapse and expand it); the
+  key's disclosure. A group's box is checked, unchecked or mixed, counting only the rows that can be
+  used: an unavailable row never leaves it mixed (review QA-25).
+- **Kept** (§25.3.7): one record in this browser's `localStorage` under
+  `forever-route-lab:map-layers`: `{ version: 1, style, hidden, drawerOpen, collapsed }`, read at
+  the first render and written 500 ms after the last change. Only what was chosen is written, and
+  a value that is not understood is dropped (the defaults apply). The style's earlier key
+  (`forever-route-lab:map-style`) is read when the record has no style. Not in the project, not
+  exported, not undone by Ctrl+Z; the search text is not kept.
+
+**The map search** (§25.3.5; MP.4c). "Search the map" matches the names of quests, the NPCs and
+objects the quests name (givers, finishers, objective targets), flight masters and zones, and the
+places the places model draws (review PR-05): dungeons and raids by their instances' names, every
+flight point by its client node's name (client-only nodes too), transport stops, and the services
+by name and by kind ("innkeeper", "Warrior trainer", "vendor"), ignoring case and accents, prefix
+matches first. Its index is built on the field's first focus. A query
+starts at two characters, 150 ms after the last key, and the status says how many results there
+are (politely, after the debounce). While a query lasts:
+
+- the results replace the rows, grouped (Quests, Instances, Travel, Services, Zones), at most 60
+  listed and "and 12 more: type more to narrow the search"; each says what it is in one line
+  ("Start: Gornek · level 2 · available after step 12", "Flight master · Orgrimmar", "Dungeon
+  entrance", "Innkeeper", "Zone · Kalimdor"), and a result in a hidden row says "(hidden
+  category)";
+- the map draws only the results' pins (whatever their row; a place by its pins' ids), with the
+  route and the selection;
+- choosing a result shows it: a zone is jumped to; anything else is shown at the zone band at
+  least, its pin ringed and its popover opened, which takes focus (rule 15); the right panel's tab
+  is left as it is (the popover's Show in Details opens the quest there; review PR-05). "Fit results
+  on the map" fits them; "Clear search" (or Escape in the field) ends the query and the map draws
+  the rows again.
+
+**The map style** (map-atlas.md §21; steps MM.7 and MM.9). "Map style: Minimap | Painted", a radio
+group with a visible label at the drawer's top. **The minimap is the default** since MM.9 (a browser
+with no stored choice opens in it; D-045 item 2, after the presentation's names existed, D-049). The
+choice is announced ("Map style: Painted.") and kept in the record. It applies to the seamless atlas;
+without one (a geometry that cannot place the continents) both radios are unavailable, with the
+reason as the control's description ("Styles apply to the seamless atlas, which this geometry cannot
+place: the map shows one world map at a time."). When the chosen style cannot be drawn, the other is
+shown and the note says so ("Minimap tiles unavailable: …; showing the painted map", or "Minimap
+tiles not downloaded (run `pnpm maps:minimap:fetch`); showing the painted map" in a build without the
+tile pack); the choice stands and is never overwritten by the fallback. The container carries
+`data-map-style` for the style shown, and the palette follows it. The caption's notice names the art
+shown ("Minimap art © Blizzard Entertainment" or "Painted map art © Blizzard Entertainment"), and so
+do the map's instructions. The key and About name both base maps' notices and say which is shown.
+
+**Pins** (§25.2; MP.4a). The quest givers, turn-ins, counted objectives, flight points and later the
+dungeons, transport stops and services are pins: our own teardrop, a dark body with a light glyph
+(services the light family), drawn from cached bitmaps (an LRU of 256).
+
+- **Size.** The head is 12 px below the continent band, grows to 26 px across it and stays 26 px from
+  the zone band; services and counted objectives at 0.8 of that. Places (dungeons, flight points,
+  transports) are drawn from 0.0325 px a yard, services from 0.149.
+- **Colour.** A quest pin's glyph takes the quest's exact difficulty colour from a 16 px head, with
+  the pip tag beside it; below that it is uncoloured. A cluster is coloured only when all its quests
+  share one difficulty. Colour is never the only cue: the pips, the edge (solid: as stated; dashed:
+  not sure; double: both factions), the fill (hollow: not known yet) and the badges (lock, level,
+  progress pie, the dungeon arch, "×n") say it too. Faction is a glyph and an outline, never a hue.
+  Under forced colours the pins take system colours.
+- **Clusters** (§25.2.5). Below the zone band, quest givers and turn-ins fold into the cells of a
+  nested yard grid (512, 1,024, 2,048 and 4,096 yd; the smallest cell of at least 1.25 heads). The
+  builder makes all four levels once per input; the zoom picks one. A cluster sits at its member
+  nearest the centroid, counts quests, places and points, and says so ("3 quests at 3 givers near
+  here: 2 available, 1 may be available; 3 standard. Zoom in to separate them."); a click zooms in
+  to its members, at most to just inside the zone band, where they separate. The pin cap (at most
+  300 a band, §25.7) counts clusters and never trims one.
+- **Stacks.** At the zone and close bands, pins of one kind whose heads overlap by more than about
+  60 % merge into one "×n" (a spatial hash, recomputed at a zoom settle, a new layer or a new mask,
+  never on a pan); a click lists them.
+- **Hits.** Leaflet's topmost path first, then the pins' own index (a 32 px grid, built in idle
+  time after a settle or at the first pointer event; a pin's target is its head and point with 2 px
+  to spare, and at least a 24 px square below a 20 px head): the nearest head centre wins, and pins
+  within 3 px of it are a list. Hover rings a pin; the
+  pointer line names it.
+- **Other markers** (step beads, halos, objective dots) and every line style are as before; the key
+  names each glyph, line style and badge (rule 12 of §9) and how to read the grid.
+
+**Names on the map** (map-presentation.md §13, §25.4; D-049 O19; step MP.7). The labels canvas draws
+the places model's names (`app/map-labels.ts`): every zone and city with its level span for the
+character, below 0.05 px a yard as one compact line ("The Barrens 13–25" and the boxed E; a new zone
+with cited text by its name alone), to the zone band as a two-line card (the name; the difficulty
+chip's canvas twin rating the zone's median quest level at the step, dashed for a lower-bound level,
+"quests 13–25 (93)" and the boxed E, or the cited text: "mid-30s to mid-40s (official)", "endgame
+(reported)", "level range unknown ?", "Battleground (client: Map 2997 InstanceType 3)"), and as a 13 px
+zone label to about zoom −1.75; the continents' names at the world band; dungeon and flight point
+names from 0.05 px a yard. Each card keeps room for the twin, so a step change never widens it. The
+priority is static (continents, levelling zones by frame area, cities, dungeons, flight points). In
+the minimap style, which has no names, Ironforge and the Undercity read "Ironforge (underground
+city)" and "Undercity (underground city)", and from the zone band their frames are dashed outlines.
+From the zone band the **"Viewing" chip** (DOM, at the stage's top left beside Map layers) names the
+zone at the view centre: "Viewing The Barrens · quests 13–25 (93 open to an Orc Warrior)" with the
+boxed E and the real `DifficultyLabel` rating its median quest level.
+
+**The map popover** (map-presentation.md §14.2; rule 15 of §9; step MP.6). A click on a pin, on a
+stack whose items do different things, or on empty map at the zone band or closer opens the popover
+beside the point, in place of the old choice list. It lists what is there and what can be added
+after the selection: a quest's Accept, Complete objectives or Turn in (the likely one primary), Show
+in Details and Open on Wowhead (marked external: a new tab, no opener, no referrer; D-041 J); a flight
+point's "Add flight from here"; a dungeon's quests inside (§8.5); a transport stop's "Add transport"
+(unavailable, with why, for a stop of unknown service); a service's Set hearth, Train or Buy here; any
+point's "Go here" and "Fly from the nearest known flight point" (both flight points named); a stack of
+steps' "Select step N" and "Select all". A cluster still zooms in; a step marker still selects its
+step. Every insert is announced as the other inserts are.
+
+**Services** (map-presentation.md §11; step MP.11). Innkeepers, the character's class trainers and the
+vendors the dataset carries (only those tied to quests, and the notes say so), of the character's
+side and both factions, as light pins from zoom −2.75 (vendors from the close band). An NPC with no
+faction in the dataset is not drawn, and one inside an instance is not drawn at its entrance.
+
+**Zone fills** (map-presentation.md §12.4, §12.6; step MP.10), zoomed out only (the zone band's budget
+is 0). The **fallback tint** (each zone's mean painted colour, `public/maps/tint/`, generated by
+`tools/maps/tints.ts` from the painted zone images and the terrain; since ATL.10 those images come from
+a local `convert.ts --all` folder, as `public/maps/art/` keeps five) is drawn where no painted art is shown on a
+map (the relief backdrop), never over the atlas tiles and never in the minimap style. The **zone
+faction** row (off by default) draws each zone's pattern in the hatch colour, never a hue: `/` for
+Alliance territory, `\` for Horde territory, both for the client value 6, dots for a sanctuary, none
+for no faction territory; its words are in the zone's hover, and a click on it jumps to the zone.
+
+**Behaviour** (unchanged by the presentation work, but for the clicks, which the popover changed).
 
 - **It follows the route list.** When the active step changes (list, keyboard, map click), the map
   brings it into view with `focus`, which zooms in to at least −2 and pans only when the point is
-  not comfortably visible; a step on another world map switches surface. A selection change moves
+  not comfortably visible; on the atlas a step on the other continent or the isle only pans and
+  zooms, and a step in an instance or on a battleground switches surface. A selection change moves
   the active step in the same sync, so one click or arrow key costs one sync (M3 review PERF-6).
   "Focus step" recentres on request, and says why it cannot ("Step 1 has no location", "Step 6 is
   not on the map: it moves the character somewhere the route does not say", "Step 6 is on world
-  map 36, which this map cannot show"). The last one is also announced and shown in the status
-  line when the active step lands there, since the map cannot follow it (MAP-UX-9).
+  map 36, which this map cannot show"). The last one is also announced and shown in the caption
+  when the active step lands there, since the map cannot follow it (MAP-UX-9).
 - **Labels.** Route descriptors carry no step numbers (MAPS §7.3): the controller is the adapter's
   label provider and numbers steps from the current route order when a tooltip opens ("12 ·
-  Accept quest: Your Place in the World", "Route: steps 3–40", "Transport to Eastern Kingdoms:
-  step 12 to step 13", "Step 20: Hearthstone (destination unknown until simulation)"). A marker's
-  badges are said in words after its text: "(outside its zone’s map frame)", "(leg unknown: an
-  earlier step could not be placed)", "(inside an instance: drawn at its entrance)" (MAP-A11Y-10).
-  The status line's "Pointer on:" text is the tooltip's.
-- **Clicks.** A step marker, halo, route segment (the leg into the step after it) or leg selects
-  that step; a transition glyph selects the step at its other end, so the map follows across; a
-  departure glyph (a hearth with no known bind point) selects its step; a quest giver, objective,
-  turn-in or flight master that starts quests opens its quests in Details; an aggregate glyph
-  opens its zone. Several items at one point are one marker with a count badge: when their clicks
-  would differ, a small list beside the point names them ("6 steps here", each with its hover
-  text) with an "all" action ("Select all 6 steps", "Open all 9 quests in Details"); the first item
-  takes focus, arrows move, Escape or a press outside closes, and focus returns to the map
-  (MAP-UX-3). A click on empty map at continent zoom jumps to the zone frame the point is most
-  central in (`zoneFramesContaining`; the Crossroads opens The Barrens, not Durotar's overlapping
-  frame, coordinates.md §15; MAP-UX-1). Frames themselves are not interactive (MAPS §7.5).
-- **Zones.** Jump to zone (the top bar, an aggregate click, an empty click) fits the zone's frame
-  at the zone zoom or closer, so its points are drawn raw even where the stage is too small to
-  fit the zone there, and the zone's points stay raw at any zoom while it is the zone (PERF-4,
-  MAP-UX-2). Its frame is drawn emphasised and the top bar's select shows it until the zone is
-  panned out of view or another surface is shown; then both reset (MAP-UX-12).
-- **Route rows.** The pointer over a route row highlights that step's marker (a group header: its
-  steps'), on top of every layer, without rebuilding anything.
-- **Pick on map** (Milestone 4, §14). `startPick({ label, onPick })` makes the next click on the
-  map a point and nothing else (it selects nothing); `getStatus().pick` names it, the status line
-  says "Picking the location of step 3: click the map to place it. Escape cancels.", and the
-  toolbar has "Cancel pick". Escape anywhere cancels it first (a capture listener while it lasts),
-  except while a modal dialog is open: the map is inert then, so Escape closes the dialog and the
-  pick waits behind it (UI-F8).
-  The point is world form, where the click was to 0.1 yd, with the zone hint as its UiMap: the
-  zone the map was jumped to when its frame holds the point, else the zone frame the point is
-  most central in (`attributeZone`), else none. A pick ends on detach, and when the editor that
-  started it leaves Details.
+  Accept quest: Your Place in the World", "Route: steps 3–40"). A marker's badges are said in
+  words after its text (MAP-A11Y-10). With route state, a quest pin's hover starts "After step N:".
+- **Clicks.** A step marker, halo, route segment or leg selects that step; a transition glyph
+  selects the step at its other end; a pin opens the map popover (above); a cluster zooms in; an
+  aggregate glyph or a zone's faction fill opens its zone. Several steps at one point whose clicks
+  would differ open the popover's list ("2 steps here", with "Select all 2 steps"; MAP-UX-3). A click
+  on empty map at continent zoom jumps to the zone frame the point is most central in
+  (`zoneFramesContaining`; MAP-UX-1); at the zone band or closer it opens the popover for the point;
+  with the popover open, a click on empty map only closes it.
+- **Zones.** Jump to zone (the top bar, an aggregate click, an empty click, a zone result) fits the
+  zone's frame at the zone zoom or closer (PERF-4, MAP-UX-2). Its frame is drawn emphasised and the
+  top bar's select shows it until the zone is panned out of view or another surface is shown.
+- **Route rows.** The pointer over a route row highlights that step's marker, on top of every layer,
+  without rebuilding anything.
+- **Pick on map** (§14). `startPick({ label, onPick })` makes the next click a point and nothing
+  else; the caption says "Picking the location of step 3: click the map to place it. Escape
+  cancels.", and the toolbar has "Cancel pick". Escape anywhere cancels it first, except while a
+  modal dialog is open (UI-F8). The point is world form, to 0.1 yd, with the zone hint as its UiMap.
 - **Focused quests.** The quests opened in Details while they are shown, otherwise the active
-  step's quests: their objectives and turn-ins are drawn, and their givers raw and emphasised at
-  any zoom.
+  step's quests: their objectives and turn-ins are drawn, and their givers raw and emphasised.
 - **Initial view.** The route's first surface, fitted to the route there (never closer than zoom
-  −1.5). A remount keeps the adapter and its views.
-- **Painted art and terrain** (Milestone 3b; D-032, D-033; MAPS §7.5). The map shows Blizzard
-  Entertainment's painted art for the map being viewed: the continent zoomed out, the zone being
-  viewed zoomed in (the zone jumped to, else the one the view centre is most central in; one image
-  at a time, because zone images have painted borders). The shaded relief is the backdrop, faint
-  while art is drawn over it; zone outlines are drawn from the terrain, and the coastline is
-  optional. Over art the zone frames lose their fill. The notice beside the toolbar says what is
-  under the markers: "Painted map art © Blizzard Entertainment" (short: "Art © Blizzard") while
-  the art is drawn, "Terrain relief computed from game data, not painted art" (short: "Relief")
-  when only the relief is, the local-art notice for a local set, else the schematic notice. The
-  instructions of the engine's surface start with the same words (rule 12 of §9). The art
-  layer's note names the owner and says About has the notice.
-- **Failures never block.** The art and terrain load when the map first mounts, not at startup.
-  A manifest or file that cannot be loaded leaves the map drawing what it has (the relief without
-  the art, the zone frames without either, the route as ever): the layer's checkbox is disabled
-  with the reason ("Painted map art could not be loaded (…)"), and the status line says what the
-  map shows instead ("Painted map art could not be loaded: the map shows the terrain relief
-  instead"). A world map without terrain data (the islands, battlegrounds) says so on its terrain
-  layers.
-- **Walking paths.** A row "Walking paths" sits under "Route line" in the layer panel: a toggle
-  of how the route line draws walked legs, not a layer (`MapUiState.walkingPaths`). It is
-  unavailable ("No walking paths are available yet: every leg is drawn as a straight line") until
-  the navigation model gives paths (`setRoutePaths`). With it on, walked legs follow their paths;
-  a leg whose path is still being computed is straight in short dashes, and one with no path is
-  straight, dash-dot-dot; the row's notes count each ("3 walked legs follow their paths on this
-  map.", "2 legs are straight, in short dashes, while their paths are computed."). Hover text on
-  those lines says "Route (walking path pending)" or "Route (straight line: no walking path)".
-  Flights, transport and hearthstone legs stay straight.
-- **Layer defaults.** Painted art, relief, zone outlines and walking paths on; the coastline off
-  (it is fetched only once shown). Visibility is view state: it is not persisted, as no map view
-  state is.
-- **Honest counts.** The layer panel lists every layer, topmost first, with its glyph, what is
-  drawn and notes that always name their unit (MAP-HONEST-5): points folded into zone counts,
-  markers over the cap, points not placed and why, points or steps on other world maps, quests that
-  start from an item, quest givers, objectives, turn-ins and flight masters with no spawn in the
-  dataset (MAP-HONEST-4), flight masters of the other faction. Under the layers, the key names every
-  glyph, line style and badge and says how to read the grid (MAP-A11Y-10). The art and terrain
-  layers are unavailable, with the reason, where they cannot be drawn (not loaded, none for this
-  world map), and the proposal until proposals exist. The status line gives
-  the route on this surface ("Route: 54 of 55 steps on Kalimdor · 1 without a location"; steps on
-  maps no surface shows are counted apart, "1 on maps with no surface") and, zoomed out, "Zoomed
-  out: quest points shown as zone counts".
-- **Performance.** Only a layer whose inputs changed is rebuilt and sent. Route layers are built
-  from the steps they draw (`createDrawnRouteFilter`, `focusWithin`), so inserting, editing,
-  deleting or selecting a note rebuilds no route layer; an insert elsewhere changes only the
-  descriptors next to it (no step numbers in them). The step markers do not see the focus
-  (M3 review PERF-2, Milestone 4): every one is `normal`, and the selection layer draws the
-  selected, hovered and active steps' halos and a strong copy of their markers on top (the active
-  step's first under its cap), so a selection change never rebuilds the step markers. They are
-  built from caches (a candidate per step input, points interned for finding stacks, merged stacks
-  by their members), so a move rebuilds only what it touched; the same descriptor objects in a
-  new order diff to nothing in the adapter. Hover writes nothing to the store, so no panel but the pointer line re-renders for it
-  (PERF-14). With walking paths, each leg's path is asked for once per paths object, and a route
-  edit rebuilds only the route-line pieces it touched (MAPS §7.4); the map-edit bench with eight
-  path points per leg measured a 10,000-step move at 5.5-5.8 ms median against 5.0-5.5 ms without
-  paths (Node, the fake adapter). `docs/measurements/map-m3.json` has the numbers and how they were taken.
+  −1.5): the atlas, with every placed step on both continents and the isle, for a route in the open
+  world. A remount keeps the adapter and its views.
+- **Painted art and terrain** (Milestone 3b; D-032, D-033; MAPS §7.5): as before; the notice in the
+  caption says what is under the pins, and the surface's instructions start with the same words
+  (rule 12 of §9), so they name the style shown.
+- **Failures never block.** A manifest or file that cannot be loaded leaves the map drawing what it
+  has; its row is unavailable with the reason, and the drawer's notices say what the map shows
+  instead ("Painted map art could not be loaded: the map shows the terrain relief instead").
+- **Walking paths.** A row under Route line: how the route line draws walked legs, not a layer
+  (`MapUiState.walkingPaths`), unavailable until the navigation model gives paths. Its notes count
+  the legs that follow their paths, wait for them, or have none.
+- **Performance.** Only a layer whose inputs changed is rebuilt and sent; the rows and the search
+  are a mask in the adapter (a redraw, no rebuild). Route layers are built from the steps they draw,
+  so selecting or editing a note rebuilds none. Hover writes nothing to the store. The pins' budgets
+  and the 4× measurements are in `docs/measurements/map-presentation.json` (`mp4a`), the drawer's
+  cost to the entry chunk in ui-refresh.md §10.3.
 
 ## 13. Project storage
 
@@ -812,7 +1196,7 @@ The project strip, the Projects dialog, import, export and the drift report (ARC
 
 **Save status.** The strip always says, in words, what is kept:
 
-| Status | Strip | Full sentence (tooltip, the Projects button's description, the dialog) |
+| Status | Strip | Full sentence (tooltip, the strip's visually hidden words, the dialog) |
 |---|---|---|
 | saved | "Saved 12:03" (local 24-hour time; the date first on another day) | "All changes are saved in this browser (last saved 12:03)." |
 | pending | "Unsaved changes" | "Changes are saved automatically in a moment." |
@@ -853,7 +1237,16 @@ in another tab", or, without browser storage, any edit at all), the browser asks
 closes (`beforeunload`). Opening, creating or importing another project first saves the open one;
 when that fails, the switch is refused with the reason, so changes are never dropped silently.
 
+**The Projects menu** (ui-refresh.md §4.1). The route's name, in the route panel's header, is a
+menu button: the routes in this browser (the open one checked; one that cannot be opened is
+unavailable, with why), New route…, Rename…, Duplicate, Recently deleted…, Projects… and Delete
+route…. Switching opens the project and announces it; Duplicate runs at once; each "…" item opens
+the Projects dialog in that step (the name field of New or Rename, the delete confirmation, or the
+Recently deleted heading), and Cancel or Escape in the step returns focus to its button in the
+dialog. The top bar's Projects button went; the save status stays beside the top bar.
+
 **Projects dialog.** Actions are buttons whose names include the project ("Open “Durotar run”").
+Destructive choices (Delete, Delete permanently, Overwrite) are danger buttons.
 Rename and New project open a name field in place (focus moves to it; Enter confirms, Escape
 cancels without closing the dialog). While an operation runs the actions are `aria-disabled`
 ("Wait for the current operation to finish").
@@ -920,12 +1313,31 @@ edit is one command, so one undo entry; a command that changes nothing adds none
 
 **Where new steps go.** After the selection (after its last step), else after the focused step,
 else at the end (`insertionIndex`): where the planner is working (docs/research/ux-benchmark.md).
-The new steps become the selection.
+The new steps become the selection. The route list draws the place (the insertion line and the
+band under the later steps, §8) and the Add footer names it: Grind, Travel, **Hearth** (a
+hearthstone use, to the bind point the walk knows), **Train** and **Buy** (a train or vendor step
+with nothing set, which open Details to set it) and Note.
 
-**Adding quests.** The Available tab's + on each quest adds its accept, complete and turn-in as
-one command ("Add quest"); the tab also has "New custom quest". A quest in Details has "Add
-accept, complete and turn in", Accept, "Complete" (or "Complete all objectives") and "Turn in",
-and "Complete objective n" beside each objective when there are several. Each step is placed at
+**Adding quests** (ui-refresh.md §5.4, §5.5, §7.3). The Available tab's Accept on each quest adds
+its accept step; its name says where it goes ("after step 12", or "at the end of the route" while
+nothing is selected; review UI-08). Line 2 shows the quest's XP at the level after the step with its
+basis marker ("+630 XP ≈"; an upper bound while that level is a lower bound; review UI-05). A locked
+quest has "Needs <prerequisite>" (which opens the prerequisite in Details) and **Accept first** right
+after it, which accepts the prerequisite: the first one the route does not already accept and that
+is neither in the log nor done after the step, named first ("and 1 more" lists the others in its
+tooltip). When every prerequisite is taken already, Accept first is unavailable and says why ("…
+is already accepted at step 11: move that step before step 8"), so it never adds a second accept
+(review QA-05). A zone heading's name words its numbers: the span with what its count counts, the
+median chip ("median quest level 9, Impossible (red), at the level after step 12") and how many
+quests are listed (review UI-13). The tab's summary line has "New custom quest". The Quest log tab has Objectives done and Turn in on each quest ("…
+after step 12"), every quest with its chip, and Done here on each open objective ("Done here: Kill
+10 boars (objective 1 of Vile Familiars), after step 12"); every objective's words are a grid item,
+so ↓ reaches a done one too (review UI-11). Details' difficulty is taken at the level after the
+selected step when there is route state, as the rows and the Available tab take it, and at the
+start level only without it (review UI-12). A quest in Details has Accept, Objectives done and Turn in, with the
+quest's state at the step making one of them primary (none without route state), **Add all three**
+(accept, complete and turn-in as one command, "Add quest", which the Available rows' + did), and
+"Complete objective n" beside each objective when there are several. Each step is placed at
 the relevant spawn nearest the insertion context, by straight line: the starter's spawns for an
 accept, the finisher's for a turn-in, the objective targets' (a creature, an object, an item's
 drop sources, an event's points) for a complete. The context is the last step before the
@@ -1140,10 +1552,17 @@ has not seen yet says "Not simulated yet: the route is being simulated again aft
 duration and XP per hour in the status bar; it says nothing about the route's XP total and the
 time shares, so they go where they take least room:
 
-- *Always visible:* the XP bar at the active step ("Level after step 12"), else at the end of the
-  route; "Time" (the route's duration), "XP" (the route's XP total, hidden at 1440px and below)
-  and "XP/h", each a `ReadoutValue` with its markers; Time and XP/h carry the pending marker while
-  the walk is provisional.
+- *Always visible:* "Lv 4 after step 12" (the level in 15px bold and where it is read in 12px
+  muted; ui-refresh.md §8) and the XP bar at the active step ("Level after step 12"), else at the end
+  of the route: 200 × 12px with 20 ticks every 5% (decorative, not drawn under forced colours; the
+  numbers carry the value), its value beside it; "Time" (the route's duration), "XP" (the route's XP
+  total, hidden at 1440px and below) and "XP/h", each a `ReadoutValue` with its markers; Time and
+  XP/h carry the pending marker while the walk is provisional.
+- *In log* ("In log 4 / 40", hidden at 1280px and below): the quests in the log after the active
+  step against the ruleset's `questLogCapacity`, "≥4 / 40" while the log before the route is not
+  known (history "partly known"); its tooltip and spoken words name the capacity's basis ("client
+  data", or "your project's value"); "?" with the reason without a walked step, never 0. The Quest
+  log tab's count and name say the same ("Quest log, 4 quests after step 12").
 - *XP per hour's bound* (UI-10). It is the known XP over the known time. When some steps' time is
   unknown (the duration is `≥`) and all XP is known, the true rate is at most this: `≤`, said "at
   most". When some XP is unknown and all time is known, it is at least this: `≥`. When both are
@@ -1244,6 +1663,15 @@ open and 11.0 → 0.37 ms with the Validation tab open; a re-walk publish with u
 6.6 → 3.8 ms and 11.0 → 5.5 ms; an edit 73 → 70 ms and 117 → 108 ms (the route view is rebuilt,
 so it is unchanged within the noise). Throttling the progress publishes is the pipeline's
 (ARCHITECTURE §12.1); the browser commit times are for the Milestone 9 run.
+
+**A selection change** (review UI-04). The quest state, places and labels for the new active step
+are rebuilt in a task of their own once the selection has stood still for `SELECTION_SETTLE_MS`
+(60 ms, which the app passes to the pipeline; `selectionSettleMs`): arrowing through the list
+rebuilds them once, where it stops, and the selection paints first. **Gate:** a selection change on
+the 10,000-step project settles in 50 ms or less at 4× CPU throttling (headless Chrome, the UR.2b
+harness, the Available tab, median of 30). MEASURED (fix-ui, 2026-09-30, the working tree with the
+other fixes of this review): 8.0 ms at 1× and 47.1 ms at 4× (p90 54.6 ms), against 19.8 ms and
+112.3 ms with the rebuild in the next task (the `?settle=0` comparison on the same build).
 
 **Checked by hand** (Milestone 6 review fixes, in the built app in headless Edge through the
 DevTools protocol, walking paths held by holding the navigation files): the status bar at 721-1600px

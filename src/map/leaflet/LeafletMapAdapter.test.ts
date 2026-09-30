@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import * as L from 'leaflet';
+import { pinGeometry } from '../marks-pins';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NpcId, StepId, UiMapId, WorldMapId } from '../../domain/ids';
 import type { WorldPoint } from '../../domain/points';
@@ -183,6 +184,15 @@ function screenOf(adapter: LeafletMapAdapter, point: WorldPoint): { readonly x: 
   return { x: (view.bounds.yMax - point.y) * scale, y: (view.bounds.xMax - point.x) * scale };
 }
 
+/**
+ * Where a quest giver's pin head is, on screen, at the zone band (D 26): above the item's point,
+ * which is the pin's tip (map-presentation.md §25.2.1); pointer tests aim there.
+ */
+function headOf(adapter: LeafletMapAdapter, point: WorldPoint): { readonly x: number; readonly y: number } {
+  const at = screenOf(adapter, point);
+  return { x: at.x, y: at.y - pinGeometry(26).centreToPoint };
+}
+
 function pathCanvas(host: HTMLElement): HTMLCanvasElement {
   const canvas = host.querySelector<HTMLCanvasElement>('.leaflet-overlay-pane canvas:not(.frl-map__grid)');
   if (canvas === null) throw new Error('no path canvas yet');
@@ -301,8 +311,9 @@ describe('LeafletMapAdapter (happy-dom smoke test)', () => {
     expect(click).toMatchObject({ type: 'click', hit: { layer: 'route-steps', id: 'step:s1', ref: { kind: 'step', stepId: 's1' }, refs: [{ kind: 'step', stepId: 's1' }], segment: null } });
     expect(click?.type === 'click' ? click.zones : null).toEqual([1411]);
 
+    // The giver is a pin now (map-presentation.md §25.2): its head, above its point, takes the click.
     adapter.setLayer('route-steps', content('route-steps', []));
-    pointer(host, 'click', at);
+    pointer(host, 'click', headOf(adapter, GORNEK));
     expect(events.filter((event) => event.type === 'click').at(-1)).toMatchObject({ hit: { layer: 'available-quests', id: 'spawn:npc:3143:0' } });
 
     adapter.toggleLayer('available-quests', false);
@@ -316,7 +327,7 @@ describe('LeafletMapAdapter (happy-dom smoke test)', () => {
       expect(empty.point.y).toBeCloseTo(GORNEK.y, -1);
     }
     adapter.toggleLayer('available-quests', true);
-    pointer(host, 'click', at);
+    pointer(host, 'click', headOf(adapter, GORNEK));
     expect(events.filter((event) => event.type === 'click').at(-1)).toMatchObject({ hit: { layer: 'available-quests' } });
   });
 
@@ -348,7 +359,7 @@ describe('LeafletMapAdapter (happy-dom smoke test)', () => {
     const { adapter, host, events } = setup();
     adapter.setViewport({ center: GORNEK, zoom: -2 });
     adapter.setLayer('available-quests', content('available-quests', [giver(3143, GORNEK, '<b>Gornek</b> & co')]));
-    pointer(host, 'mousemove', screenOf(adapter, GORNEK));
+    pointer(host, 'mousemove', headOf(adapter, GORNEK));
     expect(events.filter((event) => event.type === 'hover').at(-1)).toMatchObject({ hit: { layer: 'available-quests', id: 'spawn:npc:3143:0' } });
     const tooltip = host.querySelector('.frl-map__tooltip');
     expect(tooltip?.textContent).toBe('<b>Gornek</b> & co');
@@ -460,8 +471,9 @@ describe('LeafletMapAdapter draw order and updates (M3 review PERF-1, PERF-2)', 
     adapter.setLayer('zone-frames', content('zone-frames', [durotarFrame]));
     adapter.setLayer('available-quests', content('available-quests', [giver(1, at(10, -3000))]));
     expect(adapter.drawOrder()).toEqual(['zone-frames/frame:1411', 'available-quests/spawn:npc:1:0', 'route-steps/step:a', 'route-steps/step:b']);
-    // A new item lands in its layer's order, not on top of the canvas.
-    adapter.setLayer('available-quests', content('available-quests', [giver(1, at(10, -3000)), giver(2, at(20, -3000))]));
+    // A new item lands in its layer's order, not on top of the canvas: pins by screen y, north first
+    // (map-presentation.md §25.2.6), so this one, south of the first, draws after it.
+    adapter.setLayer('available-quests', content('available-quests', [giver(1, at(10, -3000)), giver(2, at(5, -3000))]));
     expect(adapter.drawOrder()).toEqual([
       'zone-frames/frame:1411',
       'available-quests/spawn:npc:1:0',
@@ -527,7 +539,8 @@ describe('LeafletMapAdapter draw order and updates (M3 review PERF-1, PERF-2)', 
     const setStyle = vi.spyOn(L.Polyline.prototype, 'setStyle');
     adapter.highlight({ layer: 'route-line', ids: ['run:1:route:a'] });
     expect(setStyle).toHaveBeenCalledTimes(1);
-    expect(setStyle.mock.calls[0]?.[0]).toMatchObject({ weight: 5 });
+    // The route's 2.6 px (map-presentation.md §25.4), 2 px more when highlighted.
+    expect(setStyle.mock.calls[0]?.[0]).toMatchObject({ weight: 4.6 });
     expect(adapter.drawOrder()).toEqual(['route-line/run:1:route:a', 'route-steps/step:a']);
     adapter.highlight({ layer: 'route-steps', ids: ['step:a'] });
     expect(setStyle).toHaveBeenCalledTimes(2); // the line back to normal
@@ -734,8 +747,8 @@ describe('LeafletMapAdapter glyph drawing (M3 review PERF-3, PERF-13, MAP-UX-3)'
     calls.length = 0;
     adapter.setViewport({ center: GORNEK, zoom: -2.5 });
     const dashes = calls.filter((call) => call.name === 'setLineDash').map((call) => JSON.stringify(call.args[0]));
-    // Leaflet's dash for the line, then one clear before the first glyph after it.
-    expect(dashes).toEqual(['[10,6]', '[]']);
+    // The halo's dash (review PR-03) and Leaflet's for the line, then one clear before the first glyph after it.
+    expect(dashes).toEqual(['[10,6]', '[10,6]', '[]']);
     // Two glyphs, and no more saves than Leaflet's own per pass.
     expect(calls.filter((call) => call.name === 'save').length).toBe(saves);
   });
@@ -772,6 +785,23 @@ describe('LeafletMapAdapter departures and aggregates', () => {
     adapter.setLayer('objectives', content('objectives', [aggregate]));
     pointer(host, 'click', screenOf(adapter, at(0, -3000)));
     expect(events.filter((event) => event.type === 'click').at(-1)).toMatchObject({ hit: { id: 'agg:objectives:1411', refs: [{ kind: 'aggregate' }] } });
+  });
+});
+
+describe('LeafletMapAdapter wheel and zoom steps (docs/research/map-atlas.md §8.4, step ATL.0)', () => {
+  it('creates the map with 60 wheel pixels per zoom level and whole-level zoom steps', () => {
+    const { adapter } = setup();
+    const map = (adapter as unknown as { map: L.Map | null }).map;
+    if (map === null) throw new Error('not mounted');
+    // 120 px per level capped the wheel at 43-46 notches from -6 to -2; 60 took 21-22 (MEASURED, map-atlas.md §3.2).
+    expect(map.options.wheelPxPerZoomLevel).toBe(60);
+    // The ± buttons and the keyboard's + and - move one whole level.
+    expect(map.options.zoomDelta).toBe(1);
+    expect(map.keyboard.enabled()).toBe(true);
+    expect((map.keyboard as unknown as { _zoomKeys: Record<number, number> })._zoomKeys[187]).toBe(1);
+    // Unchanged by ATL.0: the snap and Leaflet's own wheel handler (step ATL.8 replaces both).
+    expect(map.options.zoomSnap).toBe(0.25);
+    expect(map.scrollWheelZoom.enabled()).toBe(true);
   });
 });
 

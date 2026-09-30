@@ -114,6 +114,7 @@ export function derivedResults(project: ProjectV1, options: ResultsOptions = {})
     travelModel: 'straight-line',
     pendingLegs,
     pendingSteps: estimates.filter((e) => e.facts.some((f) => f.kind === 'pending-leg')).length,
+    taxiPending: false,
     final,
     walkedFrom: 0,
     timing: { walkMs: 0, metricsMs: 0, sinceChangeMs: 0 },
@@ -129,6 +130,8 @@ export function readyState(results: DerivedResults, patch: Partial<DerivedState>
     selected: null,
     travel: { model: 'straight-line', reason: 'this deploy has no navigation data', revision: 'straight-line', unavailableMaps: [], unavailableAll: false },
     paths: IDLE_PATHS,
+    questState: null,
+    zoneSpans: null,
     ...patch,
   };
 }

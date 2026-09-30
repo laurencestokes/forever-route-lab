@@ -17,12 +17,10 @@ import {
   characterName,
   dataBadgeDetail,
   dropToIndex,
-  entityWhereText,
   grindTargetText,
   locationDetail,
   locationText,
   mapStepLabel,
-  objectiveWhere,
   panelTabOf,
   publishedPointText,
   questName,
@@ -33,11 +31,11 @@ import {
   sameItems,
   selectedRowKeys,
   selectionMessage,
-  spawnSummary,
   stepRowModel,
   stepTitle,
   type RouteView,
 } from './app-model';
+import { entityWhereText, objectiveWhere, spawnSummary } from './app/detail-text';
 import { SIDE_PANEL_TAB_ORDER } from './shell/SidePanel';
 
 const { project, dataset } = createPlaceholderWorkspace({ nowIso: '2026-09-25T12:00:00.000Z' });
@@ -263,6 +261,20 @@ describe('instance-presence spawns (COORD-2, code-F5)', () => {
   it('keeps naming the zone of an ordinary zone spawn', () => {
     expect(spawnSummary(base, GORNEK)).toBe('1 spawn in Durotar');
     expect(questZoneName(base, cutting)).toBe('Durotar');
+  });
+
+  it('says when the starters spawn in several places, and names the preferred one first (QA-20)', () => {
+    const own = base.spawns(GORNEK)[0];
+    if (own === undefined) throw new Error('fixture Gornek has no spawn');
+    // Gornek standing in Dun Morogh first, then in Durotar and inside an instance, as Winter's Presents' giver does
+    const dunMorogh: SpawnPoint = { ...own, uiMapId: 1426 as UiMapId };
+    const instance: SpawnPoint = { source: { kind: 'instance', areaId: 491 as AreaId }, world: null, uiMapId: null };
+    const several = (spawns: readonly SpawnPoint[]): DatasetView => ({ ...base, spawns: (ref) => (ref.kind === 'npc' && ref.id === GORNEK.id ? spawns : base.spawns(ref)) });
+    expect(questZoneName(several([dunMorogh, own, dunMorogh]), cutting)).toBe('Dun Morogh and 1 other zone');
+    expect(questZoneName(several([dunMorogh, own, instance]), cutting)).toBe('Dun Morogh and 2 other places');
+    // a caller that knows the zones' sides names the character's first
+    expect(questZoneName(several([dunMorogh, own]), cutting, (id) => id === (1411 as UiMapId))).toBe('Durotar and 1 other zone');
+    expect(questZoneName(several([dunMorogh, own]), cutting, () => false)).toBe('Dun Morogh and 1 other zone');
   });
 });
 

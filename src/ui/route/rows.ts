@@ -1,3 +1,4 @@
+import type { IssueSeverity } from '../../domain/issues';
 import type { StepKind } from '../../domain/route';
 import type { Difficulty } from '../../rules/difficulty';
 import type { IssueCounts } from '../lib/issues';
@@ -25,6 +26,43 @@ export const ESTIMATE_COLUMN_LABELS: Readonly<Record<EstimateColumn, string>> = 
   time: 'Step time',
 };
 
+/**
+ * The top number of a two-line row (docs/research/ui-refresh.md §6.1): the XP gained (default) or
+ * the step time; the level after the step sits under it. One-line rows keep one `EstimateColumn`.
+ */
+export type TopNumber = 'xp' | 'time';
+
+export const TOP_NUMBERS: readonly TopNumber[] = ['xp', 'time'];
+
+/**
+ * A quest step's mark in the route list (ui-refresh.md §5.2; the one state table of
+ * map-presentation.md §25.2.3): an accept is available, may be available (a doubt at the step) or
+ * locked (an error at the step); a turn-in is ready, may be ready, locked, or its readiness is unknown
+ * (before the walk has reached it).
+ */
+export type RowMarkState = 'available' | 'uncertain' | 'locked' | 'ready' | 'record-unknown';
+
+/** The worst issue at a step (error, then warning, then info), which line 2 of a two-line row shows in words. */
+export interface RowIssue {
+  readonly severity: IssueSeverity;
+  /** The validator's full message: the row's name and line 2's tooltip. */
+  readonly message: string;
+  /**
+   * Line 2's short form: the message without the step's own quest ("Needs Cutting Teeth turned in
+   * first", "No step finishes objective 1"), since line 1 already names it (review UI-01);
+   * omitted: the message.
+   */
+  readonly short?: string | undefined;
+}
+
+/** Line 2's place, short (two-line rows): who or what, and the zone, without the coordinates the tooltip and the name keep (review UI-01). */
+export interface RowPlace {
+  /** The NPC, object or label ("Kaltunk"); null for none. */
+  readonly lead: string | null;
+  /** The zone's name ("Durotar"); null when the point names none. */
+  readonly zone: string | null;
+}
+
 export interface StepRowModel {
   readonly type: 'step';
   /** Stable key, normally the StepId. */
@@ -32,10 +70,20 @@ export interface StepRowModel {
   /** 1-based step number as shown (group headers are not numbered). */
   readonly number: number;
   readonly kind: StepKind;
-  /** One line: quest name, destination, note text. Ellipsised when long. */
+  /** What the step does, first in line 1 (D-048 A): "Accept", "Turn in", "Complete", "Travel", "Grind". */
+  readonly verb: string;
+  /** What it does it to, after the verb: the quest's name (without its chain label), "to Razor Hill", the note's text. Ellipsised when long. */
   readonly title: string;
-  /** Dimmed secondary text after the title (for example a zone), or null. */
+  /** The quest's place in its chain ("1/2" after the title, spoken "1 of 2"); null for none. */
+  readonly chain: { readonly index: number; readonly length: number } | null;
+  /**
+   * Where the step happens, in words ("Kaltunk · Durotar 43.3, 68.5"): line 2 of a two-line row, and
+   * dimmed after the title in a one-line row; null for none. Filled in as the row renders
+   * (`createRowDeriver`, cached by dataset view and step), so building the rows formats nothing.
+   */
   readonly detail: string | null;
+  /** `detail`'s short form for line 2 of a two-line row (the lead gives way, the zone stays); omitted or null: `detail` as it is. */
+  readonly place?: RowPlace | null | undefined;
   /** Fractional level after this step (12.4 = level 12, 40%); unknown stays unknown. */
   readonly projectedLevel: Readout<number>;
   /** Seconds the step takes (docs/ARCHITECTURE.md §9.3); unknown stays unknown. */
@@ -59,15 +107,25 @@ export interface StepRowModel {
     readonly provenance: ForeverProvenance;
   } | null;
   readonly issues: IssueCounts;
+  /** The worst issue at the step, or null for none (filled in with the walk's issues). */
+  readonly issue: RowIssue | null;
+  /** The mark's state for an accept or a turn-in; null for the other kinds (their neutral disc has no state). */
+  readonly mark: RowMarkState | null;
+  /** The whole level the step reaches when the level after it crosses one ("↑2.3", "reaches level 2"); null otherwise. */
+  readonly levelUp: number | null;
   readonly locked: boolean;
 }
 
-/** A header row for a group of steps (an imported RXP step). One line, like every row. */
+/** A header row for a group of steps (an imported RXP step). As tall as the list's step rows. */
 export interface GroupRowModel {
   readonly type: 'group';
   readonly key: string;
   readonly label: string;
   readonly stepCount: number;
+  /** An imported RXP step (said on line 2 of a two-line header). */
+  readonly imported: boolean;
+  /** The level after the group's first and last steps (filled in with the walk's numbers); null before. */
+  readonly levelSpan: { readonly from: Readout<number>; readonly to: Readout<number> } | null;
 }
 
 export type RouteRowModel = StepRowModel | GroupRowModel;

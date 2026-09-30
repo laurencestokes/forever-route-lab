@@ -23,12 +23,15 @@ import { lfBytes, sha256Hex } from './hash';
  * - A2 every listed image exists with its recorded byte count and SHA-256 and is a still WebP of
  *   its recorded size (headers only), and nothing unlisted is in the folder.
  * - A3 `NOTICE.md` is exactly the text regenerated from the manifest.
- * - A4 against the committed placeholder geometry: every placeholder UiMap has an image or a
- *   recorded reason; every image's UiMap is in the placeholder, has its UiMap's art size, and its
- *   `bounds` equal the UiMap's single full-rectangle row after `Math.fround` (null exactly when there
- *   is no such single row, like Azeroth 947 with a row per continent).
- * - A5 the folder is within the `art` budget: gzip-6 of every file ≤ 12,000,000 B (D-034 item 4;
- *   the dist audit also gates per-file baselines).
+ * - A4 against the committed placeholder geometry: every placeholder UiMap has an image, a `sources`
+ *   record (composed but not deployed, D-042 O5) or a recorded reason; every image's UiMap is in the
+ *   placeholder, has its UiMap's art size, and its `bounds` equal the UiMap's single full-rectangle
+ *   row after `Math.fround` (null exactly when there is no such single row, like Azeroth 947 with a
+ *   row per continent); with `expectedDeployment` (validate.ts passes `DEPLOYED_ART_UIMAPS`), the
+ *   manifest's deployment lists exactly those UiMaps (docs/research/map-atlas.md §7.6, step ATL.10).
+ * - A5 the folder is within the `art` budget: gzip-6 of every file, subfolders included,
+ *   ≤ 1,000,000 B (D-042 O5, which superseded D-034 item 4's 12 MB; the dist audit also gates
+ *   per-file baselines).
  */
 
 const check = (id: string, title: string, problems: readonly string[]): CheckResult => ({ id, title, problems, skipped: null });
@@ -40,12 +43,12 @@ export interface ArtCheckReport {
   readonly gzipBytes: number | null;
 }
 
-export function committedArtChecks(dir: string, placeholder: MapGeometry): ArtCheckReport {
+export function committedArtChecks(dir: string, placeholder: MapGeometry, expectedDeployment: readonly number[] | null = null): ArtCheckReport {
   const titles = {
     A1: `${ART_MANIFEST_FILE} and ${ART_NOTICE_FILE} exist; the manifest parses, names Blizzard Entertainment and records the pinned build`,
     A2: 'every listed image exists with its byte count and SHA-256, is a still WebP of its recorded size, and nothing else is in the folder',
     A3: `${ART_NOTICE_FILE} is the text regenerated from the manifest`,
-    A4: 'every placeholder UiMap has an image (or a recorded reason); sizes and world rectangles equal the committed placeholder',
+    A4: `every placeholder UiMap has an image, a sources record or a recorded reason; sizes and world rectangles equal the committed placeholder${expectedDeployment === null ? '' : `; the deployed images are UiMaps ${expectedDeployment.join(', ')} (D-042 O5)`}`,
     A5: `the folder is within the art budget (${formatBytes(ART_BUDGET_GZIP_BYTES)} gzip-6)`,
   } as const;
   const a1: string[] = [];
@@ -103,8 +106,15 @@ export function committedArtChecks(dir: string, placeholder: MapGeometry): ArtCh
 
   const a4: string[] = [];
   const imaged = new Set(manifest.files.map((f) => f.uiMapId));
+  const composed = new Set(manifest.sources.map((s) => s.uiMapId));
   const skipped = new Set(manifest.skippedUiMaps);
-  for (const id of placeholder.maps.keys()) if (!imaged.has(id) && !skipped.has(id)) a4.push(`UiMap ${String(id)} has no image and no recorded reason`);
+  for (const id of placeholder.maps.keys()) if (!imaged.has(id) && !composed.has(id) && !skipped.has(id)) a4.push(`UiMap ${String(id)} has no image, no sources record and no recorded reason`);
+  if (expectedDeployment !== null) {
+    const listed = manifest.deployment?.uiMaps ?? null;
+    const want = [...expectedDeployment].sort((a, b) => a - b);
+    if (listed === null) a4.push(`the manifest deploys every composed image; D-042 O5 deploys only UiMaps ${want.join(', ')} (regenerate with convert.ts)`);
+    else if (listed.length !== want.length || listed.some((id, i) => id !== want[i])) a4.push(`the manifest deploys UiMaps ${listed.join(', ')}; D-042 O5 deploys ${want.join(', ')}`);
+  }
   for (const file of manifest.files) {
     const map = placeholder.maps.get(uiMapId(file.uiMapId));
     if (map === undefined) {
@@ -128,11 +138,17 @@ export function committedArtChecks(dir: string, placeholder: MapGeometry): ArtCh
   }
   checks.push(check('A4', titles.A4, a4));
 
+  // A5 counts every file under the folder, subfolders included (docs/research/map-atlas.md §7.5)
   let gzipBytes = 0;
-  for (const name of existsSync(dir) ? readdirSync(dir) : []) {
-    const path = join(dir, name);
-    if (lstatSync(path).isFile()) gzipBytes += gzipSize(readFileSync(path));
-  }
+  const sum = (folder: string): void => {
+    for (const name of readdirSync(folder)) {
+      const path = join(folder, name);
+      const stat = lstatSync(path);
+      if (stat.isDirectory()) sum(path);
+      else if (stat.isFile()) gzipBytes += gzipSize(readFileSync(path));
+    }
+  };
+  if (existsSync(dir)) sum(dir);
   checks.push(check('A5', `${titles.A5}: ${formatBytes(gzipBytes)}`, gzipBytes <= ART_BUDGET_GZIP_BYTES ? [] : [`${formatBytes(gzipBytes)} gzip-6 is over the budget`]));
   return { checks, manifest, gzipBytes };
 }

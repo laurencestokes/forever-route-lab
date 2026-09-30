@@ -36,18 +36,22 @@
  *   in a task of its own, PERF-03), and `runTaskMs` that next task (enumerating the legs and the
  *   run's first round);
  * - `navEditStart`, `navEditMiddle`: the edits above with the navigation model and every leg
- *   computed (a worker stand-in that answers at once), which adds the leg-table lookups (PERF-02).
+ *   computed (a worker stand-in that answers at once), which adds the leg-table lookups (PERF-02);
+ * - `taxiArrives` (review TR-11): the committed client taxi file arriving on a live pipeline (a
+ *   loader held until the first walk is published): the TravelGraph re-seeded with its nodes,
+ *   flights and inferred docks, TIME-6's per-leg data, and the walk that follows, published.
+ *   `sinceChangeMs` is the published timing; `taskMs` the whole synchronous task.
  *
  * `--budget`: the edit cases (editStart, editMiddle, editEnd, select, classChange, classToggle,
- * navEditStart, navEditMiddle) against §14's 50 ms edit to results; the startup cases (firstWalk and
- * navigationArrives' task) against §14's rule of no long task over 100 ms.
+ * navEditStart, navEditMiddle) against §14's 50 ms edit to results; the startup cases (firstWalk,
+ * navigationArrives' task and taxiArrives' task) against §14's rule of no long task over 100 ms.
  */
 import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { fixedClock } from '../../src/app/clock';
 import { updateStepNote } from '../../src/app/commands';
 import { createDerivedStore, type DerivedResults } from '../../src/app/derived';
-import { createDerivedPipeline, type DerivedPipeline } from '../../src/app/derived-pipeline';
+import { type ClientTableLoaders, createDerivedPipeline, type DerivedPipeline } from '../../src/app/derived-pipeline';
 import { createNavigationRuntime, type DisposableNavLegService, type NavigationState } from '../../src/app/navigation-runtime';
 import type { NavTimers } from '../../src/app/navigation-scheduler';
 import { testNavManifest } from '../../src/app/navigation-test-helpers';
@@ -62,7 +66,9 @@ import { defaultCharacter } from '../../src/domain/project-factory';
 import type { ProjectV1 } from '../../src/domain/project';
 import type { RouteStep } from '../../src/domain/route';
 import { makeAcceptStep, makeCompleteStep, makeGrindStep, makeHearthStep, makeTurnInStep } from '../../src/domain/step-factory';
+import type { ClientTableLoad, ClientTaxi } from '../../src/infra/maps/client-tables';
 import { fakeServer, nodeSha256, publicSite } from '../support/fake-fetch';
+import { committedTaxi } from './bench-support';
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string): string => {
@@ -160,7 +166,7 @@ interface Bench {
   readonly derived: ReturnType<typeof createDerivedStore>;
 }
 
-function start(navigation: NavigationState = { kind: 'unavailable', reason: 'benchmark: straight-line model' }, timers: NavTimers = manualTimers): Bench {
+function start(navigation: NavigationState = { kind: 'unavailable', reason: 'benchmark: straight-line model' }, timers: NavTimers = manualTimers, clientTables: ClientTableLoaders | null = null): Bench {
   const store = createEditorStore({ project, ids: sequentialIdSource(1_000_000), clock: fixedClock(NOW), coalesceWindowMs: 0 });
   const derived = createDerivedStore();
   const pipeline = createDerivedPipeline({
@@ -171,6 +177,7 @@ function start(navigation: NavigationState = { kind: 'unavailable', reason: 'ben
     navigation,
     timers,
     now: () => performance.now(),
+    clientTables,
   });
   return { store, pipeline, derived };
 }
@@ -343,7 +350,33 @@ const navEditMiddle = navStats(bench(nb, navEdit(Math.floor(STEPS / 2))));
 nb.pipeline.dispose();
 navRuntime.dispose();
 
-const route = { steps: STEPS, issues, firstWalk, editStart, editMiddle, editEnd, select, classChange, classToggle, navigationArrives, navEditStart, navEditMiddle };
+// The committed taxi file arriving on a live pipeline (TR-11): held until the first walk is published.
+const taxiTable = await committedTaxi();
+const taxiArrivals: { since: number[]; task: number[] } = { since: [], task: [] };
+for (let i = 0; i < WARM + RUNS; i += 1) {
+  let release: (load: ClientTableLoad<ClientTaxi>) => void = () => undefined;
+  const held = new Promise<ClientTableLoad<ClientTaxi>>((resolve) => {
+    release = resolve;
+  });
+  const t = start(undefined, manualTimers, { taxi: () => held, dungeons: () => new Promise<never>(() => undefined) });
+  t.pipeline.flush();
+  const before = resultsOf(t);
+  release({ kind: 'loaded', table: taxiTable });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const t0 = performance.now();
+  t.pipeline.flush();
+  const t1 = performance.now();
+  const after = resultsOf(t);
+  if (after === before || after.taxiPending) throw new Error('no walk after the taxi file arrived');
+  if (i >= WARM) {
+    taxiArrivals.since.push(after.timing.sinceChangeMs);
+    taxiArrivals.task.push(t1 - t0);
+  }
+  t.pipeline.dispose();
+}
+const taxiArrives = { sinceChangeMs: stats(taxiArrivals.since), taskMs: stats(taxiArrivals.task) };
+
+const route = { steps: STEPS, issues, firstWalk, editStart, editMiddle, editEnd, select, classChange, classToggle, navigationArrives, navEditStart, navEditMiddle, taxiArrives };
 console.log(JSON.stringify({ runs: RUNS, warm: WARM, node: process.version, platform: `${process.platform} ${process.arch}`, [`derived${String(STEPS)}`]: route }, null, 2));
 if (BUDGET) {
   const edits = (['editStart', 'editMiddle', 'editEnd', 'select', 'classChange', 'classToggle', 'navEditStart', 'navEditMiddle'] as const).filter((name) => route[name].median > BUDGET_MS);
@@ -351,6 +384,7 @@ if (BUDGET) {
     ['firstWalk', firstWalk.median],
     ['navigationArrives task', navigationArrives.taskMs.median],
     ['navigationArrives run task', navigationArrives.runTaskMs.median],
+    ['taxiArrives task', taxiArrives.taskMs.median],
   ].filter(([, median]) => (median as number) > LONG_TASK_MS);
   if (edits.length > 0) console.error(`Over the ${String(BUDGET_MS)} ms edit-to-results budget: ${edits.map((name) => `${name} ${String(route[name].median)} ms`).join(', ')}`);
   if (startup.length > 0) console.error(`A startup task over ${String(LONG_TASK_MS)} ms: ${startup.map(([name, median]) => `${String(name)} ${String(median)} ms`).join(', ')}`);
@@ -371,6 +405,7 @@ if (CHECK !== null) {
       editMiddle: editMiddle.median,
       classChange: classChange.median,
       navEditStart: navEditStart.median,
+      taxiArrives: taxiArrives.sinceChangeMs.median,
     };
     const found = Object.entries(current).flatMap(([name, now]) => {
       const was = baseline[name]?.median;

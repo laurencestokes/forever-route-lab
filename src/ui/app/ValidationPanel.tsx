@@ -9,7 +9,6 @@ import {
   describeIssueCounts,
   EmptyState,
   formatInteger,
-  IssueList,
   type IssueListItem,
   PanelSection,
   plural,
@@ -18,6 +17,7 @@ import {
   SeverityIcon,
   totalIssues,
 } from '../kit';
+import { IssueList } from '../shell/DetailParts';
 import { noResultsReason, validationCounts } from './derived-view';
 import type { Announce } from './LiveAnnouncer';
 import { sameResultsView, selectDerived } from './selectors';

@@ -40,15 +40,17 @@ import { type Location, type WorldPoint, worldSourcedPoint } from '../../src/dom
 import type { CharacterProfile } from '../../src/domain/project';
 import { defaultCharacter } from '../../src/domain/project-factory';
 import type { RouteStep } from '../../src/domain/route';
-import { makeAcceptStep, makeCompleteStep, makeGrindStep, makeHearthStep, makeNoteStep, makeTravelStep, makeTurnInStep } from '../../src/domain/step-factory';
+import { makeAcceptStep, makeCompleteStep, makeFlightStep, makeGrindStep, makeHearthStep, makeNoteStep, makeTravelStep, makeTurnInStep } from '../../src/domain/step-factory';
 import type { EngineContext, WalkProject } from '../../src/engine';
 import { resolve as resolvePoint } from '../../src/geo/resolve';
 import type { MapGeometry } from '../../src/geo/types';
 import { effectiveRules, FOREVER_BETA } from '../../src/rules';
 import { createStraightLineTravelModel } from '../../src/rules/straight-line';
-import { seedTravelGraph } from '../../src/rules/travel-graph';
+import { createClientTables, type ClientTaxi } from '../../src/infra/maps/client-tables';
+import { seedTravelGraph, taxiNodeOpenTo } from '../../src/rules/travel-graph';
+import { taxiLegDataOf } from '../../src/sim/taxi';
 import { validateRoute } from '../../src/validate';
-import { fakeServer, nodeSha256, publicSite, REPO_ROOT } from '../support/fake-fetch';
+import { fakeServer, nodeSha256, publicSite, readDirectory, REPO_ROOT } from '../support/fake-fetch';
 
 export type BenchRoute = 'stress' | 'realistic';
 export const BENCH_ROUTES: readonly BenchRoute[] = ['stress', 'realistic'];
@@ -179,6 +181,64 @@ export async function benchSetup(route: BenchRoute, count: number): Promise<Benc
   const byKind: Record<string, number> = {};
   for (const step of built.steps) byKind[step.kind] = (byKind[step.kind] ?? 0) + 1;
   return { route, view, character, context, project, steps: built.steps, composition: { ...byKind, ...built.composition } };
+}
+
+/** The committed client taxi file (`public/maps/client/taxi.json`), loaded and checked as the app does. */
+export async function committedTaxi(): Promise<ClientTaxi> {
+  const server = fakeServer(readDirectory('public/maps/client', 'maps/client/'));
+  const load = await createClientTables({ fetch: server.fetch, baseUrl: './', sha256: nodeSha256 }).taxi();
+  if (load.kind !== 'loaded') throw new Error(`the committed taxi file: ${load.detail}`);
+  return load.table;
+}
+
+/** A route with flights and transports, and the context that prices them by TIME-6 and TIME-7. */
+export interface TravelVariant {
+  readonly context: EngineContext;
+  readonly project: WalkProject;
+  readonly flights: number;
+  readonly transports: number;
+}
+
+/**
+ * TIME-6 and TIME-7 on a bench route (review TR-11): the TravelGraph seeded with the committed taxi
+ * file (its nodes, flights and inferred docks), `localTaxi` from it, and the route with a flight
+ * every 21st step between flight masters of the character's side on the route's world map (all of
+ * them known), and every 500th step a round trip on the Rut'theran - Auberdine boat by record, whose
+ * docks are the file's inferred berths. Deterministic: the flights pair the nodes in graph order.
+ */
+export function travelVariant(setup: BenchSetup, taxi: ClientTaxi): TravelVariant {
+  const { view, character, context, project } = setup;
+  const graph = seedTravelGraph(
+    { npc: (id) => view.npc(id), spawns: (ref) => view.spawns(ref), zone: (id) => view.zone(id), flightMasterIds: context.graph.taxiNodes.flatMap((node) => (node.npcId === null ? [] : [node.npcId])), dungeons: [] },
+    context.rules,
+    { taxi },
+  );
+  const start = resolvePoint(project.character.startLocation?.source ?? worldSourcedPoint(1 as never, 0, 0), context.geometry);
+  const mapId = start?.mapId ?? null;
+  const own = graph.taxiNodes.filter((node) => node.npcId !== null && node.taxiNodeId !== null && node.point?.mapId === mapId && taxiNodeOpenTo(node, character.faction));
+  if (own.length < 2) throw new Error('the travel variant needs two flight points of the side');
+  const ref = (node: (typeof own)[number]) => ({ npcId: node.npcId, taxiNodeId: null, name: null });
+  const ids = sequentialIdSource(900_000);
+  const steps = [...project.route.steps];
+  let flights = 0;
+  let transports = 0;
+  for (let i = 20, k = 0; i < steps.length; i += 21, k += 1) {
+    const from = own[k % own.length];
+    const to = own[(k * 7 + 3) % own.length];
+    if (from === undefined || to === undefined || from === to) continue;
+    steps.splice(i, 0, makeFlightStep(ids, { from: ref(from), to: ref(to) }));
+    flights += 1;
+  }
+  for (let i = 499; i < steps.length; i += 500) {
+    steps.splice(i, 0, makeTravelStep(ids, { mode: 'transport', transport: { id: 'rutheran-auberdine', dock: null } }), makeTravelStep(ids, { mode: 'transport', transport: { id: 'rutheran-auberdine', dock: null } }));
+    transports += 2;
+  }
+  return {
+    context: { ...context, graph, localTaxi: taxiLegDataOf(taxi) },
+    project: { ...project, character: { ...project.character, knownFlightPaths: own.map(ref) }, route: { ...project.route, steps } },
+    flights,
+    transports,
+  };
 }
 
 function spawnLocation(view: DatasetView, id: NpcId): Location | null {

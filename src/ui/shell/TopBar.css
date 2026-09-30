@@ -42,43 +42,13 @@
   background: var(--frl-border);
 }
 
-.frl-topbar__project {
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.frl-topbar__project-name {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--frl-fg-muted);
-  text-overflow: ellipsis;
-}
-
-.frl-topbar__crumb {
-  color: var(--frl-fg-subtle);
-}
-
-.frl-topbar__route-name {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  font-weight: var(--frl-weight-medium);
-  text-overflow: ellipsis;
-}
-
 .frl-topbar__spacer {
   flex: 1 1 0;
   min-width: var(--frl-space-2);
 }
 
 .frl-topbar__search {
-  flex: 0 1 240px;
+  flex: 0 1 420px;
   min-width: 140px;
 }
 
@@ -106,6 +76,27 @@
   flex: none;
 }
 
+/* The character button (D-048 D): the settings glyph, the character in bold and "· Horde". */
+.frl-topbar__character {
+  gap: 6px;
+  max-width: 240px;
+}
+
+.frl-topbar__character-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frl-topbar__character-name {
+  font-weight: var(--frl-weight-bold);
+}
+
+.frl-topbar__character-faction {
+  color: var(--frl-fg-muted);
+}
+
 /* Below 1200px the action buttons keep their icons; the words stay for assistive technology. */
 @media (max-width: 1200px) {
   .frl-topbar__button-label {
@@ -118,7 +109,23 @@
     white-space: nowrap;
   }
 
-  .frl-topbar__actions .frl-button {
+  .frl-topbar__actions .frl-button:not(.frl-topbar__character) {
+    width: var(--frl-control-height);
+    padding: 0;
+  }
+
+  /* The character button keeps "Orc Warrior" to 1100px, then its glyph alone (it keeps its name). */
+  .frl-topbar__character-faction {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .frl-topbar__character-words {
+    display: none;
+  }
+
+  .frl-topbar__actions .frl-topbar__character {
     width: var(--frl-control-height);
     padding: 0;
   }

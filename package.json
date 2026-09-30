@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && tsx tools/build/licence-gate.ts && tsx tools/build/third-party-notices.ts && tsx tools/build/audit-dist.ts --strip-manifest",
+    "build:deploy": "tsx tools/build/minimap-fetch.ts && vite build --mode deploy && tsx tools/build/licence-gate.ts && tsx tools/build/third-party-notices.ts && tsx tools/build/audit-dist.ts --strip-manifest --deploy",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.pure.json && tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
@@ -26,6 +27,9 @@
     "data:check": "pnpm data:fetch && pnpm data:extract --check && pnpm data:validate",
     "maps:placeholder": "tsx tools/maps/import.ts --placeholder",
     "maps:validate": "tsx tools/maps/validate.ts",
+    "maps:tints": "tsx tools/maps/tints.ts",
+    "maps:minimap:fetch": "tsx tools/build/minimap-fetch.ts",
+    "maps:minimap:pack": "tsx tools/build/minimap-pack.ts",
     "rxp:overlap": "tsx tools/build/rxp-overlap.ts",
     "nav:extract": "tsx tools/terrain/extract.ts",
     "nav:check": "tsx tools/terrain/extract.ts --check",

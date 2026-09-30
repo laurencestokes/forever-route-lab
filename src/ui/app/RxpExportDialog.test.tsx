@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import fixture01 from '../../../tests/fixtures/rxp/01-basic-durotar.txt?raw';
 import fixture03 from '../../../tests/fixtures/rxp/03-lua-wrapped.txt?raw';
 import { fixturePrepared, fixtureView } from '../../../tests/support/fixture-dataset';
@@ -14,8 +14,14 @@ import { sequentialIdSource } from '../../app/shell-support';
 import { notesProject } from '../../app/test-helpers';
 import type { ProjectV1 } from '../../domain/project';
 import { App } from '../App';
+import { loadDetailsPanel } from './lazy';
 import { ProjectSessionProvider, useProjectSessionState } from './ProjectMenuContext';
 import { RxpExportDialog } from './RxpExportDialog';
+
+// The dialogs are lazy parts (ui-refresh.md §10.3) that production builds preload when idle; so do these tests.
+beforeAll(async () => {
+  await loadDetailsPanel();
+});
 
 afterEach(() => {
   cleanup();

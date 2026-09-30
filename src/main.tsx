@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createEditorStore, type EditorStore, randomIdSource, systemClock } from './app';
 import { createDerivedStore, type DerivedResults, type DerivedStore, type DerivedStoreHandle } from './app/derived';
-import { createMapResources, type MapEngineSetup } from './app/map-exports';
+import { createMapLayersSetting, createMapResources, type MapEngineSetup } from './app/map-exports';
 import { NAVIGATION_CHECKING, type NavigationState, startNavigation } from './app/navigation-runtime';
 import { browserLifecycle, createProjectSession, openBrowserProjectStorage, type ProjectSession } from './app/persistence';
 import { DerivedStoreProvider } from './app/react';
@@ -91,7 +91,8 @@ const openStorage = () => {
 let mapEngine: Promise<MapAdapterFactory> | null = null;
 const loadMapAdapter: MapEngineSetup['loadAdapter'] = () => {
   mapEngine ??= import('./map/leaflet').then(
-    (module) => module.createLeafletMapAdapter,
+    // The zoom buttons float in the map's own chrome (map-presentation.md §25.3.0), not Leaflet's.
+    (module): MapAdapterFactory => (options) => module.createLeafletMapAdapter({ ...options, zoomControl: false }),
     (error: unknown) => {
       mapEngine = null;
       throw error;
@@ -138,7 +139,7 @@ function measureDerived(results: DerivedResults): void {
  */
 function startDerived(store: EditorStore, workspace: Workspace, handle: DerivedStoreHandle, paths: ReturnType<typeof createRoutePathFeed>): void {
   loadPipeline().then(
-    ({ createDerivedPipeline }) => {
+    ({ createDerivedPipeline, SELECTION_SETTLE_MS }) => {
       const pipeline = createDerivedPipeline({
         store,
         data: workspace.data,
@@ -146,8 +147,12 @@ function startDerived(store: EditorStore, workspace: Workspace, handle: DerivedS
         output: handle,
         navigation: NAVIGATION_CHECKING,
         now: () => performance.now(),
+        // A moving selection rebuilds the quest state once, where it stops (review UI-04).
+        selectionSettleMs: SELECTION_SETTLE_MS,
         onPublished: measureDerived,
         onNavigationModel: paths.setModel,
+        // The committed client tables (D-039 B, E): fetched and verified in the pipeline's chunk.
+        clientTables: { resources: { fetch: (url, init) => window.fetch(url, init), baseUrl: import.meta.env.BASE_URL, sha256: browserSha256() } },
       });
       void startNavigationOnce().then((state) => {
         pipeline.setNavigation(state);
@@ -206,8 +211,19 @@ async function start(onProgress: (progress: WorkspaceProgress) => void): Promise
     resources: createMapResources({ fetch: (url, init) => window.fetch(url, init), baseUrl: import.meta.env.BASE_URL, sha256: browserSha256() }),
     paths,
     loadAdapter: loadMapAdapter,
+    // The map's settings chosen in this browser (map-presentation.md §25.3.7; map-atlas.md §21.3),
+    // like the theme: the Map layers drawer's record, whose style the controller reads. The atlas
+    // and the smooth wheel are on by default since step ATL.10 (map-atlas.md §11), so the
+    // `?atlas` and `?smooth-wheel` switches of the build steps are gone.
+    ...mapSettings(),
   };
   return { workspace, store, map, session, derived: derived.store };
+}
+
+/** The Map layers drawer's record and its style part (one `localStorage` record). */
+function mapSettings(): Pick<MapEngineSetup, 'mapStyle' | 'mapLayers'> {
+  const mapLayers = createMapLayersSetting(() => window.localStorage);
+  return { mapStyle: mapLayers.style, mapLayers };
 }
 
 /** The app, with the project name and the sample notice following the open project. */

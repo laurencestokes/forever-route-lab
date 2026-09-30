@@ -1,0 +1,2808 @@
+{
+  "about": "UI refresh measurements (docs/research/ui-refresh.md revision 2; D-046, D-048). The entry-chunk figures of steps UR.1a, UR.1, UR.2 and UR.3 to UR.6 (the shared ledger is ui-refresh.md §10.3), UR.2b: PERF-11’s browser baseline for the route list, taken before the rows changed, and UR.3’s measure against it in both densities. UR.8’s measurement part (with MP.12) is ur8.",
+  "entryChunk": {
+    "$comment": "Entry chunk and its static imports, gzip, as printed by the dist audit of `pnpm build` (tools/build/audit-dist.ts) on the working tree of 2026-09-27. \"In context\" figures: the entry built with a source map and the named files’ bytes removed, then compressed again at gzip level 6 (.cache/ui-refresh/ur-build/attribute.mjs, as .cache/ui-refresh/ledger/attribute.mjs). Parts no screen uses yet are measured by building the app with src/main.tsx made to reference them (.cache/ui-refresh/ur-build/vite.probe.config.ts, PROBE=kit|marks|both).",
+    "before": {
+      "kB": 248.98,
+      "basis": "MEASURED: the dist audit before UR.1a (the MP.1 row of the ledger)"
+    },
+    "ur1a": {
+      "kB": 243.81,
+      "deltaKB": -5.17,
+      "basis": "MEASURED: the dist audit after the Details panel (StepDetails, QuestDetails, StepEditors, field-parse) moved into the lazy-parts chunk; lazy-parts 13.92 → 19.62 kB gzip, entry CSS 10.82 → 10.46 kB. The design’s estimate was −5.43 kB plus 0.1 to 0.2 kB for the boundary."
+    },
+    "ur1": {
+      "kB": 244.26,
+      "deltaKB": 0.45,
+      "basis": "MEASURED: the restyled Button (default, the secondary alias, primary, danger, ghost, link; pressed and expanded looks), IconButton’s tile, nine icons, Checkbox’s mixed state and useLazy’s peek (UR.1a). SearchField, SegmentedControl and ExternalLink are not imported by any screen yet, so they are tree-shaken: +0.59 kB in context when used (probe, 246.62 → 247.24 kB with the marks already in), so the kit’s total is +1.04 kB against the ledger’s +0.8 to 1.1.",
+      "notYetInEntryKB": 0.59
+    },
+    "ur2": {
+      "kB": 246.62,
+      "deltaKB": 2.36,
+      "basis": "MEASURED: QuestMark and StepMark are memo() components, which the bundler keeps once the kit exports them, so they and the part of src/map/marks.ts they read (the state table with its spoken templates, the \"!\", \"?\" and arch paths, resolveMarkLook, markColour) are in the entry from UR.2. In context: QuestMark 1.04 kB, StepMark 0.05 kB, src/map/marks.ts 1.25 kB (4,684 minified bytes). The ledger estimated +0.6 to 0.8 (QuestMark, StepMark) plus +0.3 to 0.5 (marks.ts): 1.0 kB over its top. Below the 248.5 kB stop line.",
+      "inContextKB": {
+        "questMark": 1.04,
+        "stepMark": 0.05,
+        "marksModule": 1.25
+      }
+    },
+    "ur3to6": {
+      "kB": 247.67,
+      "basis": "MEASURED: the dist audit after UR.3 to UR.6 (2026-09-28), from 248.22 kB after MP.3: -0.55 kB. The steps added +5.9 kB in the first build (254.12 kB); the reserve (the Projects dialog and drift report lazy), the About, Import and Export dialogs, the Projects menu's content, View's content, the Quest log tab and the Details-only texts moved into the lazy parts, and the parts only lazy parts use (DetailList, IssueList, ExternalLink, SegmentedControl, AboutDialog) left the kit's value exports. Lazy parts 19.62 -> 31.93 kB gzip."
+    },
+    "finalVerification": {
+      "kB": 248.98,
+      "deltaKB": -2.14,
+      "budgetKb": 250,
+      "stopLineKb": 248.5,
+      "basis": "MEASURED (dist audit of pnpm build, 2026-09-30, gzip level 6: index 236.89 + shell-support 11.76 + http 0.32; pnpm build:deploy 248.97 kB). Every fixer of the joint review together measured 251.12 kB; the final verification then moved the pins’ half of map/marks into src/map/marks-pins.ts (a 1.39 kB chunk the lazy map chunk and the drawer share) and the Viewing chip’s ring lookup (app/map-viewing.ts, geo/zone-rings.ts) into the derived pipeline (the places’ zoneAt). Under the budget; 0.48 kB above the 248.5 kB stop rule (ui-refresh.md §10.3)."
+    }
+  },
+  "ur2bRouteListBaseline": {
+    "when": [
+      "2026-09-27T20:49:24.705Z",
+      "2026-09-27T20:50:41.283Z"
+    ],
+    "browser": "Chrome/153.0.8010.54 headless (new), no GPU (software raster), a throwaway profile deleted afterwards",
+    "tree": "The working tree after UR.1a, UR.1 and UR.2 and before UR.3: the route rows, RouteList, StepRow and the deriver are unchanged (the one-line 28 px rows; the row affordances grew from 22 to 24 px with --frl-control-height-sm).",
+    "method": "The real App (shell, virtualised route list, side panel, status bar) over the committed dataset (loadWorkspace over public/) and the real derived pipeline (engine, simulation, validation; straight-line travel, navigation unavailable), with no map and no project storage, built by Vite in production mode (minified, React’s production build): .cache/ui-refresh/perf-list/harness.tsx, driven by measure.mjs over the DevTools protocol at 1366 × 768, DPR 1, CPU throttle 1× and 4× (Emulation.setCPUThrottlingRate). Step 5,001 is selected first (mid-list). Selection change: a real ArrowDown, then ArrowUp, alternately, in the focused route list; scriptMs is from the keydown’s capture listener to a window keydown listener after the app’s own (the store update, the pipeline’s `selected` publish and React’s commit, passive effects included), layoutMs a forced style and layout after it, settledMs from the keydown until a message posted after it arrives (so it also holds the work already queued, and any rendering the browser does in between, which in headless Chrome is software raster: an upper bound, not an app measure). Re-walk publish with unchanged numbers: new result objects with the same values (records, estimates, issues, metrics and the selected step copied), published through the derived store; settledMs from the publish until a message posted after it arrives, then layoutMs. 5 warm-ups, then 40 runs per case; two runs; the right panel on Available (the tab at start) and on Details (the lazy panel, loaded before timing). A CPU probe (a 2e7 square-root loop) took 38-38 ms in the page (the reference is 40 ms): a calm machine.",
+    "commands": [
+      "pnpm exec tsx .cache/ui-refresh/perf-list/make-project.ts",
+      "pnpm exec vite build --config .cache/ui-refresh/perf-list/vite.config.ts",
+      "node .cache/ui-refresh/perf-list/measure.mjs <label> 40"
+    ],
+    "project": {
+      "steps": 10000,
+      "composition": {
+        "accept": 620,
+        "complete": 711,
+        "turnin": 620,
+        "travel": 7987,
+        "note": 62,
+        "quests": 620,
+        "paddingWaypoints": 6680
+      },
+      "basis": "The benches’ realistic route (tests/bench/bench-support.ts buildRealisticRoute: an Orc Warrior’s quests in guide order, repaired with the validator, padded with travel waypoints) inside the committed sample project; self-built from the committed dataset."
+    },
+    "rowsMounted": {
+      "atTop": 28,
+      "midList": 36
+    },
+    "baseline": {
+      "$comment": "The median of the two runs’ medians and p90s, in ms. UR.3 compares scriptMs and layoutMs of both scenarios, in both densities.",
+      "available-x1": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 1.85,
+            "p90": 2.4
+          },
+          "layoutMs": {
+            "median": 0.5,
+            "p90": 0.65
+          },
+          "settledMs": {
+            "median": 11.5,
+            "p90": 12.25
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 0.6,
+            "p90": 0.9
+          },
+          "layoutMs": {
+            "median": 0,
+            "p90": 0.1
+          }
+        }
+      },
+      "details-x1": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 2.85,
+            "p90": 3.6
+          },
+          "layoutMs": {
+            "median": 1.9,
+            "p90": 2.8
+          },
+          "settledMs": {
+            "median": 10.85,
+            "p90": 12.85
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 0.5,
+            "p90": 0.7
+          },
+          "layoutMs": {
+            "median": 0,
+            "p90": 0.05
+          }
+        }
+      },
+      "available-x4": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 7.8,
+            "p90": 9.5
+          },
+          "layoutMs": {
+            "median": 2.15,
+            "p90": 2.85
+          },
+          "settledMs": {
+            "median": 30.1,
+            "p90": 35.1
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 2,
+            "p90": 3
+          },
+          "layoutMs": {
+            "median": 0,
+            "p90": 0.2
+          }
+        }
+      },
+      "details-x4": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 11.05,
+            "p90": 14.45
+          },
+          "layoutMs": {
+            "median": 9.4,
+            "p90": 11.8
+          },
+          "settledMs": {
+            "median": 35.15,
+            "p90": 43.95
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 2,
+            "p90": 3.3
+          },
+          "layoutMs": {
+            "median": 0,
+            "p90": 0.2
+          }
+        }
+      }
+    },
+    "runs": [
+      {
+        "label": "run1",
+        "when": "2026-09-27T20:49:24.705Z",
+        "probeBeforeMs": 38,
+        "probeAfterMs": 39,
+        "scenarios": {
+          "available-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 1.1,
+                "median": 1.8,
+                "p90": 2.3,
+                "max": 3
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0.3,
+                "median": 0.5,
+                "p90": 0.7,
+                "max": 0.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 9.1,
+                "median": 11.3,
+                "p90": 12.1,
+                "max": 13.2
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.3,
+                "median": 0.6,
+                "p90": 0.9,
+                "max": 0.9
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "details-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 2.1,
+                "median": 2.8,
+                "p90": 3.4,
+                "max": 4.1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 1.2,
+                "median": 2,
+                "p90": 2.8,
+                "max": 3.5
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 7.1,
+                "median": 11.1,
+                "p90": 13.1,
+                "max": 14.1
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.2,
+                "median": 0.5,
+                "p90": 0.7,
+                "max": 0.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0,
+                "max": 0.1
+              }
+            }
+          },
+          "available-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 5.5,
+                "median": 7.6,
+                "p90": 9.4,
+                "max": 9.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 1.6,
+                "median": 2.2,
+                "p90": 2.9,
+                "max": 3.4
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 23,
+                "median": 30.1,
+                "p90": 33.8,
+                "max": 44.6
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.3,
+                "median": 2,
+                "p90": 3.1,
+                "max": 3.4
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.2,
+                "max": 0.3
+              }
+            }
+          },
+          "details-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 8.4,
+                "median": 10.2,
+                "p90": 14.1,
+                "max": 17
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 5.7,
+                "median": 9.1,
+                "p90": 11.7,
+                "max": 13.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 26.8,
+                "median": 34.4,
+                "p90": 43.9,
+                "max": 49.6
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.4,
+                "median": 2,
+                "p90": 3.5,
+                "max": 3.9
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.2,
+                "max": 0.3
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "run2",
+        "when": "2026-09-27T20:50:41.283Z",
+        "probeBeforeMs": 37,
+        "probeAfterMs": 38,
+        "scenarios": {
+          "available-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 1.3,
+                "median": 1.9,
+                "p90": 2.5,
+                "max": 2.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0.3,
+                "median": 0.5,
+                "p90": 0.6,
+                "max": 0.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 9.6,
+                "median": 11.7,
+                "p90": 12.4,
+                "max": 12.9
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.3,
+                "median": 0.6,
+                "p90": 0.9,
+                "max": 1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "details-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 2.1,
+                "median": 2.9,
+                "p90": 3.8,
+                "max": 4.2
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 1.2,
+                "median": 1.8,
+                "p90": 2.8,
+                "max": 3.2
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 6.1,
+                "median": 10.6,
+                "p90": 12.6,
+                "max": 15.1
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.3,
+                "median": 0.5,
+                "p90": 0.7,
+                "max": 0.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "available-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 5.4,
+                "median": 8,
+                "p90": 9.6,
+                "max": 11.6
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 1.6,
+                "median": 2.1,
+                "p90": 2.8,
+                "max": 4.1
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 23.2,
+                "median": 30.1,
+                "p90": 36.4,
+                "max": 43.2
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.4,
+                "median": 2,
+                "p90": 2.9,
+                "max": 3.6
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.2,
+                "max": 0.2
+              }
+            }
+          },
+          "details-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 8.5,
+                "median": 11.9,
+                "p90": 14.8,
+                "max": 17.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 5.7,
+                "median": 9.7,
+                "p90": 11.9,
+                "max": 18.3
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 27,
+                "median": 35.9,
+                "p90": 44,
+                "max": 53.2
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.4,
+                "median": 2,
+                "p90": 3.1,
+                "max": 3.9
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.2,
+                "max": 0.3
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "ur3RouteListMeasure": {
+    "when": [
+      "2026-09-28T00:19:53.213Z",
+      "2026-09-28T00:22:16.232Z",
+      "2026-09-28T00:21:04.944Z",
+      "2026-09-28T00:23:27.543Z"
+    ],
+    "browser": "Chrome/153.0.8010.54 headless (new), no GPU (software raster), a throwaway profile deleted afterwards",
+    "tree": "The working tree after UR.3 to UR.6 (and MP.3, which came between UR.2b and UR.3): two-line rows by default, the insertion line and the later band, the route panel’s header, step toolbar and Add footer, the status bar’s “Lv N after step N” and “In log”. The list’s viewport and each row are contained (`contain: strict`), the route panel’s header, step toolbar and Add footer are memoised, and the row deriver keeps the rows it filled in for its walk.",
+    "method": "As UR.2b’s (the same harness, project and driver: .cache/ui-refresh/perf-list/), with the rows’ density set per run (`?density=one-line`, stored as the View choice before the App mounts). Two runs per density, 40 samples per case after 5 warm-ups; the figures are the median of the two runs’ medians. The CPU probe took 39-38 ms (reference 40 ms).",
+    "commands": [
+      "pnpm exec vite build --config .cache/ui-refresh/perf-list/vite.config.ts",
+      "node .cache/ui-refresh/perf-list/measure.mjs <label> 40 two-line|one-line",
+      "node .cache/ui-refresh/perf-list/write-ur3.mjs <entry kB> <note>"
+    ],
+    "rowsMounted": {
+      "twoLine": {
+        "atTop": 22,
+        "midList": 30
+      },
+      "oneLine": {
+        "atTop": 28,
+        "midList": 36
+      }
+    },
+    "twoLine": {
+      "available-x1": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 2,
+            "p90": 2.7
+          },
+          "layoutMs": {
+            "median": 0.95,
+            "p90": 1.7
+          },
+          "settledMs": {
+            "median": 19.3,
+            "p90": 21.45
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 0.5,
+            "p90": 0.75
+          },
+          "layoutMs": {
+            "median": 0,
+            "p90": 0.1
+          }
+        }
+      },
+      "details-x1": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 3.15,
+            "p90": 3.8
+          },
+          "layoutMs": {
+            "median": 2.6,
+            "p90": 3.45
+          },
+          "settledMs": {
+            "median": 17.4,
+            "p90": 19.35
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 0.45,
+            "p90": 0.6
+          },
+          "layoutMs": {
+            "median": 0,
+            "p90": 0.1
+          }
+        }
+      },
+      "available-x4": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 9.2,
+            "p90": 11.75
+          },
+          "layoutMs": {
+            "median": 3.55,
+            "p90": 5.35
+          },
+          "settledMs": {
+            "median": 64.9,
+            "p90": 76.35
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 1.8,
+            "p90": 2.5
+          },
+          "layoutMs": {
+            "median": 0.05,
+            "p90": 0.2
+          }
+        }
+      },
+      "details-x4": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 11.95,
+            "p90": 14.45
+          },
+          "layoutMs": {
+            "median": 11.1,
+            "p90": 15.8
+          },
+          "settledMs": {
+            "median": 61.4,
+            "p90": 76.2
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 1.85,
+            "p90": 2.6
+          },
+          "layoutMs": {
+            "median": 0.1,
+            "p90": 0.2
+          }
+        }
+      }
+    },
+    "oneLine": {
+      "available-x1": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 2,
+            "p90": 2.65
+          },
+          "layoutMs": {
+            "median": 0.6,
+            "p90": 0.85
+          },
+          "settledMs": {
+            "median": 20.45,
+            "p90": 22.1
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 0.55,
+            "p90": 0.8
+          },
+          "layoutMs": {
+            "median": 0,
+            "p90": 0.1
+          }
+        }
+      },
+      "details-x1": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 2.8,
+            "p90": 3.4
+          },
+          "layoutMs": {
+            "median": 2.1,
+            "p90": 2.9
+          },
+          "settledMs": {
+            "median": 15.75,
+            "p90": 17.95
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 0.5,
+            "p90": 0.7
+          },
+          "layoutMs": {
+            "median": 0,
+            "p90": 0.1
+          }
+        }
+      },
+      "available-x4": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 8.3,
+            "p90": 11.25
+          },
+          "layoutMs": {
+            "median": 2.95,
+            "p90": 4.25
+          },
+          "settledMs": {
+            "median": 65.85,
+            "p90": 78.2
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 1.75,
+            "p90": 2.5
+          },
+          "layoutMs": {
+            "median": 0.05,
+            "p90": 0.2
+          }
+        }
+      },
+      "details-x4": {
+        "selectionChange": {
+          "scriptMs": {
+            "median": 11.8,
+            "p90": 15.25
+          },
+          "layoutMs": {
+            "median": 10.2,
+            "p90": 13.95
+          },
+          "settledMs": {
+            "median": 59.05,
+            "p90": 70.4
+          }
+        },
+        "rewalkUnchanged": {
+          "settledMs": {
+            "median": 1.8,
+            "p90": 2.8
+          },
+          "layoutMs": {
+            "median": 0.05,
+            "p90": 0.2
+          }
+        }
+      }
+    },
+    "againstBaseline": {
+      "twoLine": {
+        "available-x1": {
+          "selection scriptMs": {
+            "baseline": 1.85,
+            "now": 2,
+            "change": "8 %"
+          },
+          "selection layoutMs": {
+            "baseline": 0.5,
+            "now": 0.95,
+            "change": "90 %"
+          },
+          "re-walk settledMs": {
+            "baseline": 0.6,
+            "now": 0.5,
+            "change": "-17 %"
+          }
+        },
+        "details-x1": {
+          "selection scriptMs": {
+            "baseline": 2.85,
+            "now": 3.15,
+            "change": "11 %"
+          },
+          "selection layoutMs": {
+            "baseline": 1.9,
+            "now": 2.6,
+            "change": "37 %"
+          },
+          "re-walk settledMs": {
+            "baseline": 0.5,
+            "now": 0.45,
+            "change": "-10 %"
+          }
+        },
+        "available-x4": {
+          "selection scriptMs": {
+            "baseline": 7.8,
+            "now": 9.2,
+            "change": "18 %"
+          },
+          "selection layoutMs": {
+            "baseline": 2.15,
+            "now": 3.55,
+            "change": "65 %"
+          },
+          "re-walk settledMs": {
+            "baseline": 2,
+            "now": 1.8,
+            "change": "-10 %"
+          }
+        },
+        "details-x4": {
+          "selection scriptMs": {
+            "baseline": 11.05,
+            "now": 11.95,
+            "change": "8 %"
+          },
+          "selection layoutMs": {
+            "baseline": 9.4,
+            "now": 11.1,
+            "change": "18 %"
+          },
+          "re-walk settledMs": {
+            "baseline": 2,
+            "now": 1.85,
+            "change": "-7 %"
+          }
+        }
+      },
+      "oneLine": {
+        "available-x1": {
+          "selection scriptMs": {
+            "baseline": 1.85,
+            "now": 2,
+            "change": "8 %"
+          },
+          "selection layoutMs": {
+            "baseline": 0.5,
+            "now": 0.6,
+            "change": "20 %"
+          },
+          "re-walk settledMs": {
+            "baseline": 0.6,
+            "now": 0.55,
+            "change": "-8 %"
+          }
+        },
+        "details-x1": {
+          "selection scriptMs": {
+            "baseline": 2.85,
+            "now": 2.8,
+            "change": "-2 %"
+          },
+          "selection layoutMs": {
+            "baseline": 1.9,
+            "now": 2.1,
+            "change": "11 %"
+          },
+          "re-walk settledMs": {
+            "baseline": 0.5,
+            "now": 0.5,
+            "change": "0 %"
+          }
+        },
+        "available-x4": {
+          "selection scriptMs": {
+            "baseline": 7.8,
+            "now": 8.3,
+            "change": "6 %"
+          },
+          "selection layoutMs": {
+            "baseline": 2.15,
+            "now": 2.95,
+            "change": "37 %"
+          },
+          "re-walk settledMs": {
+            "baseline": 2,
+            "now": 1.75,
+            "change": "-12 %"
+          }
+        },
+        "details-x4": {
+          "selection scriptMs": {
+            "baseline": 11.05,
+            "now": 11.8,
+            "change": "7 %"
+          },
+          "selection layoutMs": {
+            "baseline": 9.4,
+            "now": 10.2,
+            "change": "9 %"
+          },
+          "re-walk settledMs": {
+            "baseline": 2,
+            "now": 1.8,
+            "change": "-10 %"
+          }
+        }
+      }
+    },
+    "runs": [
+      {
+        "label": "ur3-two-a",
+        "density": "two-line",
+        "when": "2026-09-28T00:19:53.213Z",
+        "probeBeforeMs": 39,
+        "probeAfterMs": 39,
+        "scenarios": {
+          "available-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 1.5,
+                "median": 1.9,
+                "p90": 2.6,
+                "max": 3.1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0.6,
+                "median": 0.9,
+                "p90": 1.6,
+                "max": 1.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 17.2,
+                "median": 19.5,
+                "p90": 21.4,
+                "max": 22.9
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.3,
+                "median": 0.5,
+                "p90": 0.7,
+                "max": 1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "details-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 2.3,
+                "median": 3,
+                "p90": 3.7,
+                "max": 3.9
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 1.5,
+                "median": 2.5,
+                "p90": 3.3,
+                "max": 3.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 14.2,
+                "median": 17.4,
+                "p90": 19.7,
+                "max": 21.9
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.2,
+                "median": 0.5,
+                "p90": 0.6,
+                "max": 0.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "available-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 5.7,
+                "median": 8.9,
+                "p90": 11.6,
+                "max": 13.3
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 2.6,
+                "median": 3.6,
+                "p90": 5.6,
+                "max": 5.7
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 51.6,
+                "median": 65.3,
+                "p90": 75.1,
+                "max": 84.9
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.2,
+                "median": 1.8,
+                "p90": 2.5,
+                "max": 3.1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0.1,
+                "p90": 0.2,
+                "max": 0.3
+              }
+            }
+          },
+          "details-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 8.4,
+                "median": 12,
+                "p90": 14.1,
+                "max": 15.7
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 6.1,
+                "median": 11.4,
+                "p90": 14.5,
+                "max": 17.7
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 48,
+                "median": 60.7,
+                "p90": 75,
+                "max": 79.3
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.2,
+                "median": 1.7,
+                "p90": 2.6,
+                "max": 3
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0.1,
+                "p90": 0.2,
+                "max": 0.4
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "ur3-two-b",
+        "density": "two-line",
+        "when": "2026-09-28T00:22:16.232Z",
+        "probeBeforeMs": 39,
+        "probeAfterMs": 39,
+        "scenarios": {
+          "available-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 1.5,
+                "median": 2.1,
+                "p90": 2.8,
+                "max": 3.1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0.5,
+                "median": 1,
+                "p90": 1.8,
+                "max": 2
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 16.4,
+                "median": 19.1,
+                "p90": 21.5,
+                "max": 23.8
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.3,
+                "median": 0.5,
+                "p90": 0.8,
+                "max": 1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.2
+              }
+            }
+          },
+          "details-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 2.4,
+                "median": 3.3,
+                "p90": 3.9,
+                "max": 4.3
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 2,
+                "median": 2.7,
+                "p90": 3.6,
+                "max": 4.5
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 14.3,
+                "median": 17.4,
+                "p90": 19,
+                "max": 21.6
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.2,
+                "median": 0.4,
+                "p90": 0.6,
+                "max": 0.7
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "available-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 6.7,
+                "median": 9.5,
+                "p90": 11.9,
+                "max": 13
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 2.6,
+                "median": 3.5,
+                "p90": 5.1,
+                "max": 5.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 53.5,
+                "median": 64.5,
+                "p90": 77.6,
+                "max": 78.4
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.1,
+                "median": 1.8,
+                "p90": 2.5,
+                "max": 3.6
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.2,
+                "max": 0.2
+              }
+            }
+          },
+          "details-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 8.9,
+                "median": 11.9,
+                "p90": 14.8,
+                "max": 18.3
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 7.5,
+                "median": 10.8,
+                "p90": 17.1,
+                "max": 20.2
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 48.1,
+                "median": 62.1,
+                "p90": 77.4,
+                "max": 93.8
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.2,
+                "median": 2,
+                "p90": 2.6,
+                "max": 3
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0.1,
+                "p90": 0.2,
+                "max": 0.2
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "ur3-one-a",
+        "density": "one-line",
+        "when": "2026-09-28T00:21:04.944Z",
+        "probeBeforeMs": 39,
+        "probeAfterMs": 38,
+        "scenarios": {
+          "available-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 1.6,
+                "median": 1.9,
+                "p90": 2.7,
+                "max": 3.1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0.5,
+                "median": 0.6,
+                "p90": 0.9,
+                "max": 0.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 16.4,
+                "median": 20.5,
+                "p90": 22.1,
+                "max": 24.7
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.4,
+                "median": 0.6,
+                "p90": 0.8,
+                "max": 1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "details-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 2.1,
+                "median": 2.8,
+                "p90": 3.4,
+                "max": 3.9
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 1.2,
+                "median": 2.1,
+                "p90": 2.9,
+                "max": 3
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 11.9,
+                "median": 15.8,
+                "p90": 18.1,
+                "max": 20.2
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.2,
+                "median": 0.5,
+                "p90": 0.7,
+                "max": 0.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "available-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 6.7,
+                "median": 8.7,
+                "p90": 11.5,
+                "max": 14.6
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 2.4,
+                "median": 3,
+                "p90": 4.5,
+                "max": 4.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 52.7,
+                "median": 66,
+                "p90": 79.1,
+                "max": 92.2
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.2,
+                "median": 1.8,
+                "p90": 2.7,
+                "max": 3.2
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0.1,
+                "p90": 0.2,
+                "max": 0.3
+              }
+            }
+          },
+          "details-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 8.5,
+                "median": 11.8,
+                "p90": 16,
+                "max": 18.1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 6.8,
+                "median": 9.8,
+                "p90": 14.8,
+                "max": 16.6
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 48.8,
+                "median": 58,
+                "p90": 74,
+                "max": 83.8
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.1,
+                "median": 1.8,
+                "p90": 2.8,
+                "max": 3.1
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0.1,
+                "p90": 0.2,
+                "max": 0.3
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "ur3-one-b",
+        "density": "one-line",
+        "when": "2026-09-28T00:23:27.543Z",
+        "probeBeforeMs": 38,
+        "probeAfterMs": 38,
+        "scenarios": {
+          "available-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 1.6,
+                "median": 2.1,
+                "p90": 2.6,
+                "max": 2.9
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0.4,
+                "median": 0.6,
+                "p90": 0.8,
+                "max": 0.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 17.7,
+                "median": 20.4,
+                "p90": 22.1,
+                "max": 23.1
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.3,
+                "median": 0.5,
+                "p90": 0.8,
+                "max": 0.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "details-x1": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 2.1,
+                "median": 2.8,
+                "p90": 3.4,
+                "max": 3.9
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 1.2,
+                "median": 2.1,
+                "p90": 2.9,
+                "max": 3.2
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 10.4,
+                "median": 15.7,
+                "p90": 17.8,
+                "max": 20.4
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 0.3,
+                "median": 0.5,
+                "p90": 0.7,
+                "max": 0.7
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.1,
+                "max": 0.1
+              }
+            }
+          },
+          "available-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 6.5,
+                "median": 7.9,
+                "p90": 11,
+                "max": 11.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 2.4,
+                "median": 2.9,
+                "p90": 4,
+                "max": 4.8
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 52.5,
+                "median": 65.7,
+                "p90": 77.3,
+                "max": 85.8
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.1,
+                "median": 1.7,
+                "p90": 2.3,
+                "max": 2.8
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.2,
+                "max": 0.3
+              }
+            }
+          },
+          "details-x4": {
+            "selectionChange": {
+              "scriptMs": {
+                "n": 40,
+                "min": 8.3,
+                "median": 11.8,
+                "p90": 14.5,
+                "max": 15.3
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 6.6,
+                "median": 10.6,
+                "p90": 13.1,
+                "max": 14.9
+              },
+              "settledMs": {
+                "n": 40,
+                "min": 44.2,
+                "median": 60.1,
+                "p90": 66.8,
+                "max": 71.2
+              }
+            },
+            "rewalkUnchanged": {
+              "settledMs": {
+                "n": 40,
+                "min": 1.2,
+                "median": 1.8,
+                "p90": 2.8,
+                "max": 3.6
+              },
+              "layoutMs": {
+                "n": 40,
+                "min": 0,
+                "median": 0,
+                "p90": 0.2,
+                "max": 0.2
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "ur8": {
+    "$comment": "Step UR.8's measurement part (docs/research/ui-refresh.md §14 step 16, joint with map-presentation.md MP.12), 2026-09-28, on the working tree after MM.9 and ATL.10 (uncommitted). The review parts of UR.8 (an independent critique, axe, a screen reader, a Windows contrast theme, the UI.md §6 widths with panels collapsed and in map focus) are not in this step. The map's own figures (selection-to-paint, edit-to-paint, frames, memory) are in docs/measurements/map-atlas.json, atl9mm8.",
+    "entryChunk": {
+      "kB": 246.05,
+      "budgetKb": 250,
+      "stopLineKb": 248.5,
+      "basis": "tsx tools/build/audit-dist.ts --deploy on the production build in .cache/map-ui-build/dist (gzip level 6: index 234.04 kB, shell-support 11.69 kB, http 0.32 kB). Unchanged since the MM.9/ATL.10 ledger row; this step changes no source, so it adds no ledger row. Lazy parts 50.54 kB, derived pipeline 61.34 kB and the Leaflet chunk 74.04 kB are Vite's own gzip figures."
+    },
+    "sheets": {
+      "uiCompare": ".cache/map-ui-build/ui-compare.jpg: the new left panel (light and dark, 1366 x 768 at DPR 2) and top bar beside WoWF-QRP's saved screenshots (.cache/ui-refresh/friend: b-left-panel, h-head-left-panel-dark, a-topbar); WoWF-QRP was not visited",
+      "benchCompare": ".cache/map-ui-build/bench-compare.jpg: both map styles beside WoWF-QRP's and MapGenie's saved screenshots at their scales (1440 x 900, DPR 1, map focus)",
+      "contactSheets": ".cache/map-ui-build/contact-sheet-minimap.jpg and contact-sheet-painted.jpg: every band in both themes",
+      "screenshots": ".cache/map-ui-build/shots/ (band-<style>-<theme>-<band>.png, bench-*.png, ui-*.png)",
+      "refreshed": "2026-09-30 (final verification, after the review fixes): all four sheets re-made from new screenshots (shots.mjs --step 13: the band and bench shots with route step 13 selected, review PR-13; the UI shots as the app opens). The 2026-09-28 sheets are kept in .cache/map-ui-build/archive-2026-09-28/."
+    },
+    "visualProblems": [
+      "Left panel: the route name is cut to 'Sample: Durot…' in the 341 px header beside the SAMPLE badge and View (ui-compare.jpg; shots/ui-light.png).",
+      "Two-line rows: line 2 is cut hard ('Simple Parch…', 'Kaltunk · Durota…') because the three row buttons are always shown (D-048 F); WoWF-QRP wraps its titles instead (ui-compare.jpg).",
+      "Go to zone or view… 'Both continents' (then Go) leaves the view where it is while the atlas is already shown: it does not fit the world, and says nothing (observed in the harness).",
+      "World band, both styles: zone labels and cluster badges overlap in the northern Eastern Kingdoms (Tirisfal Glades, Undercity (underground city), Western and Eastern Plaguelands, Silverpine Forest, Alterac Mountains, Hillsbrad Foothills) (shots/band-minimap-light-1-world.png, band-painted-light-1-world.png).",
+      "Zone outlines are drawn as the UiMap rectangles' stepped edges, which run across open sea at the world, continent and zone bands, most visibly on the minimap's navy (shots/band-minimap-light-2-continent.png, band-minimap-light-3-zone.png east of Durotar).",
+      "The yard grid's labels repeat per placement at the world band ('Y 0 (W)' three times, one inside the Zephras Isle card) (shots/band-minimap-light-1-world.png).",
+      "Painted style, zone band: the painting's own names duplicate ours ('CROSSROADS' under 'Crossroads, The Barrens', 'ORGRIMMAR' under 'Orgrimmar, Durotar'; MP.7's deviation 10), and the coast shows the design's known shortfall: a blurred painted-water band and straight painting edges near Orgrimmar (shots/band-painted-light-3-zone.png).",
+      "Continent band: pins and labels collide in towns (Orgrimmar 20–60, Durotar 7–12, Ashenvale 20–30) (shots/band-minimap-dark-2-continent.png).",
+      "Close band: a pin is drawn under the Map layers button at the top-left corner; the floating controls do not keep pins clear (shots/band-minimap-light-4-close.png).",
+      "Painted style at the close band is blurred (the art magnified about 6x at +0.94) (bench-compare.jpg, last row), as the design expects; the minimap there reads more saturated than MapGenie's same area (OBSERVED on bench-compare.jpg, not measured).",
+      "First visit opens at the sample route's fit (the zone band), so the first view is 31 tiles and the underlay, 399 kB (minimap), not the atlas fit view's 13 tiles, 85 kB that the ≤ 100 kB first-view budget describes."
+    ],
+    "routeList": {
+      "when": [
+        "2026-09-28T08:18:22.331Z",
+        "2026-09-28T08:20:47.490Z",
+        "2026-09-28T08:19:35.027Z",
+        "2026-09-28T08:22:00.767Z"
+      ],
+      "browser": "Chrome/153.0.8010.54 headless (new), a throwaway profile deleted afterwards",
+      "tree": "The working tree on 2026-09-28 after MP.4 to MP.11, MM.7, MM.9 and ATL.10 (uncommitted): the same rows as UR.3 measured, with the map presentation, drawer, popover and places models in the tree; the harness has no map, so the map itself is not in these figures (it is in docs/measurements/map-atlas.json, atl9mm8).",
+      "method": "UR.2b’s harness and driver unchanged (.cache/ui-refresh/perf-list/: the real App over the committed dataset and the real derived pipeline, the 10,000-step project, step 5,001 selected, 1366 × 768, DPR 1), rebuilt on the current tree; two runs per density, 40 samples per case after 5 warm-ups; the figures are the median of the two runs’ medians. The CPU probe took 38-39 ms (reference 40 ms).",
+      "commands": [
+        "pnpm exec vite build --config .cache/ui-refresh/perf-list/vite.config.ts",
+        "node .cache/ui-refresh/perf-list/measure.mjs ur8-two-a|ur8-two-b 40 two-line; … ur8-one-a|ur8-one-b 40 one-line",
+        "node .cache/map-ui-build/harness/write-ur8.mjs --write"
+      ],
+      "rowsMounted": {
+        "twoLine": {
+          "atTop": 22,
+          "midList": 30
+        },
+        "oneLine": {
+          "atTop": 28,
+          "midList": 36
+        }
+      },
+      "twoLine": {
+        "available-x1": {
+          "selectionChange": {
+            "scriptMs": {
+              "median": 2.3,
+              "p90": 2.65
+            },
+            "layoutMs": {
+              "median": 1.05,
+              "p90": 1.65
+            },
+            "settledMs": {
+              "median": 20.1,
+              "p90": 22
+            }
+          },
+          "rewalkUnchanged": {
+            "settledMs": {
+              "median": 0.6,
+              "p90": 0.75
+            },
+            "layoutMs": {
+              "median": 0,
+              "p90": 0.1
+            }
+          }
+        },
+        "details-x1": {
+          "selectionChange": {
+            "scriptMs": {
+              "median": 3.1,
+              "p90": 3.6
+            },
+            "layoutMs": {
+              "median": 2.5,
+              "p90": 3.6
+            },
+            "settledMs": {
+              "median": 17.4,
+              "p90": 20.05
+            }
+          },
+          "rewalkUnchanged": {
+            "settledMs": {
+              "median": 0.5,
+              "p90": 0.7
+            },
+            "layoutMs": {
+              "median": 0,
+              "p90": 0.1
+            }
+          }
+        },
+        "available-x4": {
+          "selectionChange": {
+            "scriptMs": {
+              "median": 8.8,
+              "p90": 11.65
+            },
+            "layoutMs": {
+              "median": 4.2,
+              "p90": 5.9
+            },
+            "settledMs": {
+              "median": 70.1,
+              "p90": 83.2
+            }
+          },
+          "rewalkUnchanged": {
+            "settledMs": {
+              "median": 2.05,
+              "p90": 2.65
+            },
+            "layoutMs": {
+              "median": 0.1,
+              "p90": 0.25
+            }
+          }
+        },
+        "details-x4": {
+          "selectionChange": {
+            "scriptMs": {
+              "median": 13,
+              "p90": 15.95
+            },
+            "layoutMs": {
+              "median": 12.9,
+              "p90": 17.6
+            },
+            "settledMs": {
+              "median": 68.7,
+              "p90": 79.05
+            }
+          },
+          "rewalkUnchanged": {
+            "settledMs": {
+              "median": 1.9,
+              "p90": 2.55
+            },
+            "layoutMs": {
+              "median": 0.15,
+              "p90": 0.2
+            }
+          }
+        }
+      },
+      "oneLine": {
+        "available-x1": {
+          "selectionChange": {
+            "scriptMs": {
+              "median": 2.2,
+              "p90": 2.55
+            },
+            "layoutMs": {
+              "median": 0.7,
+              "p90": 0.85
+            },
+            "settledMs": {
+              "median": 20.8,
+              "p90": 22.7
+            }
+          },
+          "rewalkUnchanged": {
+            "settledMs": {
+              "median": 0.6,
+              "p90": 0.8
+            },
+            "layoutMs": {
+              "median": 0,
+              "p90": 0.1
+            }
+          }
+        },
+        "details-x1": {
+          "selectionChange": {
+            "scriptMs": {
+              "median": 2.95,
+              "p90": 3.5
+            },
+            "layoutMs": {
+              "median": 2.25,
+              "p90": 3
+            },
+            "settledMs": {
+              "median": 17.05,
+              "p90": 18.35
+            }
+          },
+          "rewalkUnchanged": {
+            "settledMs": {
+              "median": 0.5,
+              "p90": 0.65
+            },
+            "layoutMs": {
+              "median": 0,
+              "p90": 0.1
+            }
+          }
+        },
+        "available-x4": {
+          "selectionChange": {
+            "scriptMs": {
+              "median": 9.15,
+              "p90": 11.1
+            },
+            "layoutMs": {
+              "median": 3.4,
+              "p90": 5.15
+            },
+            "settledMs": {
+              "median": 70,
+              "p90": 80.2
+            }
+          },
+          "rewalkUnchanged": {
+            "settledMs": {
+              "median": 2,
+              "p90": 2.6
+            },
+            "layoutMs": {
+              "median": 0.1,
+              "p90": 0.2
+            }
+          }
+        },
+        "details-x4": {
+          "selectionChange": {
+            "scriptMs": {
+              "median": 13.05,
+              "p90": 16.15
+            },
+            "layoutMs": {
+              "median": 11.2,
+              "p90": 15.55
+            },
+            "settledMs": {
+              "median": 66.05,
+              "p90": 77.65
+            }
+          },
+          "rewalkUnchanged": {
+            "settledMs": {
+              "median": 2.05,
+              "p90": 2.8
+            },
+            "layoutMs": {
+              "median": 0.05,
+              "p90": 0.2
+            }
+          }
+        }
+      },
+      "against": {
+        "$comment": "UR.3’s gate is script and layout time within 10 % of UR.2b in both densities (ui-refresh.md §14 step 10). settledMs holds the rendering between tasks, which in headless Chrome is an upper bound, not an app measure.",
+        "twoLine": {
+          "available-x1": {
+            "selection scriptMs": {
+              "ur2b": 1.85,
+              "ur3": 2,
+              "now": 2.3,
+              "againstUr2b": "+24 %",
+              "againstUr3": "+15 %"
+            },
+            "selection layoutMs": {
+              "ur2b": 0.5,
+              "ur3": 0.95,
+              "now": 1.05,
+              "againstUr2b": "+110 %",
+              "againstUr3": "+11 %"
+            },
+            "selection settledMs": {
+              "ur2b": 11.5,
+              "ur3": 19.3,
+              "now": 20.1,
+              "againstUr2b": "+75 %",
+              "againstUr3": "+4 %"
+            },
+            "re-walk settledMs": {
+              "ur2b": 0.6,
+              "ur3": 0.5,
+              "now": 0.6,
+              "againstUr2b": "+0 %",
+              "againstUr3": "+20 %"
+            }
+          },
+          "details-x1": {
+            "selection scriptMs": {
+              "ur2b": 2.85,
+              "ur3": 3.15,
+              "now": 3.1,
+              "againstUr2b": "+9 %",
+              "againstUr3": "-2 %"
+            },
+            "selection layoutMs": {
+              "ur2b": 1.9,
+              "ur3": 2.6,
+              "now": 2.5,
+              "againstUr2b": "+32 %",
+              "againstUr3": "-4 %"
+            },
+            "selection settledMs": {
+              "ur2b": 10.85,
+              "ur3": 17.4,
+              "now": 17.4,
+              "againstUr2b": "+60 %",
+              "againstUr3": "+0 %"
+            },
+            "re-walk settledMs": {
+              "ur2b": 0.5,
+              "ur3": 0.45,
+              "now": 0.5,
+              "againstUr2b": "+0 %",
+              "againstUr3": "+11 %"
+            }
+          },
+          "available-x4": {
+            "selection scriptMs": {
+              "ur2b": 7.8,
+              "ur3": 9.2,
+              "now": 8.8,
+              "againstUr2b": "+13 %",
+              "againstUr3": "-4 %"
+            },
+            "selection layoutMs": {
+              "ur2b": 2.15,
+              "ur3": 3.55,
+              "now": 4.2,
+              "againstUr2b": "+95 %",
+              "againstUr3": "+18 %"
+            },
+            "selection settledMs": {
+              "ur2b": 30.1,
+              "ur3": 64.9,
+              "now": 70.1,
+              "againstUr2b": "+133 %",
+              "againstUr3": "+8 %"
+            },
+            "re-walk settledMs": {
+              "ur2b": 2,
+              "ur3": 1.8,
+              "now": 2.05,
+              "againstUr2b": "+2 %",
+              "againstUr3": "+14 %"
+            }
+          },
+          "details-x4": {
+            "selection scriptMs": {
+              "ur2b": 11.05,
+              "ur3": 11.95,
+              "now": 13,
+              "againstUr2b": "+18 %",
+              "againstUr3": "+9 %"
+            },
+            "selection layoutMs": {
+              "ur2b": 9.4,
+              "ur3": 11.1,
+              "now": 12.9,
+              "againstUr2b": "+37 %",
+              "againstUr3": "+16 %"
+            },
+            "selection settledMs": {
+              "ur2b": 35.15,
+              "ur3": 61.4,
+              "now": 68.7,
+              "againstUr2b": "+95 %",
+              "againstUr3": "+12 %"
+            },
+            "re-walk settledMs": {
+              "ur2b": 2,
+              "ur3": 1.85,
+              "now": 1.9,
+              "againstUr2b": "-5 %",
+              "againstUr3": "+3 %"
+            }
+          }
+        },
+        "oneLine": {
+          "available-x1": {
+            "selection scriptMs": {
+              "ur2b": 1.85,
+              "ur3": 2,
+              "now": 2.2,
+              "againstUr2b": "+19 %",
+              "againstUr3": "+10 %"
+            },
+            "selection layoutMs": {
+              "ur2b": 0.5,
+              "ur3": 0.6,
+              "now": 0.7,
+              "againstUr2b": "+40 %",
+              "againstUr3": "+17 %"
+            },
+            "selection settledMs": {
+              "ur2b": 11.5,
+              "ur3": 20.45,
+              "now": 20.8,
+              "againstUr2b": "+81 %",
+              "againstUr3": "+2 %"
+            },
+            "re-walk settledMs": {
+              "ur2b": 0.6,
+              "ur3": 0.55,
+              "now": 0.6,
+              "againstUr2b": "+0 %",
+              "againstUr3": "+9 %"
+            }
+          },
+          "details-x1": {
+            "selection scriptMs": {
+              "ur2b": 2.85,
+              "ur3": 2.8,
+              "now": 2.95,
+              "againstUr2b": "+4 %",
+              "againstUr3": "+5 %"
+            },
+            "selection layoutMs": {
+              "ur2b": 1.9,
+              "ur3": 2.1,
+              "now": 2.25,
+              "againstUr2b": "+18 %",
+              "againstUr3": "+7 %"
+            },
+            "selection settledMs": {
+              "ur2b": 10.85,
+              "ur3": 15.75,
+              "now": 17.05,
+              "againstUr2b": "+57 %",
+              "againstUr3": "+8 %"
+            },
+            "re-walk settledMs": {
+              "ur2b": 0.5,
+              "ur3": 0.5,
+              "now": 0.5,
+              "againstUr2b": "+0 %",
+              "againstUr3": "+0 %"
+            }
+          },
+          "available-x4": {
+            "selection scriptMs": {
+              "ur2b": 7.8,
+              "ur3": 8.3,
+              "now": 9.15,
+              "againstUr2b": "+17 %",
+              "againstUr3": "+10 %"
+            },
+            "selection layoutMs": {
+              "ur2b": 2.15,
+              "ur3": 2.95,
+              "now": 3.4,
+              "againstUr2b": "+58 %",
+              "againstUr3": "+15 %"
+            },
+            "selection settledMs": {
+              "ur2b": 30.1,
+              "ur3": 65.85,
+              "now": 70,
+              "againstUr2b": "+133 %",
+              "againstUr3": "+6 %"
+            },
+            "re-walk settledMs": {
+              "ur2b": 2,
+              "ur3": 1.75,
+              "now": 2,
+              "againstUr2b": "+0 %",
+              "againstUr3": "+14 %"
+            }
+          },
+          "details-x4": {
+            "selection scriptMs": {
+              "ur2b": 11.05,
+              "ur3": 11.8,
+              "now": 13.05,
+              "againstUr2b": "+18 %",
+              "againstUr3": "+11 %"
+            },
+            "selection layoutMs": {
+              "ur2b": 9.4,
+              "ur3": 10.2,
+              "now": 11.2,
+              "againstUr2b": "+19 %",
+              "againstUr3": "+10 %"
+            },
+            "selection settledMs": {
+              "ur2b": 35.15,
+              "ur3": 59.05,
+              "now": 66.05,
+              "againstUr2b": "+88 %",
+              "againstUr3": "+12 %"
+            },
+            "re-walk settledMs": {
+              "ur2b": 2,
+              "ur3": 1.8,
+              "now": 2.05,
+              "againstUr2b": "+2 %",
+              "againstUr3": "+14 %"
+            }
+          }
+        }
+      },
+      "runs": [
+        {
+          "label": "ur8-two-a",
+          "density": "two-line",
+          "when": "2026-09-28T08:18:22.331Z",
+          "probeBeforeMs": 38,
+          "probeAfterMs": 39,
+          "scenarios": {
+            "available-x1": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 1.7,
+                  "median": 2.3,
+                  "p90": 2.6,
+                  "max": 3
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0.6,
+                  "median": 1.1,
+                  "p90": 1.6,
+                  "max": 2
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 18,
+                  "median": 20.2,
+                  "p90": 22,
+                  "max": 22.3
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 0.3,
+                  "median": 0.6,
+                  "p90": 0.7,
+                  "max": 0.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0,
+                  "p90": 0.1,
+                  "max": 0.1
+                }
+              }
+            },
+            "details-x1": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 2.4,
+                  "median": 3.1,
+                  "p90": 3.6,
+                  "max": 4.3
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 1.7,
+                  "median": 2.3,
+                  "p90": 3.7,
+                  "max": 4.2
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 12.4,
+                  "median": 17.3,
+                  "p90": 20,
+                  "max": 22.1
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 0.3,
+                  "median": 0.5,
+                  "p90": 0.7,
+                  "max": 0.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0,
+                  "p90": 0.1,
+                  "max": 0.1
+                }
+              }
+            },
+            "available-x4": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 6.9,
+                  "median": 8.5,
+                  "p90": 10.7,
+                  "max": 10.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 2.8,
+                  "median": 4.1,
+                  "p90": 5.9,
+                  "max": 6.1
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 55.7,
+                  "median": 68.6,
+                  "p90": 84.6,
+                  "max": 91.6
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 1.4,
+                  "median": 2,
+                  "p90": 2.4,
+                  "max": 3.2
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0.1,
+                  "p90": 0.3,
+                  "max": 0.3
+                }
+              }
+            },
+            "details-x4": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 9.1,
+                  "median": 12.6,
+                  "p90": 15.9,
+                  "max": 16.9
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 8.2,
+                  "median": 12.6,
+                  "p90": 16.9,
+                  "max": 18.6
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 48.7,
+                  "median": 67.5,
+                  "p90": 78.1,
+                  "max": 86.6
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 1.3,
+                  "median": 1.9,
+                  "p90": 2.6,
+                  "max": 2.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0.2,
+                  "p90": 0.2,
+                  "max": 0.3
+                }
+              }
+            }
+          }
+        },
+        {
+          "label": "ur8-two-b",
+          "density": "two-line",
+          "when": "2026-09-28T08:20:47.490Z",
+          "probeBeforeMs": 38,
+          "probeAfterMs": 39,
+          "scenarios": {
+            "available-x1": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 1.7,
+                  "median": 2.3,
+                  "p90": 2.7,
+                  "max": 2.9
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0.6,
+                  "median": 1,
+                  "p90": 1.7,
+                  "max": 1.9
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 17.1,
+                  "median": 20,
+                  "p90": 22,
+                  "max": 22.2
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 0.3,
+                  "median": 0.6,
+                  "p90": 0.8,
+                  "max": 0.9
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0,
+                  "p90": 0.1,
+                  "max": 0.1
+                }
+              }
+            },
+            "details-x1": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 2.6,
+                  "median": 3.1,
+                  "p90": 3.6,
+                  "max": 4.1
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 1.8,
+                  "median": 2.7,
+                  "p90": 3.5,
+                  "max": 4.7
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 13.6,
+                  "median": 17.5,
+                  "p90": 20.1,
+                  "max": 21.3
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 0.3,
+                  "median": 0.5,
+                  "p90": 0.7,
+                  "max": 0.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0,
+                  "p90": 0.1,
+                  "max": 0.1
+                }
+              }
+            },
+            "available-x4": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 7,
+                  "median": 9.1,
+                  "p90": 12.6,
+                  "max": 13.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 2.7,
+                  "median": 4.3,
+                  "p90": 5.9,
+                  "max": 6.3
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 56.1,
+                  "median": 71.6,
+                  "p90": 81.8,
+                  "max": 88.8
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 1.4,
+                  "median": 2.1,
+                  "p90": 2.9,
+                  "max": 3.6
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0.1,
+                  "p90": 0.2,
+                  "max": 0.3
+                }
+              }
+            },
+            "details-x4": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 9.8,
+                  "median": 13.4,
+                  "p90": 16,
+                  "max": 18.4
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 8.8,
+                  "median": 13.2,
+                  "p90": 18.3,
+                  "max": 20.3
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 55.5,
+                  "median": 69.9,
+                  "p90": 80,
+                  "max": 92.8
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 1.2,
+                  "median": 1.9,
+                  "p90": 2.5,
+                  "max": 2.9
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0.1,
+                  "p90": 0.2,
+                  "max": 0.3
+                }
+              }
+            }
+          }
+        },
+        {
+          "label": "ur8-one-a",
+          "density": "one-line",
+          "when": "2026-09-28T08:19:35.027Z",
+          "probeBeforeMs": 39,
+          "probeAfterMs": 39,
+          "scenarios": {
+            "available-x1": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 1.6,
+                  "median": 2.1,
+                  "p90": 2.4,
+                  "max": 2.7
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0.5,
+                  "median": 0.7,
+                  "p90": 0.8,
+                  "max": 1
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 17.9,
+                  "median": 20.8,
+                  "p90": 22.8,
+                  "max": 24.5
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 0.3,
+                  "median": 0.6,
+                  "p90": 0.8,
+                  "max": 0.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0,
+                  "p90": 0.1,
+                  "max": 0.1
+                }
+              }
+            },
+            "details-x1": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 2.1,
+                  "median": 3,
+                  "p90": 3.5,
+                  "max": 3.6
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 1.5,
+                  "median": 2.3,
+                  "p90": 3,
+                  "max": 3.1
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 11.2,
+                  "median": 17.1,
+                  "p90": 18.7,
+                  "max": 21.1
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 0.3,
+                  "median": 0.5,
+                  "p90": 0.6,
+                  "max": 0.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0,
+                  "p90": 0.1,
+                  "max": 0.1
+                }
+              }
+            },
+            "available-x4": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 6.5,
+                  "median": 9.3,
+                  "p90": 11.2,
+                  "max": 11.5
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 2.4,
+                  "median": 3.6,
+                  "p90": 5.2,
+                  "max": 6.1
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 55.6,
+                  "median": 70.4,
+                  "p90": 82.2,
+                  "max": 93.9
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 1.4,
+                  "median": 2,
+                  "p90": 2.6,
+                  "max": 3.2
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0.1,
+                  "p90": 0.2,
+                  "max": 0.2
+                }
+              }
+            },
+            "details-x4": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 9.1,
+                  "median": 12.8,
+                  "p90": 16.4,
+                  "max": 17.2
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 7.7,
+                  "median": 11.3,
+                  "p90": 15.8,
+                  "max": 17.8
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 50.7,
+                  "median": 66.5,
+                  "p90": 81.8,
+                  "max": 86.6
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 1.3,
+                  "median": 2,
+                  "p90": 2.9,
+                  "max": 3.2
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0,
+                  "p90": 0.2,
+                  "max": 0.3
+                }
+              }
+            }
+          }
+        },
+        {
+          "label": "ur8-one-b",
+          "density": "one-line",
+          "when": "2026-09-28T08:22:00.767Z",
+          "probeBeforeMs": 40,
+          "probeAfterMs": 39,
+          "scenarios": {
+            "available-x1": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 1.7,
+                  "median": 2.3,
+                  "p90": 2.7,
+                  "max": 2.9
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0.4,
+                  "median": 0.7,
+                  "p90": 0.9,
+                  "max": 1
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 17.8,
+                  "median": 20.8,
+                  "p90": 22.6,
+                  "max": 23.6
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 0.3,
+                  "median": 0.6,
+                  "p90": 0.8,
+                  "max": 0.9
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0,
+                  "p90": 0.1,
+                  "max": 0.1
+                }
+              }
+            },
+            "details-x1": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 2.5,
+                  "median": 2.9,
+                  "p90": 3.5,
+                  "max": 3.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 1.5,
+                  "median": 2.2,
+                  "p90": 3,
+                  "max": 3.2
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 13.5,
+                  "median": 17,
+                  "p90": 18,
+                  "max": 19.2
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 0.3,
+                  "median": 0.5,
+                  "p90": 0.7,
+                  "max": 0.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0,
+                  "p90": 0.1,
+                  "max": 0.1
+                }
+              }
+            },
+            "available-x4": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 6.7,
+                  "median": 9,
+                  "p90": 11,
+                  "max": 13
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 2.4,
+                  "median": 3.2,
+                  "p90": 5.1,
+                  "max": 5.8
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 58,
+                  "median": 69.6,
+                  "p90": 78.2,
+                  "max": 93.8
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 1.3,
+                  "median": 2,
+                  "p90": 2.6,
+                  "max": 2.8
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0.1,
+                  "p90": 0.2,
+                  "max": 0.3
+                }
+              }
+            },
+            "details-x4": {
+              "selectionChange": {
+                "scriptMs": {
+                  "n": 40,
+                  "min": 10,
+                  "median": 13.3,
+                  "p90": 15.9,
+                  "max": 17.2
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 7.6,
+                  "median": 11.1,
+                  "p90": 15.3,
+                  "max": 18.2
+                },
+                "settledMs": {
+                  "n": 40,
+                  "min": 55,
+                  "median": 65.6,
+                  "p90": 73.5,
+                  "max": 86.2
+                }
+              },
+              "rewalkUnchanged": {
+                "settledMs": {
+                  "n": 40,
+                  "min": 1.4,
+                  "median": 2.1,
+                  "p90": 2.7,
+                  "max": 3
+                },
+                "layoutMs": {
+                  "n": 40,
+                  "min": 0,
+                  "median": 0.1,
+                  "p90": 0.2,
+                  "max": 0.3
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

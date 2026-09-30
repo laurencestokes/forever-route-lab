@@ -32,22 +32,30 @@ import type { MapGeometry } from '../geo';
 import { fixtureGeometry } from '../geo/test-fixtures';
 import {
   boundsCenter,
-  surfaceIdOf,
-  surfaceMapId,
+  DEFAULT_MAP_STYLE,
+  EMPTY_LABEL_RENDER_STATS,
+  boundsOnMap,
+  isAtlasSurface,
+  placementOn,
+  surfaceForMap,
+  surfacePointAt,
   type FitOptions,
   type FocusOptions,
   type HighlightTarget,
+  type MapMask,
   type LayerContent,
   type LayerId,
   type MapAdapter,
   type MapAdapterFactory,
   type MapAdapterOptions,
+  type MapBand,
   type MapContainer,
   type MapEvent,
   type MapEventType,
   type MapRenderStats,
   type MapViewState,
   type SurfaceId,
+  type SurfaceInfo,
   type Viewport,
   type WorldBounds,
 } from '../map/adapter';
@@ -182,18 +190,26 @@ export type FakeCall =
   | { readonly kind: 'fitBounds'; readonly bounds: WorldBounds; readonly options: FitOptions }
   | { readonly kind: 'focus'; readonly point: { readonly mapId: WorldMapId; readonly x: number; readonly y: number }; readonly options: FocusOptions }
   | { readonly kind: 'setViewport'; readonly viewport: Viewport }
-  | { readonly kind: 'highlight'; readonly target: HighlightTarget | null };
+  | { readonly kind: 'highlight'; readonly target: HighlightTarget | null }
+  | { readonly kind: 'refreshLabels' }
+  | { readonly kind: 'setMask'; readonly mask: MapMask }
+  | { readonly kind: 'selectPins'; readonly target: HighlightTarget | null }
+  | { readonly kind: 'zoomBy'; readonly delta: number }
+  | { readonly kind: 'setStepNumbers'; readonly shown: boolean }
+  | { readonly kind: 'setGrid'; readonly shown: boolean };
 
 export interface FakeAdapter extends MapAdapter {
   readonly options: MapAdapterOptions;
   readonly calls: FakeCall[];
   /** The last content given to each layer. */
   readonly contents: Map<LayerId, LayerContent>;
+  /** The bands the controller gave (`setBand`), in order. */
+  readonly bands: MapBand[];
   readonly mounted: () => boolean;
   /** Emits an event to the registered handlers, as the Leaflet adapter would. */
   emit(event: MapEvent): void;
-  /** Moves the view (as a pan or zoom by the user would) and emits `zoom` (when it changed) and `move`. */
-  pan(to: { readonly x?: number; readonly y?: number; readonly zoom?: number }): void;
+  /** Moves the view (as a pan or zoom by the user would) and emits `zoom` (when it changed) and `move`; on the atlas `mapId` names the map `x` and `y` are on. */
+  pan(to: { readonly x?: number; readonly y?: number; readonly zoom?: number; readonly mapId?: WorldMapId }): void;
   /** Calls of one kind. */
   callsOf<K extends FakeCall['kind']>(kind: K): Extract<FakeCall, { readonly kind: K }>[];
 }
@@ -207,24 +223,37 @@ export interface FakeAdapterSettings {
   readonly failMount?: string;
 }
 
+/** The fake stage's size in pixels. */
+const FAKE_WIDTH_PX = 800;
+const FAKE_HEIGHT_PX = 600;
+
+/**
+ * A fake adapter. On a world surface its view is its centre ± 100 yd, whatever the zoom; on the
+ * atlas (docs/research/map-atlas.md §8.1) it is the 800 × 600 px stage at the zoom, its centre and
+ * `mapId` come from the partition, and `visible` lists the view in every placed map's yards whose
+ * rectangle meets it padded by 50 %, as the Leaflet adapter does.
+ */
 export function createFakeAdapter(options: MapAdapterOptions, settings: FakeAdapterSettings = {}): FakeAdapter {
   const calls: FakeCall[] = [];
   const contents = new Map<LayerId, LayerContent>();
+  const bands: MapBand[] = [];
   const visible = new Map<LayerId, boolean>();
   const handlers = new Map<MapEventType, Set<(event: MapEvent) => void>>();
   const fitZoom = settings.fitZoom ?? -2;
   const surfaceZoom = settings.surfaceZoom ?? -5;
   let mounted = false;
   let surface: SurfaceId | null = options.initialSurface ?? options.surfaces[0]?.id ?? null;
-  const views = new Map<SurfaceId, { x: number; y: number; zoom: number }>();
+  const views = new Map<SurfaceId, { x: number; y: number; zoom: number; mapId: WorldMapId }>();
   let child: { remove(): void } | null = null;
 
-  const viewOf = (id: SurfaceId): { x: number; y: number; zoom: number } => {
+  const infoOf = (id: SurfaceId): SurfaceInfo | undefined => options.surfaces.find((s) => s.id === id);
+
+  const viewOf = (id: SurfaceId): { x: number; y: number; zoom: number; mapId: WorldMapId } => {
     const saved = views.get(id);
     if (saved !== undefined) return saved;
-    const info = options.surfaces.find((s) => s.id === id);
-    const center = info === undefined ? { x: 0, y: 0 } : boundsCenter(info.extent);
-    const fresh = { x: center.x, y: center.y, zoom: surfaceZoom };
+    const info = infoOf(id);
+    const center = info === undefined ? { mapId: worldMapId(0), x: 0, y: 0 } : boundsCenter(info.extent);
+    const fresh = { x: center.x, y: center.y, zoom: surfaceZoom, mapId: center.mapId };
     views.set(id, fresh);
     return fresh;
   };
@@ -232,16 +261,34 @@ export function createFakeAdapter(options: MapAdapterOptions, settings: FakeAdap
   const state = (): MapViewState | null => {
     if (!mounted || surface === null) return null;
     const view = viewOf(surface);
-    const mapId = surfaceMapId(surface);
-    return {
-      surface,
-      mapId,
-      center: { mapId, x: view.x, y: view.y },
-      zoom: view.zoom,
-      bounds: { mapId, xMin: view.x - 100, xMax: view.x + 100, yMin: view.y - 100, yMax: view.y + 100 },
-      widthPx: 800,
-      heightPx: 600,
-    };
+    const info = infoOf(surface);
+    if (info === undefined || !isAtlasSurface(info)) {
+      const mapId = info?.mapId ?? view.mapId;
+      return {
+        surface,
+        mapId,
+        center: { mapId, x: view.x, y: view.y },
+        zoom: view.zoom,
+        bounds: { mapId, xMin: view.x - 100, xMax: view.x + 100, yMin: view.y - 100, yMax: view.y + 100 },
+        widthPx: FAKE_WIDTH_PX,
+        heightPx: FAKE_HEIGHT_PX,
+      };
+    }
+    // The atlas: the centre through the partition, the stage's size at the zoom.
+    const own = placementOn(info, view.mapId);
+    const at = own === null ? null : surfacePointAt(info, own.eOff - view.y, own.sOff - view.x);
+    const center = at ?? { mapId: view.mapId, x: view.x, y: view.y };
+    const halfX = (FAKE_HEIGHT_PX / 2) * 2 ** (0 - view.zoom);
+    const halfY = (FAKE_WIDTH_PX / 2) * 2 ** (0 - view.zoom);
+    const bounds: WorldBounds = { mapId: center.mapId, xMin: center.x - halfX, xMax: center.x + halfX, yMin: center.y - halfY, yMax: center.y + halfY };
+    const padded: WorldBounds = { mapId: center.mapId, xMin: bounds.xMin - halfX, xMax: bounds.xMax + halfX, yMin: bounds.yMin - halfY, yMax: bounds.yMax + halfY };
+    const shown = info.placements.flatMap((placement) => {
+      const rect = boundsOnMap(info, placement.rect, center.mapId);
+      const meets = rect !== null && rect.xMin <= padded.xMax && rect.xMax >= padded.xMin && rect.yMin <= padded.yMax && rect.yMax >= padded.yMin;
+      const moved = meets ? boundsOnMap(info, bounds, placement.mapId) : null;
+      return moved === null ? [] : [moved];
+    });
+    return { surface, mapId: center.mapId, center, zoom: view.zoom, bounds, widthPx: FAKE_WIDTH_PX, heightPx: FAKE_HEIGHT_PX, visible: shown };
   };
 
   const emit = (event: MapEvent): void => {
@@ -264,24 +311,31 @@ export function createFakeAdapter(options: MapAdapterOptions, settings: FakeAdap
     return true;
   };
 
-  const moveTo = (id: SurfaceId, x: number, y: number, zoom: number): void => {
+  const moveTo = (id: SurfaceId, x: number, y: number, zoom: number, mapId: WorldMapId = viewOf(id).mapId): void => {
     const view = viewOf(id);
     const zoomChanged = view.zoom !== zoom;
-    views.set(id, { x, y, zoom });
+    views.set(id, { x, y, zoom, mapId });
     if (surface === id) emitMove(zoomChanged);
+  };
+
+  /** The surface for a point of `mapId` (the shown one when it places the map), switched to; null when none does. */
+  const surfaceFor = (mapId: WorldMapId): SurfaceId | null => {
+    const info = surfaceForMap(options.surfaces, surface, mapId);
+    return info !== null && switchTo(info.id) ? info.id : null;
   };
 
   const adapter: FakeAdapter = {
     options,
     calls,
     contents,
+    bands,
     mounted: () => mounted,
     emit,
     callsOf: <K extends FakeCall['kind']>(kind: K) => calls.filter((call): call is Extract<FakeCall, { readonly kind: K }> => call.kind === kind),
     pan(to) {
       if (surface === null) return;
       const view = viewOf(surface);
-      moveTo(surface, to.x ?? view.x, to.y ?? view.y, to.zoom ?? view.zoom);
+      moveTo(surface, to.x ?? view.x, to.y ?? view.y, to.zoom ?? view.zoom, to.mapId ?? view.mapId);
     },
     mount(el: MapContainer) {
       if (settings.failMount !== undefined) throw new Error(settings.failMount);
@@ -308,18 +362,18 @@ export function createFakeAdapter(options: MapAdapterOptions, settings: FakeAdap
     getSurface: () => surface,
     setViewport(viewport) {
       calls.push({ kind: 'setViewport', viewport });
-      const id = surfaceIdOf(viewport.center.mapId);
-      if (!switchTo(id)) return false;
-      moveTo(id, viewport.center.x, viewport.center.y, viewport.zoom);
+      const id = surfaceFor(viewport.center.mapId);
+      if (id === null) return false;
+      moveTo(id, viewport.center.x, viewport.center.y, viewport.zoom, viewport.center.mapId);
       return true;
     },
     fitBounds(bounds, fit = {}) {
       calls.push({ kind: 'fitBounds', bounds, options: fit });
-      const id = surfaceIdOf(bounds.mapId);
-      if (!switchTo(id)) return false;
+      const id = surfaceFor(bounds.mapId);
+      if (id === null) return false;
       const center = boundsCenter(bounds);
       // A fit that needs a zoom below the floor is centred at the floor instead (as the Leaflet adapter does).
-      moveTo(id, center.x, center.y, Math.max(Math.min(fit.maxZoom ?? 2, fitZoom), fit.minZoom ?? -Infinity));
+      moveTo(id, center.x, center.y, Math.max(Math.min(fit.maxZoom ?? 2, fitZoom), fit.minZoom ?? -Infinity), bounds.mapId);
       return true;
     },
     setLayer(layer, content) {
@@ -336,10 +390,10 @@ export function createFakeAdapter(options: MapAdapterOptions, settings: FakeAdap
     },
     focus(point, focus = {}) {
       calls.push({ kind: 'focus', point, options: focus });
-      const id = surfaceIdOf(point.mapId);
-      if (!switchTo(id)) return false;
+      const id = surfaceFor(point.mapId);
+      if (id === null) return false;
       const view = viewOf(id);
-      moveTo(id, point.x, point.y, focus.zoom ?? Math.max(view.zoom, -2));
+      moveTo(id, point.x, point.y, focus.zoom ?? Math.max(view.zoom, -2), point.mapId);
       return true;
     },
     on(type, handler) {
@@ -354,8 +408,34 @@ export function createFakeAdapter(options: MapAdapterOptions, settings: FakeAdap
     getView: state,
     resize: () => undefined,
     refreshTheme: () => undefined,
+    refreshLabels() {
+      calls.push({ kind: 'refreshLabels' });
+    },
+    setMask(mask) {
+      calls.push({ kind: 'setMask', mask });
+    },
+    selectPins(target) {
+      calls.push({ kind: 'selectPins', target });
+    },
+    setGrid(shown) {
+      calls.push({ kind: 'setGrid', shown });
+    },
+    zoomBy(delta) {
+      calls.push({ kind: 'zoomBy', delta });
+      if (surface === null) return;
+      const view = viewOf(surface);
+      moveTo(surface, view.x, view.y, view.zoom + delta, view.mapId);
+    },
+    setStepNumbers(provider) {
+      calls.push({ kind: 'setStepNumbers', shown: provider !== null });
+    },
+    setBand(band) {
+      bands.push(band);
+    },
     renderStats(): MapRenderStats {
-      return { surface, paths: 0, layers: {} as MapRenderStats['layers'] };
+      const band = (contents.get('art')?.items ?? []).find((item) => item.type === 'tiles');
+      const style = band?.type === 'tiles' ? band.style : (options.style ?? DEFAULT_MAP_STYLE);
+      return { surface, paths: 0, layers: {} as MapRenderStats['layers'], labels: EMPTY_LABEL_RENDER_STATS, style, tiles: { band: band?.id ?? null, held: null } };
     },
   };
   return adapter;

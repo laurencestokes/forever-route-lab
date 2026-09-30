@@ -13,16 +13,18 @@ import type { DatasetView } from '../../domain/dataset';
 import type { Estimated } from '../../domain/estimate';
 import type { StepId } from '../../domain/ids';
 import type { ValidationIssue } from '../../domain/issues';
+import type { RouteStep } from '../../domain/route';
 import type { EffectiveRules } from '../../rules/precedence';
+import type { RuleBasis } from '../../rules/ruleset';
 import type { StepEstimate } from '../../sim/estimate';
-import type { SimFact, UnknownPositionCause } from '../../sim/facts';
-import { NOT_SIMULATED, type RouteView } from '../app-model';
+import type { SimFact, TransportDockFact, UnknownPositionCause } from '../../sim/facts';
+import { NOT_SIMULATED, type RouteView, stepDetail, stepPlace } from '../app-model';
 import { formatInteger, plural } from '../lib/format';
 import { countIssues, type IssueCounts, NO_ISSUES } from '../lib/issues';
 import { knownReadout, type Readout, readoutFromEstimate, unknownReadout } from '../lib/readout';
 import { assumptionList, assumptionWords, type RuleParameter } from '../lib/rule-labels';
 import type { PendingTravel } from '../markers/PendingMarker';
-import type { StepRowModel } from '../route/rows';
+import type { GroupRowModel, RowIssue, RowMarkState, RowPlace, StepRowModel } from '../route/rows';
 import type { SimulationStatusModel } from '../shell/SimulationStatus';
 import type { XpBarProps } from '../shell/XpBar';
 
@@ -124,6 +126,36 @@ function itemsBeforeAcceptSentence(facts: readonly SimFact[]): string | null {
   return null;
 }
 
+/** Where a dock's position comes from, as Details words it (SIMULATION TIME-7). */
+function dockWords(dock: TransportDockFact): string {
+  switch (dock.pointFrom) {
+    case 'inferred':
+      return `${dock.name}, dock position inferred from ${dock.record ?? 'the client taxi file'}`;
+    case 'user':
+      return `${dock.name}, at the dock you entered`;
+    case 'dock-npc':
+      return `${dock.name}, at its dock master`;
+    case null:
+      return `${dock.name}, dock position unknown`;
+  }
+}
+
+/**
+ * The Details "Transport" sentence of a transport step (SIMULATION TIME-7; map-presentation.md §10,
+ * MP-R32): the service ridden and where each dock's position comes from, with its client record
+ * when it is inferred; null for other steps.
+ */
+export function transportSentence(facts: readonly SimFact[]): string | null {
+  for (const fact of facts) {
+    if (fact.kind !== 'transport-ride') continue;
+    const [departure, arrival] = fact.docks;
+    const docks = [departure, arrival].flatMap((dock) => (dock === undefined ? [] : [`${dock.end === 'departure' ? 'from' : 'to'} ${dockWords(dock)}`]));
+    const berth = fact.berthWalk ? '; the walk to or from a berth counts the swim beside the pier as walking (assumed)' : '';
+    return `${fact.name}: ${docks.join('; ')}; wait and ride times assumed${berth}`;
+  }
+  return null;
+}
+
 /** The Details "Objective work" sentence of a step (D-040): a turn-in's carried work, or an accept's items collected before it. */
 export function objectiveWorkSentence(facts: readonly SimFact[]): string | null {
   return carriedWorkSentence(facts) ?? itemsBeforeAcceptSentence(facts);
@@ -219,6 +251,8 @@ export interface StepDerived {
    * sentence: a turn-in's carried work, or an accept's items collected before it; else null.
    */
   readonly objectiveWork: string | null;
+  /** A transport step's service and its docks' provenance (TIME-7, MP-R32), in a sentence; else null. */
+  readonly transport: string | null;
 }
 
 const NO_STEP_ISSUES: readonly ValidationIssue[] = [];
@@ -280,6 +314,7 @@ export function stepDerivedAt(results: DerivedResults, index: number, reason: Pe
     issues: results.stepIssues[index] ?? NO_STEP_ISSUES,
     levelBefore,
     objectiveWork: objectiveWorkSentence(estimate.facts),
+    transport: transportSentence(estimate.facts),
   };
 }
 
@@ -350,12 +385,6 @@ export function createStepIndex(results: DerivedResults, view: Pick<RouteView, '
   };
 }
 
-/**
- * Fills the route rows with the walk's numbers as they render (`RouteList deriveRow`): only the
- * mounted rows ask, so a new walk costs the rows in view. The quest chip is taken at the level
- * the step starts at, marked uncertain while that level is a lower bound. Undefined without a
- * derived store: the rows keep their own "not simulated" values.
- */
 /** What the rows read of the derived state: the paths' state and failure, never their progress (`sameRowSource`). */
 export type RowSource = Pick<DerivedState, 'status' | 'failure' | 'results'> & {
   readonly travel: Pick<TravelStatus, 'model'>;
@@ -369,7 +398,7 @@ export function sameRowSource(a: RowSource | null, b: RowSource | null): boolean
   return a.results === b.results && a.status === b.status && a.failure === b.failure && pendingTravelReason(a) === pendingTravelReason(b);
 }
 
-/** Whether two filled-in models of the same row show the same thing (every field a walk fills in). */
+/** Whether two filled-in models of the same row show the same thing (every field a walk or line 2 fills in). */
 function sameDerivedRow(a: StepRowModel, b: StepRowModel): boolean {
   const qa = a.quest;
   const qb = b.quest;
@@ -382,6 +411,11 @@ function sameDerivedRow(a: StepRowModel, b: StepRowModel): boolean {
     a.issues.error === b.issues.error &&
     a.issues.warning === b.issues.warning &&
     a.issues.info === b.issues.info &&
+    a.detail === b.detail &&
+    (a.place ?? null) === (b.place ?? null) &&
+    a.mark === b.mark &&
+    a.levelUp === b.levelUp &&
+    (a.issue === b.issue || (a.issue !== null && b.issue !== null && a.issue.severity === b.issue.severity && a.issue.message === b.issue.message && a.issue.short === b.issue.short)) &&
     (qa === qb ||
       (qa !== null && qb !== null && qa.level === qb.level && qa.difficulty === qb.difficulty && qa.uncertain === qb.uncertain && qa.provenance === qb.provenance))
   );
@@ -402,36 +436,142 @@ function stableRow(row: StepRowModel, next: StepRowModel): StepRowModel {
   return next;
 }
 
+/**
+ * Line 2's words (where the step happens, `stepDetail`), formatted when a row first mounts and kept
+ * per dataset view, then per step object (docs/research/ui-refresh.md §10.1; review UR-10): a new
+ * view (another character, custom quests, overrides) starts a new cache, and an edited step is a
+ * new object. The words read the dataset's zone names only, not the map geometry, so the view is
+ * the whole key. Building the rows (`buildRouteView`) formats none of them.
+ */
+const lineTwoCache = new WeakMap<object, WeakMap<RouteStep, string | null>>();
+
+export function lineTwoOf(dataset: DatasetView, step: RouteStep): string | null {
+  let byStep = lineTwoCache.get(dataset);
+  if (byStep === undefined) {
+    byStep = new WeakMap();
+    lineTwoCache.set(dataset, byStep);
+  }
+  const known = byStep.get(step);
+  if (known !== undefined) return known;
+  const words = stepDetail(step, dataset);
+  byStep.set(step, words);
+  return words;
+}
+
+const placeCache = new WeakMap<object, WeakMap<RouteStep, RowPlace | null>>();
+
+/** Line 2's short place (`stepPlace`: who and the zone, no coordinates; review UI-01), cached as `lineTwoOf` is, so a kept row keeps the same object. */
+export function lineTwoPlaceOf(dataset: DatasetView, step: RouteStep): RowPlace | null {
+  let byStep = placeCache.get(dataset);
+  if (byStep === undefined) {
+    byStep = new WeakMap();
+    placeCache.set(dataset, byStep);
+  }
+  const known = byStep.get(step);
+  if (known !== undefined) return known;
+  const place = stepPlace(step, dataset);
+  byStep.set(step, place);
+  return place;
+}
+
+/**
+ * Doubts at a step that make a quest mark "may be" (ui-refresh.md §5.2; the list map-presentation.md
+ * §7.2 uses): the accept checks' `-uncertain` and `-unverifiable` codes, VAL013 and VAL021.
+ */
+export function isDoubtCode(code: string): boolean {
+  return code.endsWith('-uncertain') || code.endsWith('-unverifiable') || code.startsWith('VAL013') || code.startsWith('VAL021');
+}
+
+const SEVERITY_ORDER = ['error', 'warning', 'info'] as const;
+
+/**
+ * The worst issue at a step: its first error, else its first warning, else its first info; null for
+ * none. `shorten` gives line 2's short form (the results' `shortIssue`, review UI-01); without it the
+ * row shows the message.
+ */
+export function worstIssue(issues: readonly ValidationIssue[], shorten?: (issue: ValidationIssue) => string): RowIssue | null {
+  for (const severity of SEVERITY_ORDER) {
+    const issue = issues.find((candidate) => candidate.severity === severity);
+    if (issue !== undefined) return shorten === undefined ? { severity, message: issue.message } : { severity, message: issue.message, short: shorten(issue) };
+  }
+  return null;
+}
+
+/**
+ * A quest step's mark at the walk (ui-refresh.md §5.2): an error at the step locks it; a doubt
+ * makes it "may be"; otherwise an accept is available and a turn-in ready. A turn-in whose
+ * objectives are carried (D-040, VAL030, a warning) stays ready: line 2 says the warning.
+ */
+export function rowMarkOf(kind: StepRowModel['kind'], issues: readonly ValidationIssue[]): RowMarkState | null {
+  if (kind !== 'accept' && kind !== 'turnin') return null;
+  if (issues.some((issue) => issue.severity === 'error')) return 'locked';
+  if (issues.some((issue) => isDoubtCode(issue.code))) return 'uncertain';
+  return kind === 'accept' ? 'available' : 'ready';
+}
+
+/**
+ * Fills the route rows with the walk's numbers as they render (`RouteList deriveRow`): only the
+ * mounted rows ask, so a new walk costs the rows in view. The quest chip is taken at the level
+ * the step starts at, marked uncertain while that level is a lower bound; the quest mark takes its
+ * state from the step's issues, line 2 its words (cached) or the worst issue's, and the level
+ * column its level-up. Without a derived store the rows keep their own "not simulated" values and
+ * only line 2 is filled in.
+ */
 export function createRowDeriver(
   view: Pick<RouteView, 'steps' | 'numberOfStep' | 'rowSteps'>,
-  dataset: Pick<DatasetView, 'quest'>,
+  dataset: DatasetView,
   state: RowSource | null,
-): ((row: StepRowModel, index: number) => StepRowModel) | undefined {
+): (row: StepRowModel, index: number) => StepRowModel {
   const derive = createRowDeriverOnce(view, dataset, state);
-  return derive === undefined ? undefined : (row, rowIndex) => stableRow(row, derive(row, rowIndex));
+  // A deriver lives for one walk and one route view: the list asks it again at every render (a
+  // selection change, a scroll), and a row it has filled in comes back at once.
+  const filled = new WeakMap<StepRowModel, StepRowModel>();
+  return (row, rowIndex) => {
+    const known = filled.get(row);
+    if (known !== undefined) return known;
+    const next = stableRow(row, derive(row, rowIndex));
+    filled.set(row, next);
+    return next;
+  };
+}
+
+/** The step a row stands for, by the route view (the walk may be of an older route). */
+function rowStep(view: Pick<RouteView, 'steps' | 'numberOfStep' | 'rowSteps'>, rowIndex: number): RouteStep | undefined {
+  const id = view.rowSteps[rowIndex]?.[0];
+  const number = id === undefined ? undefined : view.numberOfStep.get(id);
+  return number === undefined ? undefined : view.steps[number - 1];
 }
 
 function createRowDeriverOnce(
   view: Pick<RouteView, 'steps' | 'numberOfStep' | 'rowSteps'>,
-  dataset: Pick<DatasetView, 'quest'>,
+  dataset: DatasetView,
   state: RowSource | null,
-): ((row: StepRowModel, index: number) => StepRowModel) | undefined {
-  if (state === null) return undefined;
+): (row: StepRowModel, index: number) => StepRowModel {
+  const withLineTwo = (row: StepRowModel, rowIndex: number): StepRowModel => {
+    const step = rowStep(view, rowIndex);
+    const detail = step === undefined ? null : lineTwoOf(dataset, step);
+    const place = step === undefined ? null : lineTwoPlaceOf(dataset, step);
+    return detail === row.detail && place === (row.place ?? null) ? row : { ...row, detail, place };
+  };
+  if (state === null) return withLineTwo;
   const results = state.results;
   if (results === null) {
     const unknown = unknownReadout<number>(noResultsReason(state));
-    return (row) => ({ ...row, projectedLevel: unknown, duration: unknown, xpGained: unknown });
+    return (row, rowIndex) => ({ ...withLineTwo(row, rowIndex), projectedLevel: unknown, duration: unknown, xpGained: unknown });
   }
   const indexOf = createStepIndex(results, view);
   const notWalked = unknownReadout<number>(STEP_NOT_WALKED);
   const reason = pendingTravelReason(state);
   return (row, rowIndex) => {
+    const base = withLineTwo(row, rowIndex);
     const id = view.rowSteps[rowIndex]?.[0];
     const index = id === undefined ? null : indexOf(id);
     const derived = index === null ? null : stepDerivedAt(results, index, reason);
-    if (derived === null) return { ...row, projectedLevel: notWalked, duration: notWalked, xpGained: notWalked, pending: null, assumptions: null, issues: NO_ISSUES };
+    if (derived === null) {
+      return { ...base, projectedLevel: notWalked, duration: notWalked, xpGained: notWalked, pending: null, assumptions: null, issues: NO_ISSUES, issue: null, levelUp: null };
+    }
     const step = index === null ? undefined : view.steps[index];
-    let quest = row.quest;
+    let quest = base.quest;
     if (quest !== null && step !== undefined && derived.levelBefore !== null && results.project.route.steps === view.steps) {
       const first = stepQuestIds(step)[0];
       const record = first === undefined ? undefined : dataset.quest(first);
@@ -445,8 +585,11 @@ function createRowDeriverOnce(
         };
       }
     }
+    const after = derived.projectedLevel.value;
+    const before = derived.levelBefore;
+    const levelUp = after !== null && before !== null && Math.floor(after) > before.level ? Math.floor(after) : null;
     return {
-      ...row,
+      ...base,
       quest,
       projectedLevel: derived.projectedLevel,
       duration: derived.duration,
@@ -454,7 +597,52 @@ function createRowDeriverOnce(
       pending: derived.pending,
       assumptions: derived.assumptions,
       issues: derived.issues.length === 0 ? NO_ISSUES : countIssues(derived.issues),
+      issue: worstIssue(derived.issues, shortIssueFor(results, step)),
+      mark: rowMarkOf(base.kind, derived.issues) ?? base.mark,
+      levelUp,
     };
+  };
+}
+
+/** Line 2's short form of a step's issues, from the results (`DerivedResults.shortIssue`, built in the pipeline's chunk; review UI-01). */
+function shortIssueFor(results: DerivedResults, step: RouteStep | undefined): ((issue: ValidationIssue) => string) | undefined {
+  const shorten = results.shortIssue;
+  if (shorten === undefined) return undefined;
+  const stepQuest = step === undefined ? null : (stepQuestIds(step)[0] ?? null);
+  return (issue) => shorten(issue, stepQuest);
+}
+
+// Group header rows -------------------------------------------------------------------------------
+
+const lastDerivedGroup = new WeakMap<GroupRowModel, GroupRowModel>();
+
+/**
+ * Fills a group header with the level span of its steps (ui-refresh.md §6.3): the level after its
+ * first step and after its last, from the walk; null without results. The same object comes back
+ * while the span reads the same, so the memoised header does not re-render.
+ */
+export function createGroupDeriver(
+  view: Pick<RouteView, 'steps' | 'numberOfStep' | 'rowSteps'>,
+  state: RowSource | null,
+): ((row: GroupRowModel, index: number) => GroupRowModel) | undefined {
+  const results = state?.results ?? null;
+  if (state === null || results === null) return undefined;
+  const indexOf = createStepIndex(results, view);
+  const reason = pendingTravelReason(state);
+  return (row, rowIndex) => {
+    const ids = view.rowSteps[rowIndex] ?? [];
+    const first = ids[0];
+    const last = ids.at(-1);
+    const from = first === undefined ? null : indexOf(first);
+    const to = last === undefined ? null : indexOf(last);
+    const a = from === null ? null : stepDerivedAt(results, from, reason);
+    const b = to === null ? null : stepDerivedAt(results, to, reason);
+    const span = a === null || b === null ? null : { from: a.projectedLevel, to: b.projectedLevel };
+    const known = lastDerivedGroup.get(row);
+    if (known !== undefined && (known.levelSpan === span || (known.levelSpan !== null && span !== null && sameReadout(known.levelSpan.from, span.from) && sameReadout(known.levelSpan.to, span.to)))) return known;
+    const next = { ...row, levelSpan: span };
+    lastDerivedGroup.set(row, next);
+    return next;
   };
 }
 
@@ -783,4 +971,72 @@ export function validationCounts(state: DerivedState | null): IssueCounts | null
     countsCache.set(issues, counts);
   }
   return counts;
+}
+
+// The quest log after the active step ---------------------------------------------------------------
+
+/** The quest log after the selection's focus step (`DerivedState.selected`), as the status bar and the Quest log tab count it. */
+export interface QuestLogCount {
+  readonly stepId: StepId;
+  readonly size: number;
+  readonly capacity: number;
+  readonly capacityBasis: RuleBasis;
+  readonly capacityFrom: 'project' | 'ruleset';
+}
+
+/** The count, or null without a walked focus step; compare with `sameQuestLogCount`. */
+export function questLogCountOf(state: DerivedState | null): QuestLogCount | null {
+  const selected = state?.selected ?? null;
+  const results = state?.results ?? null;
+  if (selected === null || results === null) return null;
+  const capacity = results.rules.values.questLogCapacity;
+  return { stepId: selected.stepId, size: selected.after.questLog.size, capacity: capacity.value, capacityBasis: capacity.basis, capacityFrom: capacity.from };
+}
+
+export function sameQuestLogCount(a: QuestLogCount | null, b: QuestLogCount | null): boolean {
+  return (
+    a === b ||
+    (a !== null && b !== null && a.stepId === b.stepId && a.size === b.size && a.capacity === b.capacity && a.capacityBasis === b.capacityBasis && a.capacityFrom === b.capacityFrom)
+  );
+}
+
+const CAPACITY_BASIS: Readonly<Record<RuleBasis, string>> = {
+  'client-data': 'client data',
+  official: 'official',
+  reported: 'reported',
+  'era-assumed': 'an Era value',
+  assumption: 'an assumption',
+};
+
+/** The quest log in words: `4 / 40` (`≥4 / 40` while the log before the route is not known), its basis, and the tab's count. */
+export interface QuestLogWords {
+  /** The short form: `4 / 40`, `≥4 / 40`, or `?`. */
+  readonly text: string;
+  /** The sentence (tooltip, spoken): the count, the step, the capacity's basis, or why it is unknown. */
+  readonly detail: string;
+  /** The Quest log tab's count ("4", "≥4"), or null while unknown. */
+  readonly badge: string | null;
+  /** The tab's spoken count: "4 quests after step 12". */
+  readonly badgeLabel: string | null;
+}
+
+/**
+ * The quest log after the active step in words (ui-refresh.md §5.5, §8). `priorHistory` is the
+ * character's: when the log before the route is `unknown`, the count is a lower bound. Unknown stays
+ * unknown: without a walked step it says why, never "0".
+ */
+export function questLogWords(count: QuestLogCount | null, stepNumber: number | null, priorHistory: 'fresh' | 'listed' | 'unknown', why: string): QuestLogWords {
+  if (count === null || stepNumber === null) return { text: '?', detail: `Quest log unknown: ${why}.`, badge: null, badgeLabel: null };
+  const bound = priorHistory === 'unknown';
+  const step = `step ${formatInteger(stepNumber)}`;
+  const basis = count.capacityFrom === 'project' ? 'your project’s value' : CAPACITY_BASIS[count.capacityBasis];
+  const size = formatInteger(count.size);
+  const capacity = formatInteger(count.capacity);
+  const lower = bound ? ' The quests in the log before the route are not known, so there may be more.' : '';
+  return {
+    text: `${bound ? '≥' : ''}${size} / ${capacity}`,
+    detail: `In the quest log after ${step}: ${bound ? 'at least ' : ''}${size} of ${capacity} quests (capacity ${capacity}: ${basis}).${lower}`,
+    badge: `${bound ? '≥' : ''}${size}`,
+    badgeLabel: `${bound ? 'at least ' : ''}${plural(count.size, 'quest')} after ${step}`,
+  };
 }

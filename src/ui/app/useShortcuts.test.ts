@@ -68,3 +68,18 @@ describe('routeEditorShortcutFor', () => {
     }
   });
 });
+
+describe('Alt+M, map focus (ui-refresh.md §4.3)', () => {
+  it('reads the physical key, so Option+M on a Mac (which types "µ") works too', () => {
+    expect(globalShortcutFor(key('m', { altKey: true, code: 'KeyM' }))).toBe('mapFocus');
+    expect(globalShortcutFor(key('µ', { altKey: true, code: 'KeyM' }))).toBe('mapFocus');
+  });
+
+  it('is Alt+M alone: not M, not Ctrl or Shift with it, and not another key that types "m"', () => {
+    expect(globalShortcutFor(key('m', { code: 'KeyM' }))).toBeNull();
+    expect(globalShortcutFor(key('m', { altKey: true, ctrlKey: true, code: 'KeyM' }))).toBeNull();
+    expect(globalShortcutFor(key('M', { altKey: true, shiftKey: true, code: 'KeyM' }))).toBeNull();
+    expect(globalShortcutFor(key('m', { altKey: true, code: 'Semicolon' }))).toBeNull();
+    expect(routeEditorShortcutFor(key('m', { altKey: true, code: 'KeyM' }))).toBeNull();
+  });
+});

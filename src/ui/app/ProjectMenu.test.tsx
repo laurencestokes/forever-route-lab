@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { fixturePrepared, fixtureView } from '../../../tests/support/fixture-dataset';
 import { insertNote } from '../../app/commands';
 import { preparedDatasetSource } from '../../app/dataset-source';
@@ -11,7 +11,14 @@ import { createSampleProject, SAMPLE_PROJECT_NAME, SAMPLE_ROUTE_NOTICE } from '.
 import { App } from '../App';
 import { downloadFile, ExportDialog, ImportDialog } from './ImportExport';
 import { describeSave, failureAnnouncementKey, formatSavedTime } from './ProjectMenu';
+import { loadDetailsPanel } from './lazy';
 import { ProjectSessionProvider, useProjectSessionState } from './ProjectMenuContext';
+
+// The Projects dialog, the menu's content and the Import dialog are lazy parts (ui-refresh.md §10.3)
+// that production builds preload when idle; so do these tests.
+beforeAll(async () => {
+  await loadDetailsPanel();
+});
 
 afterEach(() => {
   cleanup();
@@ -45,13 +52,30 @@ async function setup(extra: Partial<TestSessionOptions> = {}): Promise<TestSessi
 }
 
 const bar = () => screen.getByRole('region', { name: 'Project storage' });
-const projectsButton = () => within(bar()).getByRole('button', { name: 'Projects' });
+/** The route's name, which opens the Projects menu (ui-refresh.md §4.1). */
+const routeName = () => screen.getByRole('button', { name: /, route: open the projects menu$/ });
+const projectsMenu = () => screen.getByRole('menu', { name: 'Projects' });
+/** Opens the Projects menu from the route's name and runs one of its items. */
+const fromMenu = (item: string | RegExp) => {
+  fireEvent.click(routeName());
+  fireEvent.click(within(projectsMenu()).getByRole('menuitem', { name: item }));
+};
+/** Opens the Projects dialog on its list (the menu's "Projects…"). */
+const openProjects = () => {
+  fromMenu(/^Projects…/);
+};
 const describedBy = (element: HTMLElement) => document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ?? '';
 /** The live region that is heard now: the top-most open dialog's, else the shell's (UI review F2). */
 const liveRegion = (): Element | null => [...document.querySelectorAll('dialog[open] .frl-dialog-live')].at(-1) ?? document.querySelector('.frl-app-live');
 const announced = () => liveRegion()?.textContent.replace(/\u00a0$/, '') ?? '';
 const menu = () => screen.getByRole('dialog', { name: 'Projects' });
-const topBarText = () => document.querySelector('.frl-topbar')?.textContent ?? '';
+/** The open project's name, as the Projects menu shows it checked. */
+const openName = () => {
+  fireEvent.click(routeName());
+  const name = within(projectsMenu()).getByRole('menuitemradio', { checked: true }).querySelector('.frl-projects-menu__label')?.textContent ?? '';
+  fireEvent.keyDown(projectsMenu(), { key: 'Escape' });
+  return name;
+};
 
 async function autosave(t: TestSession) {
   await act(async () => {
@@ -86,9 +110,9 @@ describe('describeSave', () => {
 describe('the project bar', () => {
   it('shows the save status in words and follows edits through autosave', async () => {
     const t = await setup();
-    expect(projectsButton()).toBeTruthy();
+    expect(within(bar()).queryByRole('button', { name: 'Projects' })).toBeNull();
     expect(bar().textContent).toContain(describeSave({ kind: 'saved', at: SAVED_AT }).short);
-    expect(describedBy(projectsButton())).toBe(describeSave({ kind: 'saved', at: SAVED_AT }).long);
+    expect(bar().querySelector('.frl-projectbar__status .frl-visually-hidden')?.textContent).toBe(describeSave({ kind: 'saved', at: SAVED_AT }).long);
     act(() => {
       t.store.dispatch(insertNote({ text: 'edit' }));
     });
@@ -101,8 +125,8 @@ describe('the project bar', () => {
   it('says plainly when browser storage is unavailable', async () => {
     await setup({ unavailable: 'The browser does not allow storage here (InvalidStateError: private window)' });
     expect(bar().textContent).toContain('Not saved: storage unavailable');
-    expect(describedBy(projectsButton())).toContain('Projects are kept in this tab only and are lost when it closes');
-    fireEvent.click(projectsButton());
+    expect(bar().textContent).toContain('Projects are kept in this tab only and are lost when it closes');
+    openProjects();
     expect(menu().textContent).toContain('The browser does not allow storage here (InvalidStateError: private window). Projects are kept in this tab only');
     expect(within(menu()).getByRole('heading', { name: 'Other projects in this tab (not saved)' })).toBeTruthy();
   });
@@ -122,11 +146,41 @@ describe('the project bar', () => {
 });
 
 describe('the Projects menu', () => {
-  it('creates a project and opens it, and the top bar follows', async () => {
+  it('opens from the route\u2019s name as a menu button, with the routes in this browser and the open one checked', async () => {
+    await setup();
+    const button = routeName();
+    expect(button.getAttribute('aria-haspopup')).toBe('menu');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(button.closest('h2')).not.toBeNull();
+    button.focus();
+    fireEvent.keyDown(button, { key: 'ArrowDown' });
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    const items = [...projectsMenu().querySelectorAll<HTMLElement>('[role^="menuitem"]')];
+    expect(items.map((item) => item.textContent)).toEqual([expect.stringContaining(SAMPLE_PROJECT_NAME), 'New route…', 'Rename…', 'Duplicate', 'Recently deleted…', 'Projects…', 'Delete route…']);
+    expect(within(projectsMenu()).getByRole('menuitemradio', { name: new RegExp(SAMPLE_PROJECT_NAME) }).getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(projectsMenu(), { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(items.at(-1));
+    expect(items.at(-1)?.className).toContain('is-danger');
+    fireEvent.keyDown(projectsMenu(), { key: 'Home' });
+    expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(projectsMenu(), { key: 'Escape' });
+    expect(screen.queryByRole('menu', { name: 'Projects' })).toBeNull();
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('duplicates the open route from the menu, and says so', async () => {
     const t = await setup();
-    expect(topBarText()).toContain(SAMPLE_PROJECT_NAME);
-    fireEvent.click(projectsButton());
-    fireEvent.click(within(menu()).getByRole('button', { name: 'New project' }));
+    fromMenu('Duplicate');
+    await act(() => settle());
+    expect(t.session.getState().projects).toHaveLength(2);
+    expect(announced()).toBe('Saved a copy: “Sample project (copy)”.');
+  });
+
+  it('creates a project from New route… and opens it', async () => {
+    const t = await setup();
+    expect(t.session.getState().current.name).toBe(SAMPLE_PROJECT_NAME);
+    fromMenu('New route…');
     const field = within(menu()).getByRole('textbox', { name: 'Name of the new project' });
     expect(document.activeElement).toBe(field);
     fireEvent.change(field, { target: { value: 'Durotar run' } });
@@ -136,9 +190,9 @@ describe('the Projects menu', () => {
     });
     expect(screen.queryByRole('dialog', { name: 'Projects' })).toBeNull();
     expect(announced()).toBe('New project “Durotar run” is open.');
-    expect(topBarText()).toContain('Durotar run');
-    // No longer the sample: no "Sample" label and no sample notice.
-    expect(document.querySelector('.frl-topbar')?.textContent).not.toContain('Sample project');
+    expect(openName()).toBe('Durotar run');
+    // No longer the sample: no "Sample" tag in the route panel.
+    expect(screen.getByRole('main', { name: 'Route editor' }).querySelector('.frl-placeholder-tag')).toBeNull();
     expect(t.store.getState().project.route.steps).toEqual([]);
   });
 
@@ -148,7 +202,7 @@ describe('the Projects menu', () => {
       await t.session.newProject('Second');
       await settle();
     });
-    fireEvent.click(projectsButton());
+    openProjects();
     await act(() => settle());
     const others = () => within(menu()).getByRole('region', { name: /Other projects/ });
     expect(within(others()).getByText(SAMPLE_PROJECT_NAME)).toBeTruthy();
@@ -193,13 +247,13 @@ describe('the Projects menu', () => {
       await settle();
     });
     expect(announced()).toBe('Opened “Old sample”.');
-    expect(topBarText()).toContain('Old sample');
+    expect(openName()).toBe('Old sample');
     expect(t.session.getState().current.name).toBe('Old sample');
   });
 
   it('closes an inline step with Escape before the dialog', async () => {
     await setup();
-    fireEvent.click(projectsButton());
+    openProjects();
     fireEvent.click(within(menu()).getByRole('button', { name: `Rename “${SAMPLE_PROJECT_NAME}”` }));
     expect(within(menu()).queryByRole('textbox')).not.toBeNull();
     fireEvent(menu(), new Event('cancel', { cancelable: true }));
@@ -214,7 +268,7 @@ describe('the Projects menu', () => {
       t.store.dispatch(insertNote({ text: 'keep me' }));
     });
     const steps = t.store.getState().project.route.steps.length;
-    fireEvent.click(projectsButton());
+    openProjects();
     fireEvent.keyDown(within(menu()).getByRole('button', { name: 'New project' }), { key: 'z', ctrlKey: true });
     expect(t.store.getState().project.route.steps.length).toBe(steps);
   });
@@ -229,7 +283,7 @@ describe('the Projects menu', () => {
     await setup({ storage });
     // The start opened a new project, and says why.
     expect(within(bar()).getByRole('button', { name: /notices/ })).toBeTruthy();
-    fireEvent.click(projectsButton());
+    openProjects();
     const text = menu().textContent;
     expect(text).toContain('“Broken” could not be opened: The stored project is not a valid project file for this version of the app. It is kept in storage unchanged.');
     expect(text).toContain('Cannot be opened: The stored project is not a valid project file for this version of the app. It is kept unchanged; export it to keep a copy.');
@@ -282,7 +336,7 @@ describe('import and export in the top bar', () => {
     });
     expect(screen.queryByRole('dialog', { name: 'Import' })).toBeNull();
     expect(announced()).toBe('Imported “Copy of sample” as a new project and opened it.');
-    expect(topBarText()).toContain('Copy of sample');
+    expect(openName()).toBe('Copy of sample');
     expect(t.session.getState().projects).toHaveLength(2);
   });
 
@@ -358,8 +412,8 @@ describe('the drift report', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Dismiss the report' }));
     expect(screen.queryByRole('dialog', { name: 'The data changed since this project was saved' })).toBeNull();
     expect(within(bar()).queryByRole('button', { name: /^Data changed/ })).toBeNull();
-    // The opener is gone, so focus goes to the Projects button rather than the page (UI review F11).
-    expect(document.activeElement).toBe(projectsButton());
+    // The opener is gone, so focus goes to the save status beside it rather than the page (UI review F11).
+    expect(document.activeElement).toBe(bar().querySelector('.frl-projectbar__status'));
     expect(announced()).toBe('Report dismissed: the new data revision is recorded with the next save.');
     await autosave(t);
     expect((await storage.readProject(t.session.getState().current.id))?.index.dataRevision).toBe(data.identity.dataRevision);
@@ -369,7 +423,7 @@ describe('the drift report', () => {
 describe('focus in the Projects dialog (UI review F3)', () => {
   it('returns focus to the button that opened an inline step, after Cancel and after Escape', async () => {
     await setup();
-    fireEvent.click(projectsButton());
+    openProjects();
     const rename = () => within(menu()).getByRole('button', { name: `Rename “${SAMPLE_PROJECT_NAME}”` });
     rename().focus();
     fireEvent.click(rename());
@@ -390,7 +444,7 @@ describe('focus in the Projects dialog (UI review F3)', () => {
 
   it('returns focus to the renamed project’s button after a rename, although its name changed', async () => {
     await setup();
-    fireEvent.click(projectsButton());
+    openProjects();
     fireEvent.click(within(menu()).getByRole('button', { name: `Rename “${SAMPLE_PROJECT_NAME}”` }));
     fireEvent.change(within(menu()).getByRole('textbox'), { target: { value: 'My route' } });
     await act(async () => {
@@ -402,7 +456,7 @@ describe('focus in the Projects dialog (UI review F3)', () => {
 
   it('keeps a refused rename open with what was typed, and moves focus to the reason', async () => {
     await setup();
-    fireEvent.click(projectsButton());
+    openProjects();
     fireEvent.click(within(menu()).getByRole('button', { name: `Rename “${SAMPLE_PROJECT_NAME}”` }));
     const field = within(menu()).getByRole('textbox', { name: `New name for “${SAMPLE_PROJECT_NAME}”` });
     fireEvent.change(field, { target: { value: '   ' } });
@@ -424,7 +478,7 @@ describe('destructive confirmations (UI review F9, CR-03)', () => {
       await t.session.newProject('Second');
       await settle();
     });
-    fireEvent.click(projectsButton());
+    openProjects();
     await act(() => settle());
     fireEvent.click(within(menu()).getByRole('button', { name: 'Delete “Second”' }));
     const confirm = within(menu()).getByRole('group', { name: 'Delete “Second”?' });
@@ -432,14 +486,14 @@ describe('destructive confirmations (UI review F9, CR-03)', () => {
     expect(confirm.textContent).toContain(`This closes it and opens “${SAMPLE_PROJECT_NAME}”.`);
     for (const name of ['Delete', 'Delete permanently']) {
       const button = within(confirm).getByRole('button', { name });
-      expect(button.className).toContain('frl-projects__destructive');
+      expect(button.className).toContain('frl-button--danger');
       expect(button.className).not.toContain('frl-button--primary');
     }
   });
 
   it('says Recently deleted lasts only until the tab closes when browser storage is unavailable', async () => {
     await setup({ unavailable: 'The browser does not allow storage here (InvalidStateError: private window)' });
-    fireEvent.click(projectsButton());
+    openProjects();
     fireEvent.click(within(menu()).getByRole('button', { name: `Delete “${SAMPLE_PROJECT_NAME}”` }));
     const confirm = within(menu()).getByRole('group', { name: `Delete “${SAMPLE_PROJECT_NAME}”?` });
     expect(confirm.textContent).toContain('It moves to Recently deleted, which is kept only until this tab closes.');
@@ -454,7 +508,7 @@ describe('destructive confirmations (UI review F9, CR-03)', () => {
       await t.session.newProject('Third');
       await settle();
     });
-    fireEvent.click(projectsButton());
+    openProjects();
     await act(() => settle());
     fireEvent.click(within(menu()).getByRole('button', { name: 'Delete “Second”' }));
     await act(async () => {
@@ -498,7 +552,7 @@ describe('destructive confirmations (UI review F9, CR-03)', () => {
     });
     await autosave(t);
     expect(bar().textContent).toContain('Not saved: changed elsewhere');
-    fireEvent.click(projectsButton());
+    openProjects();
     fireEvent.click(within(menu()).getByRole('button', { name: 'Keep this version (overwrite)' }));
     const confirm = within(menu()).getByRole('group', { name: 'Keep this version?' });
     const steps = other.store.getState().project.route.steps.length;
@@ -521,7 +575,7 @@ describe('a project open in another tab (CR-02)', () => {
     await createTestSession({ data, createSample, storage, tabs: tabs.tab() });
     const t = await setup({ storage, tabs: tabs.tab() });
     expect(bar().textContent).toContain('Not saved: open in another tab');
-    fireEvent.click(projectsButton());
+    openProjects();
     const choice = within(menu()).getByRole('group', { name: 'This project is open in another tab' });
     expect(within(choice).getByRole('button', { name: 'Open a copy' })).toBeTruthy();
     await act(async () => {
@@ -578,7 +632,7 @@ describe('failed saves and reads', () => {
       },
     };
     await setup({ storage: flaky });
-    fireEvent.click(projectsButton());
+    openProjects();
     await act(() => settle());
     const others = within(menu()).getByRole('region', { name: /Other projects/ });
     expect(others.textContent).toContain('Not opened: The stored project could not be read (disk hiccup). It is kept unchanged; try opening it again.');

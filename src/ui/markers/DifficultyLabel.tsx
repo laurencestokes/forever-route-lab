@@ -57,6 +57,11 @@ export interface DifficultyLabelProps {
    * route), so the quest may really be easier. Drawn with a dashed edge and explained in text.
    */
   readonly uncertain?: boolean | undefined;
+  /**
+   * The words to say instead of `describeDifficulty`'s, as the tooltip and the hidden text, where
+   * the number is not a quest's level (a zone heading's median: "Median quest level 9, …"; UI-13).
+   */
+  readonly description?: string | undefined;
   readonly className?: string | undefined;
 }
 
@@ -72,9 +77,9 @@ export function describeDifficulty(level: number | null, difficulty: Difficulty 
  * number of filled pips (shape), and text (visible in `full`, tooltip and screen-reader text
  * always). The chip keeps its dark well in both themes so every difficulty colour has contrast.
  */
-export function DifficultyLabel({ level, difficulty, variant = 'compact', uncertain = false, className }: DifficultyLabelProps) {
+export function DifficultyLabel({ level, difficulty, variant = 'compact', uncertain = false, description: said, className }: DifficultyLabelProps) {
   const rank = difficulty === null ? 0 : DIFFICULTY_RANK[difficulty];
-  const description = describeDifficulty(level, difficulty, uncertain);
+  const description = said ?? describeDifficulty(level, difficulty, uncertain);
   return (
     <span
       className={cx(

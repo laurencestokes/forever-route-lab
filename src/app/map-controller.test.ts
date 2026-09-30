@@ -24,7 +24,7 @@ import { LAYER_IDS, refsOf, type LayerId, type MapContainer, type MapDescriptor,
 import { DEFAULT_LOD, RELIEF_OPACITY } from '../map/layers';
 import { fixedClock } from './clock';
 import { insertNote, moveSelected } from './commands';
-import { BADGE_TEXT, createMapController, FIT_ROUTE_MAX_ZOOM, MAP_ART_OWNER_NOTE, MAX_SYNC_MEASURES, stagePixelOf, type MapControllerOptions, type MapTiming } from './map-controller';
+import { BADGE_TEXT, createMapController, FIT_ROUTE_MAX_ZOOM, MAX_SYNC_MEASURES, stagePixelOf, type MapControllerOptions, type MapTiming } from './map-controller';
 import {
   fakeAdapterFactory,
   MAP_TEST_DATASET,
@@ -36,9 +36,10 @@ import {
   type FakeAdapter,
   type FakeAdapterSettings,
 } from './map-test-helpers';
-import { setMapLayerVisible, setMapWalkingPaths, shownOpenedQuests } from './map-view';
+import { setMapLayerVisible, setMapWalkingPaths } from './map-view';
 import { editNoteText } from './shell-support';
 import { createEditorStore, type EditorStore } from './store';
+import { MAP_ART_OWNER_NOTE, MAP_WORDING } from './map-wording';
 
 const T0 = '2026-09-25T12:00:00.000Z';
 const KALIMDOR = worldMapId(1);
@@ -91,6 +92,15 @@ interface SetupOptions {
   readonly flightMasters?: Parameters<typeof mapTestWorkspace>[3];
 }
 
+/**
+ * The controller on world surfaces, one per world map. Since step ATL.10 (docs/research/map-atlas.md
+ * §11) the app shows maps 0, 1 and 2991 on the atlas, and their world surfaces are retired; the
+ * world-surface path remains for the instances, battlegrounds and Darkspear Islands, and for every
+ * world map when the geometry cannot place the continents (no 947 rows). This file keeps testing
+ * that path on the small fixture, so it asks for it (`atlas: false`), and for Leaflet's own wheel
+ * (`smoothWheel: false`, which also leaves out the idle pre-build). The atlas, the default, is
+ * tested in map-controller.atlas.test.ts and map-controller.styles.test.ts.
+ */
 function setup(opts: SetupOptions = {}): Setup {
   const workspace = mapTestWorkspace(opts.steps, T0, opts.dataset, opts.flightMasters);
   const steps = workspace.steps;
@@ -100,6 +110,7 @@ function setup(opts: SetupOptions = {}): Setup {
   const created: Blob[] = [];
   const revoked: string[] = [];
   const controller = createMapController({
+    wording: MAP_WORDING,
     store,
     data: workspace.data,
     geometry: workspace.geometry,
@@ -114,6 +125,8 @@ function setup(opts: SetupOptions = {}): Setup {
         revoked.push(url);
       },
     },
+    atlas: false,
+    smoothWheel: false,
     ...opts.options,
   });
   const adapter = (): FakeAdapter => {
@@ -202,9 +215,10 @@ describe('store changes', () => {
     s.store.select({ kind: 'single', id: stepAt(s, 3).id });
     // The new focus is the active step at once: its quests' objectives, turn-in and giver emphasis
     // come with the selection's halo and strong marker, in one sync. The step markers do not see
-    // the focus, so they are not sent again (M3 review PERF-2).
+    // the focus (M3 review PERF-2); the route line and the beads split at the active step
+    // (map-presentation.md §13.6; review PR-02), so those after it come again, faded.
     const afterSelect = adapter.callsOf('setLayer').slice(before).map((call) => call.layer);
-    expect(afterSelect.sort()).toEqual(['available-quests', 'objectives', 'selection', 'turn-ins']);
+    expect(afterSelect.sort()).toEqual(['available-quests', 'objectives', 'route-line', 'route-steps', 'selection', 'turn-ins']);
     const mark = adapter.callsOf('setLayer').length;
     const markersBefore = itemsOf(adapter, 'route-steps');
     s.store.dispatch(moveSelected({ by: -1 }));
@@ -213,8 +227,9 @@ describe('store changes', () => {
     // on top), so the adapter's diff finds nothing to redraw (M3 review PERF-2).
     const afterMove = adapter.callsOf('setLayer').slice(mark).map((call) => call.layer);
     expect(afterMove).toEqual(['route-line', 'route-steps', 'selection']);
+    // The same objects, faded ones included: only the beads the split passes over change (§13.6).
     const markersAfter = itemsOf(adapter, 'route-steps');
-    expect(markersAfter.every((item) => markersBefore.includes(item))).toBe(true);
+    expect(markersAfter.filter((item) => !markersBefore.includes(item)).length).toBeLessThanOrEqual(1);
     // The sync after the edit is measured, with what it set.
     expect(s.timing.measures.at(-1)).toEqual({ name: 'frl:map:sync', detail: { trigger: 'store', layers: ['route-line', 'route-steps', 'selection'] } });
   });
@@ -230,8 +245,16 @@ describe('store changes', () => {
     expect(marker?.label).toBe(gather.id);
     const sets = adapter.callsOf('setLayer').length;
     s.store.dispatch(insertNote({ text: 'Before everything' }, 0));
-    expect(adapter.callsOf('setLayer').length).toBe(sets);
-    expect(itemsOf(adapter, 'route-steps').find((item) => item.id === `step:${gather.id}`)).toBe(marker);
+    // The new note is the active step, so the route after it is drawn as such (§13.6; review PR-02):
+    // the route layers alone come again, and the bead is the same one, faded, with no number in it.
+    expect(
+      adapter
+        .callsOf('setLayer')
+        .slice(sets)
+        .map((call) => call.layer)
+        .sort(),
+    ).toEqual(['route-line', 'route-steps']);
+    expect(itemsOf(adapter, 'route-steps').find((item) => item.id === `step:${gather.id}`)).toEqual({ ...marker, after: true });
     expect(s.controller.labelFor(ref)).toBe('3 · accept');
   });
 
@@ -287,8 +310,9 @@ describe('store changes', () => {
       expect(setLayerCount(adapter, 'selection') - selections).toBe(1);
       expect(s.timing.measures.length - measures).toBe(1);
     }
-    // The step markers never see the selection (M3 review PERF-2).
-    expect(setLayerCount(adapter, 'route-steps')).toBe(markers);
+    // The step markers never see the selection (M3 review PERF-2), but the split at the active step
+    // moves with it (§13.6; review PR-02): at most one re-send per selection change.
+    expect(setLayerCount(adapter, 'route-steps') - markers).toBeLessThanOrEqual(3);
     expect(adapter.callsOf('focus')).toHaveLength(3);
   });
 
@@ -341,7 +365,8 @@ describe('labels', () => {
     const giver = itemsOf(s.adapter(), 'available-quests')[0];
     if (giver?.type !== 'marker') throw new Error('giver missing');
     expect(giver.badges).toEqual(['off-frame']);
-    expect(s.controller.labelFor(giver.ref)).toBe(`Gornek: starts Gather (${BADGE_TEXT['off-frame']})`);
+    // Without route state the givers' hover says so (map-presentation.md §7.1).
+    expect(s.controller.labelFor(giver.ref)).toBe(`Gornek: starts Gather (${BADGE_TEXT['off-frame']}) · quests open to an Orc Warrior (no route state yet)`);
   });
 });
 
@@ -370,45 +395,28 @@ describe('map events', () => {
     expect(s.store.getState().selection.focus).toBe(b);
   });
 
-  it('opens the quests of a clicked giver, objective or turn-in in Details; a flight master without quests opens nothing', () => {
+  it('opens the map popover on a clicked pin, with its items’ texts and the point (MP.6; §14.2), and Details only from it', () => {
     const s = setup();
     s.controller.attach(s.factory.factory, EL);
-    s.adapter().emit({
-      type: 'click',
-      point: { mapId: KALIMDOR, x: 0, y: -4000 },
-      hit: hit('available-quests', 'spawn:npc:10:0', { kind: 'spawn', subject: { kind: 'npc', id: npcId(10) }, spawnIndex: 0, questIds: [questId(2), questId(1)] }),
-      zones: [DUROTAR],
-    });
-    const state = s.store.getState();
-    expect(state.view.rightTab).toBe('details');
-    expect(shownOpenedQuests(state.view.openedQuests, state.selection)).toEqual([1, 2]);
-    s.store.setView({ openedQuests: null, rightTab: 'available' });
-    s.adapter().emit({
-      type: 'click',
-      point: { mapId: KALIMDOR, x: 1700, y: -4400 },
-      hit: hit('flight-masters', 'spawn:npc:20:0', { kind: 'spawn', subject: { kind: 'npc', id: npcId(20) }, spawnIndex: 0, questIds: [] }),
-      zones: [],
-    });
-    expect(s.store.getState().view).toMatchObject({ openedQuests: null, rightTab: 'available' });
+    const giver: MapRef = { kind: 'spawn', subject: { kind: 'npc', id: npcId(10) }, spawnIndex: 0, questIds: [questId(2), questId(1)] };
+    s.adapter().emit({ type: 'click', point: { mapId: KALIMDOR, x: 0, y: -4000 }, hit: hit('available-quests', 'spawn:npc:10:0', giver), zones: [DUROTAR] });
+    const popover = s.controller.getStatus().popover;
+    expect(popover).toMatchObject({ layer: 'available-quests', refs: [giver], point: { space: 'world', mapId: KALIMDOR, x: 0, y: -4000 } });
+    expect(popover?.key).toBeGreaterThan(0);
+    // The popover's actions are the UI's: the click itself opens nothing in Details.
+    expect(s.store.getState().view.rightTab).not.toBe('details');
+    // Another pin: a new target (a new key, so focus moves to its first action again).
+    const master: MapRef = { kind: 'spawn', subject: { kind: 'npc', id: npcId(20) }, spawnIndex: 0, questIds: [] };
+    s.adapter().emit({ type: 'click', point: { mapId: KALIMDOR, x: 1700, y: -4400 }, hit: hit('flight-masters', 'spawn:npc:20:0', master), zones: [] });
+    const second = s.controller.getStatus().popover;
+    expect(second?.layer).toBe('flight-masters');
+    expect(second?.key).toBeGreaterThan(popover?.key ?? 0);
+    // Closing it: the API, a pan, or a click on empty map (which then does nothing more).
+    s.controller.closePopover();
+    expect(s.controller.getStatus().popover).toBeNull();
   });
 
-  it('opens the quests a clicked flight master starts (MAP-UX-3)', () => {
-    const dataset = stubDataset({
-      quests: [stubQuest({ id: questId(6386), name: 'Return to the Crossroads.', starters: [{ kind: 'npc', id: npcId(3310) }] })],
-      npcs: [stubNpc({ id: npcId(3310), name: 'Doras', subName: 'Wind Rider Master', npcFlags: 8, friendlyTo: 'H' })],
-      spawns: { 'npc:3310': [worldSpawn(KALIMDOR, 1677.6, -4315.7, ORGRIMMAR)] },
-    });
-    const s = setup({ dataset, flightMasters: [npcId(3310)] });
-    s.controller.attach(s.factory.factory, EL);
-    const master = itemsOf(s.adapter(), 'flight-masters')[0];
-    if (master?.type !== 'marker') throw new Error('flight master missing');
-    expect(master.label).toBe('Doras <Wind Rider Master> · flight master; starts Return to the Crossroads.');
-    s.adapter().emit({ type: 'click', point: master.point, hit: hitOf('flight-masters', master), zones: [] });
-    const state = s.store.getState();
-    expect(shownOpenedQuests(state.view.openedQuests, state.selection)).toEqual([6386]);
-  });
-
-  it('offers a choice for a merged marker whose items do different things, placed at the marker (MAP-UX-3)', () => {
+  it('opens the popover on a stack whose steps do different things, placed at the marker, with the character’s place (MAP-UX-3)', () => {
     const ids = sequentialIdSource();
     const steps = [
       makeAcceptStep(ids, { questId: questId(1), location: loc(0, -4000) }),
@@ -419,63 +427,39 @@ describe('map events', () => {
     s.controller.attach(s.factory.factory, EL);
     const stack = itemsOf(s.adapter(), 'route-steps').find((item) => item.type === 'marker' && item.count === 2);
     if (stack?.type !== 'marker') throw new Error('stack missing');
-    const [first, second] = steps;
-    if (first === undefined || second === undefined) throw new Error('steps');
+    const [first, , third] = steps;
+    if (first === undefined || third === undefined) throw new Error('steps');
+    s.controller.setActiveStep(third.id);
     s.adapter().emit({ type: 'click', point: stack.point, hit: hitOf('route-steps', stack), zones: [] });
-    const choice = s.controller.getStatus().choice;
-    expect(choice).toMatchObject({
-      title: '2 steps here',
-      hint: 'Choose one to select its step.',
-      options: [{ label: '1 · accept' }, { label: '2 · accept' }],
-      allLabel: 'Select all 2 steps',
-    });
+    const popover = s.controller.getStatus().popover;
+    expect(popover).toMatchObject({ layer: 'route-steps', labels: ['1 · accept', '2 · accept'], from: { mapId: KALIMDOR, x: 50, y: -4100 } });
     // The fake view is 800 × 600 px over ±100 yd around its centre.
     const view = s.adapter().getView();
     if (view === null) throw new Error('no view');
-    expect(choice?.at).toEqual({ ...stagePixelOf(view, stack.point), width: 800, height: 600 });
+    expect(popover?.at).toEqual({ ...stagePixelOf(view, stack.point), width: 800, height: 600 });
     expect(s.store.getState().selection.focus).toBeNull();
-    s.controller.choose(1);
-    expect(s.store.getState().selection.focus).toBe(second.id);
-    expect(s.controller.getStatus().choice).toBeNull();
-    s.adapter().emit({ type: 'click', point: stack.point, hit: hitOf('route-steps', stack), zones: [] });
-    s.controller.chooseAll();
-    expect([...s.store.getState().selection.stepIds]).toEqual([first.id, second.id]);
-    // A pan or an empty click closes an open choice.
-    s.adapter().emit({ type: 'click', point: stack.point, hit: hitOf('route-steps', stack), zones: [] });
+    // A pan closes it.
     s.adapter().pan({ x: 10 });
-    expect(s.controller.getStatus().choice).toBeNull();
+    expect(s.controller.getStatus().popover).toBeNull();
+    // Two refs with one outcome (the same step twice) need no popover: the step is selected.
+    const same: MapRef = { kind: 'step', stepId: first.id };
+    s.adapter().emit({ type: 'click', point: stack.point, hit: { layer: 'route-steps', id: 'x', ref: same, refs: [same, same], segment: null }, zones: [] });
+    expect(s.controller.getStatus().popover).toBeNull();
+    expect(s.store.getState().selection.focus).toBe(first.id);
   });
 
-  it('opens all stacked givers’ quests from the choice, and acts at once when every item does the same', () => {
-    const dataset = stubDataset({
-      quests: [
-        stubQuest({ id: questId(1), name: 'Alpha', starters: [{ kind: 'npc', id: npcId(10) }] }),
-        stubQuest({ id: questId(2), name: 'Beta', starters: [{ kind: 'npc', id: npcId(11) }] }),
-      ],
-      npcs: [stubNpc({ id: npcId(10), name: 'Left' }), stubNpc({ id: npcId(11), name: 'Right' })],
-      spawns: { 'npc:10': [worldSpawn(KALIMDOR, 0, -4000, DUROTAR)], 'npc:11': [worldSpawn(KALIMDOR, 0, -4000, DUROTAR)] },
-    });
-    const s = setup({ dataset, flightMasters: [] });
+  it('opens the popover on an empty point at the zone band, and a click on empty map with it open only closes it', () => {
+    const s = setup();
     s.controller.attach(s.factory.factory, EL);
-    const stack = itemsOf(s.adapter(), 'available-quests')[0];
-    if (stack?.type !== 'marker') throw new Error('stack missing');
-    expect(stack.count).toBe(2);
-    s.adapter().emit({ type: 'click', point: stack.point, hit: hitOf('available-quests', stack), zones: [] });
-    expect(s.controller.getStatus().choice).toMatchObject({
-      title: '2 quest givers here',
-      options: [{ label: 'Left: starts Alpha' }, { label: 'Right: starts Beta' }],
-      allLabel: 'Open all 2 quests in Details',
-    });
-    s.controller.chooseAll();
-    const state = s.store.getState();
-    expect(shownOpenedQuests(state.view.openedQuests, state.selection)).toEqual([1, 2]);
-    // Two refs with one outcome (the same step twice) need no choice.
-    const [a] = s.steps.map((step) => step.id);
-    if (a === undefined) throw new Error('steps');
-    const same: MapRef = { kind: 'step', stepId: a };
-    s.adapter().emit({ type: 'click', point: stack.point, hit: { layer: 'route-steps', id: 'x', ref: same, refs: [same, same], segment: null }, zones: [] });
-    expect(s.controller.getStatus().choice).toBeNull();
-    expect(s.store.getState().selection.focus).toBe(a);
+    s.adapter().pan({ zoom: -2 });
+    s.adapter().emit({ type: 'click', point: { mapId: KALIMDOR, x: 12.34, y: -4000.06 }, hit: null, zones: [DUROTAR] });
+    expect(s.controller.getStatus().popover).toMatchObject({ layer: null, refs: [], point: { space: 'world', x: 12.3, y: -4000.1 } });
+    s.adapter().emit({ type: 'click', point: { mapId: KALIMDOR, x: 50, y: -4000 }, hit: null, zones: [DUROTAR] });
+    expect(s.controller.getStatus().popover).toBeNull();
+    // A cluster still zooms in, and opens nothing.
+    const bounds = { mapId: KALIMDOR, xMin: 0, xMax: 10, yMin: -4010, yMax: -4000 };
+    s.adapter().emit({ type: 'click', point: { mapId: KALIMDOR, x: 5, y: -4005 }, hit: hit('available-quests', 'cluster', { kind: 'cluster', layer: 'available-quests', bounds, quests: 2, places: 2 }), zones: [] });
+    expect(s.controller.getStatus().popover).toBeNull();
   });
 
   it('jumps to the zone frame an empty click at continent zoom is most central in, not the smallest (MAP-UX-1)', () => {
@@ -509,10 +493,10 @@ describe('map events', () => {
     s.controller.attach(s.factory.factory, EL);
     const adapter = s.adapter();
     adapter.pan({ zoom: -5 });
-    const aggregate = adapter.contents.get('available-quests')?.items[0];
-    expect(aggregate?.type).toBe('aggregate');
-    if (aggregate === undefined) throw new Error('aggregate missing');
-    adapter.emit({ type: 'click', point: { mapId: KALIMDOR, x: 0, y: -4000 }, hit: hitOf('available-quests', aggregate), zones: [] });
+    // Quest givers cluster below the zone band (map-presentation.md §25.2.5); a zone count is the
+    // objectives layer's (points of quests not in focus), clicked here as the adapter reports it.
+    const ref = { kind: 'aggregate', layer: 'objectives', mapId: KALIMDOR, uiMapId: DUROTAR, count: 3 } as const;
+    adapter.emit({ type: 'click', point: { mapId: KALIMDOR, x: 0, y: -4000 }, hit: { layer: 'objectives', id: 'agg:objectives:1411', ref, refs: [ref], segment: null }, zones: [] });
     const fit = adapter.callsOf('fitBounds').at(-1);
     expect(fit?.bounds).toMatchObject({ xMin: -1716.6666259766 });
     expect(fit?.options).toEqual({ minZoom: DEFAULT_LOD.zoneZoom });
@@ -530,10 +514,11 @@ describe('map events', () => {
     adapter.pan({ zoom: -5 });
     expect(s.store.getState().view.map.zone).toBe(DUROTAR);
     expect(itemsOf(adapter, 'available-quests').map((item) => item.type)).toEqual(['marker']);
-    // Panned far away: the zone is forgotten, and its points fold into counts again.
+    // Panned far away: the zone is forgotten, and its points fold into clusters again (one giver: its own pin).
     adapter.pan({ x: 9000, y: 9000 });
     expect(s.store.getState().view.map.zone).toBeNull();
-    expect(itemsOf(adapter, 'available-quests').map((item) => item.type)).toEqual(['aggregate']);
+    expect(itemsOf(adapter, 'available-quests').map((item) => item.type)).toEqual(['marker']);
+    expect(adapter.contents.get('available-quests')?.stats.clustered).toBe(0);
     expect(itemsOf(adapter, 'zone-frames').every((item) => item.type === 'frame' && item.emphasis === 'normal')).toBe(true);
     s.controller.jumpToZone(ORGRIMMAR);
     expect(s.store.getState().view.map.zone).toBe(ORGRIMMAR);
@@ -557,7 +542,7 @@ describe('map events', () => {
     const status = s.controller.getStatus();
     adapter.emit({ type: 'hover', point: giver.point, hit: hitOf('available-quests', giver) });
     expect(adapter.callsOf('highlight').at(-1)).toEqual({ kind: 'highlight', target: { layer: 'available-quests', ids: [giver.id] } });
-    expect(s.controller.getHover()).toBe('Gornek: starts 2 quests (Gather and Cull)');
+    expect(s.controller.getHover()).toBe('Gornek: starts 2 quests (Gather and Cull) · quests open to an Orc Warrior (no route state yet)');
     const step = itemsOf(adapter, 'route-steps')[0];
     if (step === undefined) throw new Error('step missing');
     adapter.emit({ type: 'hover', point: null, hit: hitOf('route-steps', step) });
@@ -611,8 +596,9 @@ describe('map events', () => {
     expect(adapter.callsOf('setLayer').length).toBe(sets);
     adapter.pan({ zoom: -5 });
     const changed = adapter.callsOf('setLayer').slice(sets).map((call) => call.layer);
-    expect(changed).toEqual(['available-quests']);
-    expect(adapter.contents.get('available-quests')?.stats.aggregated).toBe(1);
+    // Quest givers and turn-ins cluster below the zone band (map-presentation.md §25.2.5): their counts change.
+    expect(changed).toEqual(['available-quests', 'turn-ins']);
+    expect(adapter.contents.get('available-quests')?.stats.clustered).toBe(0);
   });
 });
 
@@ -703,7 +689,7 @@ describe('status', () => {
     const layers = new Map(s.controller.getStatus().layers.map((layer) => [layer.layer, layer]));
     expect(layers.get('art')?.unavailable).toMatch(/^No local map set/);
     expect(layers.get('proposal')?.unavailable).toMatch(/^No proposal is open/);
-    expect(layers.get('available-quests')?.notes[0]).toBe('Givers of the 2 quests open to the character by race and class (as in the Available tab).');
+    expect(layers.get('available-quests')?.notes[0]).toBe('Quests open to an Orc Warrior (no route state yet): the givers of all 2 quests open by race and class.');
     expect(layers.get('objectives')?.notes[0]).toMatch(/^Select a quest step/);
     expect(layers.get('route-steps')?.notes).toEqual(['1 step not placed: 1 moving somewhere the route does not say', '1 step on other world maps']);
   });
@@ -1084,7 +1070,7 @@ describe('committed art and terrain', () => {
       expect(itemsOf(s.adapter(), 'coastline').map((item) => item.id)).toEqual(['outline:coast:1']);
     });
     expect(resources.calls.at(-1)).toBe('arcs 1 coast');
-    expect(layerStatus(s, 'zone-outlines')?.notes[0]).toMatch(/^Zone borders from the client’s terrain areas/);
+    expect(layerStatus(s, 'zone-outlines')?.notes[0]).toMatch(/^Zone outlines from the client’s terrain areas/);
   });
 
   it('never breaks the map: a failed art manifest leaves the relief as the backdrop, and the status line says so', async () => {

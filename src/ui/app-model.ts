@@ -1,14 +1,13 @@
 import type { RightTab } from '../app';
 import { characterName } from '../app/character-names';
-import { withChainLabel } from '../app/quest-chains';
-import { SAMPLE_ORIGIN_REF } from '../app/sample-route';
+import { questChainPosition, withChainLabel } from '../app/quest-chains';
 import { routeGroup } from '../app/rules-exports';
 import { effectiveQuestLevel, questDifficultyAt, stepQuestIds } from '../app/shell-support';
 import { plainGuideText } from '../app/ui-text';
-import type { DatasetIdentity, DatasetView, EntityRef, ObjectiveDef, PublishedPoint, QuestRecord, RecordProvenance, SpawnPoint } from '../domain/dataset';
+import type { DatasetIdentity, DatasetView, EntityRef, PublishedPoint, QuestRecord, SpawnPoint } from '../domain/dataset';
 import type { GroupId, QuestId, StepId, UiMapId } from '../domain/ids';
 import type { Location } from '../domain/points';
-import type { GrindTarget, Route, RouteStep, StepOrigin, TaxiNodeRef } from '../domain/route';
+import type { GrindTarget, Route, RouteStep, TaxiNodeRef } from '../domain/route';
 import { formatDuration, formatInteger, formatPercent, plural } from './lib/format';
 import { NO_ISSUES } from './lib/issues';
 import { type Readout, unknownReadout } from './lib/readout';
@@ -82,52 +81,55 @@ export function entityName(dataset: DatasetView, ref: EntityRef): string {
 }
 
 /** A spawn inside an instance (QuestieDB's `[-1, -1]` presence). */
-const isInstanceSpawn = (spawn: SpawnPoint): boolean => !('space' in spawn.source) && spawn.source.kind === 'instance';
+export const isInstanceSpawn = (spawn: SpawnPoint): boolean => !('space' in spawn.source) && spawn.source.kind === 'instance';
 
 /**
  * Where an instance-presence spawn is, in words: `an instance (entrance in Westfall)`, or `an
  * instance` when the entrance is unknown. Its `uiMapId` is the entrance's (where its world point
  * is), never the zone the entity is in (M2 review COORD-2, code-F5).
  */
-function instanceWhere(dataset: DatasetView, spawn: SpawnPoint): string {
+export function instanceWhere(dataset: DatasetView, spawn: SpawnPoint): string {
   return spawn.uiMapId === null ? 'an instance' : `an instance (entrance in ${zoneLabel(dataset, spawn.uiMapId)})`;
 }
 
 /**
- * Where a quest is picked up, from its starters' spawns in order: the first spawn's zone name, or
- * `Inside an instance (entrance in The Barrens)` when that spawn is inside an instance; null when
- * no spawn says.
+ * Every place a quest is picked up, from its starters' spawns in order, each once: a zone name, or
+ * `Inside an instance (entrance in The Barrens)` for a spawn inside an instance.
  */
-export function questZoneName(dataset: DatasetView, quest: QuestRecord): string | null {
+export function questPlaces(dataset: DatasetView, quest: QuestRecord): readonly { readonly uiMapId: UiMapId | null; readonly text: string }[] {
+  const out: { uiMapId: UiMapId | null; text: string }[] = [];
+  const seen = new Set<string>();
   for (const starter of quest.starters) {
     for (const spawn of dataset.spawns(starter)) {
-      if (isInstanceSpawn(spawn)) return `Inside ${instanceWhere(dataset, spawn)}`;
-      if (spawn.uiMapId === null) continue;
-      const name = dataset.zone(spawn.uiMapId)?.name ?? null;
-      if (name !== null) return name;
+      const place = isInstanceSpawn(spawn)
+        ? { uiMapId: null, text: `Inside ${instanceWhere(dataset, spawn)}` }
+        : spawn.uiMapId === null
+          ? null
+          : { uiMapId: spawn.uiMapId, text: dataset.zone(spawn.uiMapId)?.name ?? null };
+      if (place === null || place.text === null || seen.has(place.text)) continue;
+      seen.add(place.text);
+      out.push({ uiMapId: place.uiMapId, text: place.text });
     }
   }
-  return null;
+  return out;
 }
 
-export function objectiveText(dataset: DatasetView, objective: ObjectiveDef): string {
-  const count = (n: number | null): string => (n === null ? ' (count unknown)' : ` × ${formatInteger(n)}`);
-  switch (objective.kind) {
-    case 'kill':
-      return `Kill ${objective.label ?? entityName(dataset, { kind: 'npc', id: objective.npcId })}${count(objective.count)}`;
-    case 'object':
-      return `Use ${objective.label ?? entityName(dataset, { kind: 'object', id: objective.objectId })}${count(objective.count)}`;
-    case 'item':
-      return `Collect ${objective.label ?? entityName(dataset, { kind: 'item', id: objective.itemId })}${count(objective.count)}`;
-    case 'reputation':
-      return `Reach ${formatInteger(objective.value)} reputation with faction ${String(objective.factionId)}`;
-    case 'killCredit':
-      return `${objective.label ?? `Kill credit for ${entityName(dataset, { kind: 'npc', id: objective.rootNpcId })}`}${count(objective.count)}`;
-    case 'spell':
-      return objective.label ?? `Cast spell ${String(objective.spellId)}`;
-    case 'event':
-      return objective.text ?? 'Event objective';
-  }
+/**
+ * Where a quest is picked up, from its starters' spawns in order: the first place's name (a zone, or
+ * `Inside an instance (entrance in The Barrens)`); null when no spawn says. When the starters spawn
+ * in several places it says so, `Dun Morogh and 6 other zones`, so a row never names one of them as
+ * the only one (review finding QA-20: the Horde copy of Winter's Presents showed only its giver's
+ * Dun Morogh spawn). `prefer` names first the first place it accepts, such as a zone on the
+ * character's side when the caller knows the zones' factions (the client zone table, D-039 C).
+ */
+export function questZoneName(dataset: DatasetView, quest: QuestRecord, prefer?: (uiMapId: UiMapId) => boolean): string | null {
+  const places = questPlaces(dataset, quest);
+  const first = (prefer === undefined ? undefined : places.find((p) => p.uiMapId !== null && prefer(p.uiMapId))) ?? places[0];
+  if (first === undefined) return null;
+  const others = places.filter((p) => p !== first);
+  if (others.length === 0) return first.text;
+  const noun = others.every((p) => p.uiMapId !== null) ? (others.length === 1 ? 'zone' : 'zones') : others.length === 1 ? 'place' : 'places';
+  return `${first.text} and ${String(others.length)} other ${noun}`;
 }
 
 // Locations -------------------------------------------------------------------------------------
@@ -174,97 +176,6 @@ export function spawnText(dataset: DatasetView, spawn: SpawnPoint): string {
   const text = publishedPointText(dataset, spawn.source);
   if ('space' in spawn.source || spawn.source.kind !== 'instance') return text;
   return spawn.uiMapId === null ? `${text}, entrance unknown` : `${text}, entrance in ${zoneLabel(dataset, spawn.uiMapId)}`;
-}
-
-const KIND_WORD: Readonly<Record<EntityRef['kind'], string>> = { npc: 'NPC', object: 'object', item: 'item' };
-
-/**
- * Where a quest giver or receiver is: `Gornek (NPC) · Durotar 42.06, 68.33`, with the number of
- * further spawns. Items have no spawns; an entity without a published point says so.
- */
-export function entityWhereText(dataset: DatasetView, ref: EntityRef): string {
-  const name = `${entityName(dataset, ref)} (${KIND_WORD[ref.kind]})`;
-  if (ref.kind === 'item') return `${name} · an item, no map position`;
-  const spawns = dataset.spawns(ref);
-  const [first] = spawns;
-  if (first === undefined) return `${name} · no published spawn`;
-  const more = spawns.length > 1 ? ` (+${plural(spawns.length - 1, 'more spawn')})` : '';
-  return `${name} · ${spawnText(dataset, first)}${more}`;
-}
-
-/** Where one spawn is, for the summary: its zone, `an instance (entrance in …)`, or `unmapped areas`. */
-const spawnZone = (dataset: DatasetView, spawn: SpawnPoint): string => {
-  if (isInstanceSpawn(spawn)) return instanceWhere(dataset, spawn);
-  if (spawn.uiMapId !== null) return zoneLabel(dataset, spawn.uiMapId);
-  return 'unmapped areas';
-};
-
-/**
- * The zones an entity spawns in, most spawns first: `45 spawns in Durotar`, `3 spawns in Durotar
- * and 1 in The Barrens`, `1 spawn in an instance (entrance in Westfall)`.
- */
-export function spawnSummary(dataset: DatasetView, ref: EntityRef): string | null {
-  const spawns = dataset.spawns(ref);
-  if (spawns.length === 0) return null;
-  const counts = new Map<string, number>();
-  for (const spawn of spawns) {
-    const where = spawnZone(dataset, spawn);
-    counts.set(where, (counts.get(where) ?? 0) + 1);
-  }
-  const parts = [...counts]
-    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-    .map(([where, n], i) => (i === 0 ? `${plural(n, 'spawn')} in ${where}` : `${formatInteger(n)} in ${where}`));
-  const shown = parts.slice(0, 3);
-  const rest = parts.length - shown.length;
-  if (rest > 0) return `${shown.join(', ')} and ${plural(rest, 'other zone')}`;
-  return shown.length === 2 ? shown.join(' and ') : shown.join(', ');
-}
-
-/** Where an objective is done, from the dataset: its target's spawns, its item's drop sources, its event points. */
-export function objectiveWhere(dataset: DatasetView, objective: ObjectiveDef): string | null {
-  switch (objective.kind) {
-    case 'kill':
-      return spawnSummary(dataset, { kind: 'npc', id: objective.npcId });
-    case 'killCredit':
-      return spawnSummary(dataset, { kind: 'npc', id: objective.rootNpcId });
-    case 'object':
-      return spawnSummary(dataset, { kind: 'object', id: objective.objectId });
-    case 'item': {
-      const item = dataset.item(objective.itemId);
-      if (item === undefined) return null;
-      const sources = [
-        ...item.dropNpcs.map((id) => entityName(dataset, { kind: 'npc', id })),
-        ...item.dropObjects.map((id) => entityName(dataset, { kind: 'object', id })),
-        ...item.dropItems.map((id) => entityName(dataset, { kind: 'item', id })),
-      ];
-      if (sources.length === 0) return 'No drop source in the dataset';
-      const shown = sources.slice(0, 3).join(', ');
-      return sources.length > 3 ? `From ${shown} and ${plural(sources.length - 3, 'other source')}` : `From ${shown}`;
-    }
-    case 'event': {
-      const [first] = objective.points;
-      if (first === undefined) return null;
-      const more = objective.points.length > 1 ? ` (+${plural(objective.points.length - 1, 'more point')})` : '';
-      return `${publishedPointText(dataset, first)}${more}`;
-    }
-    case 'reputation':
-    case 'spell':
-      return null;
-  }
-}
-
-const UPSTREAM_DIFF_TEXT: Readonly<Record<RecordProvenance['upstreamDiff'], string>> = {
-  era: 'Era baseline',
-  'era-coords': 'Era baseline, coordinates re-projected for Forever',
-  'forever-new': "New in QuestieDB's Forever data",
-  'forever-changed': "Changed in QuestieDB's Forever data",
-};
-
-/** What QuestieDB says about a record (DATA_PROVENANCE §9.3), in words. A fact about the source, not about the game. */
-export function upstreamProvenanceText(provenance: RecordProvenance): string {
-  if (provenance.source === 'custom') return 'Custom: entered in this project';
-  const correction = provenance.created ? '; created by a QuestieDB correction' : provenance.corrected ? '; changed by a QuestieDB correction' : '';
-  return `${UPSTREAM_DIFF_TEXT[provenance.upstreamDiff]}${correction}`;
 }
 
 // Texts -----------------------------------------------------------------------------------------
@@ -370,26 +281,102 @@ export function mapStepLabel(step: RouteStep, index: number, dataset: DatasetVie
   return `${formatInteger(index + 1)} · ${STEP_KIND_LABELS[step.kind]}: ${stepTitle(step, dataset)}`;
 }
 
-/** Dimmed text after the title: where the step happens (travel titles already say it). Plain text, as `stepTitle`. */
+/**
+ * Where a step happens, in words: the place's label and its point ("Kaltunk · Durotar 43.3, 68.5",
+ * the NPC and the zone of a quest step), plain text as `stepTitle`. Null for travel (its title names
+ * the destination) and for a step without a location. Line 2 of a two-line route row, formatted only
+ * for the rows in view (`createRowDeriver`'s line-2 cache).
+ */
 export function stepDetail(step: RouteStep, dataset: DatasetView): string | null {
   if (step.kind === 'travel') return null;
-  const text = locationText(step.location, dataset);
+  const text = locationDetail(step.location, dataset);
   return text === null ? null : plainGuideText(text);
 }
 
-export function originText(origin: StepOrigin): string {
-  const from = origin.ref === null ? '' : ` of ${origin.ref}`;
-  switch (origin.source) {
-    case 'manual':
-      return origin.ref === SAMPLE_ORIGIN_REF ? 'Generated for the sample route' : 'Added by hand';
-    case 'rxp':
-      return origin.ref === null ? 'Imported from an RXP guide' : `Imported from an RXP guide (${origin.ref})`;
-    case 'optimizer':
-      return 'Proposed by the optimiser';
-    case 'duplicate':
-      return `Duplicate${from}`;
-    case 'paste':
-      return `Pasted copy${from}`;
+/**
+ * Line 2's short place (docs/research/ui-refresh.md §6.1; review UI-01): the location's label (the
+ * NPC or object) and its zone's name, without the coordinates, so the zone fits beside the chip and
+ * the row actions at a 340 px panel. `stepDetail` keeps the whole ("Kaltunk · Durotar 43.3, 68.5")
+ * for the row's tooltip and name. Null for a travel step, no location, or a point with neither.
+ */
+export function stepPlace(step: RouteStep, dataset: DatasetView): { readonly lead: string | null; readonly zone: string | null } | null {
+  if (step.kind === 'travel' || step.location === null) return null;
+  const location = step.location;
+  const uiMapId = location.source.uiMapId;
+  const zone = uiMapId === null ? null : (dataset.zone(uiMapId)?.name ?? null);
+  const label = location.label === null ? null : plainGuideText(location.label);
+  const lead = label === '' ? null : label;
+  return lead === null && zone === null ? null : { lead, zone };
+}
+
+/** A route row's words: the verb, what it acts on, and a quest's chain position (docs/research/ui-refresh.md §6.1). */
+export interface RowWords {
+  readonly verb: string;
+  readonly title: string;
+  readonly chain: { readonly index: number; readonly length: number } | null;
+}
+
+/** A quest's name for a row (its chain position is said apart). */
+function rowQuestName(dataset: DatasetView, id: QuestId): string {
+  return dataset.quest(id)?.name ?? questName(dataset, id);
+}
+
+function chainOf(dataset: DatasetView, id: QuestId): RowWords['chain'] {
+  const position = questChainPosition(dataset, id);
+  return position === null ? null : { index: position.index, length: position.length };
+}
+
+const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
+
+/**
+ * A route row's line 1, verb first (D-048 A; review UO-07): "Accept" Your Place in the World,
+ * "Travel" to Razor Hill, "Grind" for 15m 00s. The title reads after the verb and after the kind's
+ * spoken label alike ("Travel: to Razor Hill"). Plain text, as `stepTitle`; the chain label is apart.
+ */
+export function stepRowWords(step: RouteStep, dataset: DatasetView): RowWords {
+  const words = rawRowWords(step, dataset);
+  const plain = plainGuideText(words.title);
+  if (plain === words.title) return words;
+  return { ...words, title: plain === '' ? '(note with only icon or colour codes)' : plain };
+}
+
+function rawRowWords(step: RouteStep, dataset: DatasetView): RowWords {
+  switch (step.kind) {
+    case 'accept':
+      return { verb: 'Accept', title: rowQuestName(dataset, step.questId), chain: chainOf(dataset, step.questId) };
+    case 'turnin':
+      return { verb: 'Turn in', title: rowQuestName(dataset, step.questId), chain: chainOf(dataset, step.questId) };
+    case 'abandon':
+      return { verb: 'Abandon', title: rowQuestName(dataset, step.questId), chain: chainOf(dataset, step.questId) };
+    case 'complete': {
+      const [only] = step.targets;
+      const parts = step.targets.map((t) =>
+        t.objective === null ? rowQuestName(dataset, t.questId) : `${rowQuestName(dataset, t.questId)} (objective ${String(t.objective + 1)})`,
+      );
+      const text = parts.length === 0 ? 'no objectives set' : parts.join(' + ');
+      const chain = step.targets.length === 1 && only !== undefined ? chainOf(dataset, only.questId) : null;
+      return { verb: 'Complete', title: step.progress === 'partial' ? `part of ${text}` : text, chain };
+    }
+    case 'travel': {
+      const to = locationText(step.location, dataset);
+      const how = step.mode === 'auto' ? '' : ` (${step.mode})`;
+      return { verb: 'Travel', title: to === null ? `to an unknown place${how}` : `to ${to}${how}`, chain: null };
+    }
+    case 'grind':
+      return { verb: 'Grind', title: lowerFirst(grindTargetText(step.until)), chain: null };
+    case 'hearth':
+      return step.mode === 'use' ? { verb: 'Hearth', title: 'to the bind point', chain: null } : { verb: 'Set', title: 'the bind point here', chain: null };
+    case 'flight': {
+      const name = nodeName(step.to, step.nodeQuery);
+      if (step.mode === 'discover') return { verb: 'Discover', title: name === null ? 'a flight path' : `flight path: ${name}`, chain: null };
+      return { verb: 'Fly', title: name === null ? '(destination not set)' : `to ${name}`, chain: null };
+    }
+    case 'train':
+      return { verb: 'Train', title: step.what ?? step.skill ?? '(what not set)', chain: null };
+    case 'vendor':
+      return { verb: 'Buy', title: step.what ?? '(what not set)', chain: null };
+    case 'note':
+      return { verb: 'Note', title: step.text.trim() === '' ? '(empty note)' : step.text, chain: null };
   }
 }
 
@@ -413,7 +400,8 @@ function groupLabel(route: Route, groupKey: GroupId, importNames: ReadonlyMap<st
   if (rxp === null) return 'Step group';
   // A guide's #name may carry colour tokens (RXP's #displayname does): shown plain.
   const name = plainGuideText(importNames.get(rxp.importId) ?? 'RXP guide');
-  return `${name}, step ${String(rxp.stepIndex + 1)}`;
+  // The step number leads, so headers of one guide tell apart before the ellipsis (review QA-17); the guide's name follows.
+  return `RXP step ${String(rxp.stepIndex + 1)} · ${name}`;
 }
 
 /** What a row says before the walk's numbers fill it in (`RouteList deriveRow`). */
@@ -423,9 +411,10 @@ const NOT_SIMULATED_READOUT: Readout<number> = unknownReadout(NOT_SIMULATED);
  * The row model of one step, from the route and the dataset alone. Quest difficulty is taken at
  * `playerLevel` (the character's start level), which is a lower bound for the level at the step,
  * so it is marked uncertain. A scaling quest shows its effective level at `playerLevel` (QXP-7).
- * The estimates are unknown here: the walk's numbers, and the difficulty at the level the step
- * starts at, are filled in as the row renders (src/ui/app/derived-view.ts `createRowDeriver`), so
- * a new walk never rebuilds the rows.
+ * The estimates are unknown here: the walk's numbers, the difficulty at the level the step starts
+ * at, the mark's state, the worst issue and line 2's words are filled in as the row renders
+ * (src/ui/app/derived-view.ts `createRowDeriver`), so a new walk never rebuilds the rows and a route
+ * edit formats no place names.
  */
 export function stepRowModel(step: RouteStep, number: number, dataset: DatasetView, playerLevel: number | null): StepRowModel {
   const firstQuest = stepQuestIds(step)[0];
@@ -433,13 +422,16 @@ export function stepRowModel(step: RouteStep, number: number, dataset: DatasetVi
   const questLevel = record?.level ?? null;
   const minLevel = record?.minLevel ?? null;
   const level = effectiveQuestLevel(playerLevel, questLevel, minLevel);
+  const words = stepRowWords(step, dataset);
   return {
     type: 'step',
     key: step.id,
     number,
     kind: step.kind,
-    title: stepTitle(step, dataset),
-    detail: stepDetail(step, dataset),
+    verb: words.verb,
+    title: words.title,
+    chain: words.chain,
+    detail: null,
     projectedLevel: NOT_SIMULATED_READOUT,
     duration: NOT_SIMULATED_READOUT,
     xpGained: NOT_SIMULATED_READOUT,
@@ -455,6 +447,10 @@ export function stepRowModel(step: RouteStep, number: number, dataset: DatasetVi
             provenance: record === undefined ? UNKNOWN_FOREVER_PROVENANCE : foreverProvenanceOf(record.provenance),
           },
     issues: NO_ISSUES,
+    issue: null,
+    // Before the walk nothing is known at the step: "not sure" for an accept, readiness unknown for a turn-in.
+    mark: step.kind === 'accept' ? 'uncertain' : step.kind === 'turnin' ? 'record-unknown' : null,
+    levelUp: null,
     locked: step.locked,
   };
 }
@@ -490,6 +486,8 @@ export function buildRouteView(
         key: `group:${group}:${step.id}`,
         label: groupLabel(route, group, importNames),
         stepCount: run.length,
+        imported: (routeGroup(route, group)?.rxp ?? null) !== null,
+        levelSpan: null,
       };
       rowOfKey.set(header.key, rows.length);
       rows.push(header);

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createEditorStore, type EditorStore, fixedClock } from '../../app';
 import type { DatasetSource } from '../../app/dataset-source';
 import { mapTestWorkspace } from '../../app/map-test-helpers';
@@ -11,13 +11,18 @@ import type { DatasetView, QuestRecord } from '../../domain/dataset';
 import type { QuestId } from '../../domain/ids';
 import type { CustomQuest, ProjectV1 } from '../../domain/project';
 import { App } from '../App';
-import { ADD_QUEST_LABEL } from './AvailableQuests';
+import { loadDetailsPanel } from './lazy';
 
 /**
  * The route editor's flows in the whole shell (docs/UI.md §8, §14), over the placeholder data:
  * adding quests from the Available tab and Details, the clipboard and join, the Details editors,
  * custom quests and the Settings dialog.
  */
+
+// The Details panel is a lazy part (ui-refresh.md UR.1a) that production builds preload when idle; so do these tests.
+beforeAll(async () => {
+  await loadDetailsPanel();
+});
 
 afterEach(cleanup);
 
@@ -61,7 +66,7 @@ function setup(data: 'placeholder' | 'map' = 'placeholder'): { store: EditorStor
 const list = () => screen.getByRole('listbox');
 const sidePanel = () => within(screen.getByRole('complementary', { name: 'Quests and details' }));
 const tab = (name: RegExp) => sidePanel().getByRole('tab', { name });
-const routeActions = () => within(screen.getByRole('toolbar', { name: 'Route actions' }));
+const routeActions = () => within(screen.getByRole('toolbar', { name: 'Selected steps' }));
 const announced = () => (document.querySelector('.frl-app-live')?.textContent ?? '').replace(/\u00a0$/, '');
 const select = (store: EditorStore, index: number) => {
   const id = store.getState().project.route.steps[index]?.id;
@@ -78,12 +83,18 @@ const selectSet = (store: EditorStore, ids: readonly (string | undefined)[]) => 
 };
 
 describe('adding quests', () => {
-  it('adds accept, complete and turn in from the Available tab after the selection, as one undo entry', () => {
+  it('accepts a quest from the Available tab after the selection, then adds all three from Details as one undo entry', () => {
     const { store, steps } = setup();
     select(store, 0);
     fireEvent.click(tab(/^Available/));
-    const add = sidePanel().getByRole('button', { name: `${ADD_QUEST_LABEL}: Placeholder Quest 5: delivery` });
-    fireEvent.click(add);
+    // The row's one button is Accept (ui-refresh.md §5.4); the + that added all three moved to Details.
+    fireEvent.click(sidePanel().getByRole('button', { name: 'Accept Placeholder Quest 5: delivery after the selection' }));
+    expect(steps()[1]).toMatchObject({ kind: 'accept', questId: 900_005 });
+    expect(announced()).toMatch(/^Placeholder Quest 5: delivery: accept quest added as step 2\./);
+    fireEvent.click(screen.getByRole('button', { name: /^Undo/ }));
+    expect(steps()).toHaveLength(40);
+    fireEvent.click(sidePanel().getByRole('button', { name: /^Placeholder Quest 5: delivery, / }));
+    fireEvent.click(sidePanel().getByRole('button', { name: 'Add all three' }));
     const added = steps().slice(1, 4);
     expect(added.map((s) => s.kind)).toEqual(['accept', 'complete', 'turnin']);
     expect(added.every((s) => 'questId' in s ? s.questId === 900_005 : s.kind === 'complete')).toBe(true);
@@ -91,7 +102,7 @@ describe('adding quests', () => {
     expect(added[0]?.location?.label).toBe('Placeholder Quartermaster');
     expect(announced()).toMatch(/^Placeholder Quest 5: delivery: accept quest, complete objectives, turn in quest added as steps 2 to 4\./);
     expect(store.getState().history.undoLabel).toBe('Add quest');
-    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Undo/ }));
     expect(steps()[1]?.kind).toBe('accept');
     expect(steps()).toHaveLength(40);
   });
@@ -107,7 +118,7 @@ describe('adding quests', () => {
     expect(steps()[2]).toMatchObject({ kind: 'turnin', questId: KILL });
     expect(store.getState().history.undoLabel).toBe('Add turn-in');
     // The chain position is in the route rows' titles.
-    expect(within(list()).getAllByRole('option').some((row) => (row.getAttribute('aria-label') ?? '').includes('Placeholder Quest 4: follow-up to Quest 1 (2/2)'))).toBe(true);
+    expect(within(list()).getAllByRole('option').some((row) => (row.getAttribute('aria-label') ?? '').includes('Placeholder Quest 4: follow-up to Quest 1 (2 of 2)'))).toBe(true);
     expect(steps().some((s) => s.kind === 'accept' && s.questId === FOLLOW_UP)).toBe(true);
   });
 });
@@ -230,7 +241,7 @@ describe('custom quests', () => {
     fireEvent.click(within(renameForm).getByRole('button', { name: 'Save custom quest' }));
     expect(store.getState().project.customQuests.map((q) => q.name)).toEqual(['Skyborne errand, revised']);
     // Add its steps, then delete it: the editor says how many steps use it.
-    fireEvent.click(sidePanel().getByRole('button', { name: 'Add accept, complete and turn in' }));
+    fireEvent.click(sidePanel().getByRole('button', { name: 'Add all three' }));
     fireEvent.click(sidePanel().getByRole('button', { name: 'Edit custom quest' }));
     const deleteButton = await sidePanel().findByRole('button', { name: 'Delete custom quest' });
     expect(document.getElementById(deleteButton.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
@@ -265,7 +276,7 @@ describe('custom quests', () => {
 
 /** Opens Settings, which loads on first use (CR-19), and waits for its form. */
 async function openSettings() {
-  fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+  fireEvent.click(screen.getByRole('button', { name: /, settings$/ }));
   await screen.findByRole('button', { name: 'Save settings' });
   return within(screen.getByRole('dialog', { name: 'Settings' }));
 }

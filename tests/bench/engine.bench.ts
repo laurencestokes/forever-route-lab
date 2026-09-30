@@ -25,26 +25,39 @@
  * - `editEndPublish`: the last step replaced, re-walked and its route metrics taken (`walkMetrics`,
  *   which continues from the stored prefix sums): an edit near the end as the app publishes it;
  * - `stateBefore5000`: the state at step 5,000 from its checkpoint;
- * - `legs` and `metrics`: leg enumeration and the full route metrics (`aggregateRouteMetrics`).
- * `--check` runs `fullWalkCold`, `fullWalkWarm` and `editMiddle` of both routes bundled, one process
- * per case (bench-support.ts), and fails on a probe-normalised median more than 25% over the
- * stored one.
+ * - `legs` and `metrics`: leg enumeration and the full route metrics (`aggregateRouteMetrics`);
+ * - `travelWalkCold` (review TR-11): `fullWalkCold` on the route with a flight every 21st step and a
+ *   boat round trip every 500th (`travelVariant`), the TravelGraph seeded with the committed taxi
+ *   file and `localTaxi` from it, so TIME-6 multi-hop routing, the inferred docks and the berth
+ *   walks are priced.
+ * `--check` runs `fullWalkCold`, `fullWalkWarm` and `editMiddle` of both routes and
+ * `travelWalkCold` of the realistic one bundled, one process per case (bench-support.ts), and
+ * fails on a probe-normalised median more than 25% over the stored one.
  */
 import { stepId } from '../../src/domain/ids';
 import { createRouteWalker, enumerateLegs, type RouteWalk, type WalkProject, walkMetrics } from '../../src/engine';
 import { aggregateRouteMetrics } from '../../src/sim/estimate';
-import { bench, benchArgs, type BenchRoute, benchSetup, type CaseResult, cpuProbe, type GatedCase, round, runChecks, type Stats, storedBaseline } from './bench-support';
+import { bench, benchArgs, type BenchRoute, benchSetup, type CaseResult, committedTaxi, cpuProbe, type GatedCase, round, runChecks, type Stats, storedBaseline, travelVariant } from './bench-support';
 
 const args = benchArgs(process.argv.slice(2), 'docs/measurements/engine-m6.json');
 
 /** The cases `--check` gates, per route. */
-const GATED: readonly GatedCase[] = (['stress', 'realistic'] as const).flatMap((route) =>
-  ['fullWalkCold', 'fullWalkWarm', 'editMiddle'].map((name) => ({ route, name, limit: null })),
-);
+const GATED: readonly GatedCase[] = [
+  ...(['stress', 'realistic'] as const).flatMap((route) => ['fullWalkCold', 'fullWalkWarm', 'editMiddle'].map((name) => ({ route, name, limit: null }))),
+  { route: 'realistic', name: 'travelWalkCold', limit: null },
+];
 
 async function measure(route: BenchRoute, only: string | null): Promise<Record<string, unknown>> {
-  const { context, project, steps, composition } = await benchSetup(route, args.steps);
+  const setup = await benchSetup(route, args.steps);
+  const { context, project, steps, composition } = setup;
   const run = (name: string, action: (i: number) => void): Stats | null => (only === null || only === name ? bench(args.runs, args.warm, action) : null);
+  const travel = only === null || only === 'travelWalkCold' ? travelVariant(setup, await committedTaxi()) : null;
+  const travelWalkCold =
+    travel === null
+      ? null
+      : run('travelWalkCold', () => {
+          createRouteWalker({ ...travel.context, rules: { ...travel.context.rules } }).walk(travel.project);
+        });
   let last: RouteWalk | null = null;
   const fullWalkCold = run('fullWalkCold', () => {
     last = createRouteWalker({ ...context, rules: { ...context.rules } }).walk(project);
@@ -111,6 +124,7 @@ async function measure(route: BenchRoute, only: string | null): Promise<Record<s
     stateBefore5000,
     legs,
     metrics,
+    travelWalkCold: travelWalkCold === null || travel === null ? null : { ...travelWalkCold, steps: travel.project.route.steps.length, flights: travel.flights, transports: travel.transports },
   };
 }
 
