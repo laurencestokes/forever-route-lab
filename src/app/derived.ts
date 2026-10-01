@@ -170,8 +170,10 @@ export interface DerivedState {
    * the map's quest layers. Built by the pipeline in a task of its own after `selected` is
    * published (so a selection change paints first), keyed by the walk and the step: it may name the
    * previous step for a moment (`questState.stepId`). Without a focus it is the state after the last
-   * step (`questState.atEnd`, D-050 item 2). Null before the first walk, for an empty route, or after
-   * a failure: the shell then shows the quests open by race and class, and says so.
+   * step (`questState.atEnd`, D-050 item 2), kept while an edit leaves that state as it was (its
+   * `revision` then names the walk it was classified at; review F-01). Null before the first walk,
+   * for an empty route, or after a failure: the shell then shows the quests open by race and class,
+   * and says so.
    */
   readonly questState: QuestStateModel | null;
   /** The zones' level spans for the character (§12.5), once per dataset view and character; null until the pipeline has built them. */

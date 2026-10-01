@@ -150,23 +150,34 @@ interface Words {
   readonly stated: boolean;
 }
 
-/** The row's count and accessible name (§25.3.3): the unit in the name, never announced. */
-function countOf(row: MapCategoryRow, status: MapStatus, words: Words, shown: boolean): { readonly count: string | null; readonly name: string } {
+/** The row's tooltip: how many are in view, and what "+n held" beside the count means (review C-04). */
+function titleOf(inView: number | undefined, held: number): string | null {
+  const parts = [inView === undefined ? null : `${formatInteger(inView)} in view`, held > 0 ? `${formatInteger(held)} more held back: above the level ceiling, not drawn (an assumption); the Available tab lists them` : null].filter((part) => part !== null);
+  return parts.length === 0 ? null : parts.join('; ');
+}
+
+/** The row's count and accessible name (§25.3.3): the unit in the name, never announced. Exported for its tests. */
+export function countOf(row: MapCategoryRow, status: MapStatus, words: Words, shown: boolean): { readonly count: string | null; readonly name: string } {
   const counts = status.counts;
   const label = MAP_CATEGORY_LABELS[row.id];
   const state = shown ? 'shown' : 'hidden';
   const quests = counts.quests[row.id];
   const plain = { count: null, name: `${label}, ${state}` };
+  // The count is what the map draws; the quests the level ceiling holds back are named (F-08), and
+  // shown beside the count in words, so a sighted user sees them too (review C-04).
+  const held = counts.heldBack?.[row.id] ?? 0;
+  const heldWords = held > 0 ? `, ${formatInteger(held)} more above the level ceiling not drawn (an assumption)` : '';
+  const heldShown = held > 0 ? ` · +${formatInteger(held)} held` : '';
   if (row.id === 'available') {
     if (quests === undefined) return plain;
     const givers = counts.availableGivers;
     return {
-      count: givers === null ? formatInteger(quests) : `${formatInteger(quests)} · ${plural(givers, 'giver')}`,
-      name: `${label}: ${plural(quests, 'quest')}${givers === null ? '' : ` at ${plural(givers, 'giver')}`} ${words.after}, ${state}`,
+      count: `${givers === null ? formatInteger(quests) : `${formatInteger(quests)} · ${plural(givers, 'giver')}`}${heldShown}`,
+      name: `${label}: ${plural(quests, 'quest')}${givers === null ? '' : ` at ${plural(givers, 'giver')}`} ${words.after}${heldWords}, ${state}`,
     };
   }
   if (row.id === 'may-be-available' || row.id === 'needs-prerequisite' || row.id === 'unlocks-soon' || row.id === 'low-level') {
-    return quests === undefined ? { count: null, name: `${label}: ${words.after}, ${state}` } : { count: formatInteger(quests), name: `${label}: ${plural(quests, 'quest')} ${words.after}, ${state}` };
+    return quests === undefined ? { count: null, name: `${label}: ${words.after}, ${state}` } : { count: `${formatInteger(quests)}${heldShown}`, name: `${label}: ${plural(quests, 'quest')} ${words.after}${heldWords}, ${state}` };
   }
   if (row.id === 'turn-ins') {
     return quests === undefined
@@ -353,7 +364,7 @@ export function MapLayersPanel({ id, docked, controller, store, hidden, onHidden
         count,
         // A row that cannot be used now is named for it, not "hidden" (review PR-21): "Portals, unavailable: none recorded yet…".
         name: unavailable !== null ? `${label}, unavailable: ${lowerFirst(unavailable)}` : row.id === 'trainers' ? name.replace(MAP_CATEGORY_LABELS[row.id], label) : name,
-        title: inView === undefined ? null : `${formatInteger(inView)} in view`,
+        title: titleOf(inView, status.counts.heldBack?.[row.id] ?? 0),
         notes,
       };
     };

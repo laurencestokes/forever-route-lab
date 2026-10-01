@@ -375,7 +375,14 @@ export function walkingPathNotesOf(counts: WalkingPathCounts | null): readonly s
   return notes;
 }
 
-/** The drawer's counts (map-presentation.md §25.3.3): the quest state's at the active step, else the quests open by race and class. */
+/** The giver rows the level ceiling can hold quests back from (D-050 item 3). */
+const HELD_BACK_ROWS = ['available', 'may-be-available', 'needs-prerequisite', 'unlocks-soon', 'low-level'] as const;
+
+/**
+ * The drawer's counts (map-presentation.md §25.3.3): the quest state's at the active step, what
+ * the map draws (the level ceiling applied, with the quests it holds back per row), else the
+ * quests open by race and class.
+ */
 export function categoryCountsOf(source: MapNotesSource, inView: MapCategoryCounts['inView']): MapCategoryCounts {
   const who = characterName(source.character);
   const placesModel = source.places ?? null;
@@ -384,7 +391,11 @@ export function categoryCountsOf(source: MapNotesSource, inView: MapCategoryCoun
   const flightsKnown = placesModel?.flightsKnown ?? null;
   const model = source.questState;
   if (model === null) return { afterStep: null, who, quests: { available: source.givers().openQuests }, availableGivers: null, ready: null, places, flightsKnown, inView };
-  const rows = model.counts.rows;
+  // What the map draws (follow-up F-08): the level ceiling's quests are counted apart.
+  const rows = model.counts.rowsDrawn;
+  const all = model.counts.rows;
+  const heldBack: Partial<Record<MapCategoryId, number>> = {};
+  for (const row of HELD_BACK_ROWS) if (all[row] > rows[row]) heldBack[row] = all[row] - rows[row];
   return {
     afterStep: source.afterStepNumber,
     who,
@@ -397,6 +408,7 @@ export function categoryCountsOf(source: MapNotesSource, inView: MapCategoryCoun
       'turn-ins': rows['turn-ins'],
       objectives: model.counts.objectives,
     },
+    heldBack,
     availableGivers: model.counts.availableGivers,
     ready: model.counts.ready,
     places,

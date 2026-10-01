@@ -5,7 +5,8 @@
   "Client: wow_classic_beta 1.60.1.70009, build key 05215079e3905ef5922ae0b03ffefb73, read-only from WOW_INSTALL (.build.info and Data/ only). Dataset spawns: public/data at QuestieDB b6f5b07 through src/infra/data/points.ts and src/geo (placeholder geometry).",
   "Code: .cache/experiments/terrain/m3b (gitignored research code; recast-navigation-js 0.43.1 at build time only). Runs: build.ts (stage 1 per 4x4-ADT block, 12 processes), link.ts (unpruned stage 2 and census), link2.ts (pruning, water rule, census with snap rules A+B), queries.ts, cities.ts, dtcheck.ts, memstats.ts, byproducts.ts, cmp-partition.ts, region.ts.",
   "Timings: wall and CPU on one machine, warm OS cache, other sweeps possibly running in parallel for build figures; query figures were run with the machine otherwise idle.",
-  "Census counts: every dataset spawn with a world point on map 0 or 1 (74,608), snapped with the design rules; off-main includes the islands and elevator-only areas that are correct (see census.classes)."
+  "Census counts: every dataset spawn with a world point on map 0 or 1 (74,608), snapped with the design rules; off-main includes the islands and elevator-only areas that are correct (see census.classes).",
+  "Historical record (added 2026-10-01, rework follow-up F-11): these figures were measured on client 1.60.1.70009 (build key 05215079…) and are kept as measured. The committed build is now pinned to 1.60.1.70124 (build key dd3dfc28…, D-050 item 1); nav:extract and nav:check rebuilt public/nav/ there byte for byte, with the same navRevision aefbc78d… (docs/reviews/repin-70124.md §4), so the mesh these figures describe is the committed one. public/nav/manifest.json records the current client."
  ],
  "date": "2026-09-26",
  "machine": {

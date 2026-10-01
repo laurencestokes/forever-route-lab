@@ -753,8 +753,9 @@ the Milestone 3b design step, within the §14 budgets.
   components, so on the committed navmesh it applies to Rut'theran ↔ Auberdine; Menethil and
   Southshore are one component (a swim across the water joins them), so it never fires there
   (travel review TR-06; SIMULATION TIME-7). An inferred dock is a client berth in the water beside
-  its pier: walks to and from it count its swim as walking, without SIM-21 (TR-03, the fixer's
-  choice pending the architect's ruling). The file's other 7 transport paths (241, 285, 292, 301, 302,
+  its pier: walks to and from it end at its boarding point on walkable ground within 100 yd
+  (`src/rules/berths.ts`), and the step from there to the berth is priced at run speed as an
+  assumption (D-052 item 1; TR-03). The file's other 7 transport paths (241, 285, 292, 301, 302,
   303, 436) match no seed: their stops are drawn on the map as "service unknown" and never reach the
   graph.
 - **Report.** `TravelGraphReport.client` records the build, the matched and client-only nodes, the

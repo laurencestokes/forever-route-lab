@@ -44,8 +44,9 @@ import { zoneOfPoint } from './map-viewing';
 import type { NavigationTravelModel } from './navigation-model';
 import { NAVIGATION_CHECKING, type NavigationRuntime, type NavigationState } from './navigation-runtime';
 import { defaultNavTimers, type NavigationBatch, type NavTimers } from './navigation-scheduler';
-import { type QuestStateModel, questStateModel } from './quest-state';
+import { classificationReusable, type QuestStateInput, type QuestStateModel, questStateModel } from './quest-state';
 import { knownNodeKeys } from '../engine/state';
+import { sameCharacterState } from './same-state';
 import { questsForCharacter } from './shell-support';
 import type { EditorStore } from './store';
 import { zoneSpans, type ZoneSpans } from './zone-levels';
@@ -86,8 +87,15 @@ import { zoneSpans, type ZoneSpans } from './zone-levels';
  *   project walked or a new focus step: a re-walk for navigation results changes times, not quests.
  *   When it runs (review UI-04; D-050 item 5): after the next paint for a change to a still
  *   selection, so the map's pins follow in about a frame; once, where it stops, for a moving one
- *   (`selectionSettleMs`); and, after an edit whose walk was quick (`QUICK_WALK_MS`), in the walk's
- *   own task, so the pins follow the edit with its results.
+ *   (`selectionSettleMs`); and, after an edit whose walk was quick (`QUICK_WALK_MS`) with a step
+ *   selected, in the walk's own task, so the pins follow the edit with its results. The state at the
+ *   end of the route (no step selected) always takes a task of its own, and is kept while the edit
+ *   leaves the state after the last step as it was (`sameCharacterState`; review F-01), so a note or
+ *   a step's text does not classify every quest again. A model asked for a state that differs from
+ *   the published one's, or from one of the last `RECENT_QUEST_STATES`, only where the
+ *   classification does not look (the place, the time, the hearth: `classificationReusable`) keeps
+ *   its classification (follow-up F-03): a selection among steps that travel, and an edit that only
+ *   moves a step past one that travels, redo only the groups by place and the completing steps.
  * - **Clusters** (map-presentation.md §25.2.5; D-050 item 6): the same task makes every cluster
  *   level of the quest givers' and turn-ins' inputs (`app/map-clusters.ts`), which the places carry
  *   to the map (`PlacesModel.clusters`), so neither the clustering nor its cost is in the map's sync
@@ -299,6 +307,9 @@ export const SELECTION_SETTLE_MS = 60;
  */
 export const QUICK_WALK_MS = 8;
 
+/** How many recent quest-state models a selection may take its classification from (follow-up F-03). */
+export const RECENT_QUEST_STATES = 4;
+
 /** A zero-delay timer of `timers` as a cancel: the walk after an edit, and the next paint where `timers` are injected (tests and benchmarks drive them). */
 function timerAfterPaint(timers: NavTimers, task: () => void): () => void {
   const handle = timers.set(task, 0);
@@ -340,6 +351,22 @@ function pageAfterPaint(timers: NavTimers): (task: () => void) => () => void {
   };
 }
 
+/**
+ * Whether the quest state built for `key` still holds for the end of the route after a new walk
+ * (review F-01): both are the end of the route, at the same last step and index, for the same
+ * character profile and zone spans, and the state after the last step is the same value. The quest
+ * state reads nothing else of a walk at the end of the route (no step follows whose records it
+ * reads), so an edit that leaves that state as it was (a note, a step's text) keeps the model.
+ */
+function sameEndState(
+  key: { readonly atEnd: boolean; readonly index: number; readonly character: ProjectV1['character']; readonly spans: ZoneSpans; readonly state: SelectedStepState['after'] },
+  selected: SelectedStepState,
+  character: ProjectV1['character'],
+  spans: ZoneSpans,
+): boolean {
+  return key.atEnd && selected.atEnd && key.index === selected.index && key.character === character && key.spans === spans && sameCharacterState(key.state, selected.after);
+}
+
 /** One issue shortener per dataset view (review UI-01): the rows' line 2. */
 const shorteners = new WeakMap<object, ReturnType<typeof createIssueShortener>>();
 function shortenerOf(view: DatasetView): ReturnType<typeof createIssueShortener> {
@@ -371,6 +398,8 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   let results: DerivedResults | null = null;
   let selectedFocus: StepId | null = null;
   let stepIndex: { readonly steps: readonly unknown[]; readonly index: Map<StepId, number> } | null = null;
+  /** The step `indexOf` last found, and where: an edit's lookup tries there first. */
+  let lastFound: { readonly id: StepId; readonly index: number } | null = null;
   let travelStatus: TravelStatus = CHECKING_TRAVEL;
   let transportNote: string | null = null;
   let paths: PathsProgress = IDLE_PATHS;
@@ -391,7 +420,28 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   let selectionChangedAt = Number.NEGATIVE_INFINITY;
   let lastSelected: SelectedStepState | null = null;
   let publishedQuestState: QuestStateModel | null = null;
-  let questKey: { readonly project: ProjectV1; readonly stepId: StepId; readonly atEnd: boolean; readonly view: DatasetView; readonly rules: EffectiveRules } | null = null;
+  /**
+   * The last few quest-state models, newest first (follow-up F-03): a selection that comes back to a
+   * state one of them was classified at (an earlier step, or a step that only travels after it) keeps
+   * its classification instead of redoing it (`classificationReusable`).
+   */
+  let recentQuestStates: readonly QuestStateModel[] = [];
+  /**
+   * What the published quest state was built from: the project walked, the step and whether it was
+   * the end of the route, the context, and (for the end of the route, review F-01) the step's index,
+   * the character profile, the zone spans and the state after the step.
+   */
+  let questKey: {
+    readonly project: ProjectV1;
+    readonly stepId: StepId;
+    readonly index: number;
+    readonly atEnd: boolean;
+    readonly view: DatasetView;
+    readonly rules: EffectiveRules;
+    readonly character: ProjectV1['character'];
+    readonly spans: ZoneSpans;
+    readonly state: SelectedStepState['after'];
+  } | null = null;
   let changeAt: number | null = null;
   let rewalkFrom = Number.POSITIVE_INFINITY;
   let lastWalkEnd = Number.NEGATIVE_INFINITY;
@@ -526,10 +576,29 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
     output.publish({ paths });
   }
 
+  /**
+   * The index of step `id`. An edit replaces the steps array, and the focus step is then nearly
+   * always where it was, or one place either side (a step inserted or deleted before it): those are
+   * tried first, so an edit does not rebuild the whole id index (review F-01: about 1.8 ms at 10,000
+   * steps). Step ids are unique in a route, so a hit is the step.
+   */
   function indexOf(project: ProjectV1, id: StepId): number {
     const steps = project.route.steps;
-    if (stepIndex?.steps !== steps) stepIndex = { steps, index: new Map(steps.map((step, i) => [step.id, i])) };
-    return stepIndex.index.get(id) ?? -1;
+    if (stepIndex?.steps !== steps) {
+      const hint = lastFound;
+      if (hint !== null && hint.id === id) {
+        for (const at of [hint.index, hint.index - 1, hint.index + 1]) {
+          if (steps[at]?.id === id) {
+            lastFound = { id, index: at };
+            return at;
+          }
+        }
+      }
+      stepIndex = { steps, index: new Map(steps.map((step, i) => [step.id, i])) };
+    }
+    const index = stepIndex.index.get(id) ?? -1;
+    lastFound = index < 0 ? null : { id, index };
+    return index;
   }
 
   /** The state around the focus step; with no focus, around the last step (`atEnd`, D-050 item 2). */
@@ -540,7 +609,8 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
     const steps = walkedProject.route.steps;
     const stepId = focus ?? steps[steps.length - 1]?.id ?? null;
     if (stepId === null) return null;
-    const index = indexOf(walkedProject, stepId);
+    // With no focus the step is the last one: no lookup.
+    const index = focus === null ? steps.length - 1 : indexOf(walkedProject, stepId);
     const record = r.records[index];
     if (index < 0 || record === undefined) return null;
     return {
@@ -609,11 +679,13 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
         return;
       }
       const key = questKey;
-      if (key !== null && key.project === r.project && key.stepId === selected.stepId && key.atEnd === selected.atEnd && key.view === c.view && key.rules === c.rules) {
+      if (key !== null && key.stepId === selected.stepId && key.atEnd === selected.atEnd && key.view === c.view && key.rules === c.rules && (key.project === r.project || sameEndState(key, selected, character, spans))) {
+        // The same walk and step; or the end of the route, left as it was by the edit: the model stands.
+        questKey = { ...key, project: r.project };
         output.publish({ zoneSpans: spans, places: buildPlaces(c, r, selected, publishedQuestState, spans) });
         return;
       }
-      const questState = questStateModel({
+      const input: QuestStateInput = {
         revision: r.revision,
         stepId: selected.stepId,
         stepIndex: selected.index,
@@ -628,9 +700,14 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
         open: openOf(c.view, character.race, character.class),
         spans,
         previous: publishedQuestState,
-      });
+      };
+      // The published model keeps unchanged entries' objects; an older one whose classification
+      // holds for this state is used instead when the published one's does not.
+      const older = publishedQuestState !== null && classificationReusable(publishedQuestState, input) ? undefined : recentQuestStates.find((model) => classificationReusable(model, input));
+      const questState = questStateModel(older === undefined ? input : { ...input, previous: older });
       publishedQuestState = questState;
-      questKey = { project: r.project, stepId: selected.stepId, atEnd: selected.atEnd, view: c.view, rules: c.rules };
+      recentQuestStates = [questState, ...recentQuestStates.filter((model) => model !== older)].slice(0, RECENT_QUEST_STATES);
+      questKey = { project: r.project, stepId: selected.stepId, index: selected.index, atEnd: selected.atEnd, view: c.view, rules: c.rules, character, spans, state: selected.after };
       // Every cluster level of the layers' inputs, here rather than in the map's sync (§25.2.5, §25.7).
       clusterer.warm('available-quests', questState.map.givers);
       clusterer.warm('turn-ins', questState.map.turnIns);
@@ -832,8 +909,10 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       options.onPublished?.(published);
       notifyModel(c);
       afterWalk(c, published);
-      // An edit's quest state in this task after a quick walk (D-050 item 5), unless a moving selection waits for its own.
-      if (edited && walked - start <= QUICK_WALK_MS && questTimer === null && questPaint === null) runQuestState();
+      // An edit's quest state for the selected step in this task after a quick walk (D-050 item 5),
+      // unless a moving selection waits for its own. The state at the end of the route (no step
+      // selected) never joins the edit's task: it follows in a task of its own (review F-01).
+      if (edited && selected !== null && !selected.atEnd && walked - start <= QUICK_WALK_MS && questTimer === null && questPaint === null) runQuestState();
       else scheduleQuestState();
     } catch (error) {
       // Start the next walk afresh: the walker's state may be half-way through a step.
@@ -1114,6 +1193,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       unsubscribeBatches?.();
       run?.controller.abort(new DOMException('The pipeline was disposed', 'AbortError'));
       run = null;
+      recentQuestStates = [];
     },
   };
 }

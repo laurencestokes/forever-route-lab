@@ -143,8 +143,8 @@ export interface TransportDockFact {
   readonly record: string | null;
   /**
    * For a client berth, the straight-line yards from the berth to its boarding point, where the
-   * walks end (TIME-7; the step between them is part of the wait); null for other docks and for a
-   * berth without a boarding point.
+   * walks end (TIME-7; the step between them is timed at run speed, D-052 item 1); null for other
+   * docks and for a berth without a boarding point.
    */
   readonly boardingYd: number | null;
 }

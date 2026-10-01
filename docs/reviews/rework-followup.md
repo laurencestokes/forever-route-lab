@@ -2,7 +2,9 @@
 
 Recorded 2026-10-01, when the owner paused the local session and moved the work to a cloud session.
 
-**State:** the follow-up workflow finished every stage except its last one, "fix + final verify".
+**State (updated 2026-10-01, cloud session):** fixed, verified and merged to `main`; see "Fix and verify" at the end. The rest of this paragraph is the state when the local session paused.
+
+**State at the pause:** the follow-up workflow finished every stage except its last one, "fix + final verify".
 Its work is on the `rework-followup` branch and is not yet verified. That means:
 - the speed fixes and entry trim;
 - the D-050 UX items (default state, level ceiling), the TR-03 berths and the minors;
@@ -576,3 +578,59 @@ Everything is under `.cache\readability\`:
   - `sheets.py`: builds the sheet and crops from the 1× shots, with the extra lines.
 - Regenerated: `mocks\variant-{a,b,c,t}.html`, `mocks\results.json`, `mocks\shots\*-1x.png`
 - `mocks\perf.json` is unchanged: the timing pages open with no step selected, so the new scrolling never runs there.
+
+## Fix and verify (cloud session, 2026-10-01)
+
+The fix workflow ran in a cloud container: 4 vCPUs (Xeon 2.8 GHz), Node 22.22.0, no WoW client, no
+minimap tiles and software rasterising in Chromium. It had these stages: two reproducers, two fixers,
+a browser-measurement stage, an independent critic (13 findings, C-01 to C-13), two sceptics per
+finding (none refuted), a repair and a final verifier. The rulings are D-052.
+
+### Outcome per finding
+
+| Finding | Outcome |
+|---|---|
+| F-01 derived `--check` | **Closed for the D-052 item 2 gate.** The end-of-route quest state now runs in its own task, and only when the end state changed (`src/app/same-state.ts`). `selectedOf` skips the id lookup at the end. Edits with a step selected and changes to the end state are measured as reported cases (`editSelected`, `editEndLocation`), outside the gate (C-06). The A/B is owed on the owner's machine. |
+| F-02 the probe rule | **Ruled** (D-052 item 2): the interleaved A/B is the gate on every machine. The probe-normalised `--check` is a raw guard only. |
+| F-03 edit and selection to pins | **Open** (D-052 item 5). The cause is two phases by design (UI-04): 3.5 to 10 times 95e84cc here. The stage's changes are kept (8 to 14% faster in 4 of 8 cases). |
+| F-04 pans and first art at 4× | **Open.** The painted pans fail ×1.25 against 95e84cc, as eff4341 did. First art passes the ratio (×1.03 at 1×, ×1.01 at 4×). The absolute figures are owed. |
+| F-05 first-view bytes | **Open**, MR-06 unruled. The opening view is 134,382 B painted and 216.0 kB minimap, against 100 kB. `rework-speed-d050.json` now records this view. |
+| F-06 B+ | **Open**, its own stage (D-052 item 6). The ledger rows (246.82 and 247.50 kB, then 247.51 kB) are added. |
+| F-07 berths | **Fixed** (D-052 item 1). The step between pier and berth is priced at run speed, as an ASSUMPTION, and the citations are corrected. |
+| F-08 drawer counts | **Fixed**, with C-04: counts of what is drawn, "+n held", and notes from the same counts. |
+| F-09 UI-15 | **Ratified by the owner** (D-052 item 4); the docs are edited. |
+| F-10 harness | **Fixed** in the new harness `tests/bench/browser/`: it clicks only rows wholly on screen, and fails on a click without map work. |
+| F-11 re-pin report | **Fixed.** §10 is completed, `nav-m3b.json` is annotated, and `2a05fc56` is in STATUS MD-10. |
+| F-12 test flakes | **Fixed.** The path-hygiene test has an explicit timeout, and the lazy panels are preloaded in their tests. |
+
+The critic's other findings:
+- C-09: an edit with nothing selected now updates the pins one task later; this is recorded in UI.md under "An edit".
+- C-10: a new guard test, `tests/classification-guard.test.ts`.
+- C-11: the ledger and docs are brought up to date.
+- C-12: `ab-ratio.ts` handles cases one tree lacks.
+
+### Final verification (nothing else running)
+
+- `pnpm check` passes:
+  - 341 of 341 test files: 4,867 tests passed, and 45 were skipped (client suites and clone-only
+    suites).
+  - The entry chunk is 247.51 kB gzip, 0.99 kB under the stop rule.
+- The derived A/B (7 rounds; current against 95e84cc):
+  - firstWalk ×1.002;
+  - editStart ×1.004;
+  - editMiddle ×1.043;
+  - classChange ×1.012;
+  - navEditStart ×0.989;
+  - taxiArrives ×0.875 against eff4341.
+- The other benches' A/Bs pass:
+  - engine: ×0.94 to ×1.02;
+  - validate: ×0.91 to ×1.01;
+  - map-edit: largest ×1.139, insertNote;
+  - map-paths: moveStep ×0.737, insertNote ×1.084.
+  - The pan in map-paths is ×1.71, the same as eff4341, so it predates the follow-up.
+- The stored-baseline `--check`s fail on this machine only: 95e84cc fails them too.
+- `maps:validate` passes after `pnpm data:fetch`. M6, M8 and M11 are skipped without the tiles, and MT
+  passes. `nav:validate` passes 56 checks, including G13.
+- The browser harness runs: one round on the painted style, exit 0.
+- Owed on the owner's machine: every client-gated `--check`, the minimap style in the harness, and the
+  absolute D-050 item 5 budgets.

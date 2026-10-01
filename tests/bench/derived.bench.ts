@@ -13,9 +13,13 @@
  * of reach on a loaded machine for the committed tree and its parent alike (an interleaved A/B: the
  * tree at 0.95 to 1.02 of its parent). So, as the engine and validate benches do (PERF-04), the
  * script times the CPU probe (`cpuProbe`, a 2e7 square-root loop) before and after its cases, and
- * `--check` compares each median × `PROBE_REFERENCE_MS` / probe (the probe on this machine when
- * calm, 40 ms) with the stored one, which was taken at about that probe. The baselines are unchanged;
- * the raw medians are printed beside the normalised ones.
+ * `--check` compares each median × `PROBE_REFERENCE_MS` / probe (the probe on the owner's machine
+ * when calm, 40 ms) with the stored one. The stored `derived10000` block records no probe (its own
+ * comment says it is not probe-normalised), so that it was taken at about 40 ms is an ASSUMPTION;
+ * and on another machine the probe does not track this allocation-heavy workload (review F-02). The
+ * baselines are unchanged; the raw medians are printed beside the normalised ones. Off the owner's
+ * machine, the gate is the interleaved A/B against the pre-rework tree (`tests/bench/ab-derived.ts`;
+ * D-052 item 2).
  *
  * The route is tests/bench/engine.bench.ts's (the same builder, so the numbers compare with
  * `route10000` and `validate10000` in docs/measurements/engine-m6.json): the sample character's
@@ -51,7 +55,21 @@
  * - `taxiArrives` (review TR-11): the committed client taxi file arriving on a live pipeline (a
  *   loader held until the first walk is published): the TravelGraph re-seeded with its nodes,
  *   flights and inferred docks, TIME-6's per-leg data, and the walk that follows, published.
- *   `sinceChangeMs` is the published timing; `taskMs` the whole synchronous task.
+ *   `sinceChangeMs` is the published timing; `taskMs` the whole synchronous task;
+ * - `editSelected` (review C-06; reported, not checked): the selected step's note edited with it
+ *   selected, 200 steps before the end, a quick walk, so the quest state at that step runs in the
+ *   edit's own task; `sinceChangeMs` to the walk's publish, `taskMs` the whole of `flush` (the walk
+ *   and the quest state the pins wait for);
+ * - `editEndLocation` (review C-06; reported, not checked): the last step's location changed with
+ *   nothing selected, so the end state changes and the end-of-route quest state is rebuilt (the
+ *   reclassification path) in a task of its own; the same two timings.
+ *
+ * The cloud gate (`ab-derived.ts`) checks only the cases `--check` checks: note edits with nothing
+ * selected that keep the end state (the shortcut that keeps the end-of-route quest state), the
+ * first walk, the taxi file arriving, and a class change (a cold walk with a step selected, whose
+ * quest state follows in a task of its own, outside `sinceChangeMs`). The quick-walk path with a
+ * step selected and an edit that changes the end state are only in `editSelected` and
+ * `editEndLocation`, reported beside them, not gated.
  *
  * `--budget`: the edit cases (editStart, editMiddle, editEnd, select, classChange, classToggle,
  * navEditStart, navEditMiddle) against §14's 50 ms edit to results; the startup cases (firstWalk,
@@ -60,7 +78,7 @@
 import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { fixedClock } from '../../src/app/clock';
-import { updateStepNote } from '../../src/app/commands';
+import { setStepLocation, updateStepNote } from '../../src/app/commands';
 import { createDerivedStore, type DerivedResults } from '../../src/app/derived';
 import { type ClientTableLoaders, createDerivedPipeline, type DerivedPipeline } from '../../src/app/derived-pipeline';
 import { createNavigationRuntime, type DisposableNavLegService, type NavigationState } from '../../src/app/navigation-runtime';
@@ -401,7 +419,55 @@ for (let i = 0; i < WARM + RUNS; i += 1) {
 }
 const taxiArrives = { sinceChangeMs: stats(taxiArrivals.since), taskMs: stats(taxiArrivals.task) };
 
-const route = { steps: STEPS, issues, firstWalk, editStart, editMiddle, editEnd, select, questState, classChange, classToggle, navigationArrives, navEditStart, navEditMiddle, taxiArrives };
+// Two edits the cases above do not take (review C-06), on pipelines of their own so the cases above
+// are unchanged. Each reports `sinceChangeMs` (to the walk's publish) and `taskMs` (the whole of
+// `flush`: the walk and the quest-state task that follows it, which the map's pins wait for).
+const twoPhase = (e: Bench, action: (i: number) => void): { readonly sinceChangeMs: Stats; readonly taskMs: Stats; readonly walkedFrom: number } => {
+  const since: number[] = [];
+  const task: number[] = [];
+  for (let i = 0; i < WARM + RUNS; i += 1) {
+    action(i);
+    const t0 = performance.now();
+    e.pipeline.flush();
+    const t1 = performance.now();
+    if (i >= WARM) {
+      since.push(resultsOf(e).timing.sinceChangeMs);
+      task.push(t1 - t0);
+    }
+  }
+  return { sinceChangeMs: stats(since), taskMs: stats(task), walkedFrom: resultsOf(e).walkedFrom };
+};
+
+// `editSelected`: the selected step's own note edited, with the step selected (the app's normal
+// state since D-050 item 2), 200 steps before the end: a quick walk, so the quest state at the
+// selected step runs in the edit's own task.
+const es = start();
+es.pipeline.flush();
+const selectedStep = es.store.getState().project.route.steps[STEPS - 200];
+if (selectedStep === undefined) throw new Error('no step to select');
+es.store.select({ kind: 'single', id: selectedStep.id });
+es.pipeline.flush();
+const editSelected = twoPhase(es, (i) => {
+  es.store.dispatch(updateStepNote(selectedStep.id, `bench ${String(i)}`));
+});
+es.pipeline.dispose();
+
+// `editEndLocation`: the last step's location changed back and forth between two places, with
+// nothing selected: the end state changes, so the end-of-route quest state is rebuilt (the
+// classification reused where only the place differs) in a task of its own after the walk.
+const el = start();
+el.store.select({ kind: 'none' });
+el.pipeline.flush();
+const places = steps.flatMap((step) => ('location' in step && step.location !== null ? [step.location] : [])).slice(0, 40);
+const [placeA, placeB] = [places[0], places.find((place) => JSON.stringify(place) !== JSON.stringify(places[0]))];
+const lastStep = el.store.getState().project.route.steps[STEPS - 1];
+if (placeA === undefined || placeB === undefined || lastStep === undefined) throw new Error('no two places for the last step');
+const editEndLocation = twoPhase(el, (i) => {
+  el.store.dispatch(setStepLocation(lastStep.id, i % 2 === 0 ? placeA : placeB));
+});
+el.pipeline.dispose();
+
+const route = { steps: STEPS, issues, firstWalk, editStart, editMiddle, editEnd, select, questState, classChange, classToggle, navigationArrives, navEditStart, navEditMiddle, taxiArrives, editSelected, editEndLocation };
 const probeAfter = cpuProbe();
 const probeMs = round((probeBefore + probeAfter) / 2);
 console.log(JSON.stringify({ runs: RUNS, warm: WARM, node: process.version, platform: `${process.platform} ${process.arch}`, probeMs: { before: probeBefore, after: probeAfter, mean: probeMs }, [`derived${String(STEPS)}`]: route }, null, 2));

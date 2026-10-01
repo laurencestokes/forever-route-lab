@@ -4,7 +4,7 @@ import type { LayerStats } from '../map/adapter';
 import { EMPTY_LAYER_STATS } from '../map/adapter';
 import { mapTestWorkspace } from './map-test-helpers';
 import type { QuestStateModel } from './quest-state';
-import { ATLAS_TILES_NOTE, LAYER_STATS_UNITS, layerNotesOf, layerStatsNotes, MAP_ART_OWNER_NOTE, MINIMAP_TILES_NOTE, walkingPathNotesOf, type MapNotesSource } from './map-wording';
+import { ATLAS_TILES_NOTE, categoryCountsOf, LAYER_STATS_UNITS, layerNotesOf, layerStatsNotes, MAP_ART_OWNER_NOTE, MINIMAP_TILES_NOTE, walkingPathNotesOf, type MapNotesSource } from './map-wording';
 
 /*
  * The words of the Map layers drawer's notes (docs/research/map-presentation.md §25.3.3;
@@ -128,5 +128,25 @@ describe('walkingPathNotesOf', () => {
       '2 legs have no walking path: drawn straight, dash-dot-dot.',
       '1 leg outside the view waits to be computed until it comes into view.',
     ]);
+  });
+});
+
+describe('categoryCountsOf (§25.3.3; follow-up F-08)', () => {
+  it('counts what the map draws, the level ceiling applied, and keeps the quests it holds back per row', () => {
+    const zero = { available: 0, 'may-be-available': 0, 'needs-prerequisite': 0, 'unlocks-soon': 0, 'low-level': 0, 'turn-ins': 0 };
+    const counts = {
+      rows: { ...zero, available: 87, 'may-be-available': 30, 'needs-prerequisite': 11, 'turn-ins': 8 },
+      rowsDrawn: { ...zero, available: 60, 'may-be-available': 20, 'needs-prerequisite': 5, 'turn-ins': 8 },
+      availableGivers: 41,
+      ready: 4,
+      objectives: 6,
+      aboveCeiling: 43,
+    };
+    const model = { counts } as unknown as QuestStateModel;
+    const result = categoryCountsOf(source({ questState: model, afterStepNumber: 55 }), {});
+    expect(result.quests).toMatchObject({ available: 60, 'may-be-available': 20, 'needs-prerequisite': 5, 'turn-ins': 8 });
+    expect(result.heldBack).toEqual({ available: 27, 'may-be-available': 10, 'needs-prerequisite': 6 });
+    expect(result.availableGivers).toBe(41);
+    expect(categoryCountsOf(source(), {}).heldBack).toBeUndefined();
   });
 });

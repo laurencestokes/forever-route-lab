@@ -83,7 +83,8 @@ colours are unchanged, so the difficulty colours still sit on near-neutral groun
 | `--frl-surface-raised` | `#f6f4f0` | `#201e1a` | Top bar, panel headers, tab strip, status bar, group rows |
 | `--frl-surface-hover` | `#eeebe5` | `#2a2722` | Row and ghost-button hover |
 | `--frl-surface-sunken` | `#ebe7e0` | `#141210` | Map area |
-| `--frl-surface-later` | `#ebe7e0` | `#11100d` | The band under the route steps after the selection (D-048 B; drawn by UR.3). Decorative: 1.19:1 and 1.10:1 against the surface; every text pair on it passes |
+| `--frl-surface-later` | `#ebe7e0` | `#050403` | The band under the route steps after the selection (D-048 B; drawn by UR.3). Decorative: 1.19:1 against the surface in light and 1.16:1 in dark (review UI-06; it was `#11100d`, 1.07:1); every text pair on it passes |
+| `--frl-row-hover` | `#f4f2ed` | `var(--frl-surface-hover)` | A route row's hover, which must show on the plain panel and on the later band alike (review UI-06): 1.09:1 against the surface and 1.10:1 against the band in light, 1.19:1 and 1.37:1 in dark |
 | `--frl-tile` | `#e2ddd4` | `#2d2a24` | The default button's fill, segmented controls, step discs (visibly filled: 1.2 to 1.3:1 on the panels; the edge carries the shape) |
 | `--frl-tile-hover` | `#d8d2c7` | `#36322b` | The default button's fill on hover, when its edge takes `--frl-fg-muted` |
 | `--frl-border` | `#dcd6cc` | `#35312a` | Hairlines and row separators (decorative) |
@@ -376,7 +377,7 @@ All exported from `src/ui/kit.ts`.
 | `AppShell` | `shell/AppShell.tsx` | Grid frame: `top`, `left`, `centre`, `right`, `bottom`; `leftWidth`, `onLeftWidthChange`, `rightWidth`, `onRightWidthChange` (300-460px); `layout` (`ShellLayout`: `leftCollapsed`, `rightCollapsed`, `mapFocus`) and `onLayoutChange`, which add the panel handles, Enter on the separators and the Map focus toggle (§6) |
 | `TopBar` | `shell/TopBar.tsx` | Product, quest search (`search`), "Go to zone or view…" (`zones`), the character button (`character`: "Orc Warrior · Horde", opens Settings, D-048 D), Import, Export, theme toggle, About (ui-refresh.md §8) |
 | `RouteList` | `route/RouteList.tsx` | Virtualised listbox of `RouteRowModel`s; controlled `activeIndex` and `selectedKeys`; selection, editing and drag callbacks by index (§8); `density` (`two-line`, the default, or `one-line`); `deriveRow(row, index)` and `deriveGroup` fill a row's derived values as it renders (only mounted rows ask); `topNumber` (two-line rows) and `estimateColumn` (one-line rows) pick the numbers (§8, §16); `insertAt`, the row boundary where new steps go, draws the insertion line and the later band |
-| `StepRow`, `GroupRow` | `route/StepRow.tsx` | One route row (§8): two lines of 40px (the number, which is the drag handle; the mark; line 1 with the verb, title, chain, provenance, issue marker and lock; line 2 with the chip and where, or the worst issue in words, and the row actions; the top number over the level after) or one line of 28px (`density="one-line"`: the 18px mark, the verb and title, one estimate by `estimateColumn`, the lock; duplicate and delete on hover or when active). `groupLabel` for the spoken "in group …". `describeStepRow` says the row in a fixed order (number, kind, title with its chain part and where, group, the mark's state, difficulty, provenance, every estimate with a level-up, the issues and the worst one's words, the lock), never doubling a full stop; `formatXpGained` (`+450`) |
+| `StepRow`, `GroupRow` | `route/StepRow.tsx` | One route row (§8): two lines of 40px (the number, which is the drag handle; the mark; line 1 with the verb, title, chain, provenance, issue marker and lock; line 2 with the chip and where, or the worst issue in words, and the row actions; the top number over the level after) or one line of 28px (`density="one-line"`: the 18px mark, the verb (none on accept and turn-in rows, whose mark says it; UI-15) and title, one estimate by `estimateColumn`, the lock; duplicate and delete on hover or when active). `groupLabel` for the spoken "in group …". `describeStepRow` says the row in a fixed order (number, kind, title with its chain part and where, group, the mark's state, difficulty, provenance, every estimate with a level-up, the issues and the worst one's words, the lock), never doubling a full stop; `formatXpGained` (`+450`) |
 | `StepTypeGlyph` | `markers/StepTypeGlyph.tsx` | Original glyphs for accept, complete, turnin, abandon, travel, grind, hearth, flight, train, vendor, note (16, 14 or 12px) |
 | `QuestMark` | `markers/QuestMark.tsx` | A quest's "!" or "?" in a row or a quest list (ui-refresh.md §5.1), 22px (`md`) or 18px (`compact`), in one of the eight quest-mark states of the one table (`src/map/marks.ts`, read through `app/map-exports` as the same objects the map's pins draw). Filled states take the difficulty colour on the disc with a well glyph and keyline (an unknown difficulty takes the neutral `--frl-difficulty-unknown`); hollow states are a strong ring with an ink glyph; "not sure" is a dashed ring; badges sit in the map's slots (`progress` fills the pie, `unlockLevel` the level pill, `dungeonQuest` the arch). `questMarkColour` says when the mark is coloured, so the caller draws the chip's pips beside it. Decorative (`aria-hidden`) |
 | `StepMark` | `markers/StepMark.tsx` | The other step kinds on a neutral disc (the tile, a hairline edge) with `StepTypeGlyph` in the muted ink, 22 or 18px; decorative |
@@ -496,8 +497,8 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
   turn-in whose objectives are carried (D-040) stays ready and line 2 says the warning. Before the
   walk an accept is "may be" and a turn-in's readiness unknown. A turn-in keeps its "?" in every
   state.
-- **One-line rows** (View's compact choice): today's row with the 18px mark, the verb first and one
-  estimate, chosen with "Rows show" (level after, XP gained or step time).
+- **One-line rows** (View's compact choice): today's row with the 18px mark, the verb first (accept and turn-in
+  rows leave it to the "!" or "?" mark; the name and tooltip keep it, UI-15) and one estimate, chosen with "Rows show" (level after, XP gained or step time).
 - **Where new steps go, and the later steps** (D-048 B). The list draws two single elements outside
   the rows (`insertAt`, `aria-hidden`): a 2px dashed insertion line with a caret at the boundary
   after the selection's last step, and **a band in `--frl-surface-later` under every row after it**;
@@ -997,7 +998,12 @@ wheel rates are the design's starting values until ATL.9 calibrates them.
 - **Rows.** A checkbox, the category's pin in monochrome (the map's own paths) or a line or area
   swatch, the name, and the count right-aligned in tabular figures ("209 · 118 givers",
   "8 · 4 ready"). The accessible name carries the count with its unit and the state ("Available:
-  209 quests at 118 givers after step 1425, shown"); the tooltip says how many are in view. Notes
+  209 quests at 118 givers after step 1425, shown"); the tooltip says how many are in view. A
+  quest row counts what the map draws: quests the level ceiling holds back (D-050 item 3) are left
+  out of the count and the givers. The count shows them in words ("45 · 37 givers · +42 held"),
+  and the tooltip and the accessible name say what that means ("42 more above the level ceiling
+  not drawn (an assumption)"); the givers' notes are worded from the same drawn counts (review
+  C-04). Notes
   (MAP-HONEST-5) are one muted line under the row: the first note, ellipsised, and "+2 more" when
   there are more (review PR-09). The whole notes open under it while the row's box has keyboard
   focus and on a press of the line, are its tooltip, and are always the checkbox's description.
@@ -1672,6 +1678,19 @@ the 10,000-step project settles in 50 ms or less at 4× CPU throttling (headless
 harness, the Available tab, median of 30). MEASURED (fix-ui, 2026-09-30, the working tree with the
 other fixes of this review): 8.0 ms at 1× and 47.1 ms at 4× (p90 54.6 ms), against 19.8 ms and
 112.3 ms with the rebuild in the next task (the `?settle=0` comparison on the same build).
+
+**An edit** (D-050 item 5; review F-01 and C-09). With a step selected (other than the end), an
+edit whose walk takes `QUICK_WALK_MS` (8 ms) or less rebuilds the quest state, places and labels
+for that step in the edit's own task, so the pins follow the edit's first publish. With no step
+selected (the state after the last step, after the selection is cleared), the end-of-route quest
+state never joins the edit's task: it is rebuilt in a task of its own after the walk's publish,
+and only when the edit changed the state at the end (`sameCharacterState`), so the pins follow
+such an edit one task later than at 90248bb. Node's `derived.bench.ts` reports both, not gated:
+`editSelected` and `editEndLocation`, each with the time to the walk's publish and the whole task.
+MEASURED in the cloud session (2026-10-01, 10,000 steps, the median of 5 interleaved rounds'
+medians): `editSelected` 4.71 ms to the publish and 6.65 ms the whole task, `editEndLocation`
+2.34 ms and 4.01 ms; the older trees have no such cases, so there is no ratio. The browser's
+edit-to-pins with nothing selected is not measured (the harness edits a selected step).
 
 **Checked by hand** (Milestone 6 review fixes, in the built app in headless Edge through the
 DevTools protocol, walking paths held by holding the navigation files): the status bar at 721-1600px

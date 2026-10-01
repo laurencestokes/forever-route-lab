@@ -2,19 +2,22 @@ import { type WorldMapId, worldMapId } from '../domain/ids';
 import type { WorldPoint } from '../domain/points';
 
 /**
- * Client berths and their boarding points (docs/SIMULATION.md TIME-7; D-050 item 4; review TR-03).
+ * Client berths and their boarding points (docs/SIMULATION.md TIME-7; D-052 item 1; review TR-03).
  *
  * An inferred dock is the ship's stop in the committed taxi file (`transports[].stops`), which lies
  * in the water beside its pier. The navigation data's snap puts a point there, and a point on the
  * deck above the water, on the water surface (the lowest floor), so a walk to the berth itself
- * ended with a long swim. The rule (architect, D-050 item 4): the walk goes to the dock's
+ * ended with a long swim. The rule (D-052 item 1): the walk goes to the dock's
  * **boarding point**, the nearest point within `BOARDING_RADIUS_YD` of the berth whose snap is
- * walkable ground (a polygon that is not water, and not ambiguous between components), and the
- * step from the boarding point to the berth is part of the transport's wait (no swim leg, no
- * time of its own).
+ * walkable ground (a polygon that is not water, and not ambiguous between components). The step
+ * from the boarding point to the berth has no swim leg; it is priced at each end of the ride as
+ * its straight-line yards (`fromBerthYd`, the ride fact's `boardingYd`) at the run speed, as an
+ * assumption and a travel part of its own, not part of the wait (`boardingSteps`,
+ * src/sim/transport.ts). The real path along the pier is unknown and at least that long.
  *
- * **The radius, from the committed navmesh (nav revision `aefbc78d…`, client 1.60.1.70009).** The
- * architect proposed 40 yd, to be checked against the data. Every boat berth lies 13.1 to 15.1 yd
+ * **The radius, from the committed navmesh (nav revision `aefbc78d…`, measured on client
+ * 1.60.1.70009; the re-pin to 1.60.1.70124 rebuilt the mesh byte for byte, so the revision and the
+ * table are unchanged).** The architect first proposed 40 yd, to be checked against the data. Every boat berth lies 13.1 to 15.1 yd
  * from the nearest walkable polygon, but at those points the snap still takes the water surface
  * under the deck, so no walk can end there. The nearest points a walk can end on walkable ground
  * are 12.5 to 95.2 yd from the nine boat berths (listed below), so 40 yd would leave five of them
@@ -26,7 +29,7 @@ import type { WorldPoint } from '../domain/points';
  *
  * The table is data derived from the committed navmesh and taxi file. `tests/berth-boarding.test.ts`
  * searches them again (1 yd steps, nearest first, then x, then y) and fails when the table
- * differs, so a rebuilt navmesh or taxi file (the re-pin, D-050 item 1) cannot leave it stale. An
+ * differs, so a rebuilt navmesh or taxi file (a re-pin, D-050 item 1) cannot leave it stale. An
  * entry applies only while the file's stop is at the berth it records; otherwise the walk goes to
  * the berth as before, and swims.
  */

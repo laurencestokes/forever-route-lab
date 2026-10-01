@@ -4,7 +4,7 @@
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md).
 > Nothing here depends on any previous AI conversation.
 
-Last updated: 2026-09-27
+Last updated: 2026-10-01
 
 ## Current milestone
 
@@ -16,9 +16,12 @@ Last updated: 2026-09-27
 - dungeons, the client flight network, transports, zone levels and the faction overlay.
 See [docs/reviews/review-map-ui-rework.md](docs/reviews/review-map-ui-rework.md).
 
+**The rework follow-up is verified and merged** (D-052; [docs/reviews/rework-followup.md](docs/reviews/rework-followup.md),
+"Fix and verify"). Still open from it: the selection and edit to the map's pins (F-03), the pans at 4×
+(F-04) and the opening view's bytes (F-05), all under D-050 item 5, and left-panel layout B+ (D-051).
+
 **Next:**
-1. The follow-up: re-pin to client 1.60.1.70124 and rebuild; fix the speed regressions; the entry
-   chunk; the default state and level ceiling; left-panel readability.
+1. Left-panel layout B+ (D-051), then the open D-050 item 5 measurements on the owner's machine.
 2. Milestone 8, the proposal UX.
 3. Milestone 9, the gauntlet.
 
@@ -176,7 +179,21 @@ As of the map/UI rework commit (`pnpm check`; the client gates are blocked until
   (D-036).
 - Autosave of a 10,000-step project is 35 ms unthrottled. Chunked storage is decided after the
   Milestone 9 throttled run (D-036).
-- **Open after the rework (review-map-ui-rework.md):** the client is off the pin (every client gate is blocked; nav:validate G13 fails); map-edit and derived benches regressed; the map follows a selection in 89-95 ms and an edit in 40-54 ms; the 10,000-step pan at 4× has p99 48.7 ms; first art at 4× is 1.6-2.3 s; the entry is 248.98 kB; the left panel is less readable than WoWF-QRP (owner); TR-03 swims to berths.
+- **Open after the rework follow-up (D-052; rework-followup.md "Fix and verify"):**
+  - **Fixed and verified in the cloud:** the re-pin to 1.60.1.70124 (G13 passes); the derived,
+    engine, validate, map-edit and map-paths benches, each within ×1.25 of 95e84cc on the D-052 item 2
+    A/B; the entry chunk (247.51 kB); TR-03 berths (D-052 item 1); and F-08 and F-10 to F-12.
+  - **F-03, still open:** selection and edit to the map's pins take two phases since the rework. The
+    pins follow the quest state, which UI-04 computes after the selection paints. On this machine that
+    is 3.5 to 10 times 95e84cc, and the gate needs the architect's ruling (D-052 item 5).
+  - **F-04, still open:** the 10,000-step pans at 4× fail ×1.25 against 95e84cc, as at eff4341. First
+    art passes the ratio, but the absolute 1.0 s at 4× cannot be judged here: Chromium rasterises in
+    software in this container.
+  - **F-05, still open:** the opening view (step 55, Orgrimmar) is 134,382 B painted and 216.0 kB
+    minimap, against the 100 kB budget. MR-06 is unruled.
+  - **Owed on the owner's machine:** every client-gated `--check`; the stored-baseline bench
+    `--check`s (machine-only failures here; 95e84cc fails them too); the minimap style in the browser
+    harness; and the absolute D-050 item 5 figures.
 - **Superseded, the old map feedback (owner, 2026-09-26):** it felt slow; zooming from the world to a zone does not
   flow, because one art image is shown at a time; both continents are never visible together; and
   Zephras Isle is missing. The map rework (below) addresses all four. Measured causes are in
@@ -218,7 +235,8 @@ As of the map/UI rework commit (`pnpm check`; the client gates are blocked until
   (review finding MD-10): `.cache/minimap-pack/minimap-tiles-42b33cc815cd.tar` and
   `minimap-tiles-42b33cc815cd-6b9015630c99.tar` (neither is the pack `pack.json` pins, so the fetch refuses
   both), `.cache/map-ui-build/verify-MD/`, `.cache/minimap-addendum/out/b4` and
-  `b5`, and the review agents' scratchpads. The owner deletes them when no longer needed.
+  `b5`, `minimap-tiles-42b33cc815cd-2a05fc565d2d.tar` (pack `2a05fc56…`, the remanifest stopgap; follow-up
+  F-11), and the review agents' scratchpads. The owner deletes them when no longer needed.
 
 ## Blockers
 
@@ -280,24 +298,17 @@ _None._
 
 ## Exact next tasks
 
-**Moved to a cloud session 2026-10-01.** `main` is pushed, with every commit verified. The rework
-follow-up is on the branch `rework-followup` (its final verification did not run). Its reports and
-the critic's findings to fix are in [docs/reviews/rework-followup.md](docs/reviews/rework-followup.md),
-and the re-pin diff is in [docs/reviews/repin-70124.md](docs/reviews/repin-70124.md). Outside the
-owner's machine there is:
-- no WoW client, so the client-gated `--check` steps cannot run;
-- no minimap tiles (the app falls back to the painted style);
-- no `.cache/`.
+**Cloud session 2026-10-01.** The rework follow-up is fixed, verified and merged to `main`; its
+record is [docs/reviews/rework-followup.md](docs/reviews/rework-followup.md), "Fix and verify". This
+container has no WoW client, no minimap tiles, no `.cache/` and no Segoe UI font.
 
-**1. Rework follow-up (D-050):**
-1. Re-pin to client 1.60.1.70124 and rebuild everything client-derived with the byte-identical
-   checks; review the diff; clear MD-01 and G13.
-2. Fix the speed regressions: map-edit and derived --check, selection-to-map and edit-to-map times,
-   the 10,000-step pan at 4×, first art at 4× and the first-view bytes.
-3. Move clustering into the derived publish (entry chunk under 248.5 kB).
-4. Default state and level ceiling (D-050 items 2 and 3).
-5. Left-panel readability: the owner chose layout B+ (D-051). Mock it, measure it, then build it after the entry trim.
-6. TR-03 berths, and the remaining minors listed in the review.
+**1. Left-panel layout B+ (D-051):** mock it and measure it, then build it within the 988 B left
+under the 248.5 kB stop rule, or trim first. The truncation figures must be re-measured in Segoe UI
+on the owner's machine (D-052 item 6).
+
+**1b. D-050 item 5, still open:** the F-03 gate ruling (D-052 item 5), MR-06 for the opening view,
+and the pans at 4×. Measure them on the owner's machine with `tests/bench/browser` (both styles,
+absolute figures) and `tests/bench/ab-derived.ts`.
 
 **2. Deployment:** needs the owner's go-ahead to push (OD-13). It then covers the Pages workflow,
 the release-asset minimap pack (D-049 O14) and `pnpm build:deploy`.

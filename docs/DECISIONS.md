@@ -1092,3 +1092,47 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
     being whole, and the D-040 carried-work cue.
   - **Order:** the build follows the entry-chunk trim (D-050 item 6), because the stop rule must
     hold.
+
+## D-052: Rework follow-up rulings (owner and architect, 2026-10-01)
+
+- **Date:** 2026-10-01
+- **Decided by:** the owner ratified item 4; the rest are the architect's rulings on the follow-up
+  critic's findings (docs/reviews/rework-followup.md), and the owner may overrule them.
+- **Decisions:**
+  1. **Berths (TR-03, F-07):**
+     - The 100 yd boarding radius is kept.
+     - The step between a boarding point and its berth is priced at each end of a ride as
+       `boardingYd` at run speed, as a travel part of its own and not part of the wait (SIMULATION
+       TIME-7).
+     - Run speed is used even when the character is mounted. That is intended: the step is short,
+       and how a mount behaves on a pier is unsourced. This is an ASSUMPTION.
+  2. **The speed gate (F-02):**
+     - **The rule:** an interleaved A/B on one machine (`tests/bench/ab-derived.ts`, and the same
+       method for the other benches) against 95e84cc, the tree before the rework.
+       - Each run has at least 5 rounds, and each checked case's ratio of medians must be ×1.25 or
+         less.
+       - The spread is reported. When a ratio is between ×1.15 and ×1.35 and the spreads overlap,
+         rounds are added before a verdict.
+       - A case that 95e84cc lacks is compared with eff4341.
+     - This is the gate on every machine. The probe-normalised `--check` against stored baselines is
+       not approved as a gate: the stored `derived10000` block records no probe, and the probe does
+       not track this allocation-heavy workload. It stays as a raw guard on the owner's machine.
+  3. **The drawer's counts (F-08):**
+     - Rows count what the map draws, after the level ceiling (D-050 item 3).
+     - Held-back quests show as "+n held" beside the count, and in the row's tooltip and notes.
+  4. **UI-15 (F-09), ratified by the owner:** one-line accept and turn-in rows leave the verb to their
+     "!" or "?" mark. The tooltip and the spoken name keep it. ui-refresh.md §6.1 and §6.2 and UI.md
+     §7 and §8 are edited to match.
+  5. **Still open and not re-baselined (D-050 item 5):**
+     - **F-03:** since the rework, the pins follow the quest state, which UI-04 computes after the
+       selection has painted. Every selection or edit therefore takes two frames, and ×1.25 against
+       95e84cc is out of reach by design.
+     - **F-04 and F-05:** the pans at 4× and the opening view's bytes (MR-06).
+     - The architect rules on all three after absolute measurements on the owner's machine. The
+       options are in `docs/measurements/followup-cloud.json`.
+     - The follow-up's F-03 changes are kept: 8 to 14% faster in 4 of 8 cases, and none slower.
+  6. **B+ (D-051)** is its own stage. Its truncation figures came from Segoe UI, so the cloud
+     container (DejaVu Sans only) can build B+ but cannot confirm them; that re-measure is owed on the
+     owner's machine.
+  7. **The browser harness** is committed at `tests/bench/browser/`. It loads Playwright from
+     `FRL_PLAYWRIGHT` or a global install until Milestone 9 adds it as a dev dependency.

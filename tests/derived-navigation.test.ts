@@ -163,7 +163,7 @@ describe('same-map transports on the committed navmesh (D-034 item 2, terrain-na
 });
 
 describe('inferred docks on the committed navmesh and taxi file (TIME-7; NAV-08, review TR-03, TR-06)', () => {
-  it("rides the Auberdine – Rut'theran boat from the file's inferred docks, walking to and from their boarding points (D-050 item 4)", { timeout: 120_000 }, async () => {
+  it("rides the Auberdine – Rut'theran boat from the file's inferred docks, walking to and from their boarding points (D-052 item 1)", { timeout: 120_000 }, async () => {
     const server = fakeServer(site(new Map([...publicSite(), ...readDirectory('public/maps/client', 'maps/client/')])), BASE);
     const workspace = await loadWorkspace({ fetch: server.fetch, baseUrl: BASE, sha256: nodeSha256, nowIso: NOW, yieldToRender: () => Promise.resolve() });
     const taxiLoad = await createClientTables({ fetch: server.fetch, baseUrl: BASE, sha256: nodeSha256 }).taxi();

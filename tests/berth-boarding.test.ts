@@ -1,6 +1,6 @@
 /**
  * Client berths and their boarding points on the committed navmesh and taxi file (docs/SIMULATION.md
- * TIME-7; D-050 item 4; review TR-03): the table in src/rules/berths.ts is searched again here, so
+ * TIME-7; D-052 item 1; review TR-03): the table in src/rules/berths.ts is searched again here, so
  * a rebuilt navmesh or taxi file cannot leave it stale.
  *
  * The rule: the boarding point is the nearest 1-yd point within `BOARDING_RADIUS_YD` of the berth
@@ -91,7 +91,7 @@ const stopOf = (entry: BerthBoarding) => taxi.transports.find((path) => path.pat
 const navMaps = new Set(manifest.maps.map((m) => m.mapId));
 const boats = BERTH_BOARDINGS.filter((entry) => entry.fromBerthYd !== 0);
 
-describe('client berths and their boarding points (TIME-7; D-050 item 4; review TR-03)', () => {
+describe('client berths and their boarding points (TIME-7; D-052 item 1; review TR-03)', () => {
   it('was measured on this navigation data, and lists every berth the transport seeds cite on a map with it', () => {
     expect(manifest.navRevision).toBe(BOARDING_NAV_REVISION);
     const cited = TRANSPORT_SEEDS.flatMap((seed) =>

@@ -80,8 +80,8 @@ describe('map controller: the quest layers from the quest state (MP.3)', () => {
     expect(gornek?.ref).toMatchObject({ kind: 'spawn', questIds: [questId(1), questId(2)] });
     expect(s.controller.labelFor(gornek?.ref ?? { kind: 'surface', mapId: 1 as never })).toMatch(/^After step 1: Gornek: 2 quests: Gather: available \(/);
     const notes = s.controller.getStatus().layers.find((layer) => layer.layer === 'available-quests')?.notes ?? [];
-    expect(notes[0]).toBe('After step 1: 2 quests available, 0 may be available (uncertain) and 0 need a prerequisite, open to an Orc Warrior (dataset quests).');
-    expect(notes[1]).toMatch(/^Not drawn: 0 unlock within 3 levels, 0 are low level, 0 are in the log \(turn-ins\) and 0 are done\.$/);
+    expect(notes[0]).toBe('After step 1: 2 quests available, 0 may be available (uncertain) and 0 need a prerequisite are drawn, open to an Orc Warrior (dataset quests).');
+    expect(notes[1]).toBe('Not drawn unless their rows are shown: 0 unlock within 3 levels and 0 are low level. Not drawn as givers: 0 are in the log (turn-ins) and 0 are done.');
   });
 
   it('moves quests to the turn-ins once accepted, each with its turn-in state, and the numbers follow the route order', () => {

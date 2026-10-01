@@ -786,9 +786,11 @@ ones counted apart. Click opens the popover listing them (WoWF-QRP's checklist i
   Forever nodes. `data.md` §3 matched all 63 against all 100 `TaxiNodes` rows; the committed file keeps
   only the rows on paid paths, so Vesprystus (Rut'theran Village, row 27) and the two Nighthaven druid
   masters (rows 62 and 63) have no node (`report.client.unmatchedMasters`: NPCs 3838, 11798, 11800).
-  Once the file loads, their pins are hidden (`map-places.ts`), and their Cost-0 paths stay on TIME-5.
-  Open for the architect (review finding TR-10): add those rows and their non-transport Cost-0 paths to
-  the file, or draw unmatched masters from the dataset with a note. Only nodes the character's side may use (its own and both-sides nodes);
+  Once the file loads, they are drawn where the dataset puts them, with the dataset's faction (it
+  records no class restriction), and a note under Flight points names them and says why; their
+  Cost-0 paths stay on TIME-5 (review finding TR-10, built in the rework follow-up: the second of
+  the two options, `map-places.ts`). Adding those rows and their non-transport Cost-0 paths to the
+  file is not done. Only nodes the character's side may use (its own and both-sides nodes);
   the other side's are hidden and counted. The side is from `TaxiNodes.Flags` (INFERRED decode, said in
   the hover).
 - **Known to the route or not** (review MP-R13): known after the active step is
@@ -1996,8 +1998,14 @@ The groups follow. The counts in `07-panel-light-dark-search.png` are the mock's
   MapGenie's.
   - Counts are not per view, which would churn with every pan.
   - The tooltip adds "k in view", computed at `moveend`.
-- **Sources:** quest rows count quests from the `QuestStateModel` at the active step (§7.1). Place
-  and service rows count the layer builders' items.
+- **Sources:** quest rows count quests from the `QuestStateModel` at the active step (§7.1), as
+  the map draws them: the quests the level ceiling keeps off the map (D-050 item 3, an assumption)
+  are not in a row's count or its givers. The count shows how many more it holds back in words
+  ("45 · 37 givers · +42 held"), the tooltip and the accessible name say what that means ("42 more
+  above the level ceiling not drawn (an assumption)"), and the lists still show them (rework
+  follow-up F-08). The givers' notes are worded from the same drawn counts: the first note gives
+  the drawn rows and how many more the ceiling holds back in them, and the second itemises every
+  row's held-back quests, so a row's count and its notes never disagree (review C-04). Place and service rows count the layer builders' items.
 - **Names:** every row's unit is in its accessible name ("Available: 209 quests at 118 givers after
   step 1425, shown").
 - **Without route state:** "open to an Orc Warrior (no route state yet)", as §7.1.

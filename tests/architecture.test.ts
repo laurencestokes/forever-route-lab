@@ -1179,7 +1179,8 @@ describe('masks (D-012)', () => {
 });
 
 describe('path hygiene (ARCHITECTURE §17)', () => {
-  it('no tracked or untracked non-ignored text file contains a user-profile path or SavedVariables content', () => {
+  // Reads every tracked and untracked non-ignored file: 6.7 to 9.6 s under full-suite load, over the default 5 s (follow-up F-12).
+  it('no tracked or untracked non-ignored text file contains a user-profile path or SavedVariables content', { timeout: 60_000 }, () => {
     const files = [...new Set([...git(['ls-files', '-z']), ...git(['ls-files', '-z', '--others', '--exclude-standard'])])].sort();
     expect(files.length).toBeGreaterThan(0);
     const violations: string[] = [];

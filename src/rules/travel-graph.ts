@@ -98,8 +98,8 @@ export interface TransportDock {
   /**
    * For an inferred dock (a client berth, in the water beside its pier): where walks to and from
    * the dock end, the nearest walkable navmesh point within `BOARDING_RADIUS_YD` of the berth
-   * (TIME-7, src/rules/berths.ts); the step between it and the berth is part of the wait. Absent
-   * for other docks and for a berth without one: walks then end at `point`.
+   * (TIME-7, src/rules/berths.ts); the step between it and the berth is timed at run speed (D-052
+   * item 1). Absent for other docks and for a berth without one: walks then end at `point`.
    */
   readonly boarding?: DockBoarding;
 }

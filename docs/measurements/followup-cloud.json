@@ -1,0 +1,4978 @@
+{
+  "$comment": [
+    "Cloud container, 4 CPUs, painted style only, relative A/B. The rework follow-up’s browser stage (docs/reviews/rework-followup.md findings F-03, F-04, F-05 and F-10), measured 2026-10-01 with the committed harness tests/bench/browser/ (its README has every definition and the protocol).",
+    "Builds: pre = 95e84cc (the designs commit, the last before the rework), main = eff4341 (the map and UI rework), base = the rework-followup branch as this stage found it (0a8c044 plus the uncommitted changes the earlier follow-up stages left in the working tree), cur = base plus this stage’s F-03 changes. Each built with pnpm build in its own worktree (its own pnpm install --frozen-lockfile), a copy of its dist/ served by its own vite preview.",
+    "Interleaved: in round r the trees run in an order rotated by r, part by part (first view, sample route, 10,000 steps, pans), so each part of every tree runs close in time. Each figure is the median over the rounds of the per-round value (an interaction figure’s per-round value is the median, or p90, of its 14 selections or 12 edits), with the minimum, maximum and every per-round value.",
+    "The absolute figures are this machine’s and do not compare with the owner machine’s (docs/measurements/rework-speed-d050.json, map-atlas.json): there is no GPU here, so Chromium composites and rasterises in software, and frames, paints and first art take several times as long, although the CPU probe (a 2e7 square-root loop in the page at 1x, recorded per session: machine.cpuProbeMs) is close to the owner’s desktop’s 38-40 ms. Only ratios between builds measured interleaved here mean anything.",
+    "The minimap style was not measured: its tiles are a release-asset pack that is not in git (D-049 O14) and not on this machine, so it is owed on the owner’s machine (pnpm maps:minimap:fetch, pnpm build, then run.ts --style minimap)."
+  ],
+  "label": "cloud container, 4 CPUs, painted style only, relative A/B",
+  "date": "2026-10-01",
+  "machine": {
+    "cpus": 4,
+    "cpuModel": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "platform": "linux",
+    "node": "v22.22.0",
+    "os": "Linux (cloud container)",
+    "gpu": "none (no /dev/dri): chrome://gpu reports compositing and rasterisation as software only, on SwiftShader",
+    "cpuProbeMs": {
+      "median": 39.5,
+      "min": 37,
+      "max": 42.3,
+      "n": 60
+    },
+    "loadAverage1m": {
+      "median": 1.58,
+      "min": 0.91,
+      "max": 4.28
+    }
+  },
+  "browser": {
+    "version": "141.0.7390.37",
+    "launch": {
+      "headless": true,
+      "channel": "chromium"
+    },
+    "playwright": "1.56.1"
+  },
+  "harness": {
+    "path": "tests/bench/browser/",
+    "commands": [
+      "pnpm exec tsx tests/bench/browser/make-project.ts",
+      "pnpm exec tsx tests/bench/browser/run.ts --tree pre=<worktree of 95e84cc> --tree main=<worktree of eff4341> --tree base=<worktree of the branch without the F-03 changes> --tree cur=. --rounds 5",
+      "pnpm exec tsx tests/bench/browser/table.ts <out>/summary.json"
+    ],
+    "definitions": "tests/bench/browser/README.md, What it measures"
+  },
+  "protocol": {
+    "viewport": {
+      "width": 1366,
+      "height": 768,
+      "deviceScaleFactor": 1.5
+    },
+    "network": {
+      "latencyMs": 20,
+      "downloadBitsPerSecond": 50000000,
+      "uploadBitsPerSecond": 10000000
+    },
+    "rounds": 5,
+    "parts": [
+      "first-view",
+      "sample",
+      "ten-k",
+      "pans"
+    ],
+    "throttles": [
+      1,
+      4
+    ],
+    "style": "painted",
+    "selectionsPerThrottle": 14,
+    "editsPerThrottle": 12,
+    "quiet": {
+      "x1": {
+        "quietMs": 500,
+        "maxMs": 6000
+      },
+      "x4": {
+        "quietMs": 1100,
+        "maxMs": 12000
+      }
+    },
+    "sample": "A first visit (the sample project): Go to zone Durotar, the route list at its top; 14 clicks on rows wholly on screen (every other row, then those between) after one unmeasured click; 12 edits (Alt+Down, Alt+Up) on the sixth visible row’s step; at 1x then 4x in the same page.",
+    "tenK": "The 10,000-step project (make-project.ts) imported through the Import dialog, every walking leg computed first; Go to zone Stranglethorn Vale, the list scrolled so that step 5,001 is its first row; clicks and edits as for the sample route.",
+    "pans": "The 10,000-step project, Go to zone Durotar, at 4x: five drags of about 0.5 s and one long drag of about 3 s, each with its settle; frame intervals, long tasks and the app’s sync times over the five drags (drags) and the whole (longDrag).",
+    "firstView": "A first visit, cold cache, CPU throttled from the first byte, 50 Mbit/s down, 10 up, 20 ms round trip; resource timing read once the opening view has settled, before anything touches the map.",
+    "paintedAt": "Map work inside an animation-frame callback is drawn by that frame (its end); work in a task by the next frame (that frame’s first callback). Both leave out the frame’s own style, layout and paint."
+  },
+  "builds": [
+    {
+      "label": "pre",
+      "head": "95e84cc4d85664d6900bd678acbcbaa5f5c1c8ea",
+      "changes": 1,
+      "changesSha256": "237db136548b533af2943cc25f095a4254638fa0b34fdbd220ebc4d5158f0103",
+      "entryGzipKb": 237.67,
+      "buildOk": true,
+      "commit": "95e84cc",
+      "what": "pre-rework: the designs commit (2026-09-27), the last commit before the map and UI rework: one painted art image per zone, no atlas, no quest-state pins. Its worktree also holds one untracked bench file of another stage, outside the build."
+    },
+    {
+      "label": "main",
+      "head": "eff4341084135bde55b54f62e10a1399858ae2ee",
+      "changes": 0,
+      "changesSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "entryGzipKb": 248.98,
+      "buildOk": true,
+      "commit": "eff4341",
+      "what": "the map and UI rework (main)"
+    },
+    {
+      "label": "base",
+      "head": "0a8c04467abba9813ac7a919ef8235ee12540e1f",
+      "changes": 34,
+      "changesSha256": "1c9260084c01a6598457677fb489e085ffd671d2ed2aaaa18c63d93f4301a704",
+      "entryGzipKb": 247.5,
+      "buildOk": true,
+      "what": "rework-followup as this stage found it: 0a8c044 (the follow-up commit 90248bb and a .gitignore change) plus the uncommitted changes the earlier follow-up stages left in the working tree (their fixes for F-01, F-07, F-08, F-11, F-12 and others), without this stage’s F-03 changes"
+    },
+    {
+      "label": "cur",
+      "head": "0a8c04467abba9813ac7a919ef8235ee12540e1f",
+      "changes": 37,
+      "changesSha256": "cdc118bff01a7d8c55f05319160df08bff58380e7ab6f2ee60a0e9892ba30472",
+      "entryGzipKb": 247.51,
+      "buildOk": true,
+      "what": "base plus this stage’s F-03 changes (src/app/quest-state.ts, derived-pipeline.ts, same-state.ts, src/ui/shell/PanelContent.tsx, with tests)"
+    }
+  ],
+  "project10000": {
+    "sha256": "c1c8fceb751767b2b8faf5a204b967910cdd140f0eeaaa9adab34920f25ce327",
+    "steps": 10000,
+    "composition": {
+      "accept": 620,
+      "complete": 711,
+      "turnin": 620,
+      "travel": 7987,
+      "note": 62,
+      "quests": 620,
+      "paddingWaypoints": 6680
+    },
+    "basis": "tests/bench/browser/make-project.ts: the benches’ realistic route inside the committed sample project (UR.2b’s project)"
+  },
+  "results": {
+    "firstView.x1.allMapImageBytes": {
+      "pre": {
+        "median": 402283,
+        "min": 402283,
+        "max": 402283,
+        "values": [
+          402283,
+          402283,
+          402283,
+          402283,
+          402283
+        ]
+      },
+      "main": {
+        "median": 234662,
+        "min": 234662,
+        "max": 234662,
+        "values": [
+          234662,
+          234662,
+          234662,
+          234662,
+          234662
+        ]
+      },
+      "base": {
+        "median": 247756,
+        "min": 247756,
+        "max": 247756,
+        "values": [
+          247756,
+          247756,
+          247756,
+          247756,
+          247756
+        ]
+      },
+      "cur": {
+        "median": 247756,
+        "min": 247756,
+        "max": 247756,
+        "values": [
+          247756,
+          247756,
+          247756,
+          247756,
+          247756
+        ]
+      },
+      "ratios": {
+        "cur/pre": 0.616,
+        "cur/main": 1.056,
+        "cur/base": 1.0,
+        "base/pre": 0.616,
+        "main/pre": 0.583
+      }
+    },
+    "firstView.x1.firstArtAfterChunkMs": {
+      "pre": {
+        "median": 983.5,
+        "min": 904,
+        "max": 1253.5,
+        "values": [
+          976.1,
+          1096.3,
+          904,
+          1253.5,
+          983.5
+        ]
+      },
+      "main": {
+        "median": 1096.1,
+        "min": 1010.1,
+        "max": 1478.6,
+        "values": [
+          1011.1,
+          1478.6,
+          1010.1,
+          1141.3,
+          1096.1
+        ]
+      },
+      "base": {
+        "median": 919.9,
+        "min": 874.8,
+        "max": 1044.8,
+        "values": [
+          874.8,
+          1044.8,
+          919.9,
+          1043.1,
+          894.4
+        ]
+      },
+      "cur": {
+        "median": 1016.2,
+        "min": 910.6,
+        "max": 1027.4,
+        "values": [
+          910.6,
+          1016.2,
+          1027.4,
+          975.9,
+          1023.6
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.033,
+        "cur/main": 0.927,
+        "cur/base": 1.105,
+        "base/pre": 0.935,
+        "main/pre": 1.114
+      }
+    },
+    "firstView.x1.firstArtEndMs": {
+      "pre": {
+        "median": 1248.7,
+        "min": 1148.6,
+        "max": 1528.1,
+        "values": [
+          1220.1,
+          1330.8,
+          1148.6,
+          1528.1,
+          1248.7
+        ]
+      },
+      "main": {
+        "median": 1351.2,
+        "min": 1263.9,
+        "max": 1799.6,
+        "values": [
+          1282.1,
+          1799.6,
+          1263.9,
+          1433.8,
+          1351.2
+        ]
+      },
+      "base": {
+        "median": 1169.3,
+        "min": 1132.6,
+        "max": 1322.1,
+        "values": [
+          1132.6,
+          1301.8,
+          1169.3,
+          1322.1,
+          1138.8
+        ]
+      },
+      "cur": {
+        "median": 1265.6,
+        "min": 1160.3,
+        "max": 1281.8,
+        "values": [
+          1160.3,
+          1265.6,
+          1261.5,
+          1281.8,
+          1270.4
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.014,
+        "cur/main": 0.937,
+        "cur/base": 1.082,
+        "base/pre": 0.936,
+        "main/pre": 1.082
+      }
+    },
+    "firstView.x1.firstTileRequestMs": {
+      "pre": {
+        "median": 1137.1,
+        "min": 1041.9,
+        "max": 1412.3,
+        "values": [
+          1102.3,
+          1204.5,
+          1041.9,
+          1412.3,
+          1137.1
+        ]
+      },
+      "main": {
+        "median": 1314.5,
+        "min": 1232.6,
+        "max": 1762.9,
+        "values": [
+          1251.9,
+          1762.9,
+          1232.6,
+          1401.4,
+          1314.5
+        ]
+      },
+      "base": {
+        "median": 1142.5,
+        "min": 1107,
+        "max": 1294.4,
+        "values": [
+          1107,
+          1272.9,
+          1142.5,
+          1294.4,
+          1113.5
+        ]
+      },
+      "cur": {
+        "median": 1235.8,
+        "min": 1130.4,
+        "max": 1238.5,
+        "values": [
+          1130.4,
+          1235.8,
+          1235,
+          1238.5,
+          1238.2
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.087,
+        "cur/main": 0.94,
+        "cur/base": 1.082,
+        "base/pre": 1.005,
+        "main/pre": 1.156
+      }
+    },
+    "firstView.x1.firstViewBytes": {
+      "pre": {
+        "median": 183520,
+        "min": 183520,
+        "max": 183520,
+        "values": [
+          183520,
+          183520,
+          183520,
+          183520,
+          183520
+        ]
+      },
+      "main": {
+        "median": 121288,
+        "min": 121288,
+        "max": 121288,
+        "values": [
+          121288,
+          121288,
+          121288,
+          121288,
+          121288
+        ]
+      },
+      "base": {
+        "median": 134382,
+        "min": 134382,
+        "max": 134382,
+        "values": [
+          134382,
+          134382,
+          134382,
+          134382,
+          134382
+        ]
+      },
+      "cur": {
+        "median": 134382,
+        "min": 134382,
+        "max": 134382,
+        "values": [
+          134382,
+          134382,
+          134382,
+          134382,
+          134382
+        ]
+      },
+      "ratios": {
+        "cur/pre": 0.732,
+        "cur/main": 1.108,
+        "cur/base": 1.0,
+        "base/pre": 0.732,
+        "main/pre": 0.661
+      }
+    },
+    "firstView.x1.workspaceReadyMs": {
+      "pre": {
+        "median": 781.6,
+        "min": 716.7,
+        "max": 1007.4,
+        "values": [
+          748.7,
+          852.3,
+          716.7,
+          1007.4,
+          781.6
+        ]
+      },
+      "main": {
+        "median": 744.9,
+        "min": 720.5,
+        "max": 1065.4,
+        "values": [
+          744.9,
+          1065.4,
+          720.5,
+          820.5,
+          733.1
+        ]
+      },
+      "base": {
+        "median": 741.2,
+        "min": 723.3,
+        "max": 864.3,
+        "values": [
+          724.7,
+          799.9,
+          741.2,
+          864.3,
+          723.3
+        ]
+      },
+      "cur": {
+        "median": 802.1,
+        "min": 717.4,
+        "max": 836.6,
+        "values": [
+          717.4,
+          836.6,
+          791.7,
+          817.1,
+          802.1
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.026,
+        "cur/main": 1.077,
+        "cur/base": 1.082,
+        "base/pre": 0.948,
+        "main/pre": 0.953
+      }
+    },
+    "firstView.x4.allMapImageBytes": {
+      "pre": {
+        "median": 402283,
+        "min": 402283,
+        "max": 402283,
+        "values": [
+          402283,
+          402283,
+          402283,
+          402283,
+          402283
+        ]
+      },
+      "main": {
+        "median": 234662,
+        "min": 234662,
+        "max": 234662,
+        "values": [
+          234662,
+          234662,
+          234662,
+          234662,
+          234662
+        ]
+      },
+      "base": {
+        "median": 247756,
+        "min": 247756,
+        "max": 247756,
+        "values": [
+          247756,
+          247756,
+          247756,
+          247756,
+          247756
+        ]
+      },
+      "cur": {
+        "median": 247756,
+        "min": 247756,
+        "max": 247756,
+        "values": [
+          247756,
+          247756,
+          247756,
+          247756,
+          247756
+        ]
+      },
+      "ratios": {
+        "cur/pre": 0.616,
+        "cur/main": 1.056,
+        "cur/base": 1.0,
+        "base/pre": 0.616,
+        "main/pre": 0.583
+      }
+    },
+    "firstView.x4.firstArtAfterChunkMs": {
+      "pre": {
+        "median": 4098.2,
+        "min": 3604.7,
+        "max": 4670.5,
+        "values": [
+          3604.7,
+          4670.5,
+          4098.2,
+          3741.4,
+          4172.2
+        ]
+      },
+      "main": {
+        "median": 4617.5,
+        "min": 4488.2,
+        "max": 5133.4,
+        "values": [
+          4617.5,
+          4488.2,
+          4549.1,
+          5133.4,
+          4765.8
+        ]
+      },
+      "base": {
+        "median": 4641.6,
+        "min": 4064.4,
+        "max": 5386.1,
+        "values": [
+          4064.4,
+          5386.1,
+          4356.6,
+          4641.6,
+          4654.3
+        ]
+      },
+      "cur": {
+        "median": 4154,
+        "min": 3293.6,
+        "max": 4832.4,
+        "values": [
+          4154,
+          4832.4,
+          4661.8,
+          3293.6,
+          4148.5
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.014,
+        "cur/main": 0.9,
+        "cur/base": 0.895,
+        "base/pre": 1.133,
+        "main/pre": 1.127
+      }
+    },
+    "firstView.x4.firstArtEndMs": {
+      "pre": {
+        "median": 4677,
+        "min": 4323.3,
+        "max": 5360.8,
+        "values": [
+          4323.3,
+          5360.8,
+          4677,
+          4362.4,
+          4746.5
+        ]
+      },
+      "main": {
+        "median": 5289.7,
+        "min": 5116.2,
+        "max": 5798.7,
+        "values": [
+          5217.6,
+          5116.2,
+          5289.7,
+          5798.7,
+          5349.9
+        ]
+      },
+      "base": {
+        "median": 5200.4,
+        "min": 4715.9,
+        "max": 6152.9,
+        "values": [
+          4715.9,
+          6152.9,
+          4996.6,
+          5200.4,
+          5299.7
+        ]
+      },
+      "cur": {
+        "median": 4825.6,
+        "min": 3892.8,
+        "max": 5472,
+        "values": [
+          4750.3,
+          5472,
+          5365.3,
+          3892.8,
+          4825.6
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.032,
+        "cur/main": 0.912,
+        "cur/base": 0.928,
+        "base/pre": 1.112,
+        "main/pre": 1.131
+      }
+    },
+    "firstView.x4.firstTileRequestMs": {
+      "pre": {
+        "median": 4601,
+        "min": 4232.9,
+        "max": 5268.3,
+        "values": [
+          4232.9,
+          5268.3,
+          4601,
+          4265.1,
+          4652.4
+        ]
+      },
+      "main": {
+        "median": 5253.4,
+        "min": 5067.8,
+        "max": 5755.8,
+        "values": [
+          5188.4,
+          5067.8,
+          5253.4,
+          5755.8,
+          5322.6
+        ]
+      },
+      "base": {
+        "median": 5164,
+        "min": 4688.3,
+        "max": 6127,
+        "values": [
+          4688.3,
+          6127,
+          4968.1,
+          5164,
+          5274.6
+        ]
+      },
+      "cur": {
+        "median": 4798.5,
+        "min": 3856.2,
+        "max": 5445.8,
+        "values": [
+          4722.7,
+          5445.8,
+          5339.9,
+          3856.2,
+          4798.5
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.043,
+        "cur/main": 0.913,
+        "cur/base": 0.929,
+        "base/pre": 1.122,
+        "main/pre": 1.142
+      }
+    },
+    "firstView.x4.firstViewBytes": {
+      "pre": {
+        "median": 183520,
+        "min": 183520,
+        "max": 183520,
+        "values": [
+          183520,
+          183520,
+          183520,
+          183520,
+          183520
+        ]
+      },
+      "main": {
+        "median": 121288,
+        "min": 121288,
+        "max": 121288,
+        "values": [
+          121288,
+          121288,
+          121288,
+          121288,
+          121288
+        ]
+      },
+      "base": {
+        "median": 134382,
+        "min": 134382,
+        "max": 134382,
+        "values": [
+          134382,
+          134382,
+          134382,
+          134382,
+          134382
+        ]
+      },
+      "cur": {
+        "median": 134382,
+        "min": 134382,
+        "max": 134382,
+        "values": [
+          134382,
+          134382,
+          134382,
+          134382,
+          134382
+        ]
+      },
+      "ratios": {
+        "cur/pre": 0.732,
+        "cur/main": 1.108,
+        "cur/base": 1.0,
+        "base/pre": 0.732,
+        "main/pre": 0.661
+      }
+    },
+    "firstView.x4.workspaceReadyMs": {
+      "pre": {
+        "median": 2778.3,
+        "min": 2291.4,
+        "max": 2995.5,
+        "values": [
+          2673,
+          2995.5,
+          2778.3,
+          2291.4,
+          2783.8
+        ]
+      },
+      "main": {
+        "median": 2667.1,
+        "min": 2554.9,
+        "max": 2850.9,
+        "values": [
+          2576.2,
+          2554.9,
+          2850.9,
+          2667.1,
+          2725
+        ]
+      },
+      "base": {
+        "median": 2827.9,
+        "min": 2252.5,
+        "max": 3478.7,
+        "values": [
+          2659.5,
+          3478.7,
+          2881.9,
+          2252.5,
+          2827.9
+        ]
+      },
+      "cur": {
+        "median": 2875.8,
+        "min": 2167.5,
+        "max": 2995.8,
+        "values": [
+          2688.4,
+          2946,
+          2995.8,
+          2167.5,
+          2875.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.035,
+        "cur/main": 1.078,
+        "cur/base": 1.017,
+        "base/pre": 1.018,
+        "main/pre": 0.96
+      }
+    },
+    "pans.x4.drags.max": {
+      "pre": {
+        "median": 433.2,
+        "min": 400,
+        "max": 516.6,
+        "values": [
+          400,
+          516.6,
+          433.2,
+          516.6,
+          416.6
+        ]
+      },
+      "main": {
+        "median": 683.3,
+        "min": 483.2,
+        "max": 883.2,
+        "values": [
+          716.6,
+          883.2,
+          483.2,
+          683.2,
+          683.3
+        ]
+      },
+      "base": {
+        "median": 733.3,
+        "min": 650,
+        "max": 850,
+        "values": [
+          666.7,
+          850,
+          650,
+          733.3,
+          800
+        ]
+      },
+      "cur": {
+        "median": 633.3,
+        "min": 583.3,
+        "max": 783.3,
+        "values": [
+          783.3,
+          700,
+          616.6,
+          583.3,
+          633.3
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.462,
+        "cur/main": 0.927,
+        "cur/base": 0.864,
+        "base/pre": 1.693,
+        "main/pre": 1.577
+      }
+    },
+    "pans.x4.drags.over33": {
+      "pre": {
+        "median": 29,
+        "min": 23,
+        "max": 31,
+        "values": [
+          29,
+          31,
+          29,
+          23,
+          26
+        ]
+      },
+      "main": {
+        "median": 74,
+        "min": 72,
+        "max": 92,
+        "values": [
+          92,
+          74,
+          72,
+          74,
+          86
+        ]
+      },
+      "base": {
+        "median": 83,
+        "min": 75,
+        "max": 88,
+        "values": [
+          83,
+          75,
+          76,
+          84,
+          88
+        ]
+      },
+      "cur": {
+        "median": 68,
+        "min": 65,
+        "max": 79,
+        "values": [
+          68,
+          78,
+          65,
+          68,
+          79
+        ]
+      },
+      "ratios": {
+        "cur/pre": 2.345,
+        "cur/main": 0.919,
+        "cur/base": 0.819,
+        "base/pre": 2.862,
+        "main/pre": 2.552
+      }
+    },
+    "pans.x4.drags.p95": {
+      "pre": {
+        "median": 16.8,
+        "min": 16.8,
+        "max": 16.8,
+        "values": [
+          16.8,
+          16.8,
+          16.8,
+          16.8,
+          16.8
+        ]
+      },
+      "main": {
+        "median": 50,
+        "min": 33.4,
+        "max": 50,
+        "values": [
+          50,
+          50,
+          33.4,
+          49.9,
+          50
+        ]
+      },
+      "base": {
+        "median": 49.9,
+        "min": 33.4,
+        "max": 50,
+        "values": [
+          49.9,
+          33.4,
+          50,
+          33.4,
+          50
+        ]
+      },
+      "cur": {
+        "median": 33.4,
+        "min": 33.4,
+        "max": 49.9,
+        "values": [
+          49.9,
+          33.4,
+          33.4,
+          33.4,
+          33.4
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.988,
+        "cur/main": 0.668,
+        "cur/base": 0.669,
+        "base/pre": 2.97,
+        "main/pre": 2.976
+      }
+    },
+    "pans.x4.drags.p99": {
+      "pre": {
+        "median": 266.6,
+        "min": 249.9,
+        "max": 333.4,
+        "values": [
+          266.6,
+          333.4,
+          249.9,
+          283.4,
+          250
+        ]
+      },
+      "main": {
+        "median": 483.4,
+        "min": 366.7,
+        "max": 533.3,
+        "values": [
+          466.7,
+          516.6,
+          366.7,
+          483.4,
+          533.3
+        ]
+      },
+      "base": {
+        "median": 483.3,
+        "min": 450,
+        "max": 500,
+        "values": [
+          483.3,
+          450,
+          500,
+          483.3,
+          500
+        ]
+      },
+      "cur": {
+        "median": 466.6,
+        "min": 433.4,
+        "max": 516.6,
+        "values": [
+          516.6,
+          483.4,
+          466.6,
+          433.4,
+          466.6
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.75,
+        "cur/main": 0.965,
+        "cur/base": 0.965,
+        "base/pre": 1.813,
+        "main/pre": 1.813
+      }
+    },
+    "pans.x4.longDrag.p99": {
+      "pre": {
+        "median": 33.4,
+        "min": 33.4,
+        "max": 33.4,
+        "values": [
+          33.4,
+          33.4,
+          33.4,
+          33.4,
+          33.4
+        ]
+      },
+      "main": {
+        "median": 50,
+        "min": 50,
+        "max": 66.6,
+        "values": [
+          66.6,
+          50,
+          50,
+          50,
+          50
+        ]
+      },
+      "base": {
+        "median": 50.1,
+        "min": 50,
+        "max": 66.6,
+        "values": [
+          66.6,
+          50,
+          50.1,
+          66.6,
+          50.1
+        ]
+      },
+      "cur": {
+        "median": 66.6,
+        "min": 50,
+        "max": 66.7,
+        "values": [
+          66.6,
+          66.7,
+          66.7,
+          50,
+          50
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.994,
+        "cur/main": 1.332,
+        "cur/base": 1.329,
+        "base/pre": 1.5,
+        "main/pre": 1.497
+      }
+    },
+    "pans.x4.longTasks.count": {
+      "pre": {
+        "median": 32,
+        "min": 26,
+        "max": 34,
+        "values": [
+          34,
+          32,
+          33,
+          32,
+          26
+        ]
+      },
+      "main": {
+        "median": 53,
+        "min": 35,
+        "max": 56,
+        "values": [
+          55,
+          56,
+          35,
+          52,
+          53
+        ]
+      },
+      "base": {
+        "median": 52,
+        "min": 41,
+        "max": 62,
+        "values": [
+          56,
+          41,
+          62,
+          49,
+          52
+        ]
+      },
+      "cur": {
+        "median": 52,
+        "min": 44,
+        "max": 62,
+        "values": [
+          53,
+          62,
+          52,
+          44,
+          46
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.625,
+        "cur/main": 0.981,
+        "cur/base": 1.0,
+        "base/pre": 1.625,
+        "main/pre": 1.656
+      }
+    },
+    "pans.x4.longTasks.maxMs": {
+      "pre": {
+        "median": 337,
+        "min": 305,
+        "max": 355,
+        "values": [
+          337,
+          348,
+          305,
+          325,
+          355
+        ]
+      },
+      "main": {
+        "median": 604,
+        "min": 459,
+        "max": 720,
+        "values": [
+          619,
+          720,
+          459,
+          604,
+          580
+        ]
+      },
+      "base": {
+        "median": 589,
+        "min": 522,
+        "max": 683,
+        "values": [
+          576,
+          522,
+          589,
+          635,
+          683
+        ]
+      },
+      "cur": {
+        "median": 561,
+        "min": 486,
+        "max": 671,
+        "values": [
+          671,
+          575,
+          561,
+          486,
+          549
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.665,
+        "cur/main": 0.929,
+        "cur/base": 0.952,
+        "base/pre": 1.748,
+        "main/pre": 1.792
+      }
+    },
+    "pans.x4.longTasks.over50": {
+      "pre": {
+        "median": 32,
+        "min": 26,
+        "max": 33,
+        "values": [
+          33,
+          32,
+          32,
+          32,
+          26
+        ]
+      },
+      "main": {
+        "median": 52,
+        "min": 35,
+        "max": 54,
+        "values": [
+          52,
+          54,
+          35,
+          51,
+          52
+        ]
+      },
+      "base": {
+        "median": 49,
+        "min": 41,
+        "max": 59,
+        "values": [
+          51,
+          41,
+          59,
+          47,
+          49
+        ]
+      },
+      "cur": {
+        "median": 52,
+        "min": 42,
+        "max": 60,
+        "values": [
+          53,
+          60,
+          52,
+          42,
+          45
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.625,
+        "cur/main": 1.0,
+        "cur/base": 1.061,
+        "base/pre": 1.531,
+        "main/pre": 1.625
+      }
+    },
+    "pans.x4.syncMs.max": {
+      "pre": {
+        "median": 78.5,
+        "min": 58.7,
+        "max": 93.8,
+        "values": [
+          82.2,
+          93.8,
+          70.9,
+          78.5,
+          58.7
+        ]
+      },
+      "main": {
+        "median": 96.8,
+        "min": 78.8,
+        "max": 201,
+        "values": [
+          78.8,
+          100.7,
+          201,
+          96.8,
+          89
+        ]
+      },
+      "base": {
+        "median": 134.5,
+        "min": 87.8,
+        "max": 510.6,
+        "values": [
+          94.5,
+          510.6,
+          134.5,
+          141.5,
+          87.8
+        ]
+      },
+      "cur": {
+        "median": 111.2,
+        "min": 78.9,
+        "max": 173.5,
+        "values": [
+          173.5,
+          171,
+          111.2,
+          78.9,
+          97.4
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.417,
+        "cur/main": 1.149,
+        "cur/base": 0.827,
+        "base/pre": 1.713,
+        "main/pre": 1.233
+      }
+    },
+    "pans.x4.syncMs.median": {
+      "pre": {
+        "median": 47.7,
+        "min": 38.3,
+        "max": 54.4,
+        "values": [
+          54.4,
+          47.7,
+          47.7,
+          48.2,
+          38.3
+        ]
+      },
+      "main": {
+        "median": 59.9,
+        "min": 45.6,
+        "max": 64.4,
+        "values": [
+          58.5,
+          61.7,
+          45.6,
+          64.4,
+          59.9
+        ]
+      },
+      "base": {
+        "median": 54.7,
+        "min": 50.3,
+        "max": 55.9,
+        "values": [
+          55.4,
+          50.3,
+          55.9,
+          54.7,
+          54.3
+        ]
+      },
+      "cur": {
+        "median": 57,
+        "min": 42.7,
+        "max": 67.1,
+        "values": [
+          67.1,
+          57,
+          58.8,
+          42.7,
+          50.1
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.195,
+        "cur/main": 0.952,
+        "cur/base": 1.042,
+        "base/pre": 1.147,
+        "main/pre": 1.256
+      }
+    },
+    "probeMs.pans": {
+      "pre": {
+        "median": 38.7,
+        "min": 37.2,
+        "max": 40.5,
+        "values": [
+          40.1,
+          38.6,
+          40.5,
+          37.2,
+          38.7
+        ]
+      },
+      "main": {
+        "median": 40,
+        "min": 39,
+        "max": 41.4,
+        "values": [
+          39,
+          40,
+          41.4,
+          40.5,
+          39.9
+        ]
+      },
+      "base": {
+        "median": 39.6,
+        "min": 37.8,
+        "max": 41,
+        "values": [
+          37.8,
+          41,
+          38.4,
+          39.6,
+          40.5
+        ]
+      },
+      "cur": {
+        "median": 39.1,
+        "min": 37.7,
+        "max": 39.8,
+        "values": [
+          39.6,
+          37.7,
+          38.6,
+          39.1,
+          39.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.01,
+        "cur/main": 0.978,
+        "cur/base": 0.987,
+        "base/pre": 1.023,
+        "main/pre": 1.034
+      }
+    },
+    "probeMs.sample": {
+      "pre": {
+        "median": 39.6,
+        "min": 37.4,
+        "max": 41,
+        "values": [
+          37.8,
+          37.4,
+          41,
+          40.3,
+          39.6
+        ]
+      },
+      "main": {
+        "median": 38.8,
+        "min": 37.7,
+        "max": 40.5,
+        "values": [
+          38.8,
+          37.7,
+          38.5,
+          40.5,
+          39.5
+        ]
+      },
+      "base": {
+        "median": 40.1,
+        "min": 38.5,
+        "max": 42.3,
+        "values": [
+          40,
+          42.3,
+          40.2,
+          40.1,
+          38.5
+        ]
+      },
+      "cur": {
+        "median": 39.9,
+        "min": 38.3,
+        "max": 40.6,
+        "values": [
+          40.2,
+          38.3,
+          39.4,
+          40.6,
+          39.9
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.008,
+        "cur/main": 1.028,
+        "cur/base": 0.995,
+        "base/pre": 1.013,
+        "main/pre": 0.98
+      }
+    },
+    "probeMs.ten-k": {
+      "pre": {
+        "median": 37.8,
+        "min": 37.4,
+        "max": 39,
+        "values": [
+          37.6,
+          39,
+          37.4,
+          38.9,
+          37.8
+        ]
+      },
+      "main": {
+        "median": 41,
+        "min": 38.3,
+        "max": 41.6,
+        "values": [
+          38.3,
+          41,
+          40.2,
+          41.6,
+          41.5
+        ]
+      },
+      "base": {
+        "median": 38.9,
+        "min": 37,
+        "max": 41.7,
+        "values": [
+          37,
+          39.3,
+          41.7,
+          38.5,
+          38.9
+        ]
+      },
+      "cur": {
+        "median": 40,
+        "min": 38.8,
+        "max": 40.9,
+        "values": [
+          39.1,
+          40.4,
+          40,
+          38.8,
+          40.9
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.058,
+        "cur/main": 0.976,
+        "cur/base": 1.028,
+        "base/pre": 1.029,
+        "main/pre": 1.085
+      }
+    },
+    "sample.x1.edit.derivedMs.median": {
+      "pre": {
+        "median": 32.6,
+        "min": 26.5,
+        "max": 35.1,
+        "values": [
+          26.5,
+          32.6,
+          32.6,
+          35.1,
+          28.5
+        ]
+      },
+      "main": {
+        "median": 56.3,
+        "min": 53.1,
+        "max": 59.1,
+        "values": [
+          56.3,
+          57.5,
+          53.5,
+          59.1,
+          53.1
+        ]
+      },
+      "base": {
+        "median": 56.8,
+        "min": 47.3,
+        "max": 61.4,
+        "values": [
+          50,
+          56.8,
+          58,
+          61.4,
+          47.3
+        ]
+      },
+      "cur": {
+        "median": 55.4,
+        "min": 55.2,
+        "max": 74.4,
+        "values": [
+          55.4,
+          58.2,
+          55.2,
+          74.4,
+          55.2
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.699,
+        "cur/main": 0.984,
+        "cur/base": 0.975,
+        "base/pre": 1.742,
+        "main/pre": 1.727
+      }
+    },
+    "sample.x1.edit.lastMapCallMs.median": {
+      "pre": {
+        "median": 1.8,
+        "min": 1.7,
+        "max": 1.9,
+        "values": [
+          1.8,
+          1.7,
+          1.8,
+          1.9,
+          1.8
+        ]
+      },
+      "main": {
+        "median": 96.2,
+        "min": 89.4,
+        "max": 101.3,
+        "values": [
+          96.2,
+          96.7,
+          89.4,
+          101.3,
+          92.1
+        ]
+      },
+      "base": {
+        "median": 89.5,
+        "min": 77.9,
+        "max": 101.4,
+        "values": [
+          82.1,
+          89.5,
+          92.4,
+          101.4,
+          77.9
+        ]
+      },
+      "cur": {
+        "median": 77.3,
+        "min": 74.4,
+        "max": 104.8,
+        "values": [
+          80.8,
+          76.8,
+          77.3,
+          104.8,
+          74.4
+        ]
+      },
+      "ratios": {
+        "cur/pre": 42.944,
+        "cur/main": 0.804,
+        "cur/base": 0.864,
+        "base/pre": 49.722,
+        "main/pre": 53.444
+      }
+    },
+    "sample.x1.edit.toFirstPaintMs.median": {
+      "pre": {
+        "median": 12.6,
+        "min": 10.8,
+        "max": 14.3,
+        "values": [
+          12.6,
+          12.7,
+          10.8,
+          11.6,
+          14.3
+        ]
+      },
+      "main": {
+        "median": 14.8,
+        "min": 14,
+        "max": 17,
+        "values": [
+          14.7,
+          17,
+          14.8,
+          16.8,
+          14
+        ]
+      },
+      "base": {
+        "median": 15.3,
+        "min": 14,
+        "max": 18.9,
+        "values": [
+          16.4,
+          15.3,
+          14.2,
+          18.9,
+          14
+        ]
+      },
+      "cur": {
+        "median": 16,
+        "min": 14.4,
+        "max": 17.8,
+        "values": [
+          14.8,
+          16,
+          17.8,
+          16.5,
+          14.4
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.27,
+        "cur/main": 1.081,
+        "cur/base": 1.046,
+        "base/pre": 1.214,
+        "main/pre": 1.175
+      }
+    },
+    "sample.x1.edit.toLastPaintMs.median": {
+      "pre": {
+        "median": 12.6,
+        "min": 10.8,
+        "max": 14.3,
+        "values": [
+          12.6,
+          12.7,
+          10.8,
+          11.6,
+          14.3
+        ]
+      },
+      "main": {
+        "median": 96.2,
+        "min": 89.4,
+        "max": 101.3,
+        "values": [
+          96.2,
+          96.7,
+          89.4,
+          101.3,
+          92.1
+        ]
+      },
+      "base": {
+        "median": 89.5,
+        "min": 77.9,
+        "max": 101.4,
+        "values": [
+          82.1,
+          89.5,
+          92.4,
+          101.4,
+          77.9
+        ]
+      },
+      "cur": {
+        "median": 77.3,
+        "min": 74.4,
+        "max": 104.8,
+        "values": [
+          80.8,
+          76.8,
+          77.3,
+          104.8,
+          74.4
+        ]
+      },
+      "ratios": {
+        "cur/pre": 6.135,
+        "cur/main": 0.804,
+        "cur/base": 0.864,
+        "base/pre": 7.103,
+        "main/pre": 7.635
+      }
+    },
+    "sample.x1.edit.toLastPaintMs.p90": {
+      "pre": {
+        "median": 17.1,
+        "min": 16.7,
+        "max": 18.7,
+        "values": [
+          17.1,
+          16.7,
+          16.9,
+          18,
+          18.7
+        ]
+      },
+      "main": {
+        "median": 111.3,
+        "min": 107.8,
+        "max": 127.8,
+        "values": [
+          109.1,
+          127.8,
+          111.3,
+          125,
+          107.8
+        ]
+      },
+      "base": {
+        "median": 102.5,
+        "min": 98.4,
+        "max": 121,
+        "values": [
+          102.5,
+          99.6,
+          109.5,
+          121,
+          98.4
+        ]
+      },
+      "cur": {
+        "median": 93.2,
+        "min": 89.7,
+        "max": 116.5,
+        "values": [
+          92.7,
+          111.4,
+          93.2,
+          116.5,
+          89.7
+        ]
+      },
+      "ratios": {
+        "cur/pre": 5.45,
+        "cur/main": 0.837,
+        "cur/base": 0.909,
+        "base/pre": 5.994,
+        "main/pre": 6.509
+      }
+    },
+    "sample.x1.edit.withoutMapWork": {
+      "pre": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "main": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "cur": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ratios": {}
+    },
+    "sample.x1.selection.lastMapCallMs.median": {
+      "pre": {
+        "median": 19.5,
+        "min": 18.5,
+        "max": 23,
+        "values": [
+          18.5,
+          23,
+          19.5,
+          19.8,
+          19.5
+        ]
+      },
+      "main": {
+        "median": 120.5,
+        "min": 119.7,
+        "max": 125.4,
+        "values": [
+          119.7,
+          122.5,
+          120.5,
+          125.4,
+          120.2
+        ]
+      },
+      "base": {
+        "median": 85.5,
+        "min": 82.8,
+        "max": 90.1,
+        "values": [
+          85.5,
+          84,
+          82.8,
+          90.1,
+          86.8
+        ]
+      },
+      "cur": {
+        "median": 85.1,
+        "min": 80.9,
+        "max": 126.3,
+        "values": [
+          85.1,
+          83.4,
+          90.7,
+          126.3,
+          80.9
+        ]
+      },
+      "ratios": {
+        "cur/pre": 4.364,
+        "cur/main": 0.706,
+        "cur/base": 0.995,
+        "base/pre": 4.385,
+        "main/pre": 6.179
+      }
+    },
+    "sample.x1.selection.toFirstPaintMs.median": {
+      "pre": {
+        "median": 20.2,
+        "min": 18,
+        "max": 22.8,
+        "values": [
+          18,
+          22.8,
+          20.2,
+          20.9,
+          18.2
+        ]
+      },
+      "main": {
+        "median": 17.9,
+        "min": 15.5,
+        "max": 19.3,
+        "values": [
+          19.3,
+          17.2,
+          18.2,
+          17.9,
+          15.5
+        ]
+      },
+      "base": {
+        "median": 15.7,
+        "min": 15,
+        "max": 17.4,
+        "values": [
+          16.5,
+          15.7,
+          15,
+          15.7,
+          17.4
+        ]
+      },
+      "cur": {
+        "median": 16.4,
+        "min": 15.5,
+        "max": 20.2,
+        "values": [
+          17.8,
+          16.4,
+          15.5,
+          20.2,
+          15.6
+        ]
+      },
+      "ratios": {
+        "cur/pre": 0.812,
+        "cur/main": 0.916,
+        "cur/base": 1.045,
+        "base/pre": 0.777,
+        "main/pre": 0.886
+      }
+    },
+    "sample.x1.selection.toLastPaintMs.median": {
+      "pre": {
+        "median": 21.2,
+        "min": 18.5,
+        "max": 23.5,
+        "values": [
+          18.5,
+          23.5,
+          21.2,
+          21.9,
+          19.5
+        ]
+      },
+      "main": {
+        "median": 120.5,
+        "min": 119.7,
+        "max": 125.4,
+        "values": [
+          119.7,
+          122.5,
+          120.5,
+          125.4,
+          120.2
+        ]
+      },
+      "base": {
+        "median": 85.5,
+        "min": 82.8,
+        "max": 90.1,
+        "values": [
+          85.5,
+          84,
+          82.8,
+          90.1,
+          86.8
+        ]
+      },
+      "cur": {
+        "median": 85.1,
+        "min": 80.9,
+        "max": 126.3,
+        "values": [
+          85.1,
+          83.4,
+          90.7,
+          126.3,
+          80.9
+        ]
+      },
+      "ratios": {
+        "cur/pre": 4.014,
+        "cur/main": 0.706,
+        "cur/base": 0.995,
+        "base/pre": 4.033,
+        "main/pre": 5.684
+      }
+    },
+    "sample.x1.selection.toLastPaintMs.p90": {
+      "pre": {
+        "median": 30,
+        "min": 24.8,
+        "max": 32,
+        "values": [
+          24.8,
+          31.3,
+          26.4,
+          32,
+          30
+        ]
+      },
+      "main": {
+        "median": 148.8,
+        "min": 130.6,
+        "max": 161.6,
+        "values": [
+          148.8,
+          156,
+          144.5,
+          161.6,
+          130.6
+        ]
+      },
+      "base": {
+        "median": 108.5,
+        "min": 102.7,
+        "max": 136.2,
+        "values": [
+          108.5,
+          106.7,
+          102.7,
+          136.2,
+          127.7
+        ]
+      },
+      "cur": {
+        "median": 113.6,
+        "min": 95.7,
+        "max": 208.5,
+        "values": [
+          122.7,
+          113.6,
+          102.7,
+          208.5,
+          95.7
+        ]
+      },
+      "ratios": {
+        "cur/pre": 3.787,
+        "cur/main": 0.763,
+        "cur/base": 1.047,
+        "base/pre": 3.617,
+        "main/pre": 4.96
+      }
+    },
+    "sample.x1.selection.withoutMapWork": {
+      "pre": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "main": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "cur": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ratios": {}
+    },
+    "sample.x4.edit.derivedMs.median": {
+      "pre": {
+        "median": 144.8,
+        "min": 135.6,
+        "max": 162.6,
+        "values": [
+          144.8,
+          158.1,
+          162.6,
+          135.6,
+          136.7
+        ]
+      },
+      "main": {
+        "median": 269.7,
+        "min": 255.1,
+        "max": 286.8,
+        "values": [
+          285.3,
+          264.2,
+          269.7,
+          286.8,
+          255.1
+        ]
+      },
+      "base": {
+        "median": 265.8,
+        "min": 259.7,
+        "max": 281.9,
+        "values": [
+          265.8,
+          281.9,
+          263.9,
+          259.7,
+          266.5
+        ]
+      },
+      "cur": {
+        "median": 266.2,
+        "min": 215.4,
+        "max": 300.9,
+        "values": [
+          266.2,
+          300.9,
+          257.4,
+          215.4,
+          276.1
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.838,
+        "cur/main": 0.987,
+        "cur/base": 1.002,
+        "base/pre": 1.836,
+        "main/pre": 1.863
+      }
+    },
+    "sample.x4.edit.lastMapCallMs.median": {
+      "pre": {
+        "median": 7.3,
+        "min": 6.2,
+        "max": 8.7,
+        "values": [
+          6.3,
+          7.5,
+          8.7,
+          6.2,
+          7.3
+        ]
+      },
+      "main": {
+        "median": 492.9,
+        "min": 448.6,
+        "max": 535.1,
+        "values": [
+          515.3,
+          492.9,
+          470.8,
+          535.1,
+          448.6
+        ]
+      },
+      "base": {
+        "median": 417.2,
+        "min": 402.7,
+        "max": 434.5,
+        "values": [
+          428.9,
+          434.5,
+          402.7,
+          417.2,
+          413.8
+        ]
+      },
+      "cur": {
+        "median": 360.7,
+        "min": 329.9,
+        "max": 430.5,
+        "values": [
+          360.7,
+          430.5,
+          357.5,
+          329.9,
+          376
+        ]
+      },
+      "ratios": {
+        "cur/pre": 49.411,
+        "cur/main": 0.732,
+        "cur/base": 0.865,
+        "base/pre": 57.151,
+        "main/pre": 67.521
+      }
+    },
+    "sample.x4.edit.toFirstPaintMs.median": {
+      "pre": {
+        "median": 36,
+        "min": 32.3,
+        "max": 41.1,
+        "values": [
+          32.3,
+          41.1,
+          39,
+          33.2,
+          36
+        ]
+      },
+      "main": {
+        "median": 76.5,
+        "min": 65.5,
+        "max": 80.4,
+        "values": [
+          73.2,
+          76.5,
+          80.4,
+          79.1,
+          65.5
+        ]
+      },
+      "base": {
+        "median": 72.2,
+        "min": 69.3,
+        "max": 81.6,
+        "values": [
+          81.6,
+          79.5,
+          72.2,
+          69.3,
+          69.8
+        ]
+      },
+      "cur": {
+        "median": 76.1,
+        "min": 70.5,
+        "max": 87.8,
+        "values": [
+          78.5,
+          87.8,
+          72.3,
+          70.5,
+          76.1
+        ]
+      },
+      "ratios": {
+        "cur/pre": 2.114,
+        "cur/main": 0.995,
+        "cur/base": 1.054,
+        "base/pre": 2.006,
+        "main/pre": 2.125
+      }
+    },
+    "sample.x4.edit.toLastPaintMs.median": {
+      "pre": {
+        "median": 36,
+        "min": 32.3,
+        "max": 41.1,
+        "values": [
+          32.3,
+          41.1,
+          39,
+          33.2,
+          36
+        ]
+      },
+      "main": {
+        "median": 492.9,
+        "min": 448.6,
+        "max": 535.1,
+        "values": [
+          515.3,
+          492.9,
+          470.8,
+          535.1,
+          448.6
+        ]
+      },
+      "base": {
+        "median": 417.2,
+        "min": 402.7,
+        "max": 434.5,
+        "values": [
+          428.9,
+          434.5,
+          402.7,
+          417.2,
+          413.8
+        ]
+      },
+      "cur": {
+        "median": 360.7,
+        "min": 329.9,
+        "max": 430.5,
+        "values": [
+          360.7,
+          430.5,
+          357.5,
+          329.9,
+          376
+        ]
+      },
+      "ratios": {
+        "cur/pre": 10.019,
+        "cur/main": 0.732,
+        "cur/base": 0.865,
+        "base/pre": 11.589,
+        "main/pre": 13.692
+      }
+    },
+    "sample.x4.edit.toLastPaintMs.p90": {
+      "pre": {
+        "median": 52,
+        "min": 40.5,
+        "max": 100.3,
+        "values": [
+          52,
+          66.3,
+          100.3,
+          44.9,
+          40.5
+        ]
+      },
+      "main": {
+        "median": 556.5,
+        "min": 508.6,
+        "max": 585.3,
+        "values": [
+          556.5,
+          549.9,
+          585.3,
+          575.3,
+          508.6
+        ]
+      },
+      "base": {
+        "median": 510.7,
+        "min": 452.8,
+        "max": 559.1,
+        "values": [
+          559.1,
+          510.7,
+          465.7,
+          452.8,
+          550.1
+        ]
+      },
+      "cur": {
+        "median": 454.4,
+        "min": 405.5,
+        "max": 606.5,
+        "values": [
+          454.4,
+          606.5,
+          415.2,
+          405.5,
+          456.2
+        ]
+      },
+      "ratios": {
+        "cur/pre": 8.738,
+        "cur/main": 0.817,
+        "cur/base": 0.89,
+        "base/pre": 9.821,
+        "main/pre": 10.702
+      }
+    },
+    "sample.x4.edit.withoutMapWork": {
+      "pre": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "main": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "cur": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ratios": {}
+    },
+    "sample.x4.selection.lastMapCallMs.median": {
+      "pre": {
+        "median": 99.9,
+        "min": 97.5,
+        "max": 106,
+        "values": [
+          97.5,
+          100.6,
+          106,
+          99,
+          99.9
+        ]
+      },
+      "main": {
+        "median": 430.5,
+        "min": 408.4,
+        "max": 476.1,
+        "values": [
+          408.4,
+          476.1,
+          430.5,
+          458.8,
+          420.3
+        ]
+      },
+      "base": {
+        "median": 352.8,
+        "min": 327.5,
+        "max": 373,
+        "values": [
+          352.8,
+          373,
+          338,
+          327.5,
+          364.1
+        ]
+      },
+      "cur": {
+        "median": 361.8,
+        "min": 335.2,
+        "max": 449.7,
+        "values": [
+          449.7,
+          361.8,
+          384.8,
+          336,
+          335.2
+        ]
+      },
+      "ratios": {
+        "cur/pre": 3.622,
+        "cur/main": 0.84,
+        "cur/base": 1.026,
+        "base/pre": 3.532,
+        "main/pre": 4.309
+      }
+    },
+    "sample.x4.selection.toFirstPaintMs.median": {
+      "pre": {
+        "median": 97,
+        "min": 93.4,
+        "max": 102.1,
+        "values": [
+          93.4,
+          97.2,
+          102.1,
+          95.6,
+          97
+        ]
+      },
+      "main": {
+        "median": 83.3,
+        "min": 82.2,
+        "max": 91.2,
+        "values": [
+          83.3,
+          83,
+          82.2,
+          91.2,
+          84
+        ]
+      },
+      "base": {
+        "median": 83,
+        "min": 74.3,
+        "max": 94.6,
+        "values": [
+          81,
+          92.9,
+          83,
+          74.3,
+          94.6
+        ]
+      },
+      "cur": {
+        "median": 84,
+        "min": 73.9,
+        "max": 103.3,
+        "values": [
+          103.3,
+          84,
+          86.5,
+          73.9,
+          78.5
+        ]
+      },
+      "ratios": {
+        "cur/pre": 0.866,
+        "cur/main": 1.008,
+        "cur/base": 1.012,
+        "base/pre": 0.856,
+        "main/pre": 0.859
+      }
+    },
+    "sample.x4.selection.toLastPaintMs.median": {
+      "pre": {
+        "median": 99.9,
+        "min": 97.5,
+        "max": 106,
+        "values": [
+          97.5,
+          100.6,
+          106,
+          99,
+          99.9
+        ]
+      },
+      "main": {
+        "median": 430.5,
+        "min": 408.4,
+        "max": 476.1,
+        "values": [
+          408.4,
+          476.1,
+          430.5,
+          458.8,
+          420.3
+        ]
+      },
+      "base": {
+        "median": 352.8,
+        "min": 327.5,
+        "max": 373,
+        "values": [
+          352.8,
+          373,
+          338,
+          327.5,
+          364.1
+        ]
+      },
+      "cur": {
+        "median": 361.8,
+        "min": 335.2,
+        "max": 449.7,
+        "values": [
+          449.7,
+          361.8,
+          384.8,
+          336,
+          335.2
+        ]
+      },
+      "ratios": {
+        "cur/pre": 3.622,
+        "cur/main": 0.84,
+        "cur/base": 1.026,
+        "base/pre": 3.532,
+        "main/pre": 4.309
+      }
+    },
+    "sample.x4.selection.toLastPaintMs.p90": {
+      "pre": {
+        "median": 133.4,
+        "min": 114.7,
+        "max": 148.8,
+        "values": [
+          114.7,
+          131.8,
+          147.1,
+          148.8,
+          133.4
+        ]
+      },
+      "main": {
+        "median": 556.4,
+        "min": 460.6,
+        "max": 587.5,
+        "values": [
+          460.6,
+          556.4,
+          559.2,
+          587.5,
+          501.6
+        ]
+      },
+      "base": {
+        "median": 509.2,
+        "min": 456.5,
+        "max": 575.5,
+        "values": [
+          575.5,
+          514.2,
+          456.5,
+          480.7,
+          509.2
+        ]
+      },
+      "cur": {
+        "median": 470,
+        "min": 428.8,
+        "max": 575.5,
+        "values": [
+          575.5,
+          552.6,
+          470,
+          428.8,
+          440.2
+        ]
+      },
+      "ratios": {
+        "cur/pre": 3.523,
+        "cur/main": 0.845,
+        "cur/base": 0.923,
+        "base/pre": 3.817,
+        "main/pre": 4.171
+      }
+    },
+    "sample.x4.selection.withoutMapWork": {
+      "pre": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "main": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "cur": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ratios": {}
+    },
+    "tenK.x1.edit.derivedMs.median": {
+      "pre": {
+        "median": 103.4,
+        "min": 91.9,
+        "max": 123.4,
+        "values": [
+          103.5,
+          102.1,
+          91.9,
+          123.4,
+          103.4
+        ]
+      },
+      "main": {
+        "median": 131.6,
+        "min": 122.2,
+        "max": 153.4,
+        "values": [
+          122.2,
+          139.8,
+          153.4,
+          131.6,
+          124.9
+        ]
+      },
+      "base": {
+        "median": 128.6,
+        "min": 121.1,
+        "max": 141.3,
+        "values": [
+          132.5,
+          128.6,
+          121.1,
+          141.3,
+          125.8
+        ]
+      },
+      "cur": {
+        "median": 127.4,
+        "min": 118.2,
+        "max": 134.4,
+        "values": [
+          125.1,
+          127.4,
+          118.2,
+          134.1,
+          134.4
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.232,
+        "cur/main": 0.968,
+        "cur/base": 0.991,
+        "base/pre": 1.244,
+        "main/pre": 1.273
+      }
+    },
+    "tenK.x1.edit.lastMapCallMs.median": {
+      "pre": {
+        "median": 88.7,
+        "min": 80.9,
+        "max": 113.1,
+        "values": [
+          87.2,
+          96.5,
+          80.9,
+          113.1,
+          88.7
+        ]
+      },
+      "main": {
+        "median": 113.1,
+        "min": 104.1,
+        "max": 155,
+        "values": [
+          104.1,
+          124.1,
+          155,
+          113.1,
+          112
+        ]
+      },
+      "base": {
+        "median": 115.3,
+        "min": 103.5,
+        "max": 122.6,
+        "values": [
+          118.2,
+          114.8,
+          103.5,
+          122.6,
+          115.3
+        ]
+      },
+      "cur": {
+        "median": 110.3,
+        "min": 108.9,
+        "max": 120.4,
+        "values": [
+          108.9,
+          116.9,
+          110.3,
+          120.4,
+          109.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.244,
+        "cur/main": 0.975,
+        "cur/base": 0.957,
+        "base/pre": 1.3,
+        "main/pre": 1.275
+      }
+    },
+    "tenK.x1.edit.toFirstPaintMs.median": {
+      "pre": {
+        "median": 58.5,
+        "min": 52.5,
+        "max": 70.3,
+        "values": [
+          54.2,
+          62.4,
+          52.5,
+          70.3,
+          58.5
+        ]
+      },
+      "main": {
+        "median": 64.7,
+        "min": 58.5,
+        "max": 87.3,
+        "values": [
+          58.5,
+          73,
+          87.3,
+          58.5,
+          64.7
+        ]
+      },
+      "base": {
+        "median": 63.2,
+        "min": 51.4,
+        "max": 67.6,
+        "values": [
+          67.6,
+          63.2,
+          51.4,
+          66.3,
+          60
+        ]
+      },
+      "cur": {
+        "median": 62.5,
+        "min": 60,
+        "max": 66.9,
+        "values": [
+          63.2,
+          66.9,
+          60,
+          62.5,
+          61.1
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.068,
+        "cur/main": 0.966,
+        "cur/base": 0.989,
+        "base/pre": 1.08,
+        "main/pre": 1.106
+      }
+    },
+    "tenK.x1.edit.toLastPaintMs.median": {
+      "pre": {
+        "median": 88.7,
+        "min": 80.9,
+        "max": 113.1,
+        "values": [
+          87.2,
+          96.5,
+          80.9,
+          113.1,
+          88.7
+        ]
+      },
+      "main": {
+        "median": 113.1,
+        "min": 104.1,
+        "max": 155,
+        "values": [
+          104.1,
+          124.1,
+          155,
+          113.1,
+          112
+        ]
+      },
+      "base": {
+        "median": 115.3,
+        "min": 103.5,
+        "max": 122.6,
+        "values": [
+          118.2,
+          114.8,
+          103.5,
+          122.6,
+          115.3
+        ]
+      },
+      "cur": {
+        "median": 110.3,
+        "min": 108.9,
+        "max": 120.4,
+        "values": [
+          108.9,
+          116.9,
+          110.3,
+          120.4,
+          109.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.244,
+        "cur/main": 0.975,
+        "cur/base": 0.957,
+        "base/pre": 1.3,
+        "main/pre": 1.275
+      }
+    },
+    "tenK.x1.edit.toLastPaintMs.p90": {
+      "pre": {
+        "median": 488.4,
+        "min": 475.7,
+        "max": 516.2,
+        "values": [
+          501.1,
+          488.4,
+          486.9,
+          516.2,
+          475.7
+        ]
+      },
+      "main": {
+        "median": 533.9,
+        "min": 518.1,
+        "max": 559,
+        "values": [
+          518.1,
+          527.8,
+          559,
+          533.9,
+          547.6
+        ]
+      },
+      "base": {
+        "median": 531.8,
+        "min": 505.3,
+        "max": 558.5,
+        "values": [
+          531.8,
+          541.1,
+          525.8,
+          558.5,
+          505.3
+        ]
+      },
+      "cur": {
+        "median": 521.1,
+        "min": 503.9,
+        "max": 545.8,
+        "values": [
+          515.9,
+          503.9,
+          521.1,
+          531.3,
+          545.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.067,
+        "cur/main": 0.976,
+        "cur/base": 0.98,
+        "base/pre": 1.089,
+        "main/pre": 1.093
+      }
+    },
+    "tenK.x1.edit.withoutMapWork": {
+      "pre": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "main": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "cur": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ratios": {}
+    },
+    "tenK.x1.selection.lastMapCallMs.median": {
+      "pre": {
+        "median": 19,
+        "min": 18.4,
+        "max": 19.9,
+        "values": [
+          18.4,
+          19.3,
+          19.9,
+          19,
+          18.4
+        ]
+      },
+      "main": {
+        "median": 126.6,
+        "min": 115.2,
+        "max": 138.9,
+        "values": [
+          115.2,
+          138.9,
+          126.6,
+          128.1,
+          125.5
+        ]
+      },
+      "base": {
+        "median": 118.8,
+        "min": 114.4,
+        "max": 125.8,
+        "values": [
+          119.1,
+          118.8,
+          115.4,
+          114.4,
+          125.8
+        ]
+      },
+      "cur": {
+        "median": 109.4,
+        "min": 102.4,
+        "max": 120,
+        "values": [
+          109.4,
+          119.5,
+          102.4,
+          106.9,
+          120
+        ]
+      },
+      "ratios": {
+        "cur/pre": 5.758,
+        "cur/main": 0.864,
+        "cur/base": 0.921,
+        "base/pre": 6.253,
+        "main/pre": 6.663
+      }
+    },
+    "tenK.x1.selection.toFirstPaintMs.median": {
+      "pre": {
+        "median": 23.4,
+        "min": 20.5,
+        "max": 29.2,
+        "values": [
+          20.5,
+          24.4,
+          20.9,
+          23.4,
+          29.2
+        ]
+      },
+      "main": {
+        "median": 32,
+        "min": 26.4,
+        "max": 32.7,
+        "values": [
+          26.4,
+          32,
+          32.7,
+          32.7,
+          29.5
+        ]
+      },
+      "base": {
+        "median": 25.5,
+        "min": 24,
+        "max": 32.5,
+        "values": [
+          25.5,
+          29.4,
+          25.2,
+          24,
+          32.5
+        ]
+      },
+      "cur": {
+        "median": 29.1,
+        "min": 24.7,
+        "max": 33.5,
+        "values": [
+          30.7,
+          29,
+          24.7,
+          29.1,
+          33.5
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.244,
+        "cur/main": 0.909,
+        "cur/base": 1.141,
+        "base/pre": 1.09,
+        "main/pre": 1.368
+      }
+    },
+    "tenK.x1.selection.toLastPaintMs.median": {
+      "pre": {
+        "median": 24.3,
+        "min": 21.8,
+        "max": 30.8,
+        "values": [
+          21.8,
+          25.5,
+          22.2,
+          24.3,
+          30.8
+        ]
+      },
+      "main": {
+        "median": 126.6,
+        "min": 115.2,
+        "max": 138.9,
+        "values": [
+          115.2,
+          138.9,
+          126.6,
+          128.1,
+          125.5
+        ]
+      },
+      "base": {
+        "median": 118.8,
+        "min": 114.4,
+        "max": 125.8,
+        "values": [
+          119.1,
+          118.8,
+          115.4,
+          114.4,
+          125.8
+        ]
+      },
+      "cur": {
+        "median": 109.4,
+        "min": 102.4,
+        "max": 120,
+        "values": [
+          109.4,
+          119.5,
+          102.4,
+          106.9,
+          120
+        ]
+      },
+      "ratios": {
+        "cur/pre": 4.502,
+        "cur/main": 0.864,
+        "cur/base": 0.921,
+        "base/pre": 4.889,
+        "main/pre": 5.21
+      }
+    },
+    "tenK.x1.selection.toLastPaintMs.p90": {
+      "pre": {
+        "median": 50.4,
+        "min": 50.3,
+        "max": 53.3,
+        "values": [
+          53.3,
+          50.3,
+          52.2,
+          50.3,
+          50.4
+        ]
+      },
+      "main": {
+        "median": 171.5,
+        "min": 139.7,
+        "max": 184.2,
+        "values": [
+          139.7,
+          184.2,
+          179.5,
+          168.4,
+          171.5
+        ]
+      },
+      "base": {
+        "median": 152.4,
+        "min": 141.7,
+        "max": 182.2,
+        "values": [
+          152.4,
+          141.7,
+          146,
+          182.2,
+          178.3
+        ]
+      },
+      "cur": {
+        "median": 145.6,
+        "min": 141.2,
+        "max": 191.9,
+        "values": [
+          175.8,
+          142.6,
+          145.6,
+          141.2,
+          191.9
+        ]
+      },
+      "ratios": {
+        "cur/pre": 2.889,
+        "cur/main": 0.849,
+        "cur/base": 0.955,
+        "base/pre": 3.024,
+        "main/pre": 3.403
+      }
+    },
+    "tenK.x1.selection.withoutMapWork": {
+      "pre": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "main": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "cur": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ratios": {}
+    },
+    "tenK.x4.edit.derivedMs.median": {
+      "pre": {
+        "median": 548.9,
+        "min": 462.3,
+        "max": 586,
+        "values": [
+          548.9,
+          586,
+          462.3,
+          547.4,
+          570.2
+        ]
+      },
+      "main": {
+        "median": 702.2,
+        "min": 649.9,
+        "max": 735.7,
+        "values": [
+          708.5,
+          735.7,
+          668.6,
+          702.2,
+          649.9
+        ]
+      },
+      "base": {
+        "median": 679.6,
+        "min": 630.2,
+        "max": 704.7,
+        "values": [
+          679.6,
+          630.2,
+          638,
+          704.7,
+          684.5
+        ]
+      },
+      "cur": {
+        "median": 687.2,
+        "min": 640.2,
+        "max": 762.8,
+        "values": [
+          687.2,
+          673.9,
+          640.2,
+          710.4,
+          762.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.252,
+        "cur/main": 0.979,
+        "cur/base": 1.011,
+        "base/pre": 1.238,
+        "main/pre": 1.279
+      }
+    },
+    "tenK.x4.edit.lastMapCallMs.median": {
+      "pre": {
+        "median": 493.2,
+        "min": 411.9,
+        "max": 528.3,
+        "values": [
+          522.2,
+          528.3,
+          411.9,
+          493.2,
+          492.7
+        ]
+      },
+      "main": {
+        "median": 609.6,
+        "min": 569.3,
+        "max": 694.3,
+        "values": [
+          619.3,
+          694.3,
+          609.6,
+          569.3,
+          596.3
+        ]
+      },
+      "base": {
+        "median": 630.5,
+        "min": 562,
+        "max": 651.6,
+        "values": [
+          651.6,
+          588.6,
+          562,
+          637.7,
+          630.5
+        ]
+      },
+      "cur": {
+        "median": 638.9,
+        "min": 526.3,
+        "max": 679.8,
+        "values": [
+          641.3,
+          638.9,
+          526.3,
+          605.8,
+          679.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.295,
+        "cur/main": 1.048,
+        "cur/base": 1.013,
+        "base/pre": 1.278,
+        "main/pre": 1.236
+      }
+    },
+    "tenK.x4.edit.toFirstPaintMs.median": {
+      "pre": {
+        "median": 335.1,
+        "min": 267.6,
+        "max": 358,
+        "values": [
+          335.1,
+          358,
+          267.6,
+          346.9,
+          331.3
+        ]
+      },
+      "main": {
+        "median": 362.1,
+        "min": 350,
+        "max": 424.5,
+        "values": [
+          413.2,
+          424.5,
+          350,
+          362.1,
+          361.2
+        ]
+      },
+      "base": {
+        "median": 350.9,
+        "min": 298.6,
+        "max": 380.9,
+        "values": [
+          380.9,
+          345.5,
+          298.6,
+          350.9,
+          372.2
+        ]
+      },
+      "cur": {
+        "median": 374.5,
+        "min": 316.3,
+        "max": 426.8,
+        "values": [
+          364.4,
+          374.5,
+          316.3,
+          426.8,
+          397.2
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.118,
+        "cur/main": 1.034,
+        "cur/base": 1.067,
+        "base/pre": 1.047,
+        "main/pre": 1.081
+      }
+    },
+    "tenK.x4.edit.toLastPaintMs.median": {
+      "pre": {
+        "median": 493.2,
+        "min": 411.9,
+        "max": 528.3,
+        "values": [
+          522.2,
+          528.3,
+          411.9,
+          493.2,
+          492.7
+        ]
+      },
+      "main": {
+        "median": 609.6,
+        "min": 569.3,
+        "max": 694.3,
+        "values": [
+          619.3,
+          694.3,
+          609.6,
+          569.3,
+          596.3
+        ]
+      },
+      "base": {
+        "median": 630.5,
+        "min": 562,
+        "max": 651.6,
+        "values": [
+          651.6,
+          588.6,
+          562,
+          637.7,
+          630.5
+        ]
+      },
+      "cur": {
+        "median": 638.9,
+        "min": 526.3,
+        "max": 679.8,
+        "values": [
+          641.3,
+          638.9,
+          526.3,
+          605.8,
+          679.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.295,
+        "cur/main": 1.048,
+        "cur/base": 1.013,
+        "base/pre": 1.278,
+        "main/pre": 1.236
+      }
+    },
+    "tenK.x4.edit.toLastPaintMs.p90": {
+      "pre": {
+        "median": 571,
+        "min": 539.1,
+        "max": 617.9,
+        "values": [
+          569.1,
+          617.9,
+          539.1,
+          571,
+          602
+        ]
+      },
+      "main": {
+        "median": 741.3,
+        "min": 683.1,
+        "max": 886,
+        "values": [
+          741.3,
+          886,
+          748.2,
+          707.6,
+          683.1
+        ]
+      },
+      "base": {
+        "median": 718.7,
+        "min": 629,
+        "max": 757.9,
+        "values": [
+          757.9,
+          629,
+          693,
+          718.7,
+          741.1
+        ]
+      },
+      "cur": {
+        "median": 783.8,
+        "min": 690.5,
+        "max": 871.8,
+        "values": [
+          696.4,
+          871.8,
+          690.5,
+          797.1,
+          783.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 1.373,
+        "cur/main": 1.057,
+        "cur/base": 1.091,
+        "base/pre": 1.259,
+        "main/pre": 1.298
+      }
+    },
+    "tenK.x4.edit.withoutMapWork": {
+      "pre": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "main": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "cur": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ratios": {}
+    },
+    "tenK.x4.selection.lastMapCallMs.median": {
+      "pre": {
+        "median": 109.2,
+        "min": 91.1,
+        "max": 121.2,
+        "values": [
+          109.2,
+          121.2,
+          91.1,
+          114.8,
+          96.5
+        ]
+      },
+      "main": {
+        "median": 569.5,
+        "min": 461.9,
+        "max": 609,
+        "values": [
+          588.8,
+          569.5,
+          461.9,
+          609,
+          521.6
+        ]
+      },
+      "base": {
+        "median": 549.2,
+        "min": 452.8,
+        "max": 584.7,
+        "values": [
+          549.2,
+          584.7,
+          482,
+          452.8,
+          559.1
+        ]
+      },
+      "cur": {
+        "median": 488,
+        "min": 468.9,
+        "max": 552.8,
+        "values": [
+          552.8,
+          469.4,
+          488,
+          490.4,
+          468.9
+        ]
+      },
+      "ratios": {
+        "cur/pre": 4.469,
+        "cur/main": 0.857,
+        "cur/base": 0.889,
+        "base/pre": 5.029,
+        "main/pre": 5.215
+      }
+    },
+    "tenK.x4.selection.toFirstPaintMs.median": {
+      "pre": {
+        "median": 132.6,
+        "min": 105.2,
+        "max": 141.5,
+        "values": [
+          139.4,
+          132.6,
+          105.2,
+          141.5,
+          130.8
+        ]
+      },
+      "main": {
+        "median": 140.4,
+        "min": 130.5,
+        "max": 158.1,
+        "values": [
+          140.4,
+          158.1,
+          130.5,
+          137.9,
+          144.6
+        ]
+      },
+      "base": {
+        "median": 135.6,
+        "min": 114.2,
+        "max": 153.1,
+        "values": [
+          142.1,
+          153.1,
+          122.3,
+          135.6,
+          114.2
+        ]
+      },
+      "cur": {
+        "median": 128.1,
+        "min": 119,
+        "max": 161.3,
+        "values": [
+          128.1,
+          139.6,
+          119,
+          161.3,
+          122.6
+        ]
+      },
+      "ratios": {
+        "cur/pre": 0.966,
+        "cur/main": 0.912,
+        "cur/base": 0.945,
+        "base/pre": 1.023,
+        "main/pre": 1.059
+      }
+    },
+    "tenK.x4.selection.toLastPaintMs.median": {
+      "pre": {
+        "median": 137.9,
+        "min": 114.1,
+        "max": 150.2,
+        "values": [
+          147,
+          137.9,
+          114.1,
+          150.2,
+          136.5
+        ]
+      },
+      "main": {
+        "median": 569.5,
+        "min": 461.9,
+        "max": 609,
+        "values": [
+          588.8,
+          569.5,
+          461.9,
+          609,
+          521.6
+        ]
+      },
+      "base": {
+        "median": 549.2,
+        "min": 452.8,
+        "max": 584.7,
+        "values": [
+          549.2,
+          584.7,
+          482,
+          452.8,
+          559.1
+        ]
+      },
+      "cur": {
+        "median": 488,
+        "min": 468.9,
+        "max": 552.8,
+        "values": [
+          552.8,
+          469.4,
+          488,
+          490.4,
+          468.9
+        ]
+      },
+      "ratios": {
+        "cur/pre": 3.539,
+        "cur/main": 0.857,
+        "cur/base": 0.889,
+        "base/pre": 3.983,
+        "main/pre": 4.13
+      }
+    },
+    "tenK.x4.selection.toLastPaintMs.p90": {
+      "pre": {
+        "median": 299,
+        "min": 256.8,
+        "max": 316.9,
+        "values": [
+          316.9,
+          293.4,
+          256.8,
+          310.7,
+          299
+        ]
+      },
+      "main": {
+        "median": 736,
+        "min": 656.6,
+        "max": 939.2,
+        "values": [
+          701.1,
+          736,
+          656.6,
+          803.7,
+          939.2
+        ]
+      },
+      "base": {
+        "median": 751.1,
+        "min": 670.5,
+        "max": 799.6,
+        "values": [
+          799.6,
+          768.8,
+          670.5,
+          718.7,
+          751.1
+        ]
+      },
+      "cur": {
+        "median": 740,
+        "min": 675.6,
+        "max": 834.5,
+        "values": [
+          740,
+          745.2,
+          675.6,
+          834.5,
+          734.8
+        ]
+      },
+      "ratios": {
+        "cur/pre": 2.475,
+        "cur/main": 1.005,
+        "cur/base": 0.985,
+        "base/pre": 2.512,
+        "main/pre": 2.462
+      }
+    },
+    "tenK.x4.selection.withoutMapWork": {
+      "pre": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "main": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "cur": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ratios": {}
+    }
+  },
+  "firstViewDetail": {
+    "pre": {
+      "viewLevel": null,
+      "indexBytes": null,
+      "firstViewBytes": 183520,
+      "firstViewTransferBytes": 183820,
+      "tilesInView": 1,
+      "byLevel": {},
+      "artImages": {
+        "n": 1,
+        "bytes": 183520
+      },
+      "reliefImages": {
+        "n": 1,
+        "bytes": 218763
+      },
+      "allMapImageBytes": 402283,
+      "allMapImageTransferBytes": 402883,
+      "opening": {
+        "selectedSteps": [],
+        "mapChip": null
+      }
+    },
+    "main": {
+      "viewLevel": -2,
+      "indexBytes": 1316,
+      "firstViewBytes": 121288,
+      "firstViewTransferBytes": 125488,
+      "tilesInView": 13,
+      "byLevel": {
+        "atlas:-2": {
+          "n": 13,
+          "bytes": 119972,
+          "transferBytes": 123872
+        },
+        "atlas:-3": {
+          "n": 2,
+          "bytes": 23344,
+          "transferBytes": 23944
+        },
+        "atlas:-5": {
+          "n": 13,
+          "bytes": 91346,
+          "transferBytes": 95246
+        }
+      },
+      "artImages": {
+        "n": 0,
+        "bytes": 0
+      },
+      "reliefImages": {
+        "n": 0,
+        "bytes": 0
+      },
+      "allMapImageBytes": 234662,
+      "allMapImageTransferBytes": 243062,
+      "opening": {
+        "selectedSteps": [],
+        "mapChip": "Viewing Durotar · quests 1–12 (44 open to an Orc Warrior)E(Uses Era values where Forever values are unknown: the dataset"
+      }
+    },
+    "base": {
+      "viewLevel": -2,
+      "indexBytes": 1316,
+      "firstViewBytes": 134382,
+      "firstViewTransferBytes": 138882,
+      "tilesInView": 14,
+      "byLevel": {
+        "atlas:-2": {
+          "n": 14,
+          "bytes": 133066,
+          "transferBytes": 137266
+        },
+        "atlas:-3": {
+          "n": 2,
+          "bytes": 23344,
+          "transferBytes": 23944
+        },
+        "atlas:-5": {
+          "n": 13,
+          "bytes": 91346,
+          "transferBytes": 95246
+        }
+      },
+      "artImages": {
+        "n": 0,
+        "bytes": 0
+      },
+      "reliefImages": {
+        "n": 0,
+        "bytes": 0
+      },
+      "allMapImageBytes": 247756,
+      "allMapImageTransferBytes": 256456,
+      "opening": {
+        "selectedSteps": [
+          55
+        ],
+        "mapChip": "Viewing Orgrimmar · quests 20–60 (57 open to an Orc Warrior)E(Uses Era values where Forever values are unknown: the data"
+      }
+    },
+    "cur": {
+      "viewLevel": -2,
+      "indexBytes": 1316,
+      "firstViewBytes": 134382,
+      "firstViewTransferBytes": 138882,
+      "tilesInView": 14,
+      "byLevel": {
+        "atlas:-2": {
+          "n": 14,
+          "bytes": 133066,
+          "transferBytes": 137266
+        },
+        "atlas:-3": {
+          "n": 2,
+          "bytes": 23344,
+          "transferBytes": 23944
+        },
+        "atlas:-5": {
+          "n": 13,
+          "bytes": 91346,
+          "transferBytes": 95246
+        }
+      },
+      "artImages": {
+        "n": 0,
+        "bytes": 0
+      },
+      "reliefImages": {
+        "n": 0,
+        "bytes": 0
+      },
+      "allMapImageBytes": 247756,
+      "allMapImageTransferBytes": 256456,
+      "opening": {
+        "selectedSteps": [
+          55
+        ],
+        "mapChip": "Viewing Orgrimmar · quests 20–60 (57 open to an Orc Warrior)E(Uses Era values where Forever values are unknown: the data"
+      }
+    }
+  },
+  "gate": {
+    "rule": "The cloud gate: on this machine, interleaved, at least 5 rounds, the ratio of medians current / 95e84cc must be at most 1.25 per checked case.",
+    "cases": [
+      {
+        "case": "selection to pins painted, sample route, 1x",
+        "figure": "sample.x1.selection.toLastPaintMs.median",
+        "pre": "21.2 [18.5-23.5]",
+        "main": "120.5 [119.7-125.4]",
+        "base": "85.5 [82.8-90.1]",
+        "cur": "85.1 [80.9-126.3]",
+        "curOverPre": 4.01,
+        "curOverMain": 0.71,
+        "curOverBase": 1.0,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "selection to pins painted, sample route, 4x",
+        "figure": "sample.x4.selection.toLastPaintMs.median",
+        "pre": "99.9 [97.5-106]",
+        "main": "430.5 [408.4-476.1]",
+        "base": "352.8 [327.5-373]",
+        "cur": "361.8 [335.2-449.7]",
+        "curOverPre": 3.62,
+        "curOverMain": 0.84,
+        "curOverBase": 1.03,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "edit to pins painted, sample route, 1x",
+        "figure": "sample.x1.edit.toLastPaintMs.median",
+        "pre": "12.6 [10.8-14.3]",
+        "main": "96.2 [89.4-101.3]",
+        "base": "89.5 [77.9-101.4]",
+        "cur": "77.3 [74.4-104.8]",
+        "curOverPre": 6.13,
+        "curOverMain": 0.8,
+        "curOverBase": 0.86,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "edit to pins painted, sample route, 4x",
+        "figure": "sample.x4.edit.toLastPaintMs.median",
+        "pre": "36 [32.3-41.1]",
+        "main": "492.9 [448.6-535.1]",
+        "base": "417.2 [402.7-434.5]",
+        "cur": "360.7 [329.9-430.5]",
+        "curOverPre": 10.02,
+        "curOverMain": 0.73,
+        "curOverBase": 0.86,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "selection to pins painted, 10,000 steps, 1x",
+        "figure": "tenK.x1.selection.toLastPaintMs.median",
+        "pre": "24.3 [21.8-30.8]",
+        "main": "126.6 [115.2-138.9]",
+        "base": "118.8 [114.4-125.8]",
+        "cur": "109.4 [102.4-120]",
+        "curOverPre": 4.5,
+        "curOverMain": 0.86,
+        "curOverBase": 0.92,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "selection to pins painted, 10,000 steps, 4x",
+        "figure": "tenK.x4.selection.toLastPaintMs.median",
+        "pre": "137.9 [114.1-150.2]",
+        "main": "569.5 [461.9-609]",
+        "base": "549.2 [452.8-584.7]",
+        "cur": "488 [468.9-552.8]",
+        "curOverPre": 3.54,
+        "curOverMain": 0.86,
+        "curOverBase": 0.89,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "edit to pins painted, 10,000 steps, 1x",
+        "figure": "tenK.x1.edit.toLastPaintMs.median",
+        "pre": "88.7 [80.9-113.1]",
+        "main": "113.1 [104.1-155]",
+        "base": "115.3 [103.5-122.6]",
+        "cur": "110.3 [108.9-120.4]",
+        "curOverPre": 1.24,
+        "curOverMain": 0.98,
+        "curOverBase": 0.96,
+        "verdict": "pass"
+      },
+      {
+        "case": "edit to pins painted, 10,000 steps, 4x",
+        "figure": "tenK.x4.edit.toLastPaintMs.median",
+        "pre": "493.2 [411.9-528.3]",
+        "main": "609.6 [569.3-694.3]",
+        "base": "630.5 [562-651.6]",
+        "cur": "638.9 [526.3-679.8]",
+        "curOverPre": 1.3,
+        "curOverMain": 1.05,
+        "curOverBase": 1.01,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "10,000-step pans at 4x: frame p99",
+        "figure": "pans.x4.drags.p99",
+        "pre": "266.6 [249.9-333.4]",
+        "main": "483.4 [366.7-533.3]",
+        "base": "483.3 [450-500]",
+        "cur": "466.6 [433.4-516.6]",
+        "curOverPre": 1.75,
+        "curOverMain": 0.97,
+        "curOverBase": 0.97,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "10,000-step pans at 4x: frames over 33 ms",
+        "figure": "pans.x4.drags.over33",
+        "pre": "29 [23-31]",
+        "main": "74 [72-92]",
+        "base": "83 [75-88]",
+        "cur": "68 [65-79]",
+        "curOverPre": 2.34,
+        "curOverMain": 0.92,
+        "curOverBase": 0.82,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "10,000-step pans at 4x: long tasks over 50 ms",
+        "figure": "pans.x4.longTasks.over50",
+        "pre": "32 [26-33]",
+        "main": "52 [35-54]",
+        "base": "49 [41-59]",
+        "cur": "52 [42-60]",
+        "curOverPre": 1.62,
+        "curOverMain": 1.0,
+        "curOverBase": 1.06,
+        "verdict": "FAIL"
+      },
+      {
+        "case": "first art after the map chunk, 1x",
+        "figure": "firstView.x1.firstArtAfterChunkMs",
+        "pre": "983.5 [904-1253.5]",
+        "main": "1096.1 [1010.1-1478.6]",
+        "base": "919.9 [874.8-1044.8]",
+        "cur": "1016.2 [910.6-1027.4]",
+        "curOverPre": 1.03,
+        "curOverMain": 0.93,
+        "curOverBase": 1.1,
+        "verdict": "pass"
+      },
+      {
+        "case": "first art after the map chunk, 4x",
+        "figure": "firstView.x4.firstArtAfterChunkMs",
+        "pre": "4098.2 [3604.7-4670.5]",
+        "main": "4617.5 [4488.2-5133.4]",
+        "base": "4641.6 [4064.4-5386.1]",
+        "cur": "4154 [3293.6-4832.4]",
+        "curOverPre": 1.01,
+        "curOverMain": 0.9,
+        "curOverBase": 0.89,
+        "verdict": "pass"
+      }
+    ]
+  },
+  "firstPaintRatios": {
+    "sample.x1.selection.toFirstPaintMs.median": {
+      "pre": "20.2 [18-22.8]",
+      "cur": "16.4 [15.5-20.2]",
+      "curOverPre": 0.81
+    },
+    "sample.x4.selection.toFirstPaintMs.median": {
+      "pre": "97 [93.4-102.1]",
+      "cur": "84 [73.9-103.3]",
+      "curOverPre": 0.87
+    },
+    "sample.x1.edit.toFirstPaintMs.median": {
+      "pre": "12.6 [10.8-14.3]",
+      "cur": "16 [14.4-17.8]",
+      "curOverPre": 1.27
+    },
+    "sample.x4.edit.toFirstPaintMs.median": {
+      "pre": "36 [32.3-41.1]",
+      "cur": "76.1 [70.5-87.8]",
+      "curOverPre": 2.11
+    },
+    "tenK.x1.selection.toFirstPaintMs.median": {
+      "pre": "23.4 [20.5-29.2]",
+      "cur": "29.1 [24.7-33.5]",
+      "curOverPre": 1.24
+    },
+    "tenK.x4.selection.toFirstPaintMs.median": {
+      "pre": "132.6 [105.2-141.5]",
+      "cur": "128.1 [119-161.3]",
+      "curOverPre": 0.97
+    },
+    "tenK.x1.edit.toFirstPaintMs.median": {
+      "pre": "58.5 [52.5-70.3]",
+      "cur": "62.5 [60-66.9]",
+      "curOverPre": 1.07
+    },
+    "tenK.x4.edit.toFirstPaintMs.median": {
+      "pre": "335.1 [267.6-358]",
+      "cur": "374.5 [316.3-426.8]",
+      "curOverPre": 1.12
+    }
+  },
+  "f03": {
+    "finding": "F-03: edit-to-map and selection-to-map not fixed (docs/reviews/rework-followup.md).",
+    "verdict": "Not within the cloud gate (cur / 95e84cc at most 1.25) in 7 of 8 cases. 6 are slower beyond noise (cur’s fastest round slower than 95e84cc’s slowest), and by design (see cause): selection to pins painted, sample route, 1x 4.01x; selection to pins painted, sample route, 4x 3.62x; selection to pins painted, 10,000 steps, 1x 4.5x; selection to pins painted, 10,000 steps, 4x 3.54x; edit to pins painted, sample route, 1x 6.13x; edit to pins painted, sample route, 4x 10.02x. Edit to pins painted, 10,000 steps, 4x 1.3x fails with overlapping ranges, where every build waits for the walk of 10,000 steps (eff4341 1.24x of 95e84cc, cur / eff4341 1.05x). Within the gate: edit to pins painted, 10,000 steps, 1x 1.24x. Against base (the branch without this stage’s changes), this stage’s changes take 8-14 % off 4 cases (selection to pins painted, 10,000 steps, 1x 0.92x; selection to pins painted, 10,000 steps, 4x 0.89x; edit to pins painted, sample route, 1x 0.86x; edit to pins painted, sample route, 4x 0.86x), leave 4 within 5 % (selection to pins painted, sample route, 1x 1.0x; selection to pins painted, sample route, 4x 1.03x; edit to pins painted, 10,000 steps, 1x 0.96x; edit to pins painted, 10,000 steps, 4x 1.01x). No change of this kind brings the selections and the sample-route edits within 1.25x of 95e84cc without changing the design, so the architect sets the gate (decision needed).",
+    "selection": [
+      {
+        "case": "selection to pins painted, sample route, 1x",
+        "ms": {
+          "pre": "21.2 [18.5-23.5]",
+          "main": "120.5 [119.7-125.4]",
+          "base": "85.5 [82.8-90.1]",
+          "cur": "85.1 [80.9-126.3]"
+        },
+        "p90ms": {
+          "pre": "30 [24.8-32]",
+          "main": "148.8 [130.6-161.6]",
+          "base": "108.5 [102.7-136.2]",
+          "cur": "113.6 [95.7-208.5]"
+        },
+        "toFirstPaintMs": {
+          "pre": "20.2 [18-22.8]",
+          "main": "17.9 [15.5-19.3]",
+          "base": "15.7 [15-17.4]",
+          "cur": "16.4 [15.5-20.2]"
+        },
+        "curOverPre": 4.01,
+        "curOverMain": 0.71,
+        "curOverBase": 1.0,
+        "mainOverPre": 5.68,
+        "gate": "FAIL",
+        "curAbovePreBeyondSpread": true
+      },
+      {
+        "case": "selection to pins painted, sample route, 4x",
+        "ms": {
+          "pre": "99.9 [97.5-106]",
+          "main": "430.5 [408.4-476.1]",
+          "base": "352.8 [327.5-373]",
+          "cur": "361.8 [335.2-449.7]"
+        },
+        "p90ms": {
+          "pre": "133.4 [114.7-148.8]",
+          "main": "556.4 [460.6-587.5]",
+          "base": "509.2 [456.5-575.5]",
+          "cur": "470 [428.8-575.5]"
+        },
+        "toFirstPaintMs": {
+          "pre": "97 [93.4-102.1]",
+          "main": "83.3 [82.2-91.2]",
+          "base": "83 [74.3-94.6]",
+          "cur": "84 [73.9-103.3]"
+        },
+        "curOverPre": 3.62,
+        "curOverMain": 0.84,
+        "curOverBase": 1.03,
+        "mainOverPre": 4.31,
+        "gate": "FAIL",
+        "curAbovePreBeyondSpread": true
+      },
+      {
+        "case": "selection to pins painted, 10,000 steps, 1x",
+        "ms": {
+          "pre": "24.3 [21.8-30.8]",
+          "main": "126.6 [115.2-138.9]",
+          "base": "118.8 [114.4-125.8]",
+          "cur": "109.4 [102.4-120]"
+        },
+        "p90ms": {
+          "pre": "50.4 [50.3-53.3]",
+          "main": "171.5 [139.7-184.2]",
+          "base": "152.4 [141.7-182.2]",
+          "cur": "145.6 [141.2-191.9]"
+        },
+        "toFirstPaintMs": {
+          "pre": "23.4 [20.5-29.2]",
+          "main": "32 [26.4-32.7]",
+          "base": "25.5 [24-32.5]",
+          "cur": "29.1 [24.7-33.5]"
+        },
+        "curOverPre": 4.5,
+        "curOverMain": 0.86,
+        "curOverBase": 0.92,
+        "mainOverPre": 5.21,
+        "gate": "FAIL",
+        "curAbovePreBeyondSpread": true
+      },
+      {
+        "case": "selection to pins painted, 10,000 steps, 4x",
+        "ms": {
+          "pre": "137.9 [114.1-150.2]",
+          "main": "569.5 [461.9-609]",
+          "base": "549.2 [452.8-584.7]",
+          "cur": "488 [468.9-552.8]"
+        },
+        "p90ms": {
+          "pre": "299 [256.8-316.9]",
+          "main": "736 [656.6-939.2]",
+          "base": "751.1 [670.5-799.6]",
+          "cur": "740 [675.6-834.5]"
+        },
+        "toFirstPaintMs": {
+          "pre": "132.6 [105.2-141.5]",
+          "main": "140.4 [130.5-158.1]",
+          "base": "135.6 [114.2-153.1]",
+          "cur": "128.1 [119-161.3]"
+        },
+        "curOverPre": 3.54,
+        "curOverMain": 0.86,
+        "curOverBase": 0.89,
+        "mainOverPre": 4.13,
+        "gate": "FAIL",
+        "curAbovePreBeyondSpread": true
+      }
+    ],
+    "edit": [
+      {
+        "case": "edit to pins painted, sample route, 1x",
+        "ms": {
+          "pre": "12.6 [10.8-14.3]",
+          "main": "96.2 [89.4-101.3]",
+          "base": "89.5 [77.9-101.4]",
+          "cur": "77.3 [74.4-104.8]"
+        },
+        "p90ms": {
+          "pre": "17.1 [16.7-18.7]",
+          "main": "111.3 [107.8-127.8]",
+          "base": "102.5 [98.4-121]",
+          "cur": "93.2 [89.7-116.5]"
+        },
+        "toFirstPaintMs": {
+          "pre": "12.6 [10.8-14.3]",
+          "main": "14.8 [14-17]",
+          "base": "15.3 [14-18.9]",
+          "cur": "16 [14.4-17.8]"
+        },
+        "curOverPre": 6.13,
+        "curOverMain": 0.8,
+        "curOverBase": 0.86,
+        "mainOverPre": 7.63,
+        "gate": "FAIL",
+        "curAbovePreBeyondSpread": true
+      },
+      {
+        "case": "edit to pins painted, sample route, 4x",
+        "ms": {
+          "pre": "36 [32.3-41.1]",
+          "main": "492.9 [448.6-535.1]",
+          "base": "417.2 [402.7-434.5]",
+          "cur": "360.7 [329.9-430.5]"
+        },
+        "p90ms": {
+          "pre": "52 [40.5-100.3]",
+          "main": "556.5 [508.6-585.3]",
+          "base": "510.7 [452.8-559.1]",
+          "cur": "454.4 [405.5-606.5]"
+        },
+        "toFirstPaintMs": {
+          "pre": "36 [32.3-41.1]",
+          "main": "76.5 [65.5-80.4]",
+          "base": "72.2 [69.3-81.6]",
+          "cur": "76.1 [70.5-87.8]"
+        },
+        "curOverPre": 10.02,
+        "curOverMain": 0.73,
+        "curOverBase": 0.86,
+        "mainOverPre": 13.69,
+        "gate": "FAIL",
+        "curAbovePreBeyondSpread": true
+      },
+      {
+        "case": "edit to pins painted, 10,000 steps, 1x",
+        "ms": {
+          "pre": "88.7 [80.9-113.1]",
+          "main": "113.1 [104.1-155]",
+          "base": "115.3 [103.5-122.6]",
+          "cur": "110.3 [108.9-120.4]"
+        },
+        "p90ms": {
+          "pre": "488.4 [475.7-516.2]",
+          "main": "533.9 [518.1-559]",
+          "base": "531.8 [505.3-558.5]",
+          "cur": "521.1 [503.9-545.8]"
+        },
+        "toFirstPaintMs": {
+          "pre": "58.5 [52.5-70.3]",
+          "main": "64.7 [58.5-87.3]",
+          "base": "63.2 [51.4-67.6]",
+          "cur": "62.5 [60-66.9]"
+        },
+        "curOverPre": 1.24,
+        "curOverMain": 0.98,
+        "curOverBase": 0.96,
+        "mainOverPre": 1.28,
+        "gate": "pass",
+        "curAbovePreBeyondSpread": false
+      },
+      {
+        "case": "edit to pins painted, 10,000 steps, 4x",
+        "ms": {
+          "pre": "493.2 [411.9-528.3]",
+          "main": "609.6 [569.3-694.3]",
+          "base": "630.5 [562-651.6]",
+          "cur": "638.9 [526.3-679.8]"
+        },
+        "p90ms": {
+          "pre": "571 [539.1-617.9]",
+          "main": "741.3 [683.1-886]",
+          "base": "718.7 [629-757.9]",
+          "cur": "783.8 [690.5-871.8]"
+        },
+        "toFirstPaintMs": {
+          "pre": "335.1 [267.6-358]",
+          "main": "362.1 [350-424.5]",
+          "base": "350.9 [298.6-380.9]",
+          "cur": "374.5 [316.3-426.8]"
+        },
+        "curOverPre": 1.3,
+        "curOverMain": 1.05,
+        "curOverBase": 1.01,
+        "mainOverPre": 1.24,
+        "gate": "FAIL",
+        "curAbovePreBeyondSpread": false
+      }
+    ],
+    "effectOfTheFix": {
+      "rule": "cur / base, ratio of medians over the same rounds; base is the branch without this stage’s changes.",
+      "cases": {
+        "selection to pins painted, sample route, 1x": 1.0,
+        "selection to pins painted, sample route, 4x": 1.03,
+        "selection to pins painted, 10,000 steps, 1x": 0.92,
+        "selection to pins painted, 10,000 steps, 4x": 0.89,
+        "edit to pins painted, sample route, 1x": 0.86,
+        "edit to pins painted, sample route, 4x": 0.86,
+        "edit to pins painted, 10,000 steps, 1x": 0.96,
+        "edit to pins painted, 10,000 steps, 4x": 1.01
+      },
+      "lower": [
+        "selection to pins painted, 10,000 steps, 1x",
+        "selection to pins painted, 10,000 steps, 4x",
+        "edit to pins painted, sample route, 1x",
+        "edit to pins painted, sample route, 4x"
+      ],
+      "withinFivePercentOrHigher": [
+        "selection to pins painted, sample route, 1x",
+        "selection to pins painted, sample route, 4x",
+        "edit to pins painted, 10,000 steps, 1x",
+        "edit to pins painted, 10,000 steps, 4x"
+      ]
+    },
+    "cause": [
+      "95e84cc draws a selection or an edit with one map sync in the input’s own frame: nothing on its map depends on the selected step’s quest state, so its selection and its sample-route edit end with that frame (its toLastPaintMs equals its toFirstPaintMs).",
+      "Since the rework the quest pins and the Available tab show the quest state after the selected step (docs/research/map-presentation.md, step MP.3; the owner signed off the built map in D-050). After the input’s own frame (toFirstPaintMs: selections 0.81-1.24x of 95e84cc’s, edits 1.07-2.11x), a second phase follows: the quest-state task (for an edit, after the walk), the publish’s React render of the panels, a second map sync for the pins and labels, and a second frame. UI-04 (docs/UI.md, “A selection change”) rebuilds the quest state in a task of its own so that the selection paints first, with a gate of 50 ms or less for the selection to settle at 4x on 10,000 steps; so two frames are the floor.",
+      "CPU profiles (tests/bench/browser/profile.ts, an unminified build of base, 1x, 15 interactions each): a sample-route selection spends 21.8 ms in runQuestState (questStateModel 15.7 ms, of which classifyFindings 5.4 ms), 17.0 ms in React (render 10.7, commit 6.3) and 6.8 ms in the map controller’s sync; an edit 21.2 ms in runQuestState inside the walk’s task (questStateModel 16.6 ms) and 24.5 ms in React; a 10,000-step selection 28.5 ms in runQuestState (questStateModel 21.3 ms), 20.3 ms in React, 11.3 ms in sync and 17.9 ms in garbage collection.",
+      "A Chromium trace of three sample-route selections (minified base, 1x): the input’s frame 15-24 ms (commit 9-17 ms), then the quest-state task 33-47 ms (23-36 ms of script, 8-12 ms of React in its microtasks), then the second frame 23-30 ms (paint 6-9, commit 6-8, pre-paint 3.5-6). 95e84cc: the input’s task and one frame of about 15 ms, then nothing.",
+      "The Available tab is about 30 % of a sample-route selection: with the Validation tab shown instead (the current tree, two sessions of 10 selections per mode), selection to pins painted took 60.9 and 61.8 ms at 1x and 249.5 and 241.2 ms at 4x, against 81.7 and 94.4 ms and 351.7 and 364.4 ms with the Available tab. Each of its rows carries the step in its accessible name (“… after step N”), so every row renders again on every selection.",
+      "DOM writes per sample-route selection before the fix (a MutationObserver in the page): 170-180 tabindex writes (the quest grid rewrote every item’s tab stop on every render), about 80 aria-label changes (the step in each row’s name) and about 30 text changes."
+    ],
+    "fix": [
+      "src/ui/shell/PanelContent.tsx: the quest grid writes only the tab stops that change (setTabStop): none on a render that keeps the focused item, two when the focus moves, instead of every item’s on every render (170-180 writes per sample-route selection before). Test: src/ui/shell/SidePanel.test.tsx (a MutationObserver; fails without the change).",
+      "src/app/quest-state.ts: a model keeps what it classified from (QuestStateModel.classifiedFrom). A new model whose inputs are the same objects and whose state differs only in fields the classification never reads (UNCLASSIFIED_FIELDS: time, place, hearth and its cooldown, riding, known flight paths) reuses every entry, count and note, and the givers and turn-ins (the same objects, so the map leaves those layers alone); it redoes only the steps that complete the log objectives and the Available groups by place (classificationReusable, reclassified). src/app/same-state.ts gains sameCharacterStateExcept.",
+      "src/app/derived-pipeline.ts: the pipeline keeps the last four models (RECENT_QUEST_STATES) and takes the classification from one that matches: a selection back to an earlier state, a step among steps that only travel, an edit that moves a step past a travel step.",
+      "Tests: src/app/quest-state.test.ts (a reused model equals a model built afresh, including after a move, the completing steps and the groups by distance; every classified field forces a fresh classification; other inputs never match), src/app/same-state.test.ts, src/app/derived-pipeline.test.ts (reuse from the recent models; fails without the lookup). Mutations of the completing steps, the groups, the recent-model lookup and the tab-stop write each fail a test. Full suite, typecheck and lint pass; the entry chunk is 247.51 kB gzip (base 247.50; stop rule 248.5)."
+    ],
+    "optionsForTheArchitect": [
+      {
+        "option": "Gate the second phase against the rework, not against 95e84cc",
+        "what": "cur / eff4341 at most 1.0 on this machine (today 7 of 8 cases are; range 0.71-1.05x), plus absolute budgets for selection and edit to pins painted at 1x and 4x, set by the architect and measured on the owner’s machine with this harness.",
+        "cost": "Accepts the two-frame design that MP.3 and UI-04 imply; no code."
+      },
+      {
+        "option": "Take the step out of each Available row’s accessible name",
+        "what": "Say “after step N” once, in the tab’s heading, so rows whose quest did not change skip their render (memoised rows).",
+        "cost": "A wording and accessibility change to rule on (docs/UI.md); expected gain at most the Available tab’s share, about 30 % of a sample-route selection here; still two frames."
+      },
+      {
+        "option": "Quest state in a worker",
+        "what": "Move questStateModel off the main thread.",
+        "cost": "A large change to the derived pipeline (the dataset and the route in the worker, the model sent back); removes 20-30 ms of main-thread script per selection at 1x but not the second frame."
+      },
+      {
+        "option": "Pins in the selection’s own frame",
+        "what": "Compute the quest state inside the input’s task.",
+        "cost": "Breaks UI-04’s 50 ms settle at 4x on 10,000 steps; not recommended."
+      }
+    ]
+  },
+  "f04": {
+    "finding": "F-04: the other item-5 gates still fail; the painted style’s pans were never measured.",
+    "verdict": "The painted style’s 10,000-step pans at 4x are now measured (relative, this machine): frame p99 466.6 [433.4-516.6] ms against 95e84cc’s 266.6 [249.9-333.4] (1.75x) and eff4341’s 483.4 [366.7-533.3] (0.97x); frames over 33 ms 68 [65-79] against 29 [23-31] (2.34x); long tasks over 50 ms 52 [42-60] against 32 [26-33] (1.62x). They fail the 1.25 gate and are where the rework left them (cur / eff4341 0.92-1.0). First art after the map chunk: 1016.2 [910.6-1027.4] ms at 1x and 4154 [3293.6-4832.4] ms at 4x, against 95e84cc’s 983.5 [904-1253.5] and 4098.2 [3604.7-4670.5] (1.03x and 1.01x, within the ratio gate). The 1.0 s budget at 4x is absolute and cannot be judged here: on this machine every build, 95e84cc included, takes 4.1-4.6 s at 4x (medians; software rendering). The minimap style’s pans and first art, and the absolute figures, are owed on the owner’s machine. D-050 item 5 stays open.",
+    "pansAt4x": {
+      "drags.p95": {
+        "pre": "16.8 [16.8-16.8]",
+        "main": "50 [33.4-50]",
+        "base": "49.9 [33.4-50]",
+        "cur": "33.4 [33.4-49.9]",
+        "curOverPre": 1.99,
+        "curOverMain": 0.67
+      },
+      "drags.p99": {
+        "pre": "266.6 [249.9-333.4]",
+        "main": "483.4 [366.7-533.3]",
+        "base": "483.3 [450-500]",
+        "cur": "466.6 [433.4-516.6]",
+        "curOverPre": 1.75,
+        "curOverMain": 0.97
+      },
+      "drags.max": {
+        "pre": "433.2 [400-516.6]",
+        "main": "683.3 [483.2-883.2]",
+        "base": "733.3 [650-850]",
+        "cur": "633.3 [583.3-783.3]",
+        "curOverPre": 1.46,
+        "curOverMain": 0.93
+      },
+      "drags.over33": {
+        "pre": "29 [23-31]",
+        "main": "74 [72-92]",
+        "base": "83 [75-88]",
+        "cur": "68 [65-79]",
+        "curOverPre": 2.34,
+        "curOverMain": 0.92
+      },
+      "longDrag.p99": {
+        "pre": "33.4 [33.4-33.4]",
+        "main": "50 [50-66.6]",
+        "base": "50.1 [50-66.6]",
+        "cur": "66.6 [50-66.7]",
+        "curOverPre": 1.99,
+        "curOverMain": 1.33
+      },
+      "longTasks.count": {
+        "pre": "32 [26-34]",
+        "main": "53 [35-56]",
+        "base": "52 [41-62]",
+        "cur": "52 [44-62]",
+        "curOverPre": 1.62,
+        "curOverMain": 0.98
+      },
+      "longTasks.over50": {
+        "pre": "32 [26-33]",
+        "main": "52 [35-54]",
+        "base": "49 [41-59]",
+        "cur": "52 [42-60]",
+        "curOverPre": 1.62,
+        "curOverMain": 1.0
+      },
+      "longTasks.maxMs": {
+        "pre": "337 [305-355]",
+        "main": "604 [459-720]",
+        "base": "589 [522-683]",
+        "cur": "561 [486-671]",
+        "curOverPre": 1.66,
+        "curOverMain": 0.93
+      },
+      "syncMs.median": {
+        "pre": "47.7 [38.3-54.4]",
+        "main": "59.9 [45.6-64.4]",
+        "base": "54.7 [50.3-55.9]",
+        "cur": "57 [42.7-67.1]",
+        "curOverPre": 1.19,
+        "curOverMain": 0.95
+      },
+      "syncMs.max": {
+        "pre": "78.5 [58.7-93.8]",
+        "main": "96.8 [78.8-201]",
+        "base": "134.5 [87.8-510.6]",
+        "cur": "111.2 [78.9-173.5]",
+        "curOverPre": 1.42,
+        "curOverMain": 1.15
+      }
+    },
+    "firstArt": {
+      "x1": {
+        "firstArtAfterChunkMs": {
+          "pre": "983.5 [904-1253.5]",
+          "main": "1096.1 [1010.1-1478.6]",
+          "base": "919.9 [874.8-1044.8]",
+          "cur": "1016.2 [910.6-1027.4]",
+          "curOverPre": 1.03,
+          "curOverMain": 0.93
+        },
+        "firstArtEndMs": {
+          "pre": "1248.7 [1148.6-1528.1]",
+          "main": "1351.2 [1263.9-1799.6]",
+          "base": "1169.3 [1132.6-1322.1]",
+          "cur": "1265.6 [1160.3-1281.8]",
+          "curOverPre": 1.01,
+          "curOverMain": 0.94
+        },
+        "firstTileRequestMs": {
+          "pre": "1137.1 [1041.9-1412.3]",
+          "main": "1314.5 [1232.6-1762.9]",
+          "base": "1142.5 [1107-1294.4]",
+          "cur": "1235.8 [1130.4-1238.5]",
+          "curOverPre": 1.09,
+          "curOverMain": 0.94
+        },
+        "workspaceReadyMs": {
+          "pre": "781.6 [716.7-1007.4]",
+          "main": "744.9 [720.5-1065.4]",
+          "base": "741.2 [723.3-864.3]",
+          "cur": "802.1 [717.4-836.6]",
+          "curOverPre": 1.03,
+          "curOverMain": 1.08
+        }
+      },
+      "x4": {
+        "firstArtAfterChunkMs": {
+          "pre": "4098.2 [3604.7-4670.5]",
+          "main": "4617.5 [4488.2-5133.4]",
+          "base": "4641.6 [4064.4-5386.1]",
+          "cur": "4154 [3293.6-4832.4]",
+          "curOverPre": 1.01,
+          "curOverMain": 0.9
+        },
+        "firstArtEndMs": {
+          "pre": "4677 [4323.3-5360.8]",
+          "main": "5289.7 [5116.2-5798.7]",
+          "base": "5200.4 [4715.9-6152.9]",
+          "cur": "4825.6 [3892.8-5472]",
+          "curOverPre": 1.03,
+          "curOverMain": 0.91
+        },
+        "firstTileRequestMs": {
+          "pre": "4601 [4232.9-5268.3]",
+          "main": "5253.4 [5067.8-5755.8]",
+          "base": "5164 [4688.3-6127]",
+          "cur": "4798.5 [3856.2-5445.8]",
+          "curOverPre": 1.04,
+          "curOverMain": 0.91
+        },
+        "workspaceReadyMs": {
+          "pre": "2778.3 [2291.4-2995.5]",
+          "main": "2667.1 [2554.9-2850.9]",
+          "base": "2827.9 [2252.5-3478.7]",
+          "cur": "2875.8 [2167.5-2995.8]",
+          "curOverPre": 1.04,
+          "curOverMain": 1.08
+        }
+      }
+    }
+  },
+  "f05": {
+    "finding": "F-05: the first-view bytes got worse on the new opening view.",
+    "bytes": {
+      "cur": {
+        "opening": {
+          "selectedSteps": [
+            55
+          ],
+          "mapChip": "Viewing Orgrimmar · quests 20–60 (57 open to an Orc Warrior)E(Uses Era values where Forever values are unknown: the data"
+        },
+        "viewLevel": -2,
+        "firstViewBytes": 134382,
+        "tilesInView": 14,
+        "indexBytes": 1316,
+        "byLevel": {
+          "atlas:-2": {
+            "n": 14,
+            "bytes": 133066,
+            "transferBytes": 137266
+          },
+          "atlas:-3": {
+            "n": 2,
+            "bytes": 23344,
+            "transferBytes": 23944
+          },
+          "atlas:-5": {
+            "n": 13,
+            "bytes": 91346,
+            "transferBytes": 95246
+          }
+        },
+        "allMapImageBytes": 247756
+      },
+      "main": {
+        "opening": {
+          "selectedSteps": [],
+          "mapChip": "Viewing Durotar · quests 1–12 (44 open to an Orc Warrior)E(Uses Era values where Forever values are unknown: the dataset"
+        },
+        "viewLevel": -2,
+        "firstViewBytes": 121288,
+        "tilesInView": 13,
+        "byLevel": {
+          "atlas:-2": {
+            "n": 13,
+            "bytes": 119972,
+            "transferBytes": 123872
+          },
+          "atlas:-3": {
+            "n": 2,
+            "bytes": 23344,
+            "transferBytes": 23944
+          },
+          "atlas:-5": {
+            "n": 13,
+            "bytes": 91346,
+            "transferBytes": 95246
+          }
+        },
+        "allMapImageBytes": 234662
+      },
+      "pre": {
+        "artImages": {
+          "n": 1,
+          "bytes": 183520
+        },
+        "reliefImages": {
+          "n": 1,
+          "bytes": 218763
+        },
+        "allMapImageBytes": 402283
+      },
+      "note": "Bytes do not depend on the machine: they depend on the build, the window (1366 x 768 CSS px; the atlas has no retina tiles, so the device scale does not change them) and the opening view. The painted figures here equal the critic’s (134.4 and 121.3 kB)."
+    },
+    "mr06": {
+      "measureOn": "The view the app opens at on a first visit to the sample project in a 1366 x 768 window: since D-050 item 2 the selected step’s view (step 55, Orgrimmar, the zone band, atlas level -2), no longer the whole-route fit. The figure: the body bytes of the tiles at the view’s level plus the tile index, per style; the underlay and the other levels’ tiles loaded before the view settles reported beside it.",
+      "achievable": "Not with the built tiles. The painted style needs 14 level -2 tiles (133,066 B, 9,505 B a tile) plus the index (1,316 B): 134.4 kB; under 100 kB it would need at most 10 such tiles, or tiles of at most 7,049 B (26 % lighter). The minimap style (the critic’s figure on the owner’s machine) needs 15 tiles, 213,756 B, 216.0 kB with its index: tiles of at most 6,517 B (54 % lighter). ATL.7’s 100 kB was set for the whole-route fit at level -5 (docs/research/map-atlas.md §24.2: 13 tiles, 85 kB with the index).",
+      "proposedText": "MR-06 (proposed): the first-view budget is measured on the view the app opens at on a first visit to the sample project in a 1366 x 768 window (the selected step’s zone-band view), as the body bytes of the tiles at that view’s level plus the tile index. It is 150 kB for the painted style and 240 kB for the minimap style, 12 % and 11 % above today’s 134.4 kB and 216.0 kB; a figure above them is a regression to fix, not to re-baseline. The underlay and the tiles of other levels loaded before the view settles (today 114.7 kB in the painted style) are reported beside it. ATL.7’s 100 kB stays the budget of the whole-route fit.",
+      "options": [
+        {
+          "option": "A. Restate the budget per style on the opening view (the proposed text)",
+          "cost": "No code. Accepts 134.4 kB (painted) and 216.0 kB (minimap) on the opening view, against 100 kB; at the 50 Mbit/s budget network that is 22 and 35 ms of transfer against 16 ms. Before the rework the first view loaded 402.3 kB of map images (one painted art image and its relief)."
+        },
+        {
+          "option": "B. Open a level coarser, then refine",
+          "cost": "Code in the map’s tile layer (the map chunk, not the entry). About a quarter as many tiles at level -3 (an estimate: 2 such tiles, 23,344 B, already load before the view settles), so probably under 100 kB, and it may help first art (MR-07); but a soft first frame on every open, and more bytes in all once the view refines."
+        },
+        {
+          "option": "C. Lighter tiles at the zone band",
+          "cost": "A rebuild of the atlas (and of the minimap pack, a release asset) on the owner’s machine with the client, and the owner’s sign-off on how they look again (D-050 signed off the built tiles): about 26 % lighter painted tiles and 54 % lighter minimap tiles."
+        },
+        {
+          "option": "D. Keep measuring the whole-route fit",
+          "cost": "Contradicts D-050 item 5 (“measured on the view the app actually opens at”); the app has not opened there since D-050 item 2."
+        },
+        {
+          "option": "E. Open on the whole-route fit again and move to the selected step on the first action",
+          "cost": "Reverses the knock-on of the owner’s D-050 item 2 (UI-08) for the map; an owner decision."
+        }
+      ],
+      "recommendation": "A: the opening view’s bytes above 100 kB cost about 6 ms (painted) and 19 ms (minimap) of transfer at the budget network, every lighter route costs quality or code, and the first view already loads less than before the rework. B is worth measuring if MR-07 (first art at 4x) stays open on the owner’s machine.",
+      "howToCheck": "In a browser with this harness (first-view part, firstViewBytes; --style minimap on a machine with the pack), and without one beside ATL.7’s check in tests/atlas-first-view.test.ts, which already sums the committed tiles of the whole-route fit for three panel sizes and could sum the opening view’s the same way.",
+      "recordUpdate": "docs/measurements/rework-speed-d050.json still records the old view; this file has the opening view’s bytes (firstViewDetail, f05.bytes). The lead adds the cross-reference with the MR-06 ruling."
+    }
+  },
+  "f10": {
+    "finding": "F-10: selection on open breaks the harness’s 10k selection case.",
+    "fix": "The harness places the list itself in every build (Go to zone, then the list scrolled so that step 5,001 is its first row on 10,000 steps, the top on the sample route) and clicks only rows wholly inside the list; an interaction with no map work is left out of the figures and fails the run.",
+    "interactionsWithoutMapWork": {
+      "sample.x1.selection.withoutMapWork": {
+        "pre": 0,
+        "main": 0,
+        "base": 0,
+        "cur": 0
+      },
+      "sample.x1.edit.withoutMapWork": {
+        "pre": 0,
+        "main": 0,
+        "base": 0,
+        "cur": 0
+      },
+      "sample.x4.selection.withoutMapWork": {
+        "pre": 0,
+        "main": 0,
+        "base": 0,
+        "cur": 0
+      },
+      "sample.x4.edit.withoutMapWork": {
+        "pre": 0,
+        "main": 0,
+        "base": 0,
+        "cur": 0
+      },
+      "tenK.x1.selection.withoutMapWork": {
+        "pre": 0,
+        "main": 0,
+        "base": 0,
+        "cur": 0
+      },
+      "tenK.x1.edit.withoutMapWork": {
+        "pre": 0,
+        "main": 0,
+        "base": 0,
+        "cur": 0
+      },
+      "tenK.x4.selection.withoutMapWork": {
+        "pre": 0,
+        "main": 0,
+        "base": 0,
+        "cur": 0
+      },
+      "tenK.x4.edit.withoutMapWork": {
+        "pre": 0,
+        "main": 0,
+        "base": 0,
+        "cur": 0
+      }
+    }
+  },
+  "owedOnTheOwnersMachine": [
+    "The minimap style: every figure here with --style minimap after pnpm maps:minimap:fetch and pnpm build (the pack is a release asset, not in git).",
+    "Absolute figures against the budgets (D-050 item 5, UI-04, MR-06, MR-07): this machine renders in software and its absolute times do not compare.",
+    "Every client-gated --check step (no WoW client here)."
+  ]
+}

@@ -130,7 +130,7 @@ function itemsBeforeAcceptSentence(facts: readonly SimFact[]): string | null {
 function dockWords(dock: TransportDockFact): string {
   switch (dock.pointFrom) {
     case 'inferred': {
-      // TIME-7: the walks end at the berth's boarding point, the step between them is in the wait.
+      // TIME-7 (D-052 item 1): the walks end at the berth's boarding point; the step between them is timed at run speed.
       const boarding = dock.boardingYd === null || dock.boardingYd === 0 ? '' : `, boarding on walkable ground ${formatInteger(Math.round(dock.boardingYd))} yd from the berth`;
       return `${dock.name}, dock position inferred from ${dock.record ?? 'the client taxi file'}${boarding}`;
     }
@@ -153,7 +153,7 @@ export function transportSentence(facts: readonly SimFact[]): string | null {
     if (fact.kind !== 'transport-ride') continue;
     const [departure, arrival] = fact.docks;
     const docks = [departure, arrival].flatMap((dock) => (dock === undefined ? [] : [`${dock.end === 'departure' ? 'from' : 'to'} ${dockWords(dock)}`]));
-    const boarding = fact.docks.some((dock) => dock.boardingYd !== null && dock.boardingYd > 0) ? ', the step from boarding to the berth included in the wait' : '';
+    const boarding = fact.docks.some((dock) => dock.boardingYd !== null && dock.boardingYd > 0) ? ', and the step between berth and boarding point timed at run speed (assumed)' : '';
     return `${fact.name}: ${docks.join('; ')}; wait and ride times assumed${boarding}`;
   }
   return null;

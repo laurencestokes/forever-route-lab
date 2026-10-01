@@ -983,6 +983,13 @@
   "firstViewBytes": {
     "$comment": "Review MR-06, measured on the view the app opens at (the sample route's fit, zoom −2.11, the 684 × 690 map panel), cold, 50 Mbit/s: resource timing read before anything touches the map (the instrument's Zoom in/out capture, which loads 16 more tiles, is not installed). firstViewBytes: the tiles in the view plus the index. The budget (§24.2, ≤ 100 kB) was written for the atlas fit view (85 kB).",
     "verdict": "FAIL on the view the app opens at",
+    "superseded": "These figures are the whole-route fit, the view the app opened at before D-050 item 2 (selection on open). Since then the app opens at the selected step's view (step 55, Orgrimmar, atlas level -2), which is heavier: see openingViewAfterD050Item2. Kept as measured; MR-06 on the new view awaits the architect (followup-cloud.json f05.mr06).",
+    "openingViewAfterD050Item2": {
+      "$comment": "The view the app opens at since D-050 item 2, a first visit to the sample project in a 1366 x 768 window: step 55 selected, Orgrimmar's zone band, atlas level -2. firstViewBytes: the level -2 tiles in the view plus the index. Painted: measured in the cloud session (docs/measurements/followup-cloud.json f05.bytes.cur; the same bytes in every round of the browser stage, the follow-up critic and both sceptics). Minimap: the follow-up critic's figure on the owner's machine (docs/reviews/rework-followup.md F-05); the cloud has no minimap tiles, so it is not re-measured here.",
+      "verdict": "FAIL against the 100 kB budget in both styles; the ruling on this view (MR-06) is the architect's",
+      "painted": { "tilesInView": 14, "tileBytesInView": 133066, "indexBytes": 1316, "firstViewBytes": 134382, "sameBurst": { "atlas:-3": { "n": 2, "bytes": 23344 }, "atlas:-5 underlay": { "n": 13, "bytes": 91346 } } },
+      "minimap": { "tilesInView": 15, "tileBytesInView": 213756, "firstViewKb": 216.0, "basis": "owner's machine, follow-up critic F-05; not measured in the cloud" }
+    },
     "budgetBytes": 100000,
     "minimap": {
       "panelCssPx": [

@@ -430,9 +430,14 @@ export interface MapCategoryCounts {
   readonly afterStep: number | null;
   /** The character, "Orc Warrior" (for "open to an Orc Warrior (no route state yet)"). */
   readonly who: string;
-  /** Quests per quest row, from the quest state; without it, the quests open by race and class, all under Available. */
+  /**
+   * Quests per quest row the map draws, from the quest state (the level ceiling applied, D-050 item
+   * 3); without it, the quests open by race and class, all under Available.
+   */
   readonly quests: Readonly<Partial<Record<MapCategoryId, number>>>;
-  /** Distinct givers of the available row's quests (the second figure, "209 · 118 givers"); null without route state. */
+  /** Quests per quest row the level ceiling keeps off the map (an assumption; the lists still show them); absent or 0 when none. */
+  readonly heldBack?: Readonly<Partial<Record<MapCategoryId, number>>>;
+  /** Distinct givers of the available row's drawn quests (the second figure, "209 · 118 givers"); null without route state. */
   readonly availableGivers: number | null;
   /** Log quests ready to turn in ("8 · 4 ready"); null without route state. */
   readonly ready: number | null;

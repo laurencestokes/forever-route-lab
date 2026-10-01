@@ -1,5 +1,5 @@
 {
-  "about": "UI refresh measurements (docs/research/ui-refresh.md revision 2; D-046, D-048). The entry-chunk figures of steps UR.1a, UR.1, UR.2 and UR.3 to UR.6 (the shared ledger is ui-refresh.md §10.3), UR.2b: PERF-11’s browser baseline for the route list, taken before the rows changed, and UR.3’s measure against it in both densities. UR.8’s measurement part (with MP.12) is ur8.",
+  "about": "UI refresh measurements (docs/research/ui-refresh.md revision 2; D-046, D-048). The entry-chunk figures of steps UR.1a, UR.1, UR.2 and UR.3 to UR.6 (the shared ledger is ui-refresh.md §10.3; the final verification, d050 and d050ux after them), UR.2b: PERF-11’s browser baseline for the route list, taken before the rows changed, and UR.3’s measure against it in both densities. UR.8’s measurement part (with MP.12) is ur8.",
   "entryChunk": {
     "$comment": "Entry chunk and its static imports, gzip, as printed by the dist audit of `pnpm build` (tools/build/audit-dist.ts) on the working tree of 2026-09-27. \"In context\" figures: the entry built with a source map and the named files’ bytes removed, then compressed again at gzip level 6 (.cache/ui-refresh/ur-build/attribute.mjs, as .cache/ui-refresh/ledger/attribute.mjs). Parts no screen uses yet are measured by building the app with src/main.tsx made to reference them (.cache/ui-refresh/ur-build/vite.probe.config.ts, PROBE=kit|marks|both).",
     "before": {
@@ -92,6 +92,21 @@
           "after": 14
         }
       }
+    },
+    "d050ux": {
+      "kB": 247.5,
+      "deltaKB": 0.68,
+      "budgetKb": 250,
+      "stopLineKb": 248.5,
+      "basis": "MEASURED (dist audit, 2026-09-30): the rework follow-up's build of the D-050 UX items and the review's minors (selection on open, UI-08; the state after the last step, PR-13; the level ceiling, PR-18; the berth table, TR-03; PR-16; UI-06; UI-15; QA-20; TR-10), from 246.82 kB after the speed fixes. Not attributed in context. The re-pin's audit and the follow-up critic's give the same 247.50 kB (docs/reviews/rework-followup.md: F-06, the follow-up's \"Entry chunk\" line and the re-pin's budget table). 1.00 kB under the 248.5 kB stop rule, the room left for D-051's B+ build (ui-refresh.md §10.3)."
+    },
+    "followupCloud": {
+      "kB": 247.51,
+      "bytes": 247512,
+      "deltaKB": 0.01,
+      "budgetKb": 250,
+      "stopLineKb": 248.5,
+      "basis": "MEASURED (dist audit, 2026-10-01, gzip level 6, in the cloud session): the rework follow-up's cloud fixes, the side panel's tab stops (F-03) and the repair stage's drawer counts (C-04, a lazy part), from 247.50 kB. index 235,429 + shell-support 11,760 + http 323 B. The tree before the repair stage gave 247,515 B (the browser stage's, the follow-up critic's and both sceptics' builds); after it 247,512 B. 988 B under the 248.5 kB stop rule, the room left for D-051's B+ build (ui-refresh.md §10.3)."
     }
   },
   "ur2bRouteListBaseline": {

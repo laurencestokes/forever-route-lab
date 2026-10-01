@@ -7,7 +7,9 @@ import { effectiveRules, FOREVER_BETA } from '../rules';
 import { createAcceptChecks } from '../validate/availability';
 import { stateWith, type StateFields } from '../validate/test-helpers';
 import { MAP_TEST_DUROTAR, MAP_TEST_KALIMDOR, stubDataset, stubNpc, stubQuest, worldSpawn } from './map-test-helpers';
-import { DRAW_LEVEL_CEILING, DRAWN_ROWS, LEVEL_WINDOW, PREREQUISITE_WINDOW, type QuestStateInput, type QuestStateModel, questStateModel, sameEntry, turnInOf } from './quest-state';
+import { classificationReusable, DRAW_LEVEL_CEILING, DRAWN_ROWS, LEVEL_WINDOW, PREREQUISITE_WINDOW, type QuestStateInput, type QuestStateModel, questStateModel, sameEntry, turnInOf, UNCLASSIFIED_FIELDS } from './quest-state';
+import { categoryCountsOf, layerNotesOf, type MapNotesSource } from './map-wording';
+import { EMPTY_LAYER_STATS } from '../map/adapter';
 import { noStateText, withArticle } from './quest-state-text';
 import { questsForCharacter } from './shell-support';
 import { zoneSpans } from './zone-levels';
@@ -305,17 +307,22 @@ describe('questStateModel: the Available tab’s groups and the map’s givers',
 describe('the map’s level ceiling (D-050 item 3; review PR-18)', () => {
   const OTHER = npcId(20);
   const other = [{ kind: 'npc' as const, id: OTHER }];
+  const MINER = npcId(21);
   // At level 10: a quest at the ceiling, one just above it, and a level-60 repeatable open from level 1.
   const ceilingQuests: readonly QuestRecord[] = [
     q(1, { name: 'Open door' }),
     q(40, { name: 'At the ceiling', level: 10 + DRAW_LEVEL_CEILING, minLevel: 1, starters: other }),
     q(41, { name: 'Just above', level: 10 + DRAW_LEVEL_CEILING + 1, minLevel: 1, starters: other }),
-    q(42, { name: 'Copper bars', level: 60, minLevel: 1, starters: other }),
+    q(42, { name: 'Copper bars', level: 60, minLevel: 1, starters: [{ kind: 'npc' as const, id: MINER }] }),
   ];
   const dataset = stubDataset({
     quests: ceilingQuests,
-    npcs: [stubNpc({ id: GIVER, name: 'Gornek' }), stubNpc({ id: OTHER, name: 'Miner Cromwell' })],
-    spawns: { 'npc:10': [worldSpawn(MAP_TEST_KALIMDOR, 0, -4000, MAP_TEST_DUROTAR)], 'npc:20': [worldSpawn(MAP_TEST_KALIMDOR, 30, -4000, MAP_TEST_DUROTAR)] },
+    npcs: [stubNpc({ id: GIVER, name: 'Gornek' }), stubNpc({ id: OTHER, name: 'Grunt Kor' }), stubNpc({ id: MINER, name: 'Miner Cromwell' })],
+    spawns: {
+      'npc:10': [worldSpawn(MAP_TEST_KALIMDOR, 0, -4000, MAP_TEST_DUROTAR)],
+      'npc:20': [worldSpawn(MAP_TEST_KALIMDOR, 30, -4000, MAP_TEST_DUROTAR)],
+      'npc:21': [worldSpawn(MAP_TEST_KALIMDOR, 60, -4000, MAP_TEST_DUROTAR)],
+    },
     zones: [{ uiMapId: MAP_TEST_DUROTAR, name: 'Durotar', worldMapId: MAP_TEST_KALIMDOR }],
   });
   const m = model({
@@ -336,9 +343,47 @@ describe('the map’s level ceiling (D-050 item 3; review PR-18)', () => {
     expect(m.groups.flatMap((group) => group.questIds)).toEqual(expect.arrayContaining([questId(41), questId(42)]));
   });
 
+  it('gives the drawer what the map draws: the rows and givers less the quests above the ceiling (follow-up F-08)', () => {
+    expect(m.counts.rowsDrawn.available).toBe(2);
+    expect(m.counts.rows.available - m.counts.rowsDrawn.available).toBe(m.counts.aboveCeiling);
+    // Gornek and Grunt Kor give the drawn quests; Miner Cromwell gives only "Copper bars", held back.
+    expect(m.counts.availableGivers).toBe(2);
+    const high = model({ dataset, state: stateWith({ level: 55 }), checks: createAcceptChecks({ dataset, rules: RULES }), open: questsForCharacter(dataset, CHARACTER).open, spans: zoneSpans(dataset, GEOMETRY, CHARACTER) });
+    expect(high.counts.rowsDrawn).toEqual(high.counts.rows);
+    // At level 55 the low quests leave the available row; "Copper bars" is drawn, so its giver counts.
+    expect(high.counts.rows.available).toBe(1);
+    expect(high.counts.availableGivers).toBe(1);
+  });
+
   it('counts them in the notes as an assumption', () => {
-    expect(m.map.notes.givers.join(' ')).toContain(`Not drawn by the level ceiling (an assumption): 2 quests are more than ${String(DRAW_LEVEL_CEILING)} levels above the character's level; the Available tab lists them.`);
+    expect(m.map.notes.givers[1]).toBe(`Not drawn by the level ceiling (an assumption), more than ${String(DRAW_LEVEL_CEILING)} levels above the character's level: 2 available; the Available tab lists them.`);
     expect(model().map.notes.givers.join(' ')).not.toContain('level ceiling');
+  });
+
+  it('words the drawer row’s count and its first note from the same numbers, the held-back quests leading (review C-04)', () => {
+    const source = {
+      character: { race: 'Orc', class: 'WARRIOR' },
+      questState: m,
+      afterStep: 'After step 55: ',
+      afterStepNumber: 55,
+      places: null,
+      flightMasters: () => ({ input: { groups: [] }, otherFaction: 0, factionUnknown: 0, spawnless: 0 }),
+    } as unknown as MapNotesSource;
+    const counts = categoryCountsOf(source, {});
+    const notes = layerNotesOf('available-quests', EMPTY_LAYER_STATS, source);
+    const { quests, heldBack } = counts;
+    const heldInRows = (heldBack?.available ?? 0) + (heldBack?.['may-be-available'] ?? 0) + (heldBack?.['needs-prerequisite'] ?? 0);
+    expect(heldInRows).toBe(2);
+    expect(notes[0]).toBe(
+      `After step 55: ${String(quests.available)} quests available, ${String(quests['may-be-available'])} may be available (uncertain) and ${String(quests['needs-prerequisite'])} need a prerequisite are drawn, open to an Orc Warrior (dataset quests); ${String(heldInRows)} more in these rows are above the level ceiling and not drawn (an assumption).`,
+    );
+    // Every row's held-back count is itemised in the second note, as the drawer names it.
+    expect(notes[1]).toContain(`: ${String(heldBack?.available)} available;`);
+    // Without a ceiling at work, nothing is held back and the notes say so by saying nothing.
+    const high = model({ dataset, state: stateWith({ level: 55 }), checks: createAcceptChecks({ dataset, rules: RULES }), open: questsForCharacter(dataset, CHARACTER).open, spans: zoneSpans(dataset, GEOMETRY, CHARACTER) });
+    const highSource = { ...source, questState: high } as MapNotesSource;
+    expect(categoryCountsOf(highSource, {}).heldBack).toEqual({});
+    expect(layerNotesOf('available-quests', EMPTY_LAYER_STATS, highSource)[0]).toBe(`After step 55: ${String(categoryCountsOf(highSource, {}).quests.available)} quest available, 0 may be available (uncertain) and 0 need a prerequisite are drawn, open to an Orc Warrior (dataset quests).`);
   });
 
   it('draws one all the same when it is in focus, and applies to the drawer’s other rows too', () => {
@@ -363,3 +408,138 @@ describe('the words without route state (§7.1)', () => {
   });
 });
 
+describe('the classification kept for a state that differs only where it does not look (follow-up F-03)', () => {
+  // One set of inputs, as the pipeline keeps them while the project's context stands.
+  const CHECKS = createAcceptChecks({ dataset: DATASET, rules: RULES });
+  const OPEN = questsForCharacter(DATASET, CHARACTER).open;
+  const SPANS = zoneSpans(DATASET, GEOMETRY, CHARACTER);
+  const records: StepRecord[] = [
+    { step: { id: stepId('s-a'), kind: 'travel' }, delta: { objectivesDone: [], abandoned: null, turnedIn: null } },
+    { step: { id: stepId('s-b'), kind: 'travel' }, delta: { objectivesDone: [], abandoned: null, turnedIn: null } },
+    { step: { id: stepId('s-c'), kind: 'complete' }, delta: { objectivesDone: [{ questId: questId(97), objective: 1 }], abandoned: null, turnedIn: null } },
+    { step: { id: stepId('s-d'), kind: 'travel' }, delta: { objectivesDone: [], abandoned: null, turnedIn: null } },
+    { step: { id: stepId('s-e'), kind: 'turnin' }, delta: { objectivesDone: [{ questId: questId(97), objective: 1 }], abandoned: null, turnedIn: questId(97) } },
+  ] as unknown as StepRecord[];
+  const inputOf = (fields: Partial<QuestStateInput> = {}): QuestStateInput => ({
+    revision: 1,
+    stepId: stepId('s-a'),
+    stepIndex: 0,
+    state: baseState(),
+    records,
+    dataset: DATASET,
+    geometry: GEOMETRY,
+    rules: RULES,
+    character: CHARACTER,
+    checks: CHECKS,
+    open: OPEN,
+    spans: SPANS,
+    ...fields,
+  });
+  /** A model without the parts a comparison of values cannot see: its two lookups and its source. */
+  const values = (m: QuestStateModel) => {
+    const { giversOf, giversFor, classifiedFrom, ...rest } = m;
+    return { ...rest, focused: giversOf([questId(3), questId(4)]), unlocking: giversFor(new Set(['unlocks-soon'] as const), [questId(6)]), state: classifiedFrom?.state };
+  };
+  /** The same state somewhere else, later, with the hearth on cooldown: no field the classification reads. */
+  const elsewhere = (): CharacterState => {
+    const state = baseState();
+    state.location = { mapId: MAP_TEST_KALIMDOR, x: 900, y: -4900 };
+    state.timeSec = 3_600;
+    state.hearth = { mapId: MAP_TEST_KALIMDOR, x: 0, y: -4000 };
+    state.hearthReadyAt = 7_200;
+    state.sinceCastBasis = 'assumption';
+    state.knownFlightPaths.add('1:23' as never);
+    return state;
+  };
+
+  it('names the fields it never reads, and only those', () => {
+    expect([...UNCLASSIFIED_FIELDS].sort()).toEqual(['hearth', 'hearthHint', 'hearthReadyAt', 'knownFlightPaths', 'location', 'locationCause', 'locationHint', 'riding', 'sinceCastBasis', 'sinceCastEraFallback', 'timeSec']);
+  });
+
+  it('keeps every entry, count and map input for a state that only moved, as a model built afresh says', () => {
+    const first = questStateModel(inputOf());
+    const later = inputOf({ revision: 2, stepId: stepId('s-b'), stepIndex: 1, state: elsewhere() });
+    expect(classificationReusable(first, later)).toBe(true);
+    const kept = questStateModel({ ...later, previous: first });
+    const fresh = questStateModel(later);
+    expect(values(kept)).toEqual(values(fresh));
+    // The same objects: the Available tab's rows and the map's givers and turn-ins stay as they are.
+    expect(kept.quests).toBe(first.quests);
+    expect(kept.map.givers).toBe(first.map.givers);
+    expect(kept.map.turnIns).toBe(first.map.turnIns);
+    expect(kept).toMatchObject({ revision: 2, stepId: stepId('s-b'), stepIndex: 1, atEnd: false });
+    // The groups follow the new place: the givers are farther now.
+    expect(kept.groups[0]?.distance).toBeGreaterThan(first.groups[0]?.distance ?? Infinity);
+  });
+
+  it('follows the step for the steps that complete the log quests’ objectives, and their outlines', () => {
+    const first = questStateModel(inputOf());
+    expect(entryOf(first, 97).turnIn?.completedBy).toEqual({ stepId: stepId('s-c'), turnIn: false });
+    // After s-d, only the turn-in carries quest 97's open objective (D-040).
+    const later = inputOf({ revision: 2, stepId: stepId('s-d'), stepIndex: 3, state: elsewhere() });
+    const kept = questStateModel({ ...later, previous: first });
+    expect(values(kept)).toEqual(values(questStateModel(later)));
+    expect(entryOf(kept, 97).turnIn?.completedBy).toEqual({ stepId: stepId('s-e'), turnIn: true });
+    expect(kept.map.log.areas.find((area) => area.questId === questId(97))).toMatchObject({ labelStep: stepId('s-e'), labelTurnIn: true });
+    // Only that entry is new.
+    expect(kept.quests.get(questId(1))).toBe(first.quests.get(questId(1)));
+    expect(kept.quests.get(questId(97))).not.toBe(first.quests.get(questId(97)));
+  });
+
+  it('classifies again when a field it reads differs, or another dataset, rules, character, checks or quest list is asked for', () => {
+    const first = questStateModel(inputOf());
+    const changes: readonly ((state: CharacterState) => void)[] = [
+      (state) => {
+        state.level = 11;
+      },
+      (state) => {
+        state.xp = 50;
+      },
+      (state) => {
+        state.unknownXpEvents = 1;
+      },
+      (state) => {
+        state.xpBasis = 'assumption';
+      },
+      (state) => {
+        state.questLog.delete(questId(98));
+      },
+      (state) => {
+        state.questLog.set(questId(97), { objectives: ['done', 'done'], failed: false, routeAccepted: true });
+      },
+      (state) => {
+        state.completed.add(questId(99));
+      },
+      (state) => {
+        state.abandoned.add(questId(1));
+      },
+      (state) => {
+        state.acceptedInRoute.add(questId(5));
+      },
+      (state) => {
+        state.skills.set(393, 75);
+      },
+      (state) => {
+        state.reputationDelta.set(76, 250);
+      },
+      (state) => {
+        state.knownSpells.add(1234);
+      },
+    ];
+    for (const change of changes) {
+      const state = baseState();
+      change(state);
+      const later = inputOf({ revision: 2, stepId: stepId('s-b'), stepIndex: 1, state });
+      expect(classificationReusable(first, later)).toBe(false);
+      expect(values(questStateModel({ ...later, previous: first }))).toEqual(values(questStateModel(later)));
+    }
+    const other = inputOf({ revision: 2, state: elsewhere() });
+    expect(classificationReusable(first, { ...other, checks: createAcceptChecks({ dataset: DATASET, rules: RULES }) })).toBe(false);
+    expect(classificationReusable(first, { ...other, open: [...OPEN] })).toBe(false);
+    expect(classificationReusable(first, { ...other, character: { ...CHARACTER } })).toBe(false);
+    expect(classificationReusable(first, { ...other, rules: effectiveRules(FOREVER_BETA) })).toBe(false);
+    // A model built by hand (no source) is never taken.
+    const { classifiedFrom: _source, ...byHand } = first;
+    expect(classificationReusable(byHand, other)).toBe(false);
+  });
+});

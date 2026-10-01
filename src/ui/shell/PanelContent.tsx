@@ -95,6 +95,19 @@ function gridItems(grid: HTMLElement): HTMLElement[][] {
     .filter((items) => items.length > 0);
 }
 
+/**
+ * Gives `stop` the grid's one tab stop (`tabIndex` 0) and every other item -1, writing only the
+ * items whose value changes: the grid re-renders on every selection (its rows say "after step N"),
+ * and rewriting every item's attribute each time (170 to 180 writes per selection on the sample
+ * route's Available tab) was DOM work that changed nothing (follow-up F-03).
+ */
+export function setTabStop(items: readonly HTMLElement[], stop: HTMLElement | null): void {
+  for (const item of items) {
+    const wanted = item === stop ? 0 : -1;
+    if (item.tabIndex !== wanted) item.tabIndex = wanted;
+  }
+}
+
 export const QUEST_GRID_KEYS =
   'Arrow keys move between the quests and their buttons, and onto the group headings; Home and End go along a row, Control+Home and Control+End to the ends, Page Up and Page Down by ten rows; Enter or Space activates.';
 
@@ -139,13 +152,12 @@ export function QuestGrid({ label, children, className }: QuestGridProps) {
       const target = kept ?? row?.[Math.min(at.item, row.length - 1)] ?? row?.[0] ?? null;
       if (target !== null) {
         current.current = target.dataset.gridKey ?? null;
-        for (const item of all) item.tabIndex = item === target ? 0 : -1;
+        setTabStop(all, target);
         target.focus();
         return;
       }
     }
-    const stop = kept ?? all[0] ?? null;
-    for (const item of all) item.tabIndex = item === stop ? 0 : -1;
+    setTabStop(all, kept ?? all[0] ?? null);
   });
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -181,7 +193,7 @@ export function QuestGrid({ label, children, className }: QuestGridProps) {
         const target = event.target as HTMLElement;
         const row = rows.findIndex((items) => items.includes(target));
         place.current = row < 0 ? null : { row, item: rows[row]?.indexOf(target) ?? 0 };
-        for (const item of rows.flat()) item.tabIndex = item === event.target ? 0 : -1;
+        setTabStop(rows.flat(), target);
       }}
       onBlur={(event) => {
         const next = event.relatedTarget;

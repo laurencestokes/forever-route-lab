@@ -488,7 +488,7 @@ describe('carried objective work (D-040)', () => {
   });
 
   it('says in Details which transport a step rode and where its docks come from, with the client record (TIME-7, MP-R32; TR-02)', () => {
-    // TIME-7 (TR-03): a client berth's walks end at its boarding point, the step between them in the wait.
+    // TIME-7 (D-052 item 1; TR-03): a client berth's walks end at its boarding point, the step between them timed at run speed.
     const ride = (pointFrom: 'inferred' | 'user', arrivalBoardingYd: number | null): SimFact => ({
       kind: 'transport-ride',
       transportId: 'stormwind-auberdine',
@@ -500,7 +500,7 @@ describe('carried objective work (D-040)', () => {
       ],
     });
     expect(transportSentence([ride('inferred', 12.5)])).toBe(
-      'Stormwind Harbor – Auberdine ship: from Auberdine, dock position inferred from client transport path 11616, stop 1 of 2, boarding on walkable ground 37 yd from the berth; to Stormwind Harbor, dock position inferred from client transport path 11616, stop 2 of 2, boarding on walkable ground 13 yd from the berth; wait and ride times assumed, the step from boarding to the berth included in the wait',
+      'Stormwind Harbor – Auberdine ship: from Auberdine, dock position inferred from client transport path 11616, stop 1 of 2, boarding on walkable ground 37 yd from the berth; to Stormwind Harbor, dock position inferred from client transport path 11616, stop 2 of 2, boarding on walkable ground 13 yd from the berth; wait and ride times assumed, and the step between berth and boarding point timed at run speed (assumed)',
     );
     expect(transportSentence([ride('user', null)])).toBe(
       'Stormwind Harbor – Auberdine ship: from Auberdine, at the dock you entered; to Stormwind Harbor, dock position inferred from client transport path 11616, stop 2 of 2; wait and ride times assumed',

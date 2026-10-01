@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createDerivedStore, createEditorStore, fixedClock, insertNote } from '../app';
 import { createDerivedPipeline } from '../app/derived-pipeline';
 import { mapTestWorkspace } from '../app/map-test-helpers';
@@ -9,12 +9,20 @@ import { DerivedStoreProvider } from '../app/react';
 import { sequentialIdSource } from '../app/shell-support';
 import { App } from './App';
 import { STEP_NOT_WALKED } from './app/derived-view';
+import { loadValidationPanel } from './app/lazy';
 
 /**
  * The shell over the real derived-result pipeline (src/app/derived-pipeline.ts: engine, simulation
  * and validator) on the map test route, with no navigation data: the rows, the status bar and the
  * Validation tab show what the walk worked out, and an edit is walked again.
  */
+
+// The Validation panel is a lazy part (ui-refresh.md UR.1a) that production builds preload when
+// idle; so does this test. Run first on a cold transform cache, the chunk took longer than
+// findByRole's default 1 s to load (rework follow-up F-12).
+beforeAll(async () => {
+  await loadValidationPanel();
+}, 60_000);
 
 afterEach(cleanup);
 
@@ -63,7 +71,7 @@ describe('the shell over the real pipeline', () => {
 
     const issues = s.handle.store.getState().results?.issues ?? [];
     fireEvent.click(screen.getByRole('tab', { name: /^Validation/ }));
-    const list = await screen.findByRole('list', { name: 'Issues' });
+    const list = await screen.findByRole('list', { name: 'Issues' }, { timeout: 10_000 });
     expect(within(list).getAllByRole('listitem')).toHaveLength(Math.min(issues.length, 100));
 
     // An edit: the new step is said to be waiting for the walk until it runs.

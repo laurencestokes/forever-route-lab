@@ -15,7 +15,8 @@ import { walkRoute } from './walker';
  * The walker's transports and flights after the map rework's travel review (docs/SIMULATION.md
  * TIME-5..TIME-7; findings TR-01, TR-02, TR-03 and TR-08): the quickest-edge choice never picks a
  * service from inferred docks, a ride records its edge and its docks' provenance, a walk to or from
- * a client berth ends at its boarding point on walkable ground (D-050 item 4), and a flight to a
+ * a client berth ends at its boarding point on walkable ground, the step to the berth priced at run
+ * speed as an assumption (D-052 item 1), and a flight to a
  * node its faction may not use warns.
  * The seeded ship, its client path and the positions are made up for the tests.
  */
@@ -128,9 +129,11 @@ describe('a transport step naming no record and no dock (TIME-7; TR-01)', () => 
   });
 });
 
-// D-050 item 4 (review TR-03): a client berth lies in the water beside its pier; its walks end at
-// the boarding point the berth table gives (src/rules/berths.ts), the step to the berth is in the wait.
-describe('walks to and from client berths (TIME-7; D-050 item 4; TR-03)', () => {
+// D-052 item 1 (review TR-03, follow-up F-07): a client berth lies in the water beside its pier; its
+// walks end at the boarding point the berth table gives (src/rules/berths.ts), and the step between
+// the boarding point and the berth is priced at each end as its straight-line yards at run speed,
+// an assumption, as a travel part of its own (not in the wait).
+describe('walks to and from client berths (TIME-7; D-052 item 1; TR-03)', () => {
   /** The Stormwind Harbor – Auberdine ship on its real client path and berths (the table knows them). */
   const REAL: TransportSeed = { ...SHIP, id: 'real-ship', clientPath: 11616 };
   const REAL_TAXI: CommittedTaxi = {
@@ -142,17 +145,37 @@ describe('walks to and from client berths (TIME-7; D-050 item 4; TR-03)', () => 
   const real = (options: FixtureContextOptions = {}) => fixtureContext(DATA, { flightMasterIds: [60, 61], graph: { transports: [REAL], taxi: REAL_TAXI }, travel: halfSwim, ...options });
   const start = { character: { startLocation: at(6634, 908) } };
 
-  it('walk to the boarding point on walkable ground, and on from the arrival’s, with no time for the step to the berth', () => {
-    const result = walk([makeTravelStep(ids, { mode: 'transport', transport: { id: 'real-ship', dock: null }, location: at(-8648, 1433, EASTERN_KINGDOMS) })], real(), start);
+  it('walk to the boarding point on walkable ground, and on from the arrival’s, and price each step to the berth at run speed as an assumption', () => {
+    const ctx = real();
+    const result = walk([makeTravelStep(ids, { mode: 'transport', transport: { id: 'real-ship', dock: null }, location: at(-8648, 1433, EASTERN_KINGDOMS) })], ctx, start);
     const crossing = record(result, 0);
     expect(crossing.legs.map((leg) => [leg.purpose, leg.from.point, leg.to.point])).toEqual([
       ['dock', point(6634, 908), BOARD_K],
       ['step', BOARD_E, point(-8648, 1433, EASTERN_KINGDOMS)],
     ]);
-    // 100 yd to the boarding point and 100 yd on (half ground, half swim in this model), the wait and the ride; nothing for the berths.
+    // 100 yd to the boarding point and 100 yd on (half ground, half swim in this model), the wait
+    // and the ride, and the two berth steps (36.8 and 12.5 yd) at run speed. No leg is drawn for them.
+    const runSpeed = ctx.rules.values.runSpeed.value;
     const swim = crossing.legs[0]?.seconds.value ?? 0;
-    expect(crossing.estimate.duration.value).toBeCloseTo(2 * swim + 120, 10);
+    expect(crossing.estimate.duration.value).toBeCloseTo(2 * swim + 120 + (36.8 + 12.5) / runSpeed, 10);
+    expect(crossing.estimate.duration.basis).toBe('assumption');
+    expect(crossing.estimate.breakdown.waiting).toBeCloseTo(60, 10);
+    expect(crossing.estimate.breakdown.travel).toBeCloseTo(2 * swim + 60 + (36.8 + 12.5) / runSpeed, 10);
     expect(factsOf(crossing, 'transport-ride')[0]?.docks.map((dock) => dock.boardingYd)).toEqual([36.8, 12.5]);
+  });
+
+  it('price only the arrival’s berth step when the departure is a dock the user entered', () => {
+    const ctx = real();
+    const result = walk([makeTravelStep(ids, { mode: 'transport', transport: { id: 'real-ship', dock: at(6548, 942) }, location: at(-8648, 1433, EASTERN_KINGDOMS) })], ctx, start);
+    const crossing = record(result, 0);
+    expect(crossing.legs.map((leg) => [leg.purpose, leg.to.point])).toEqual([
+      ['dock', point(6548, 942)],
+      ['step', point(-8648, 1433, EASTERN_KINGDOMS)],
+    ]);
+    const runSpeed = ctx.rules.values.runSpeed.value;
+    const walked = crossing.legs.reduce((sum, leg) => sum + (leg.seconds.value ?? 0), 0);
+    expect(crossing.estimate.duration.value).toBeCloseTo(walked + 120 + 12.5 / runSpeed, 10);
+    expect(factsOf(crossing, 'transport-ride')[0]?.docks.map((dock) => dock.boardingYd)).toEqual([null, 12.5]);
   });
 
   it('a transport without a location leaves the character at the arrival’s boarding point', () => {

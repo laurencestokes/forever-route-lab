@@ -41,7 +41,7 @@ import type { KillPlace } from '../sim/kill-xp';
 import { type ObjectiveWork, partialWork } from '../sim/objectives';
 import { type Basis, sumEstimates } from '../sim/provenance';
 import { flightTime, type LocalTaxiData, nearestLocalTaxiNode } from '../sim/taxi';
-import { transportCrossing } from '../sim/transport';
+import { boardingSteps, transportCrossing } from '../sim/transport';
 import { type GroundTravel, type StepSpeeds, trainRiding } from '../sim/travel';
 import { grantXp } from '../sim/xp';
 import { evaluateFilter, evaluateSkipIf, or3 } from './conditions';
@@ -571,8 +571,10 @@ function priceCrossing(
   }
   const arrival = edge === null ? null : env.places.dock(edge.to);
   const onward = arrival !== null && target !== null && arrival.point.mapId === target.point.mapId ? groundMove(env, arrival, target, radius, speeds) : null;
-  const parts: TimePart[] = [...crossing.parts];
-  const used: (readonly RuleKey[])[] = [crossing.used];
+  // The steps between each berth and its boarding point, at run speed (an assumption; D-052 item 1).
+  const pier = boardingSteps(edge, env.rules);
+  const parts: TimePart[] = [...crossing.parts, ...pier.parts];
+  const used: (readonly RuleKey[])[] = [crossing.used, pier.used];
   if (onward !== null) {
     parts.push({ bucket: 'travel', seconds: onward.seconds });
     used.push(onward.used);

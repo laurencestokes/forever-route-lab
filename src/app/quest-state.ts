@@ -14,6 +14,7 @@ import { questXp } from '../sim/quest-xp';
 import { type AcceptChecks, type AcceptFinding, acceptTruth, availabilitySubject } from '../validate/availability';
 import { formatIssueMessage, type IssueCode, issueCodeSpec } from '../validate/codes';
 import { characterName } from './character-names';
+import { sameCharacterStateExcept } from './same-state';
 import { objectiveModel } from './map-model';
 import { withArticle } from './quest-state-text';
 import { HOLIDAY_QUEST_SORTS } from './sample-route';
@@ -177,8 +178,15 @@ export interface AvailableGroup {
 export interface QuestStateCounts {
   readonly classes: Readonly<Record<QuestClass, number>>;
   readonly outside: Readonly<Record<OutsideReason, number>>;
+  /** Quests per row, as the Available tab lists them (the level ceiling does not apply). */
   readonly rows: Readonly<Record<QuestRow, number>>;
-  /** Distinct givers of the available row's quests ("209 · 118 givers"). */
+  /**
+   * Quests per row the map draws when the row is shown: the giver rows less the quests the level
+   * ceiling keeps off the map (`DRAW_LEVEL_CEILING`, D-050 item 3); turn-ins are all drawn. The
+   * drawer's counts (map-presentation.md §25.3.3; follow-up F-08).
+   */
+  readonly rowsDrawn: Readonly<Record<QuestRow, number>>;
+  /** Distinct givers of the available row's quests the map draws, the level ceiling applied ("209 · 118 givers"). */
   readonly availableGivers: number;
   /** Log quests ready to turn in ("8 · 4 ready"). */
   readonly ready: number;
@@ -231,7 +239,7 @@ export interface QuestMapInputs {
 }
 
 export interface QuestStateModel {
-  /** The editor revision walked. */
+  /** The editor revision walked (at the end of the route, the walk it was classified at: a later walk that leaves that state as it was keeps the model). */
   readonly revision: number;
   /** The active step: the state is the one after it. */
   readonly stepId: StepId;
@@ -265,6 +273,24 @@ export interface QuestStateModel {
    * then. The same object for the same rows and ids.
    */
   readonly giversFor: (rows: ReadonlySet<QuestRow>, questIds: readonly QuestId[]) => SpawnLayerInput;
+  /**
+   * What the entries were classified from (follow-up F-03): a model asked for a state that differs
+   * from this one only where the classification does not look (`classificationReusable`) keeps
+   * them. Absent on a model built by hand.
+   */
+  readonly classifiedFrom?: QuestClassification;
+}
+
+/** The inputs a model's entries were classified from, and the log quests' open objectives at that state. */
+export interface QuestClassification {
+  readonly state: ReadonlyCharacterState;
+  readonly dataset: DatasetView;
+  readonly geometry: MapGeometry;
+  readonly rules: EffectiveRules;
+  readonly character: QuestStateInput['character'];
+  readonly checks: AcceptChecks;
+  readonly open: readonly QuestRecord[];
+  readonly objectives: ReadonlyMap<QuestId, ReadonlySet<number>>;
 }
 
 export interface QuestStateInput {
@@ -800,13 +826,37 @@ const zeroes = <K extends string>(keys: readonly K[]): Record<K, number> => Obje
 const n = (value: number): string => value.toLocaleString('en-GB');
 const counted = (value: number, one: string, many: string): string => `${n(value)} ${value === 1 ? one : many}`;
 
+/** The giver rows the level ceiling can hold back, in the drawer's order, and their words in the notes. */
+const HELD_ROWS = ['available', 'may-be-available', 'needs-prerequisite', 'unlocks-soon', 'low-level'] as const;
+const HELD_WORDS: Readonly<Record<(typeof HELD_ROWS)[number], string>> = {
+  available: 'available',
+  'may-be-available': 'that may be available',
+  'needs-prerequisite': 'that need a prerequisite',
+  'unlocks-soon': 'that unlock soon',
+  'low-level': 'at a low level',
+};
+const listOf = (parts: readonly string[]): string => (parts.length < 2 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1] ?? ''}`);
+
 /** The layer notes (§7.2's "counted in the notes by reason", MAP-HONEST-5), without step numbers. */
 function layerNotes(counts: QuestStateCounts, who: string, log: QuestStateModel['log'], giverNotes: GiverNotes, turnInNotes: TurnInNotes, levelLowerBound: boolean): QuestLayerNotes {
-  const { rows, outside, classes } = counts;
+  const { rowsDrawn: drawn, outside, classes } = counts;
+  // Worded from what the map draws, as the drawer's counts are (review C-04): the quests the level
+  // ceiling holds back from the rows drawn by default are counted in the first line, and every
+  // row's are itemised in the second, never folded into the drawn counts.
+  const held = HELD_ROWS.map((row) => ({ row, count: counts.rows[row] - drawn[row] })).filter((part) => part.count > 0);
+  const heldTotal = held.reduce((sum, part) => sum + part.count, 0);
   const givers = [
-    `${counted(rows.available, 'quest', 'quests')} available, ${n(rows['may-be-available'])} may be available (uncertain) and ${n(rows['needs-prerequisite'])} need a prerequisite, open to ${withArticle(who)} (dataset quests).`,
-    `Not drawn: ${n(rows['unlocks-soon'])} unlock within ${String(LEVEL_WINDOW)} levels, ${n(rows['low-level'])} are low level, ${n(classes['in-log'])} are in the log (turn-ins) and ${n(classes.done)} are done.`,
+    `${counted(drawn.available, 'quest', 'quests')} available, ${n(drawn['may-be-available'])} may be available (uncertain) and ${n(drawn['needs-prerequisite'])} need a prerequisite are drawn, open to ${withArticle(who)} (dataset quests)${counts.aboveCeiling > 0 ? `; ${n(counts.aboveCeiling)} more in these rows are above the level ceiling and not drawn (an assumption)` : ''}.`,
   ];
+  if (heldTotal > 0) {
+    const parts = held.map((part) => `${n(part.count)} ${HELD_WORDS[part.row]}`);
+    givers.push(
+      `Not drawn by the level ceiling (an assumption), more than ${String(DRAW_LEVEL_CEILING)} levels above the character's level${levelLowerBound ? ' (itself a lower bound)' : ''}: ${listOf(parts)}; the Available tab lists ${heldTotal === 1 ? 'it' : 'them'}.`,
+    );
+  }
+  givers.push(
+    `Not drawn unless their rows are shown: ${n(drawn['unlocks-soon'])} unlock within ${String(LEVEL_WINDOW)} levels and ${n(drawn['low-level'])} are low level. Not drawn as givers: ${n(classes['in-log'])} are in the log (turn-ins) and ${n(classes.done)} are done.`,
+  );
   const words: Readonly<Record<OutsideReason, string>> = {
     'level-ahead': 'need a higher level',
     'prerequisite-outside': 'need a prerequisite outside the window',
@@ -816,11 +866,6 @@ function layerNotes(counts: QuestStateCounts, who: string, log: QuestStateModel[
     'level-unknown': 'have no known level',
     event: 'are holiday or event quests',
   };
-  if (counts.aboveCeiling > 0) {
-    givers.push(
-      `Not drawn by the level ceiling (an assumption): ${counted(counts.aboveCeiling, 'quest is', 'quests are')} more than ${String(DRAW_LEVEL_CEILING)} levels above the character's level${levelLowerBound ? ' (itself a lower bound)' : ''}; the Available tab lists ${counts.aboveCeiling === 1 ? 'it' : 'them'}.`,
-    );
-  }
   const reasons = OUTSIDE_REASONS.filter((reason) => outside[reason] > 0).map((reason) => `${n(outside[reason])} ${words[reason]}`);
   if (reasons.length > 0) givers.push(`Outside the windows: ${reasons.join(', ')}.`);
   if (log.full) givers.push(`The quest log is full (${n(log.size)} of ${n(log.capacity)}): nothing can be accepted until a quest is turned in.`);
@@ -874,6 +919,8 @@ function giverPlace(dataset: DatasetView, record: QuestRecord | undefined, locat
 }
 
 export function questStateModel(input: QuestStateInput): QuestStateModel {
+  const previous = input.previous ?? null;
+  if (previous !== null && classificationReusable(previous, input)) return reclassified(previous, input);
   const { state, dataset, geometry, rules, character, checks } = input;
   const subject = availabilitySubject(character);
   const characterLevel = state.level;
@@ -948,7 +995,6 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
   }
 
   // Unchanged entries keep the previous model's objects.
-  const previous = input.previous ?? null;
   if (previous !== null) {
     for (const [id, entry] of quests) {
       const old = previous.quests.get(id);
@@ -956,20 +1002,26 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
     }
   }
   const entries = [...quests.values()].sort((a, b) => a.questId - b.questId);
+  // The level ceiling keeps quests far above the character off the map (D-050 item 3).
+  const ceiling = characterLevel + DRAW_LEVEL_CEILING;
+  const aboveCeiling = (entry: QuestStateEntry): boolean => entry.level !== null && entry.level > ceiling;
   const classes = zeroes(QUEST_CLASSES);
   const outside = zeroes(OUTSIDE_REASONS);
   const rows = zeroes(QUEST_ROWS);
+  const rowsDrawn = zeroes(QUEST_ROWS);
   let ready = 0;
   for (const entry of entries) {
     classes[entry.cls] += 1;
     if (entry.outside !== null) outside[entry.outside] += 1;
-    if (entry.row !== null) rows[entry.row] += 1;
+    if (entry.row !== null) {
+      rows[entry.row] += 1;
+      // As `giversFor` draws them: the giver rows above the ceiling are not drawn; turn-ins are.
+      if (entry.row === 'turn-ins' || !aboveCeiling(entry)) rowsDrawn[entry.row] += 1;
+    }
     if (entry.turnIn?.kind === 'ready') ready += 1;
   }
 
-  // The map's inputs; the level ceiling keeps quests far above the character off the map (D-050 item 3).
-  const ceiling = characterLevel + DRAW_LEVEL_CEILING;
-  const aboveCeiling = (entry: QuestStateEntry): boolean => entry.level !== null && entry.level > ceiling;
+  // The map's inputs.
   const drawnByDefault = (entry: QuestStateEntry): boolean => entry.row !== null && DRAWN_ROWS.has(entry.row) && !aboveCeiling(entry);
   const drawn = entries.filter(drawnByDefault);
   let heldBack = 0;
@@ -987,57 +1039,11 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
   const objectives = logObjectives(dataset, geometry, logEntries, open);
   const availableGivers = new Set<string>();
   for (const entry of entries) {
-    if (entry.row !== 'available') continue;
+    if (entry.row !== 'available' || aboveCeiling(entry)) continue;
     for (const ref of dataset.quest(entry.questId)?.starters ?? []) if (ref.kind !== 'item') availableGivers.add(`${ref.kind}:${String(ref.id)}`);
   }
 
-  // The Available tab's groups.
-  const listed = entries.filter((entry) => entry.row !== null && entry.row !== 'turn-ins').sort(byListOrder);
-  const zoneGroups = new Map<string, { title: string; uiMapId: UiMapId | null; distance: number | null; ids: QuestId[] }>();
-  const soon: QuestId[] = [];
-  const low: QuestId[] = [];
-  for (const entry of listed) {
-    if (entry.row === 'unlocks-soon') {
-      soon.push(entry.questId);
-      continue;
-    }
-    if (entry.row === 'low-level') {
-      low.push(entry.questId);
-      continue;
-    }
-    const place = giverPlace(dataset, dataset.quest(entry.questId), state.location);
-    const key = place === null ? 'no-giver' : `zone:${String(place.uiMapId ?? 'none')}`;
-    const group = zoneGroups.get(key) ?? {
-      title: place === null ? 'No giver on the map' : ((place.uiMapId === null ? undefined : input.spans.get(place.uiMapId)?.name) ?? zoneNameOf(dataset, place.uiMapId)),
-      uiMapId: place?.uiMapId ?? null,
-      distance: null,
-      ids: [],
-    };
-    const distance = place?.distance ?? null;
-    if (distance !== null && (group.distance === null || distance < group.distance)) group.distance = distance;
-    group.ids.push(entry.questId);
-    zoneGroups.set(key, group);
-  }
-  const groups: AvailableGroup[] = [...zoneGroups.entries()]
-    .sort(([ka, a], [kb, b]) => {
-      if ((ka === 'no-giver') !== (kb === 'no-giver')) return ka === 'no-giver' ? 1 : -1;
-      return (a.distance ?? Infinity) - (b.distance ?? Infinity) || (a.title < b.title ? -1 : a.title > b.title ? 1 : 0) || (a.uiMapId ?? 0) - (b.uiMapId ?? 0);
-    })
-    .map(([key, group]) => {
-      const span = group.uiMapId === null ? null : (input.spans.get(group.uiMapId) ?? null);
-      return {
-        key,
-        kind: key === 'no-giver' ? 'no-giver' : 'zone',
-        title: group.title,
-        uiMapId: group.uiMapId,
-        span,
-        rating: span === null ? null : zoneRating(span, characterLevel, lowerBound, rules),
-        distance: group.distance,
-        questIds: group.ids,
-      };
-    });
-  if (soon.length > 0) groups.push({ key: 'unlocks-soon', kind: 'unlocks-soon', title: 'Unlocks soon', uiMapId: null, span: null, rating: null, distance: null, questIds: soon });
-  if (low.length > 0) groups.push({ key: 'low-level', kind: 'low-level', title: 'Low level', uiMapId: null, span: null, rating: null, distance: null, questIds: low });
+  const groups = availableGroups(dataset, entries, state.location, input.spans, characterLevel, lowerBound, rules);
 
   let focused: { readonly key: string; readonly input: SpawnLayerInput } | null = null;
   const giversOf = (ids: readonly QuestId[]): SpawnLayerInput => {
@@ -1072,7 +1078,7 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
   };
 
   const capacity = rules.values.questLogCapacity.value;
-  const counts: QuestStateCounts = { classes, outside, rows, availableGivers: availableGivers.size, ready, objectives: objectives.quests, aboveCeiling: heldBack };
+  const counts: QuestStateCounts = { classes, outside, rows, rowsDrawn, availableGivers: availableGivers.size, ready, objectives: objectives.quests, aboveCeiling: heldBack };
   const log = { size: state.questLog.size, capacity, full: state.questLog.size >= capacity };
   const giverNotes: GiverNotes = { itemStarted: givers.itemOnly, noStarter: givers.none, spawnlessGivers: givers.spawnlessGroups, spawnlessQuests: givers.spawnlessQuests };
   const turnInNotes: TurnInNotes = { unknownQuests, noPosition, spawnless: turnIns.spawnlessQuests };
@@ -1100,5 +1106,154 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
     },
     giversOf,
     giversFor,
+    classifiedFrom: { state, dataset, geometry, rules, character, checks, open: input.open, objectives: open },
   };
+}
+
+/**
+ * The state fields the classification never reads (follow-up F-03): where the character is and
+ * since when, the hearth and its cooldown, riding and the flight paths known. The accept checks
+ * and COL-1 read the level, its XP and basis, the log, the completed, abandoned and accepted
+ * quests, skills, reputation and spells (src/validate/availability.ts); this model adds the log's
+ * objectives and the level. Every other field, and any field added later, is compared.
+ */
+export const UNCLASSIFIED_FIELDS: ReadonlySet<string> = new Set<keyof ReadonlyCharacterState>([
+  'timeSec',
+  'location',
+  'locationHint',
+  'locationCause',
+  'hearth',
+  'hearthHint',
+  'hearthReadyAt',
+  'sinceCastBasis',
+  'sinceCastEraFallback',
+  'riding',
+  'knownFlightPaths',
+]);
+
+/**
+ * Whether `model`'s entries hold for `input` (follow-up F-03): the same dataset, geometry, rules,
+ * character, checks and open quests, and a state equal in every field the classification reads.
+ * A selection that moves between steps that only travel (or note, hearth, fly) gets the same class,
+ * reason, marks and XP for every quest, so only what follows the place and the step is redone.
+ */
+export function classificationReusable(model: QuestStateModel, input: QuestStateInput): boolean {
+  const from = model.classifiedFrom;
+  return (
+    from !== undefined &&
+    from.dataset === input.dataset &&
+    from.geometry === input.geometry &&
+    from.rules === input.rules &&
+    from.character === input.character &&
+    from.checks === input.checks &&
+    from.open === input.open &&
+    sameCharacterStateExcept(from.state, input.state, UNCLASSIFIED_FIELDS)
+  );
+}
+
+const sameCompleting = (a: CompletingStep | null, b: CompletingStep | null): boolean =>
+  a === null || b === null ? a === b : a.stepId === b.stepId && a.turnIn === b.turnIn;
+
+/**
+ * `previous` for `input`, whose state differs from previous's only where the classification does
+ * not look (`classificationReusable`): every entry, count, note, the givers and turn-ins (the same
+ * objects, so the map leaves those layers alone) are kept; the steps that complete the log quests'
+ * objectives follow the new step (and the objectives' outlines with them), and the Available tab's
+ * groups follow the new place. The same model as `questStateModel` builds without `previous`
+ * (quest-state.test.ts compares them).
+ */
+function reclassified(previous: QuestStateModel, input: QuestStateInput): QuestStateModel {
+  const from = previous.classifiedFrom;
+  if (from === undefined) throw new Error('reclassified needs a classified model');
+  const completed = completingSteps(input.records, input.stepIndex + 1, from.objectives);
+  let quests: Map<QuestId, QuestStateEntry> | null = null;
+  for (const id of from.objectives.keys()) {
+    const entry = previous.quests.get(id);
+    if (entry === undefined || entry.turnIn === null) continue;
+    const by = completed.get(id) ?? null;
+    if (sameCompleting(entry.turnIn.completedBy, by)) continue;
+    quests ??= new Map(previous.quests);
+    quests.set(id, { ...entry, turnIn: { ...entry.turnIn, completedBy: by } });
+  }
+  const kept = quests ?? previous.quests;
+  const entries = [...kept.values()];
+  const log =
+    quests === null
+      ? previous.map.log
+      : logObjectives(
+          from.dataset,
+          from.geometry,
+          entries.filter((entry) => entry.cls === 'in-log').sort((a, b) => a.questId - b.questId),
+          from.objectives,
+        ).input;
+  return {
+    ...previous,
+    revision: input.revision,
+    stepId: input.stepId,
+    stepIndex: input.stepIndex,
+    atEnd: input.atEnd ?? false,
+    quests: kept,
+    groups: availableGroups(from.dataset, entries, input.state.location, input.spans, previous.level, previous.levelLowerBound, from.rules),
+    map: log === previous.map.log ? previous.map : { ...previous.map, log },
+    classifiedFrom: { ...from, state: input.state },
+  };
+}
+
+/** The Available tab's groups (§14.4): the listed quests by their giver's zone, nearest first, then Unlocks soon and Low level. */
+function availableGroups(
+  dataset: DatasetView,
+  entries: readonly QuestStateEntry[],
+  location: WorldPoint | null,
+  spans: ZoneSpans,
+  characterLevel: number,
+  lowerBound: boolean,
+  rules: EffectiveRules,
+): AvailableGroup[] {
+  const listed = entries.filter((entry) => entry.row !== null && entry.row !== 'turn-ins').sort(byListOrder);
+  const zoneGroups = new Map<string, { title: string; uiMapId: UiMapId | null; distance: number | null; ids: QuestId[] }>();
+  const soon: QuestId[] = [];
+  const low: QuestId[] = [];
+  for (const entry of listed) {
+    if (entry.row === 'unlocks-soon') {
+      soon.push(entry.questId);
+      continue;
+    }
+    if (entry.row === 'low-level') {
+      low.push(entry.questId);
+      continue;
+    }
+    const place = giverPlace(dataset, dataset.quest(entry.questId), location);
+    const key = place === null ? 'no-giver' : `zone:${String(place.uiMapId ?? 'none')}`;
+    const group = zoneGroups.get(key) ?? {
+      title: place === null ? 'No giver on the map' : ((place.uiMapId === null ? undefined : spans.get(place.uiMapId)?.name) ?? zoneNameOf(dataset, place.uiMapId)),
+      uiMapId: place?.uiMapId ?? null,
+      distance: null,
+      ids: [],
+    };
+    const distance = place?.distance ?? null;
+    if (distance !== null && (group.distance === null || distance < group.distance)) group.distance = distance;
+    group.ids.push(entry.questId);
+    zoneGroups.set(key, group);
+  }
+  const groups: AvailableGroup[] = [...zoneGroups.entries()]
+    .sort(([ka, a], [kb, b]) => {
+      if ((ka === 'no-giver') !== (kb === 'no-giver')) return ka === 'no-giver' ? 1 : -1;
+      return (a.distance ?? Infinity) - (b.distance ?? Infinity) || (a.title < b.title ? -1 : a.title > b.title ? 1 : 0) || (a.uiMapId ?? 0) - (b.uiMapId ?? 0);
+    })
+    .map(([key, group]) => {
+      const span = group.uiMapId === null ? null : (spans.get(group.uiMapId) ?? null);
+      return {
+        key,
+        kind: key === 'no-giver' ? 'no-giver' : 'zone',
+        title: group.title,
+        uiMapId: group.uiMapId,
+        span,
+        rating: span === null ? null : zoneRating(span, characterLevel, lowerBound, rules),
+        distance: group.distance,
+        questIds: group.ids,
+      };
+    });
+  if (soon.length > 0) groups.push({ key: 'unlocks-soon', kind: 'unlocks-soon', title: 'Unlocks soon', uiMapId: null, span: null, rating: null, distance: null, questIds: soon });
+  if (low.length > 0) groups.push({ key: 'low-level', kind: 'low-level', title: 'Low level', uiMapId: null, span: null, rating: null, distance: null, questIds: low });
+  return groups;
 }

@@ -3,6 +3,8 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDerivedStore } from '../../app/derived';
 import { stubDataset, stubNpc, stubQuest } from '../../app/map-test-helpers';
+import type { MapStatus } from '../../app/map-controller';
+import type { MapCategoryRow } from '../../app/map-categories';
 import type { QuestStateModel } from '../../app/quest-state';
 import { DerivedStoreProvider } from '../../app/react';
 import type { NpcId, QuestId, UiMapId, WorldMapId } from '../../domain/ids';
@@ -14,7 +16,7 @@ import type { StepRowModel } from '../route/rows';
 import { MapKey } from '../shell/MapKey';
 import { MapCategoryDrawer, type DrawerGroup, type MapCategoryDrawerProps } from '../shell/MapCategoryDrawer';
 import { acceptFirstOf, groupHeadingWords } from './AvailableQuests';
-import { searchPlacesOf } from './MapLayersPanel';
+import { countOf, searchPlacesOf } from './MapLayersPanel';
 import { QuestDetails } from './QuestDetails';
 import { UNNAMED_ZONE_NOTE, zoneChoices } from './StepEditors';
 
@@ -247,5 +249,23 @@ describe('Details’ difficulty (review UI-12)', () => {
     expect(text).toContain('Difficulty at the level after the selected step (3), as the route list and the Available tab take it.');
     expect(within(document.body).getAllByText(/Difficult \(yellow\)/).length).toBeGreaterThan(0);
     expect(text).not.toContain('start level (1)');
+  });
+});
+
+describe('the drawer’s quest counts and the level ceiling (follow-up F-08)', () => {
+  const status = (heldBack: MapStatus['counts']['heldBack']) =>
+    ({ counts: { afterStep: 55, who: 'Orc Warrior', quests: { available: 44, 'may-be-available': 20 }, heldBack, availableGivers: 40, ready: 4, places: {}, inView: {} } }) as unknown as MapStatus;
+  const row = (id: MapCategoryRow['id']) => ({ id }) as MapCategoryRow;
+  const words = { after: 'after step 55', stated: true };
+
+  it('shows what the map draws, and names the quests the ceiling holds back in the accessible name', () => {
+    expect(countOf(row('available'), status({ available: 43 }), words, true)).toEqual({
+      count: '44 · 40 givers · +43 held',
+      name: 'Available: 44 quests at 40 givers after step 55, 43 more above the level ceiling not drawn (an assumption), shown',
+    });
+    expect(countOf(row('may-be-available'), status({ available: 43 }), words, false)).toEqual({ count: '20', name: 'May be available: 20 quests after step 55, hidden' });
+    // The held-back quests are visible beside the count, in words, not only in the accessible name (review C-04).
+    expect(countOf(row('may-be-available'), status({ 'may-be-available': 1 }), words, true).count).toBe('20 · +1 held');
+    expect(countOf(row('available'), status(undefined), words, true).name).toBe('Available: 44 quests at 40 givers after step 55, shown');
   });
 });

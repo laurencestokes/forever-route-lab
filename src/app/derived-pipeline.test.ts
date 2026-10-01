@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type Location, type RouteStep, sequentialIdSource, worldMapId, worldSourcedPoint } from '../domain';
 import { makeTravelStep } from '../domain/step-factory';
 import type { NavLegsProgress } from '../nav/worker/client';
@@ -6,7 +6,7 @@ import { NavWorkerError, type NavLegQuery, type NavLegResult } from '../nav/work
 import { fixedClock } from './clock';
 import { type Command, insertNote, setStepLocation, updateStepNote } from './commands';
 import { createDerivedStore, type DerivedResults, pendingTravelReason, pendingTravelText, provisionalNote } from './derived';
-import { createDerivedPipeline, type DerivedPipeline, SELECTION_SETTLE_MS } from './derived-pipeline';
+import { createDerivedPipeline, type DerivedPipeline, RECENT_QUEST_STATES, SELECTION_SETTLE_MS } from './derived-pipeline';
 import { acceptStepsAt, MAP_TEST_DATASET, mapTestSteps, mapTestWorkspace } from './map-test-helpers';
 import { createNavigationRuntime, type DisposableNavLegService, type NavigationRuntime, type NavigationState } from './navigation-runtime';
 import { ManualTimers, testNavManifest, walkable } from './navigation-test-helpers';
@@ -15,6 +15,7 @@ import { updateSettings } from './project-commands';
 import { createRxpContext } from './rxp-context';
 import { previewRxpExport } from './rxp-export';
 import { createEditorStore, type EditorStore } from './store';
+import type * as QuestStateModule from './quest-state';
 
 /**
  * The derived-result pipeline (ARCHITECTURE §12.1, §14; terrain-navigation.md §9.3-§9.4): one walk
@@ -24,6 +25,20 @@ import { createEditorStore, type EditorStore } from './store';
  */
 
 const T0 = '2026-09-25T12:00:00.000Z';
+
+// The quest-state classifier, called through, so the tests can see when it runs and for which step (review F-01).
+const classify = vi.hoisted(() => ({ calls: [] as { readonly stepId: unknown; readonly atEnd: boolean }[] }));
+vi.mock('./quest-state', async (importOriginal) => {
+  const actual = await importOriginal<typeof QuestStateModule>();
+  return {
+    ...actual,
+    questStateModel: (input: Parameters<typeof actual.questStateModel>[0]) => {
+      classify.calls.push({ stepId: input.stepId, atEnd: input.atEnd ?? false });
+      return actual.questStateModel(input);
+    },
+  };
+});
+
 
 interface LegsCall {
   readonly queries: readonly NavLegQuery[];
@@ -345,6 +360,161 @@ describe('derived pipeline: walks and publishing', () => {
     expect(tasksToState).toBe(1);
     expect(s.handle.store.getState().questState?.stepId).toBe(first.id);
     unsubscribe();
+  });
+
+  it('keeps the end-of-route quest state out of an edit’s task, and rebuilds it only when the state after the last step changes (D-050 item 2; review F-01)', () => {
+    const s = setup();
+    s.timers.advance(0);
+    const [first] = s.steps;
+    const last = s.steps[s.steps.length - 1];
+    if (first === undefined || last === undefined) throw new Error('no step');
+    // No step selected: the panels and the map show the state after the last step.
+    const atEnd = s.handle.store.getState().questState;
+    expect(atEnd).toMatchObject({ stepId: last.id, stepIndex: s.steps.length - 1, atEnd: true });
+    expect(s.handle.store.getState().selected).toMatchObject({ stepId: last.id, atEnd: true });
+    // A note's text leaves that state as it was: the edit's publish carries the results only, and
+    // the task after it keeps the model without classifying again (the places follow the new walk).
+    // Count the timer tasks: the task that publishes each edit's results, and the one that rebuilds the places.
+    let tasks = 0;
+    const set = s.timers.set.bind(s.timers);
+    s.timers.set = (callback, ms) =>
+      set(() => {
+        tasks += 1;
+        callback();
+      }, ms);
+    let resultsTask: number | null = null;
+    let placesTask: number | null = null;
+    let classifiedTask: number | null = null;
+    const seen = { results: s.handle.store.getState().results, places: s.handle.store.getState().places, calls: 0 };
+    const unsubscribe = s.handle.store.subscribe(() => {
+      const state = s.handle.store.getState();
+      if (state.results !== seen.results) resultsTask = tasks;
+      if (state.places !== seen.places) placesTask = tasks;
+      if (classify.calls.length !== seen.calls) classifiedTask = tasks;
+      seen.results = state.results;
+      seen.places = state.places;
+      seen.calls = classify.calls.length;
+    });
+    classify.calls.length = 0;
+    s.store.dispatch(updateStepNote(first.id, 'edited'));
+    s.timers.advance(0);
+    expect(s.handle.store.getState().results?.project).toBe(s.store.getState().project);
+    expect(s.handle.store.getState().selected).toMatchObject({ revision: 1, stepId: last.id, atEnd: true });
+    expect(classify.calls).toEqual([]);
+    expect(s.handle.store.getState().questState).toBe(atEnd);
+    // The places follow the new walk, in the task after the edit's.
+    expect(resultsTask).not.toBeNull();
+    expect(placesTask).toBe((resultsTask ?? 0) + 1);
+    // An edit that moves the last step changes the state after it: a new end-of-route model, in a task of its own.
+    tasks = 0;
+    s.store.dispatch(setStepLocation(last.id, worldLocation(400, -4400)));
+    s.timers.advance(0);
+    unsubscribe();
+    expect(classify.calls).toEqual([{ stepId: last.id, atEnd: true }]);
+    expect(resultsTask).toBe(1);
+    expect(classifiedTask).toBe(2);
+    const moved = s.handle.store.getState().questState;
+    expect(moved).not.toBe(atEnd);
+    expect(moved).toMatchObject({ revision: 2, stepId: last.id, atEnd: true });
+    // A character change rebuilds it too, whatever the state.
+    classify.calls.length = 0;
+    s.store.dispatch(updateSettings({ character: { startLevel: 5 } }));
+    s.pipeline.flush();
+    expect(classify.calls).toEqual([{ stepId: last.id, atEnd: true }]);
+    expect(s.handle.store.getState().questState).not.toBe(moved);
+  });
+
+  it('keeps the classification for a step whose state differs only where it does not look, from the last few models (follow-up F-03)', () => {
+    const s = setup();
+    s.timers.advance(0);
+    const [, second, , , fifth, sixth] = s.steps;
+    if (second === undefined || fifth === undefined || sixth === undefined) throw new Error('no step');
+    expect(sixth.kind).toBe('travel');
+    const modelAt = (id: typeof fifth.id) => {
+      s.store.select({ kind: 'single', id });
+      s.timers.advance(0);
+      const model = s.handle.store.getState().questState;
+      if (model === null || model.stepId !== id) throw new Error('no quest state for the step');
+      return model;
+    };
+    // The turn-in, then the travel after it: the same quests in the same states, so the same entries.
+    const afterTurnIn = modelAt(fifth.id);
+    const afterTravel = modelAt(sixth.id);
+    expect(afterTravel).not.toBe(afterTurnIn);
+    expect(afterTravel.quests).toBe(afterTurnIn.quests);
+    expect(afterTravel.map.givers).toBe(afterTurnIn.map.givers);
+    // Another state is classified afresh ...
+    const early = modelAt(second.id);
+    expect(early.quests).not.toBe(afterTurnIn.quests);
+    // ... and coming back takes the classification from the recent models.
+    expect(modelAt(sixth.id).quests).toBe(afterTurnIn.quests);
+    expect(RECENT_QUEST_STATES).toBeGreaterThanOrEqual(2);
+  });
+
+  it('never classifies the end of the route for an edit while a step is selected (review F-01)', () => {
+    const s = setup();
+    s.timers.advance(0);
+    const [first, , third] = s.steps;
+    if (first === undefined || third === undefined) throw new Error('no step');
+    s.store.select({ kind: 'single', id: third.id });
+    s.timers.advance(0);
+    classify.calls.length = 0;
+    s.store.dispatch(updateStepNote(first.id, 'edited'));
+    s.timers.advance(0);
+    s.store.dispatch(setStepLocation(third.id, worldLocation(30, -4030)));
+    s.pipeline.flush();
+    // Only the selected step's quest state, once per edit; the end of the route is never asked for.
+    expect(classify.calls).toEqual([
+      { stepId: third.id, atEnd: false },
+      { stepId: third.id, atEnd: false },
+    ]);
+    expect(s.handle.store.getState().selected).toMatchObject({ stepId: third.id, index: 2, atEnd: false });
+    expect(s.handle.store.getState().questState).toMatchObject({ revision: 2, stepId: third.id, atEnd: false });
+  });
+
+  it('follows the selected step through edits that move it (an insert or delete before it)', () => {
+    const s = setup();
+    s.timers.advance(0);
+    const [first, , third] = s.steps;
+    if (first === undefined || third === undefined) throw new Error('no step');
+    s.store.select({ kind: 'single', id: third.id });
+    expect(s.handle.store.getState().selected).toMatchObject({ stepId: third.id, index: 2 });
+    // Two steps inserted before it at once, then the original order back.
+    const insertTwo: Command = {
+      label: 'Insert two',
+      apply: (p) => {
+        const [a, ...rest] = p.route.steps;
+        if (a === undefined) return p;
+        const copies = [
+          { ...a, id: 'x1' as never },
+          { ...a, id: 'x2' as never },
+        ];
+        return { ...p, route: { ...p.route, steps: [a, ...copies, ...rest] } };
+      },
+    };
+    s.store.dispatch(insertTwo);
+    s.timers.advance(0);
+    s.store.select({ kind: 'single', id: third.id });
+    expect(s.handle.store.getState().selected).toMatchObject({ stepId: third.id, index: 4 });
+    expect(s.handle.store.getState().selected?.record.step.id).toBe(third.id);
+    // A note edit: the step is where it was.
+    s.store.dispatch(updateStepNote(first.id, 'edited'));
+    s.timers.advance(0);
+    expect(s.handle.store.getState().selected).toMatchObject({ revision: 2, stepId: third.id, index: 4 });
+    // One step deleted before it: one place back.
+    const dropOne: Command = { label: 'Drop one', apply: (p) => ({ ...p, route: { ...p.route, steps: p.route.steps.filter((step) => step.id !== ('x1' as never)) } }) };
+    s.store.dispatch(dropOne);
+    s.timers.advance(0);
+    s.store.select({ kind: 'single', id: third.id });
+    expect(s.handle.store.getState().selected).toMatchObject({ revision: 3, stepId: third.id, index: 3 });
+    expect(s.handle.store.getState().selected?.record.step.id).toBe(third.id);
+    // Further than one place: found all the same.
+    const dropTwo: Command = { label: 'Drop two', apply: (p) => ({ ...p, route: { ...p.route, steps: p.route.steps.filter((step) => step.id !== ('x2' as never) && step.id !== first.id) } }) };
+    s.store.dispatch(dropTwo);
+    s.timers.advance(0);
+    s.store.select({ kind: 'single', id: third.id });
+    expect(s.handle.store.getState().selected).toMatchObject({ revision: 4, stepId: third.id, index: 1 });
+    expect(s.handle.store.getState().selected?.record.step.id).toBe(third.id);
   });
 
   it('makes the quest givers’ and turn-ins’ clusters in the quest-state task and hands them to the map with the places (D-050 item 6)', () => {

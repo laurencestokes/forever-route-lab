@@ -160,6 +160,24 @@ describe('QuestGrid (ui-refresh.md §9.3; APG layout grid)', () => {
     expect([...grid().querySelectorAll('[data-grid-item]')].filter((el) => (el as HTMLElement).tabIndex === 0)).toEqual([button('Done here: objective 1 of Three')]);
   });
 
+  it('writes only the tab stops that change when it renders again (follow-up F-03)', () => {
+    const { rerender } = render(<Grid />);
+    const observer = new MutationObserver(() => undefined);
+    observer.observe(grid(), { subtree: true, attributes: true, attributeFilter: ['tabindex'] });
+    // A render with the same rows (a selection elsewhere): no item's tab stop changes, so none is written.
+    rerender(<Grid />);
+    expect(observer.takeRecords()).toEqual([]);
+    // The tab stop moving writes the two items it moves between.
+    button('Accept Two').focus();
+    expect(observer.takeRecords().map((record) => record.target)).toEqual([header('Razor Hill, Durotar 5-12, 2 quests'), button('Accept Two')]);
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowUp' });
+    expect(observer.takeRecords().map((record) => record.target)).toEqual([button('Accept Two'), button('Accept One')]);
+    rerender(<Grid />);
+    expect(observer.takeRecords()).toEqual([]);
+    expect([...grid().querySelectorAll('[data-grid-item]')].filter((el) => (el as HTMLElement).tabIndex === 0)).toEqual([button('Accept One')]);
+    observer.disconnect();
+  });
+
   it('pages by ten rows, and clamps at the ends', () => {
     expect(gridKeyTarget('PageDown', false, [1, 2, 2, 1], { row: 0, item: 0 })).toEqual({ row: 3, item: 0 });
     expect(gridKeyTarget('PageUp', false, [1, 2, 2, 1], { row: 2, item: 1 })).toEqual({ row: 0, item: 0 });
