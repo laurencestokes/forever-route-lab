@@ -54,3 +54,7 @@ pnpm-debug.log*
 # Local map sets (art and extra geometry) from your own client. Never committed or deployed (D-018).
 local-maps/*
 !local-maps/README.md
+
+# Local Claude Code tool files (machine-specific)
+.claude/settings.local.json
+.claude/launch.json
