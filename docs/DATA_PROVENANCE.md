@@ -405,18 +405,22 @@ Field-level parity with upstream Generation is not proven (see the optional manu
 
 **Commits and CI (ARCHITECTURE §5.2).** Every change to `tools/questiedb/` (its tests and README
 included) changes `toolTreeHash` and lands in the same commit as the regenerated `public/data/**` and
-fixture slice; `validate` enforces this (§8.1). CI runs `pnpm data:check`: it fetches the pinned
-QuestieDB commit named in `tools/questiedb/upstream.json` (`pnpm data:fetch`), runs
-`pnpm data:extract --check`, which fails unless every output is byte-identical to the committed files
-and no other file is there (reproducibility contract, §8.3), and then `pnpm data:validate`.
+fixture slice; `validate` enforces this (§8.1). CI runs the checks of `pnpm data:check`: it fetches
+the pinned QuestieDB commit named in `tools/questiedb/upstream.json` (`pnpm data:fetch`), fails unless
+every output is byte-identical to the committed files and no other file is there
+(`pnpm data:extract --check`, or `extract.test.ts` with `CI` set; reproducibility contract, §8.3), and
+then runs `pnpm data:validate`.
 
 *Changed after the review (data-F3, code-F1):* `pnpm check` runs `pnpm data:validate` (no clone
 needed), and `pnpm test` validates the committed `public/data` and the slice with no clone
 (`validate.test.ts`). The end-to-end tool test (`extract.test.ts`) needs the clone; without it, it
 prints a loud "SKIPPED" warning, and with the environment variable `CI` set it fails instead. So a
 clean checkout without the clone gets every consistency check, but not the proof that the files
-equal a fresh extraction. *Planned:* the CI workflow itself (Milestone 9 gauntlet); until then that
-gate is `pnpm data:check`, run by hand, and STATUS tracks it.
+equal a fresh extraction. *Since D-053* that CI is the Pages workflow (`.github/workflows/pages.yml`,
+ARCHITECTURE §16), on every push to `main`: it restores the clone from a cache keyed by the pinned
+commit, runs `pnpm data:fetch` (which verifies every input either way), then `pnpm test`, in which
+`extract.test.ts` runs with `CI` set and so compares with a fresh extraction or fails, and
+`pnpm data:validate`; any failure stops the deploy. `pnpm data:check` is the same gate by hand.
 
 **Optional manual parity check (ARCHITECTURE §5.2).** The pipeline needs no Lua runtime (D-009),
 so field-level parity with QuestieDB's own Lua generation is an optional manual check, not a CI
@@ -964,8 +968,9 @@ dataRevision = lowercase hex SHA-256 of the UTF-8 concatenation of lines
   unless §6 says otherwise; numbers in ECMAScript shortest round-trip form; one record per line; LF;
   final newline; no timestamps anywhere except the report. `extract.test.ts` runs the extraction twice
   and compares bytes, and compares both with the committed files; `pnpm data:extract --check` is the
-  CI form of the same check (§5). Because `validate` requires `toolTreeHash` to equal the checkout,
-  every `tools/questiedb` change lands in the same commit as its regenerated dataset.
+  command-line form of the same check, and the Pages workflow runs the test with `CI` set (§5).
+  Because `validate` requires `toolTreeHash` to equal the checkout, every `tools/questiedb` change
+  lands in the same commit as its regenerated dataset.
 
 ### 8.4 Extraction report (not shipped, gitignored): `generated/questiedb-report.json`
 

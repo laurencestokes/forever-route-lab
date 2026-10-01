@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createEditorStore, type EditorStore, fixedClock } from '../../app';
 import type { RouteStep } from '../../domain';
 import { createMapController, type MapController, type MapEngineSetup, type MapResources } from '../../app/map-exports';
@@ -8,6 +8,7 @@ import { acceptStepsAt, fakeAdapterFactory, mapTestWorkspace, type FakeAdapter }
 import { sequentialIdSource } from '../../app/shell-support';
 import type { MapAdapterFactory } from '../../map/adapter';
 import { buildRouteView, mapStepLabel } from '../app-model';
+import { loadMapLayersPanel } from './lazy';
 import { createAnnouncer } from './LiveAnnouncer';
 import { createRouteActions } from './route-actions';
 import {
@@ -24,6 +25,13 @@ import {
 } from './MapPanel';
 
 afterEach(cleanup);
+
+// The Map layers drawer and the map popover are lazy parts (map-presentation.md §25.3.1, §14.2) that
+// production builds preload when idle; so do these tests. Loaded at the first open instead, the chunk
+// can take over a second on a busy machine, longer than Testing Library waits by default.
+beforeAll(async () => {
+  await loadMapLayersPanel();
+});
 
 const NOW = '2026-09-25T12:00:00.000Z';
 

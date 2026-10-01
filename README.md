@@ -152,7 +152,9 @@ The full plan, with the reasoning behind each piece, is [docs/ARCHITECTURE.md](d
 
 ## Run it
 
-You need Node.js 22.13 or newer and pnpm 10.33 (see `packageManager` in `package.json`).
+The site is published at <https://www.lozstokes.co.uk/forever-route-lab/>, deployed from `main` by
+GitHub Pages. To run it yourself you need Node.js 22.13 or newer and pnpm 10.33 (see
+`packageManager` in `package.json`).
 
 ```bash
 pnpm install --frozen-lockfile

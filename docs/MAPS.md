@@ -575,9 +575,10 @@ visual reference.
 ### 5.5 `validate.ts` checks
 
 **Placeholder checks** run in CI from Milestone 2 (`pnpm maps:validate`, implemented in
-`tools/maps/validate.ts` and `tools/maps/lib/checks.ts`). Any failure fails the build. The
-placeholder is first rebuilt in memory from the pinned inputs; every check then compares the
-committed file with the inputs directly, not only with the importer's output.
+`tools/maps/validate.ts` and `tools/maps/lib/checks.ts`; the Pages workflow runs them through
+`pnpm test`, all but P6, which its clean-checkout check covers: ARCHITECTURE §16). Any failure fails
+the build. The placeholder is first rebuilt in memory from the pinned inputs; every check then
+compares the committed file with the inputs directly, not only with the importer's output.
 
 | # | Check |
 |---|---|
@@ -593,9 +594,9 @@ committed file with the inputs directly, not only with the importer's output.
 | P8 | `contentHash` equals the SHA-256 of `canonicalGeometryContent` of the committed file (§5.3), recomputed exactly as `infra/maps` does at load, and equals a fresh import's content hash. A hand edit that also rewrites `contentHash` passes the loader's self-check but fails P8 (and P1, P2 or P5). |
 
 **Committed art checks** (Milestone 3b; `tools/maps/lib/art-checks.ts`) run in CI with the
-placeholder checks (`pnpm maps:validate`); they need no client. `convert.ts --check` is the rebuild
-from the client, and `tools/maps/art.client.test.ts` recomposes every image to its recorded pixel
-hash.
+placeholder checks (`pnpm maps:validate`; in the Pages workflow, through `pnpm test`); they need no
+client. `convert.ts --check` is the rebuild from the client, and `tools/maps/art.client.test.ts`
+recomposes every image to its recorded pixel hash.
 
 | # | Check |
 |---|---|
@@ -1725,9 +1726,12 @@ conclusions.
     pointer `pack.json`; the tiles ship in a release-asset pack (`NOTICE.md` first, then
     `manifest.json`, then `t/`) whose release text is the NOTICE, downloaded and verified by
     `pnpm maps:minimap:fetch` and required only by the deploy build (`pnpm build:deploy`). The
-    release is published only when the owner authorises pushing (OD-13). Removal on request: delete
-    the asset and release, commit the removal of the folder, redeploy Pages and confirm the tile URLs
-    return 404; copies already downloaded cannot be recalled. D-033's terms apply.
+    release is published only when the owner authorises pushing (OD-13); until a pack is first
+    released, the Pages workflow builds the site without the tiles (`pnpm build:painted`, D-053);
+    after that, a commit whose pack is not yet released stops the run (ARCHITECTURE §16). Removal
+    on request: delete the asset and release, commit the removal of the folder, redeploy Pages and
+    confirm the tile URLs return 404; copies already downloaded cannot be recalled. D-033's terms
+    apply.
 15. **The per-image art since ATL.10** (D-042 O5): `public/maps/art/` deploys only the five images
     still drawn one at a time; the others remain in git history from the commits before ATL.10.
 

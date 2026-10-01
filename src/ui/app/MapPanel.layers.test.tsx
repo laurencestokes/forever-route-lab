@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createEditorStore, fixedClock } from '../../app';
 import { createMapController, createMapLayersSetting, MAP_LAYERS_STORAGE_KEY, type MapEngineSetup, type MapResources } from '../../app/map-exports';
 import { fakeAdapterFactory, mapTestWorkspace } from '../../app/map-test-helpers';
 import { sequentialIdSource } from '../../app/shell-support';
 import { buildRouteView, mapStepLabel } from '../app-model';
+import { loadMapLayersPanel } from './lazy';
 import { MapPanel } from './MapPanel';
 
 /*
@@ -18,6 +19,13 @@ import { MapPanel } from './MapPanel';
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+// The drawer is a lazy part (map-presentation.md §25.3.1) that production builds preload when idle;
+// so do these tests. Loaded at the first open instead, the chunk can take over a second on a busy
+// machine, longer than Testing Library waits by default.
+beforeAll(async () => {
+  await loadMapLayersPanel();
 });
 
 const NOW = '2026-09-28T12:00:00.000Z';
@@ -34,13 +42,13 @@ function memoryStorage(initial: Readonly<Record<string, unknown>> = {}) {
   };
 }
 
-function setup({ record, atlas = false, resources = null }: { record?: unknown; atlas?: boolean; resources?: MapResources | null } = {}) {
+function setup({ record, atlas = false, resources = null, minimap }: { record?: unknown; atlas?: boolean; resources?: MapResources | null; minimap?: boolean } = {}) {
   const storage = memoryStorage(record === undefined ? {} : { [MAP_LAYERS_STORAGE_KEY]: record });
   const setting = createMapLayersSetting(() => storage);
   const workspace = mapTestWorkspace(undefined, NOW);
   const store = createEditorStore({ project: workspace.project, ids: sequentialIdSource(100), clock: fixedClock(NOW) });
   const fake = fakeAdapterFactory();
-  const controller = createMapController({ store, data: workspace.data, geometry: workspace.geometry, describeStep: mapStepLabel, timing: null, objectUrls: null, atlas, resources, mapStyle: setting.style });
+  const controller = createMapController({ store, data: workspace.data, geometry: workspace.geometry, describeStep: mapStepLabel, timing: null, objectUrls: null, atlas, resources, mapStyle: setting.style, minimap });
   const setupMap: MapEngineSetup = { geometry: workspace.geometry, art: null, resources, loadAdapter: () => Promise.resolve(fake.factory), mapLayers: setting };
   const announce = vi.fn<(message: string) => void>();
   const view = buildRouteView(store.getState().project.route, workspace.dataset, 1);
@@ -205,6 +213,25 @@ describe('the Map layers drawer in the map panel (§25.3)', () => {
     expect(group.getByRole('radio', { name: 'Painted' })).toHaveProperty('checked', true);
     // Written at once, beside the kept rows.
     expect(s.storage.record()).toEqual({ version: 1, style: 'painted', hidden: ['turn-ins'] });
+  });
+
+  it('shows the minimap as unavailable in a painted build, says why, and keeps the minimap choice in the record (D-053)', async () => {
+    const s = setup({ atlas: true, minimap: false, record: { version: 1, style: 'minimap' } });
+    await settle();
+    const why = 'This build has no minimap tiles, so the painted map is the only style.';
+    const drawer = await openDrawer();
+    const group = within(drawer.getByRole('group', { name: 'Map style' }));
+    const minimap = group.getByRole('radio', { name: 'Minimap' });
+    expect(minimap).toHaveProperty('disabled', true);
+    expect(minimap.closest('label')?.getAttribute('title')).toBe(why);
+    expect(group.getByRole('radio', { name: 'Painted' })).toHaveProperty('checked', true);
+    expect(group.getByRole('radio', { name: 'Painted' })).toHaveProperty('disabled', false);
+    // The note describes the control.
+    const note = drawer.getAllByText(why).find((element) => element.classList.contains('frl-mapdrawer__note'));
+    expect(note?.id).toBeTruthy();
+    expect(minimap.closest('fieldset')?.getAttribute('aria-describedby')).toBe(note?.id);
+    expect(s.controller.getStatus().style.chosen).toBe('painted');
+    expect(s.storage.record()).toEqual({ version: 1, style: 'minimap' });
   });
 
   it('says why the chosen style is not drawn, and which one is, when its tiles cannot be loaded (MM.7, map-atlas.md §21.4)', async () => {

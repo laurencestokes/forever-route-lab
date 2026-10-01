@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createEditorStore, fixedClock } from '../../app';
 import { createMapController, type MapControllerOptions, type MapEngineSetup, type MapResources } from '../../app/map-exports';
 import { acceptStepsAt, fakeAdapterFactory, mapTestWorkspace } from '../../app/map-test-helpers';
@@ -9,6 +9,7 @@ import type { WorldMapId } from '../../domain';
 import { syntheticIndex } from '../../../tests/support/atlas-tiles';
 import { buildRouteView, mapStepLabel } from '../app-model';
 import { ATLAS_LAYOUT_NOTE } from '../shell/MapKey';
+import { loadMapLayersPanel } from './lazy';
 import { atlasSurfaceLabel, MapPanel, MINIMAP_ART_NOTICE, SEPARATE_MAPS_GROUP, surfaceSwitcherOptions } from './MapPanel';
 
 /*
@@ -19,6 +20,13 @@ import { atlasSurfaceLabel, MapPanel, MINIMAP_ART_NOTICE, SEPARATE_MAPS_GROUP, s
  */
 
 afterEach(cleanup);
+
+// The Map layers drawer is a lazy part (map-presentation.md §25.3.1) that production builds preload
+// when idle; so do these tests. Loaded at the first open instead, the chunk can take over a second
+// on a busy machine, longer than Testing Library waits by default.
+beforeAll(async () => {
+  await loadMapLayersPanel();
+});
 
 // ui may import only app and map/adapter values (ARCHITECTURE §4), so the test brands the id itself.
 const worldMapId = (value: number): WorldMapId => value as WorldMapId;

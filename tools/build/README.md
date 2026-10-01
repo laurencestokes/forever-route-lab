@@ -6,7 +6,8 @@ tests run it on temporary trees. None of these commands publishes or uploads any
 | Command | What it does |
 |---|---|
 | `pnpm build` | `vite build`, then `licence-gate.ts`, `third-party-notices.ts` and `audit-dist.ts --strip-manifest` (the plain audit) |
-| `pnpm build:deploy` | The Pages deploy build: `minimap-fetch.ts`, then the same steps with `audit-dist.ts --strip-manifest --deploy` |
+| `pnpm build:deploy` | The full Pages build: `minimap-fetch.ts`, then the same steps with `vite build --mode deploy` and `audit-dist.ts --strip-manifest --deploy` |
+| `pnpm build:painted` | The Pages build while no minimap pack is published (D-053): the steps of `pnpm build` with `vite build --mode painted`, so the app has only the painted style and never offers or fetches the minimap |
 | `pnpm licence:check` | `licence-gate.ts`: shipped dependencies against the SPDX allowlist |
 | `pnpm maps:minimap:fetch` | `minimap-fetch.ts`: the minimap tiles from their release pack |
 | `pnpm maps:minimap:pack` | `minimap-pack.ts`: the release pack assembled from built tiles |
@@ -29,6 +30,9 @@ Today that is only the minimap tiles (`maps/minimap/t/`, D-049 O14; docs/researc
   fails.
 - **deploy** (`--deploy`, `pnpm build:deploy`): every file the manifest lists must be present with
   its SHA-256.
+
+`pnpm build:painted` uses the plain audit: the minimap's committed files ship, its tiles do not, and
+the app built in mode `painted` never fetches the minimap index or any tile (D-053).
 
 In both modes the pointer (`pack.json`) must ship and its tree hash must be the tree hash of the
 files the manifest lists under the prefix. The painted `atlas` and `art` folders have no pack and
@@ -56,13 +60,19 @@ manifest) never share a name or a tag, and a published release is never replaced
   committed ones, and that it holds exactly the manifest's tiles in path order with their sizes and
   SHA-256, and only then installs the tiles under `public/maps/minimap/t/`. Without a committed
   minimap folder (never built, or removed on request) there is nothing to fetch, and it succeeds.
-  **A private repository** (or a release not yet public) needs `MINIMAP_PACK_SOURCE=gh` with a
-  signed-in GitHub CLI; in the Pages workflow (Milestone 9) that is `GH_TOKEN` set to the workflow's
-  token, because the default download is unauthenticated.
+  **A private repository** (or a release not yet public) needs `MINIMAP_PACK_SOURCE=gh` (or
+  `--from gh`) with a signed-in GitHub CLI. The Pages workflow (`.github/workflows/pages.yml`) runs
+  `pnpm maps:minimap:fetch --from gh --repo "$GITHUB_REPOSITORY"` with `GH_TOKEN` set to the
+  workflow's token, before its tests, when the release exists; its `pnpm build:deploy` then finds the
+  verified pack in the cache and needs no token. Until a pack is first released it builds with
+  `pnpm build:painted`, and after that a commit whose pack is not released stops the run
+  (docs/ARCHITECTURE.md §16, D-053).
 - `pnpm maps:minimap:pack` assembles the pack from the tiles in `public/maps/minimap/t/` (every
   tile present and matching the manifest, nothing unlisted) and refuses unless it is byte for byte the
   pack `pack.json` pins. It writes `.cache/minimap-pack/<asset>` and prints the command with which the
-  owner can publish it, with the NOTICE as the release text, once OD-13 allows it.
+  owner can publish it, with the NOTICE as the release text, once OD-13 allows it (`gh release create
+  <tag> .cache/minimap-pack/<asset> --repo laurencestokes/forever-route-lab --title <tag> --notes-file
+  public/maps/minimap/NOTICE.md`). The Pages workflow's next run then deploys the full site.
 
 The removal steps if Blizzard asks are in docs/research/map-atlas.md §23.3 and THIRD_PARTY_NOTICES.md
 ("Minimap tiles").

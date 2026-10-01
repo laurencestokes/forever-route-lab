@@ -51,6 +51,9 @@ import type { Announce } from './LiveAnnouncer';
  * query lasts), and offers the base map's style (Minimap | Painted).
  */
 
+/** Why the minimap cannot be chosen in a painted build, which has no minimap tiles (`pnpm build:painted`, D-053). */
+const NOT_IN_THIS_BUILD = 'This build has no minimap tiles, so the painted map is the only style.';
+
 export interface MapLayersPanelProps {
   readonly id: string;
   readonly docked: boolean;
@@ -408,8 +411,10 @@ export function MapLayersPanel({ id, docked, controller, store, hidden, onHidden
   // The base map's style (map-atlas.md §21.6; step MM.7): announced, kept in this browser.
   const style = useMemo(() => {
     const need = onAtlas ? null : 'Styles apply to the seamless atlas, which this geometry cannot place: the map shows one world map at a time.';
+    // A painted build has no minimap tiles (D-053): the minimap is shown as unavailable, never offered.
+    const noMinimap = controller.styles.includes('minimap') ? null : NOT_IN_THIS_BUILD;
     const options: readonly SegmentedOption<MapStyle>[] = [
-      { value: 'minimap', label: 'Minimap', unavailable: need },
+      { value: 'minimap', label: 'Minimap', unavailable: need ?? noMinimap },
       { value: 'painted', label: 'Painted', unavailable: need },
     ];
     return {
@@ -419,7 +424,7 @@ export function MapLayersPanel({ id, docked, controller, store, hidden, onHidden
         controller.setMapStyle(next);
         announce(`Map style: ${next === 'minimap' ? 'Minimap' : 'Painted'}.`);
       },
-      note: need ?? status.style.unavailable,
+      note: need ?? status.style.unavailable ?? noMinimap,
     };
   }, [onAtlas, status.style.chosen, status.style.unavailable, controller, announce]);
 

@@ -26,6 +26,13 @@ beforeAll(async () => {
 
 afterEach(cleanup);
 
+// The Validation panel is a lazy part (ARCHITECTURE §12.1) that production builds preload when idle;
+// so do these tests. Loaded at the first open instead, the chunk can take over a second on a busy
+// machine, longer than Testing Library waits by default.
+beforeAll(async () => {
+  await loadValidationPanel();
+});
+
 const NOW = '2026-09-25T12:00:00.000Z';
 
 function setup() {

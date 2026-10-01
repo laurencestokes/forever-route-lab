@@ -32,11 +32,12 @@ describe('Details through the lazy boundary (UR.1a)', () => {
     const panel = side.getByRole('tabpanel');
     expect(within(panel).getByRole('heading', { name: 'Details' })).toBeDefined();
     expect(panel.textContent).toContain('Loading the details panel…');
-    // The loaded panel takes the words' place: the active step, "1 of n".
-    expect(await within(panel).findByRole('heading', { name: 'Step' })).toBeDefined();
+    // The loaded panel takes the words' place: the active step, "1 of n". This is the chunk's first
+    // import, which can take over a second on a busy machine, longer than Testing Library waits by default.
+    expect(await within(panel).findByRole('heading', { name: 'Step' }, { timeout: 10_000 })).toBeDefined();
     expect(panel.textContent).not.toContain('Loading the details panel…');
     expect(loadDetailsPanel.peek()).not.toBeNull();
-  });
+  }, 15_000);
 });
 
 function Harness({ load, wanted }: { readonly load: PartLoader<string>; readonly wanted: boolean }) {

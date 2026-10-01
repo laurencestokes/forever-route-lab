@@ -20,6 +20,10 @@ See [docs/reviews/review-map-ui-rework.md](docs/reviews/review-map-ui-rework.md)
 "Fix and verify"). Still open from it: the selection and edit to the map's pins (F-03), the pans at 4×
 (F-04) and the opening view's bytes (F-05), all under D-050 item 5, and left-panel layout B+ (D-051).
 
+**Deployed** to GitHub Pages by `.github/workflows/pages.yml` (D-053), at
+<https://www.lozstokes.co.uk/forever-route-lab/>, with the painted map only until the owner publishes
+the minimap tile pack.
+
 **Next:**
 1. Left-panel layout B+ (D-051), then the open D-050 item 5 measurements on the owner's machine.
 2. Milestone 8, the proposal UX.
@@ -28,7 +32,7 @@ See [docs/reviews/review-map-ui-rework.md](docs/reviews/review-map-ui-rework.md)
 ## Completed work
 
 - Repository initialised on `main` with remote `origin` = https://github.com/laurencestokes/forever-route-lab
-  (nothing pushed yet). Licence GPL-3.0-or-later (`LICENSE`).
+  (pushed; the repository is public since 2026-10-01). Licence GPL-3.0-or-later (`LICENSE`).
 - Milestone 0 research, written into the repository:
   - [docs/DATA_PROVENANCE.md](docs/DATA_PROVENANCE.md), [docs/research/questiedb-schema.md](docs/research/questiedb-schema.md):
     QuestieDB Forever schema, extraction design, provenance and licence finding.
@@ -263,7 +267,7 @@ _None._
 | OD-10 | Any real map art ever deployed publicly? | Yes: extracted, committed and deployed with notices (owner accepts the risk) | decided (D-033, supersedes D-018 art rule) | owner |
 | OD-11 | Terrain-aware walking: derived navigation data committed and deployed? | Commit + deploy with notices | decided (D-028) | owner |
 | OD-12 | Terrain extraction method | Own read-only TypeScript CASC reader over `Data/` | decided (D-028) | owner |
-| OD-13 | Push to the GitHub remote? | Not pushed until the owner says so | open | owner |
+| OD-13 | Push to the GitHub remote? | Pushed; the repository is public and the site deploys to GitHub Pages from `main`. Publishing the minimap tile pack stays the owner's own step | decided (D-053) | owner |
 | OD-14 | Navigation data size | Lighter mesh, target 5-6 MB gzip, hard cap 7 MB, mandatory spawn census | decided (D-030) | owner |
 | OD-15 | Elevator/lift connectors | Owner's in-game observations (cited); interim straight-line fallback plus warning | decided (D-031) | owner |
 | OD-16 | Terrain map byproducts (coastlines, zone outlines, low-res relief) | Commit and deploy with notices | decided (D-032) | owner |
@@ -302,16 +306,25 @@ _None._
 record is [docs/reviews/rework-followup.md](docs/reviews/rework-followup.md), "Fix and verify". This
 container has no WoW client, no minimap tiles, no `.cache/` and no Segoe UI font.
 
-**1. Left-panel layout B+ (D-051):** mock it and measure it, then build it within the 988 B left
-under the 248.5 kB stop rule, or trim first. The truncation figures must be re-measured in Segoe UI
+**1. Left-panel layout B+ (D-051):** mock it and measure it, then build it within the 870 B left
+under the 248.5 kB stop rule (with D-053's painted build), or trim first. The truncation figures must be re-measured in Segoe UI
 on the owner's machine (D-052 item 6).
 
 **1b. D-050 item 5, still open:** the F-03 gate ruling (D-052 item 5), MR-06 for the opening view,
 and the pans at 4×. Measure them on the owner's machine with `tests/bench/browser` (both styles,
 absolute figures) and `tests/bench/ab-derived.ts`.
 
-**2. Deployment:** needs the owner's go-ahead to push (OD-13). It then covers the Pages workflow,
-the release-asset minimap pack (D-049 O14) and `pnpm build:deploy`.
+**2. Deployment (D-053):** the Pages workflow (`.github/workflows/pages.yml`) is built and deploys
+every push to `main`. It builds the painted map only (`pnpm build:painted`) until the release that
+`public/maps/minimap/pack.json` pins exists; then it runs `pnpm build:deploy` with every tile
+verified. Owed:
+- the first run on GitHub, the only end-to-end test of the workflow;
+- the owner: the Pages source set to GitHub Actions, and Enforce HTTPS ticked (over plain http
+  the app stops at "This browser cannot verify the data"; ARCHITECTURE §16, Hosting);
+- the owner: the minimap pack published, after the minimap gate passes on the pinned client
+  (ARCHITECTURE §16, "Publishing the pack later");
+- done after the follow-up merged: the changed tests pass, and `pnpm build:painted`'s entry is
+  247.63 kB gzip (+0.12 kB), 0.87 kB under the 248.5 kB stop rule.
 
 **3. Milestone 8 (proposal UX)** after both: the proposal panel with metrics, the map overlay (on
 the atlas), and accept, reject or apply-selected change-sets with prerequisite requires-edges.

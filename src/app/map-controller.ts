@@ -212,6 +212,8 @@ import { plainGuideText } from './ui-text';
  *   stays. A style that cannot be drawn (its index refused or missing, or its first view's images
  *   all failed: a build without the minimap tile pack) gives way to the other, with the reason in
  *   the status line (§21.4); the fallback is never written to the setting. Neither: the relief.
+ *   A painted build (`--mode painted`, D-053) has only the painted style (`styles`): the minimap
+ *   is never chosen, fetched or fallen back to, and a kept choice of it is ignored, not overwritten.
  *   The adapter holds the old picture under the new one until the new first view has decoded.
  * - **Idle pre-build** (map-atlas.md §8.2; with `smoothWheel`): within half a level of the
  *   level-of-detail edge, the other band's spawn layers are collected in idle time, so crossing it
@@ -306,6 +308,14 @@ export interface MapControllerOptions {
    * fail is then a network failure, and its message names no developer command (review MD-03).
    */
   readonly deployBuild?: boolean | undefined;
+  /**
+   * Whether this build has the minimap style (default: true, except in a painted build, built with
+   * `--mode painted` by `pnpm build:painted`, the Pages build while the minimap tile pack is not
+   * published; D-053). Without it the painted style is the only one: it is drawn whatever this
+   * browser chose, the minimap's index is never fetched or fallen back to, and `styles` leaves the
+   * minimap out, so the drawer never offers it.
+   */
+  readonly minimap?: boolean | undefined;
   /** Runs a task in idle time and returns its cancel (default `requestIdleCallback`, else a short timeout). */
   readonly idle?: ((task: () => void) => () => void) | undefined;
   /** The map style chosen in this browser (map-atlas.md §21.3), read at the first mount; null or omitted: `DEFAULT_MAP_STYLE`, not kept. */
@@ -539,6 +549,8 @@ export interface MapController {
   readonly surfaces: readonly SurfaceInfo[];
   /** Presets of the atlas ("Kalimdor", "Eastern Kingdoms"); empty without the atlas. */
   readonly presets: readonly MapPreset[];
+  /** The base-map styles this build can draw, in the style control's order: both, or only `painted` in a painted build (D-053). */
+  readonly styles: readonly MapStyle[];
   /** A world map's name ("Kalimdor"), whichever surface shows it; null for a map with no surface. */
   readonly mapName: (mapId: WorldMapId) => string | null;
   /** Jump-to-zone choices, grouped by world map. */
@@ -559,6 +571,7 @@ export interface MapController {
   /**
    * Chooses the base map's style (map-atlas.md §21) and keeps it in this browser; choosing a style
    * that failed tries it again. The atlas draws it once its index has loaded (`getStatus().style`).
+   * A style this build cannot draw (not in `styles`, D-053) is ignored.
    */
   readonly setMapStyle: (style: MapStyle) => void;
   /** Installs the words of the layers' notes (the Map layers drawer does, once loaded); the status is published again with them. */
@@ -758,6 +771,19 @@ function isDeployBuild(): boolean {
   }
 }
 
+/** Whether this build is a painted build (`vite build --mode painted`, D-053), which has no minimap tiles; false in development, tests and other builds. */
+function isPaintedBuild(): boolean {
+  try {
+    return import.meta.env.MODE === 'painted';
+  } catch {
+    return false;
+  }
+}
+
+/** The base-map styles in the style control's order (map-atlas.md §21.6), and a painted build's one style (D-053). */
+const BOTH_STYLES: readonly MapStyle[] = ['minimap', 'painted'];
+const PAINTED_ONLY: readonly MapStyle[] = ['painted'];
+
 function defaultTiming(): MapTiming | null {
   if (typeof performance === 'undefined' || typeof performance.mark !== 'function' || typeof performance.measure !== 'function') return null;
   return performance;
@@ -916,6 +942,8 @@ export function createMapController(options: MapControllerOptions): MapControlle
   const zones = zoneGroups(geometry, surfaces);
   const smoothWheel = options.smoothWheel !== false;
   const deployBuild = options.deployBuild ?? isDeployBuild();
+  /** The styles this build can draw (D-053): a painted build has no minimap tiles. */
+  const styles = (options.minimap ?? !isPaintedBuild()) ? BOTH_STYLES : PAINTED_ONLY;
   const idle = options.idle ?? defaultIdle;
   let cancelPrebuild: (() => void) | null = null;
   const objectUrls = options.objectUrls === undefined ? defaultObjectUrls() : options.objectUrls;
@@ -1007,7 +1035,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
   const styleSetting = options.mapStyle ?? null;
   /** The words of the layers' notes, once installed (`setWording`). */
   let wording: MapWording | null = options.wording ?? null;
-  let chosenStyle: MapStyle = DEFAULT_MAP_STYLE;
+  let chosenStyle: MapStyle = styles.includes(DEFAULT_MAP_STYLE) ? DEFAULT_MAP_STYLE : 'painted';
   /** The style whose band was last drawn: it stays while the chosen style's index loads. */
   let lastStyle: MapStyle | null = null;
   let artLoading = false;
@@ -1727,12 +1755,18 @@ export function createMapController(options: MapControllerOptions): MapControlle
     if (localArt) return 'local';
     if (resources.atlas === undefined) return 'refused';
     if (drawnStyle() !== null) return 'tiles';
-    return styleState(chosenStyle) === 'failed' && styleState(otherStyle(chosenStyle)) === 'failed' ? 'refused' : 'loading';
+    if (styleState(chosenStyle) !== 'failed') return 'loading';
+    const fallback = fallbackStyle();
+    return fallback === null || styleState(fallback) === 'failed' ? 'refused' : 'loading';
   }
 
   // Styles (map-atlas.md §21) -----------------------------------------------------------------
 
-  const otherStyle = (style: MapStyle): MapStyle => (style === 'minimap' ? 'painted' : 'minimap');
+  /** The style drawn in the chosen one's place when it fails: the other one, if this build has it (a painted build has one style, D-053); else null. */
+  function fallbackStyle(): MapStyle | null {
+    const other: MapStyle = chosenStyle === 'minimap' ? 'painted' : 'minimap';
+    return styles.includes(other) ? other : null;
+  }
 
   function styleState(style: MapStyle): 'idle' | 'loading' | 'ready' | 'failed' {
     if (tilesFailed.has(style)) return 'failed';
@@ -1743,18 +1777,23 @@ export function createMapController(options: MapControllerOptions): MapControlle
 
   /**
    * The style the atlas draws (§21.2, §21.4): the chosen one when its index has loaded; while it
-   * loads, the style drawn before; when it fails, the other one once that has loaded; else none.
+   * loads, the style drawn before; when it fails, the other one once that has loaded (if this build
+   * has it); else none.
    */
   function drawnStyle(): MapStyle | null {
     const state = styleState(chosenStyle);
     if (state === 'ready') return chosenStyle;
-    if (state === 'failed') return styleState(otherStyle(chosenStyle)) === 'ready' ? otherStyle(chosenStyle) : null;
+    if (state === 'failed') {
+      const fallback = fallbackStyle();
+      return fallback !== null && styleState(fallback) === 'ready' ? fallback : null;
+    }
     return lastStyle !== null && styleState(lastStyle) === 'ready' ? lastStyle : null;
   }
 
-  /** The styles whose index is wanted now: the chosen one, and the other once the chosen one has failed. */
+  /** The styles whose index is wanted now: the chosen one, and the other (if this build has it) once the chosen one has failed. */
   function wantedStyles(): readonly MapStyle[] {
-    return styleState(chosenStyle) === 'failed' ? [chosenStyle, otherStyle(chosenStyle)] : [chosenStyle];
+    const fallback = styleState(chosenStyle) === 'failed' ? fallbackStyle() : null;
+    return fallback === null ? [chosenStyle] : [chosenStyle, fallback];
   }
 
   /** Why `style` cannot be drawn; null when it can (or has not failed). */
@@ -1768,10 +1807,10 @@ export function createMapController(options: MapControllerOptions): MapControlle
     return load?.kind === 'failed' ? load.detail : null;
   }
 
-  /** The §21.4 message when the other style is drawn in the chosen one's place; null otherwise. */
+  /** The §21.4 message when the other style is drawn in the chosen one's place; null otherwise (and in a build with one style, D-053). */
   function styleUnavailable(): string | null {
     const why = styleFailure(chosenStyle);
-    if (why === null) return null;
+    if (why === null || fallbackStyle() === null) return null;
     const instead = chosenStyle === 'minimap' ? 'showing the painted map' : 'showing the minimap';
     if (tilesFailed.has(chosenStyle)) return `${why}; ${instead}`;
     return `${chosenStyle === 'minimap' ? 'Minimap' : 'Painted map'} tiles unavailable: ${why}; ${instead}`;
@@ -2630,7 +2669,9 @@ export function createMapController(options: MapControllerOptions): MapControlle
   function readStyle(): void {
     if (styleRead) return;
     styleRead = true;
-    chosenStyle = styleSetting?.read() ?? chosenStyle;
+    const kept = styleSetting?.read() ?? null;
+    // A kept style this build cannot draw (a painted build's minimap, D-053) is not taken; it stays in the setting for a build that can.
+    if (kept !== null && styles.includes(kept)) chosenStyle = kept;
   }
 
   // Review MR-07: the chosen style's tile index (2.5 kB) is asked for as soon as the controller has
@@ -2644,6 +2685,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
   return {
     surfaces,
     presets,
+    styles,
     mapName: nameOfMap,
     zoneGroups: zones,
     labelFor,
@@ -2786,7 +2828,8 @@ export function createMapController(options: MapControllerOptions): MapControlle
     },
 
     setMapStyle(style) {
-      if (style === chosenStyle && !tilesFailed.has(style)) return;
+      // A style this build cannot draw is never chosen (D-053); the drawer does not offer it.
+      if (!styles.includes(style) || (style === chosenStyle && !tilesFailed.has(style))) return;
       chosenStyle = style;
       tilesFailed.delete(style);
       styleSetting?.write(style);

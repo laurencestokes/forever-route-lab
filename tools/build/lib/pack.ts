@@ -19,7 +19,10 @@ import { compareStrings } from './fs';
  * Nothing here publishes or uploads anything: publishing the release is the owner's step (OD-13).
  */
 
-/** Where the release lives (the repository's `origin`); `--repo` overrides it. */
+/**
+ * Where the release lives: the project's repository on GitHub. `--repo` overrides it; the Pages
+ * workflow passes its own repository, the one whose release it checks, so the two agree (D-053).
+ */
 export const MINIMAP_RELEASE_REPOSITORY = 'laurencestokes/forever-route-lab';
 /** The local cache of packs: gitignored (`.cache/`), shared with `tools/maps/minimap.ts --pack`. */
 export const MINIMAP_PACK_CACHE = '.cache/minimap-pack';

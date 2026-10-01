@@ -2214,6 +2214,7 @@ line, D-047).
 | Minimap tiles missing (a clone or build without the pack, §23.3) | The index loads but every image of the first view fails (a first view over the sea is decided by the underlay's images): the painted style | "Minimap tiles not downloaded (run `pnpm maps:minimap:fetch`)"; a deploy build cannot lack them (§24.3), so there (built with `--mode deploy`) the same failure is the network's and reads "Minimap tiles could not be loaded; showing the painted map" (review MD-03, MR-05) |
 | AVIF chosen and not supported | The painted style | "This browser cannot show the minimap tiles (AVIF)" |
 | Both indices refused | Part I §8.6's "art off" mode | as now |
+| A painted build (`pnpm build:painted`, `--mode painted`: the Pages build while no pack is published; D-053) | The painted style; the minimap's index and tiles are never fetched, and the painted index refused gives the "art off" mode | Minimap unavailable in the drawer: "This build has no minimap tiles, so the painted map is the only style." |
 
 ### 21.5 What each style draws
 
@@ -2326,6 +2327,12 @@ a release, nor bandwidth usage".
   workflow's token) → **`pnpm build:deploy`**, whose dist audit runs in deploy mode and verifies every tile
   (§24.3) → upload the Pages artifact (with a short artifact retention). Any commit's deploy is
   reproducible for as long as its pack exists, because the commit pins the pack by SHA-256.
+  Built as `.github/workflows/pages.yml` (D-053; ARCHITECTURE §16): when the release exists,
+  `pnpm maps:minimap:fetch --from gh` with the workflow's token before the tests, then
+  `pnpm build:deploy`, without the token, from the verified pack in the cache; until a pack is
+  first released, `pnpm build:painted`, a build with the painted style only (§21.4). After that, a
+  commit that pins a pack not yet released stops the run, so the live site keeps the minimap
+  (ARCHITECTURE §16).
 - **Removal on request** (MM-06), in order:
   1. delete the release asset (and the release);
   2. commit the removal of `public/maps/minimap/` (index, manifest, NOTICE, pointer), so no later build
@@ -2358,10 +2365,13 @@ a release, nor bandwidth usage".
   6,669 tiles present; the pack is not fetched; a deploy build would fail") and passes; a partial set
   fails. So a fresh clone or `git clean` stays green, and the check reports the missing tiles instead of
   failing on them.
-- **What CI checks** (no client): `maps:validate` M1–M11 (§24.4), with M6, M7 and M8 reported as skipped
-  when the tiles are absent; with the pack fetched (once OD-13 allows a release): the pack's SHA-256 against
-  `pack.json`, every tile's SHA-256 and size against the manifest, the index against the manifest, the
-  NOTICE against the manifest, the layout hash, the budgets, M8, M11 and the deploy-mode dist audit.
+- **What CI checks** (no client; the Pages workflow, ARCHITECTURE §16): M1–M11 (§24.4) through
+  `pnpm test` (`minimap-files.test.ts`, and `maps:validate` in its test form, without MT), with M6, M8
+  and M11 reported as skipped when the tiles are absent, as in the painted build; with the pack
+  released (once OD-13 allows it) the workflow fetches it before the tests and checks the pack's SHA-256
+  against `pack.json`, every tile's SHA-256 and size against the manifest, the index against the
+  manifest, the NOTICE against the manifest, the layout hash, the budgets, M6, M8, M11 and the
+  deploy-mode dist audit. MT is the owner's until it passes; then the full `maps:validate` joins CI.
 - **The provenance chain**: the manifest records the client build, every input's FDID and CKey, the
   tool tree hash and the encoder versions; `--check` on the client machine proves the tiles equal the
   tool's output for those inputs; CI proves the deployed tiles equal the manifest.
@@ -2504,7 +2514,7 @@ presentation's names exist** (MP.1, MP.7). Every step ends green on `pnpm check`
 
 | # | Risk | Mitigation |
 |---|---|---|
-| MR1 | The release asset is deleted or unreachable, and a deploy or local build has no tiles | The pointer names it and the fetch fails loudly; the deploy-mode audit refuses a deploy without the tiles; `pnpm check` stays green and says so; the runtime falls back to the painted style; the owner keeps the pack locally |
+| MR1 | The release asset is deleted or unreachable, and a deploy or local build has no tiles | The pointer names it and the fetch fails loudly; the deploy-mode audit refuses a deploy without the tiles, and the Pages workflow builds without them (the painted build) only before any pack is released or when run by hand to do so (D-053; ARCHITECTURE §16); `pnpm check` stays green and says so; the runtime falls back to the painted style; the owner keeps the pack locally |
 | MR2 | Blizzard asks for removal | Delete the asset, commit the pointer's removal, redeploy Pages and confirm the 404s (§23.3); the pixels were never in git history. Copies downloaded before removal cannot be recalled. The painted art already committed is a separate case |
 | MR3 | The recolour touches land or misses water | Colour, a gate of 4–8 yd and the dry cap; fully dry shore cells turned bluer 0.007–0.03 %, water cells untouched 1.2–1.4 % (measured); census gates in the build; M8 re-derives water, land and shore cells offline; the contact sheet names the banks |
 | MR4 | Residual seams, patches and texture (§19.6) | The family field, both feathers and the corner term; both seam measures and the texture census in the manifest with gates; the sheet shows the worst; the parameters are tunable |

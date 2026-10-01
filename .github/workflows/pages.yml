@@ -1,0 +1,242 @@
+# Deploys the site to GitHub Pages (D-053; docs/ARCHITECTURE.md §16).
+#
+# On a clean checkout it runs the gates (typecheck, lint, test, data:validate), builds the site and,
+# from main, deploys dist/ with the Pages Actions flow. The repository's Pages source must be
+# "GitHub Actions" (Settings → Pages → Build and deployment → Source); the deploy job checks it, and
+# warns when Pages does not enforce HTTPS, which the app needs (it verifies its files with WebCrypto).
+#
+# Which build depends on the minimap tile pack (D-049 O14), a release asset that
+# public/maps/minimap/pack.json pins:
+# - its release exists: the pack is downloaded and verified, it and every tile, before the tests, so
+#   the checks that need the tiles run on them; `pnpm build:deploy` then builds from the verified
+#   copy, and the deploy audit requires every tile. Any failure fails the run.
+# - no minimap pack is released yet: `pnpm build:painted` builds the site with the painted map as its
+#   only style, and the run says so in a warning and in the job summary.
+# - an earlier pack is released but not the pinned one (a re-pin pushed before its pack): the run
+#   fails, so the live site keeps its minimap, unless it was started by hand with "painted" ticked.
+# Nothing here publishes the pack: that is the owner's step (OD-13).
+#
+# The release check and the download both use this repository ($GITHUB_REPOSITORY), so they agree
+# in a fork too. Every third-party action is pinned to a full commit SHA, with its release tag in a
+# comment.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      painted:
+        description: Deploy with the painted map only if the pinned minimap pack is not released although an earlier one is (the live site loses the minimap until the pack is published)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One group per branch: runs of main deploy one at a time (a newer waiting run replaces an older
+# one), and a run started by hand on another branch never replaces a waiting run of main.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Gates and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm (the version package.json's packageManager names)
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node 22, with the pnpm store cache
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # tools/questiedb/extract.test.ts fails under CI without the pinned QuestieDB clone
+      # (docs/DATA_PROVENANCE.md §5). The clone is about 44 MB, so it is cached by the pinned commit;
+      # `pnpm data:fetch` verifies every input's SHA-256 whether it came from the cache or the network.
+      - name: Read the QuestieDB pin
+        id: questiedb
+        run: |
+          commit=$(node -p "require('./tools/questiedb/upstream.json').commit")
+          if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error file=tools/questiedb/upstream.json::the pinned commit is not a 40-character SHA"
+            exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the QuestieDB clone
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/questiedb
+          key: questiedb-${{ steps.questiedb.outputs.commit }}
+
+      - name: Fetch and verify the QuestieDB inputs
+        run: pnpm data:fetch
+
+      - name: Choose the build (is the minimap tile pack released?)
+        id: minimap
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAINTED_REQUESTED: ${{ inputs.painted }}
+        run: |
+          pointer=public/maps/minimap/pack.json
+          if [[ ! -f "$pointer" ]]; then
+            why="no $pointer is committed (the minimap style is not built, or was removed on request)"
+          else
+            tag=$(node -p "require('./$pointer').tag")
+            if [[ ! "$tag" =~ ^minimap-[0-9]+(\.[0-9]+)*-[0-9a-f]{12}-[0-9a-f]{12}$ ]]; then
+              echo "::error file=$pointer::the pinned tag is not a minimap pack tag: $tag"
+              exit 1
+            fi
+            # gh's errors go to a file and into an annotation on one line (stdout can hold an API's JSON body).
+            if found=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>"$RUNNER_TEMP/release.err"); then
+              echo "mode=full" >> "$GITHUB_OUTPUT"
+              {
+                echo "## Pages build: full site"
+                echo
+                echo "The minimap tile pack's release \`$found\` exists: the pack is downloaded and verified, it and every tile, before the tests."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            elif ! grep -q "release not found" "$RUNNER_TEMP/release.err"; then
+              echo "::error::could not look up the release $tag: $(paste -sd ' ' "$RUNNER_TEMP/release.err")"
+              exit 1
+            fi
+            why="the release $tag, which $pointer pins, does not exist"
+            # A re-pin pushed before its pack is published: an earlier pack is released, so the live
+            # site has the minimap, and a painted build would take it away. Only a run by hand may.
+            if ! earlier=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[] | select(.tag_name | startswith("minimap-")) | .tag_name' 2>"$RUNNER_TEMP/releases.err"); then
+              echo "::error::could not list the releases of $GITHUB_REPOSITORY: $(paste -sd ' ' "$RUNNER_TEMP/releases.err")"
+              exit 1
+            fi
+            if [[ -n "$earlier" ]]; then
+              earlier=${earlier//$'\n'/, }
+              if [[ "$PAINTED_REQUESTED" != "true" ]]; then
+                echo "::error title=Minimap pack not released::$why, but earlier packs are ($earlier), so the live site has the minimap and this build would remove it. Publish the pinned pack (docs/ARCHITECTURE.md §16), then run this workflow again; or run it by hand with \"painted\" ticked to deploy with the painted map only."
+                {
+                  echo "## Pages build: stopped, nothing deployed"
+                  echo
+                  echo "The minimap tiles cannot be deployed: $why. Earlier packs are released ($earlier), so the live site has the minimap; it keeps it."
+                  echo "Publish the pinned pack (docs/ARCHITECTURE.md §16), then run this workflow again; or run it by hand with \"painted\" ticked to deploy with the painted map only."
+                } >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+              why="$why; earlier packs are released ($earlier), and the run was started by hand with \"painted\" ticked"
+            fi
+          fi
+          echo "mode=painted" >> "$GITHUB_OUTPUT"
+          echo "::warning title=Minimap tiles not deployed::Built with the painted map only: $why. Publishing the pack is the owner's step (OD-13; docs/ARCHITECTURE.md §16)."
+          {
+            echo "## Pages build: painted map only"
+            echo
+            echo "The minimap tiles are not deployed: $why. The site offers the painted map as its only style."
+            echo "Publishing the pack is the owner's step (OD-13): see docs/ARCHITECTURE.md §16."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Before the tests, because the checks that need the tiles run only where they are: M6, M8 and
+      # M11 (tools/maps/minimap-files.test.ts), the pack rebuilt from them, their contrast and the first
+      # view's bytes (map-atlas.md §23.4, §24). The token goes to this step and the release check only:
+      # `pnpm build:deploy` then takes the verified pack from .cache/minimap-pack/ and needs no source.
+      - name: Fetch and verify the minimap tile pack
+        if: steps.minimap.outputs.mode == 'full'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm maps:minimap:fetch --from gh --repo "$GITHUB_REPOSITORY"
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Validate the committed data
+        run: pnpm data:validate
+
+      - name: Build the full site from the verified pack (every minimap tile required)
+        if: steps.minimap.outputs.mode == 'full'
+        run: pnpm build:deploy
+
+      - name: Build the site with the painted map only
+        if: steps.minimap.outputs.mode == 'painted'
+        run: pnpm build:painted
+
+      # D-025: the site is built from a clean checkout. The gates and the build must not change
+      # tracked files, and nothing git does not track may ship from public/ (Vite copies it whole),
+      # except the minimap tiles, which come from the verified pack (D-049 O14).
+      - name: Check that the checkout is still clean
+        run: |
+          if ! git diff --quiet; then
+            echo "::error::the gates or the build changed tracked files:"
+            git diff --stat
+            exit 1
+          fi
+          untracked=$(git ls-files --others -- public ':(exclude)public/maps/minimap/t/')
+          if [[ -n "$untracked" ]]; then
+            echo "::error::files under public/ that git does not track would deploy:"
+            echo "$untracked"
+            exit 1
+          fi
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    # A run started by hand on another branch builds and checks it, but deploys only from main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check the Pages settings (source GitHub Actions; HTTPS enforced)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # When the call fails, gh prints the API's JSON body on stdout and its reason on stderr
+          # ("gh: Not Found (HTTP 404)"); the annotation shows the reason only, on one line.
+          if ! pages=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq '"\(.build_type)|\(.https_enforced)|\(.html_url)"' 2>"$RUNNER_TEMP/pages.err"); then
+            reason=$(paste -sd ' ' "$RUNNER_TEMP/pages.err")
+            reason=${reason%.}
+            echo "::error title=GitHub Pages is not set up::${reason:-the Pages API call failed}. Enable Pages with the source GitHub Actions (Settings → Pages), then run this workflow again."
+            exit 1
+          fi
+          IFS='|' read -r build_type https_enforced html_url <<<"$pages"
+          if [[ "$build_type" != "workflow" ]]; then
+            echo "::error title=Pages source is not GitHub Actions::The Pages API reports build_type '$build_type', not 'workflow' ('legacy' is Deploy from a branch). Set Settings → Pages → Build and deployment → Source to GitHub Actions, then run this workflow again."
+            exit 1
+          fi
+          # The app verifies its files with WebCrypto, which browsers give only to secure pages: over
+          # plain http it stops at its loading screen. The deploy goes ahead; the warning says where to look.
+          if [[ "$https_enforced" == "false" || "$html_url" == http://* ]]; then
+            echo "::warning title=HTTPS is not enforced::GitHub Pages reports this site as $html_url (https_enforced: $https_enforced), and over plain http the app stops at its loading screen. Tick Enforce HTTPS under Settings → Pages in this repository if it offers the option, and in the repository that owns the custom domain (for a project site, the user site $GITHUB_REPOSITORY_OWNER.github.io); see docs/ARCHITECTURE.md §16."
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

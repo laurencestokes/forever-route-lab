@@ -1065,7 +1065,11 @@ reason as the control's description ("Styles apply to the seamless atlas, which 
 place: the map shows one world map at a time."). When the chosen style cannot be drawn, the other is
 shown and the note says so ("Minimap tiles unavailable: …; showing the painted map", or "Minimap
 tiles not downloaded (run `pnpm maps:minimap:fetch`); showing the painted map" in a build without the
-tile pack); the choice stands and is never overwritten by the fallback. The container carries
+tile pack); the choice stands and is never overwritten by the fallback. A painted build
+(`pnpm build:painted`, the Pages build while the minimap tile pack is not published; D-053) has only
+the painted style: Minimap is unavailable, with "This build has no minimap tiles, so the painted map
+is the only style." as its reason and the control's description, and the painted map is shown even
+where the browser kept the minimap, which stays kept. The container carries
 `data-map-style` for the style shown, and the palette follows it. The caption's notice names the art
 shown ("Minimap art © Blizzard Entertainment" or "Painted map art © Blizzard Entertainment"), and so
 do the map's instructions. The key and About name both base maps' notices and say which is shown.

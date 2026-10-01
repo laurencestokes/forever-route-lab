@@ -1136,3 +1136,56 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
      owner's machine.
   7. **The browser harness** is committed at `tests/bench/browser/`. It loads Playwright from
      `FRL_PLAYWRIGHT` or a global install until Milestone 9 adds it as a dev dependency.
+
+## D-053: GitHub Pages deployment, painted map only until the minimap pack is published (owner and architect, 2026-10-01)
+
+- **Date:** 2026-10-01
+- **Decided by:** the owner made the repository public, enabled GitHub Pages and asked for a workflow
+  to deploy (this settles OD-13 for pushing and deploying). The workflow's design is the architect's;
+  the owner may overrule it.
+- **Context:** ARCHITECTURE §16. D-025: deployable builds come from CI on a clean checkout. D-049
+  O14: the minimap tiles ship in a release-asset pack, which only the owner publishes; none is
+  published, and the pack exists only on the owner's machine.
+- **Decisions:**
+  - **The workflow:** `.github/workflows/pages.yml` deploys on every push to `main`, and when run by
+    hand (a run on another branch builds and checks but does not deploy).
+    - The build job has `contents: read` only. The deploy job alone has `pages: write` and
+      `id-token: write`, in the `github-pages` environment.
+    - Each branch has its own concurrency group (`pages-<ref>`), and no run cancels one in progress.
+    - Every third-party action is pinned to a full commit SHA, with its release tag in a comment.
+  - **The gates, in order:**
+    - `pnpm install --frozen-lockfile`;
+    - the QuestieDB clone, cached by the pinned commit and verified by `pnpm data:fetch`
+      (`extract.test.ts` requires it under CI, so every run includes `pnpm data:check`'s checks);
+    - in a full build, the minimap pack downloaded and verified first, so the tests that need the
+      tiles run on them;
+    - `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm data:validate`;
+    - the build;
+    - a check that no tracked file changed and that nothing untracked under `public/` ships, the
+      minimap tiles excepted.
+  - **Three outcomes for the minimap:**
+    - **full:** the release that `pack.json` pins exists. `pnpm build:deploy` builds from the
+      verified pack, and its audit requires every tile. Any failure fails the run.
+    - **painted:** no minimap pack is released yet. `pnpm build:painted` (new: `vite build --mode
+      painted` with the plain audit) builds a site whose only style is the painted map:
+      - it never fetches or offers the minimap;
+      - the Map layers drawer shows Minimap as unavailable, with the reason;
+      - a minimap choice kept in the browser is left as it is, for a build that has the tiles.
+      The run names the missing release in a warning and in its summary. A full build is unchanged.
+    - **stopped:** an earlier pack is released but not the pinned one (a re-pin pushed before its
+      pack). The run fails and the live site keeps its minimap, unless the run was started by hand
+      with "painted" ticked.
+  - **Publishing the pack** stays the owner's step, after the minimap gate (map-atlas.md §23.4). It
+    uses the command `pnpm maps:minimap:pack` prints: `gh release create <tag>
+    .cache/minimap-pack/<asset> --repo laurencestokes/forever-route-lab --title <tag> --notes-file
+    public/maps/minimap/NOTICE.md`. The next run deploys the full site.
+  - **Hosting:** <https://www.lozstokes.co.uk/forever-route-lab/>, under the owner's user site and its
+    custom domain.
+    - The Pages source must be GitHub Actions; the deploy job checks it.
+    - Enforce HTTPS must be on. On a plain http page the app cannot verify its files with WebCrypto
+      and stops at its loading screen. The deploy job warns when Pages reports HTTPS as not enforced.
+- **Review:** a builder, an independent critic with two sceptics per finding (10 findings, all
+  confirmed, 9 fixed; the tenth is a re-measure owed after the follow-up merges), a repair and a final
+  verifier. The verifier ran actionlint with shellcheck, the workflow schema, the SHA pins, every
+  step's script as written, and a clean-copy build. It also ran a Playwright smoke test under
+  `/forever-route-lab/`. The first run on GitHub is the only end-to-end test.

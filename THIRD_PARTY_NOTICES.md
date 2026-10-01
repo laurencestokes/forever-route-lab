@@ -194,7 +194,8 @@ The World of Warcraft: Forever client's painted world-map art, in two folders:
   SHA-256, so a new pack is always a new release and a published one is never replaced. `pnpm maps:minimap:fetch` (run by
   `pnpm build:deploy`) downloads it and verifies its SHA-256, that its NOTICE and manifest are the
   committed ones, and every tile's size and SHA-256. Nothing is published until the owner authorises
-  pushing (OD-13).
+  pushing (OD-13). Until a pack is first released, the Pages workflow deploys the site without the
+  minimap tiles, with the painted map as its only style (`pnpm build:painted`, D-053).
 - **Removal on request** (docs/research/map-atlas.md §23.3): delete the release asset and release;
   commit the removal of `public/maps/minimap/` (index, manifest, NOTICE, pointer); redeploy Pages;
   confirm on the published site that `maps/minimap/index.json` and a tile address per level return

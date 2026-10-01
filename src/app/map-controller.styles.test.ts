@@ -354,6 +354,10 @@ describe('two map styles in the controller (map-atlas.md §21; MM.1)', () => {
     expect(s.controller.getStatus().style.unavailable).toMatch(/^Painted map tiles unavailable: maps\/atlas\/index\.json: .*; showing the minimap$/);
   });
 
+  it('has both styles in every build but a painted one', () => {
+    expect(setup(deferredIndexes().atlas).controller.styles).toEqual(['minimap', 'painted']);
+  });
+
   it('asks again for an index that could not be fetched only at the next request, never in a loop (both styles HTTP 404)', async () => {
     const atlas = vi.fn((_hash: string, style: MapStyle = 'painted') => Promise.resolve<AtlasIndexLoad>({ kind: 'failed', reason: 'unavailable', detail: `maps/${style === 'minimap' ? 'minimap' : 'atlas'}/index.json: HTTP 404` }));
     const s = setup(atlas);
@@ -367,5 +371,63 @@ describe('two map styles in the controller (map-atlas.md §21; MM.1)', () => {
     s.controller.setMapStyle('painted');
     for (let i = 0; i < 10; i += 1) await Promise.resolve();
     expect(atlas.mock.calls.map((call) => call[1])).toEqual(['minimap', 'painted', 'painted', 'minimap']);
+  });
+});
+
+/*
+ * A painted build (`pnpm build:painted`, `vite build --mode painted`; D-053): the Pages build while the
+ * minimap tile pack is not published. It has no minimap tiles, so the painted style is the only one:
+ * the minimap is never chosen, fetched or fallen back to, and a choice of it kept in this browser is
+ * ignored without being overwritten, so a later build with the tiles shows it again.
+ */
+describe('a painted build, without the minimap tiles (D-053)', () => {
+  it('draws the painted style even where this browser chose the minimap, and never fetches the minimap index or writes the setting', async () => {
+    const indexes = deferredIndexes();
+    const { storage, writes } = memoryStorage({ [MAP_LAYERS_STORAGE_KEY]: '{"version":1,"style":"minimap"}' });
+    const s = setup(indexes.atlas, createMapStyleSetting(() => storage), { minimap: false });
+    expect(s.controller.styles).toEqual(['painted']);
+    expect(s.adapter.options.style).toBe('painted');
+    expect(indexes.styles()).toEqual(['painted']);
+    indexes.resolve('painted', loaded('painted'));
+    await vi.waitFor(() => {
+      expect(artIds(s.adapter)).toEqual(['atlas-tiles:painted']);
+    });
+    expect(s.controller.getStatus().style).toEqual({ chosen: 'painted', shown: 'painted', unavailable: null });
+    // The minimap cannot be chosen: nothing is fetched, drawn or written.
+    s.controller.setMapStyle('minimap');
+    expect(s.controller.getStatus().style.chosen).toBe('painted');
+    expect(artIds(s.adapter)).toEqual(['atlas-tiles:painted']);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    expect(indexes.styles()).toEqual(['painted']);
+    expect(writes).toEqual([]);
+    expect(storage.getItem(MAP_LAYERS_STORAGE_KEY)).toBe('{"version":1,"style":"minimap"}');
+  });
+
+  it('draws the relief when the painted index cannot be used, and never falls back to the minimap or names it', async () => {
+    const indexes = deferredIndexes();
+    const s = setup(indexes.atlas, null, { minimap: false });
+    indexes.resolve('painted', refused('painted'));
+    await vi.waitFor(() => {
+      expect(s.controller.getStatus().problems).toContain(`The atlas tiles could not be used (${refusal('painted')}): the map shows the terrain relief instead`);
+    });
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    expect(indexes.styles()).toEqual(['painted']);
+    expect(artIds(s.adapter)).toEqual([]);
+    expect(items(s.adapter, 'relief').map((item) => item.id)).toEqual(['relief:1', 'relief:0']);
+    expect(s.controller.getStatus().style).toEqual({ chosen: 'painted', shown: null, unavailable: null });
+    expect(s.controller.getStatus().problems.join(' ')).not.toMatch(/minimap/i);
+  });
+
+  it('is what a build made with --mode painted gets by default', () => {
+    vi.stubEnv('MODE', 'painted');
+    try {
+      const indexes = deferredIndexes();
+      const s = setup(indexes.atlas);
+      expect(s.controller.styles).toEqual(['painted']);
+      expect(s.adapter.options.style).toBe('painted');
+      expect(indexes.styles()).toEqual(['painted']);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

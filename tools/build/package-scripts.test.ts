@@ -37,6 +37,12 @@ describe('package.json scripts', () => {
     expect(scripts['maps:minimap:pack']).toBe('tsx tools/build/minimap-pack.ts');
   });
 
+  it('build:painted (the Pages build while the minimap pack is not published, D-053) is build in mode `painted`, with the plain audit and no pack', () => {
+    // Mode `painted`: the app has only the painted style, so it never offers or fetches the minimap.
+    expect(steps(scripts['build:painted'])).toEqual(steps(scripts['build']).map((step) => (step === 'vite build' ? 'vite build --mode painted' : step)));
+    expect(scripts['build:painted']).not.toMatch(/minimap-fetch|--deploy/);
+  });
+
   it('typecheck compiles the pure, app and node projects', () => {
     expect(steps(scripts['typecheck'])).toEqual([
       'tsc --noEmit -p tsconfig.pure.json',

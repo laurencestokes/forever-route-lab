@@ -13,6 +13,7 @@
     "dev": "vite",
     "build": "vite build && tsx tools/build/licence-gate.ts && tsx tools/build/third-party-notices.ts && tsx tools/build/audit-dist.ts --strip-manifest",
     "build:deploy": "tsx tools/build/minimap-fetch.ts && vite build --mode deploy && tsx tools/build/licence-gate.ts && tsx tools/build/third-party-notices.ts && tsx tools/build/audit-dist.ts --strip-manifest --deploy",
+    "build:painted": "vite build --mode painted && tsx tools/build/licence-gate.ts && tsx tools/build/third-party-notices.ts && tsx tools/build/audit-dist.ts --strip-manifest",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.pure.json && tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",

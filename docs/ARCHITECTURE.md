@@ -1812,8 +1812,10 @@ a cold class change although a bundle is within the budget.
   and ADT/WDT/WDL/WMO, M2, DB2 or BLTE content under any name); local paths; `.cache` references;
   `.lua` or source maps; files over budget (§14). It also fails if a required file is missing:
   `LICENSE.txt`, `third-party-notices.txt`, `data/NOTICE.md`, every data file the manifest lists,
-  `maps/placeholder/geometry.placeholder.json` and `maps/placeholder/NOTICE.md`. CI additionally
-  checks with `git ls-files --error-unmatch` that every runtime-fetched file is tracked.
+  `maps/placeholder/geometry.placeholder.json` and `maps/placeholder/NOTICE.md`. The Pages workflow
+  additionally checks, after the build, that no tracked file changed and that nothing under `public/`
+  is untracked (`git ls-files --others`), the minimap tiles excepted, so every runtime-fetched file
+  that ships is tracked or comes from the verified pack.
 - **Tiled folders** (`maps/atlas/`, `maps/minimap/`; D-042, D-049): the audit's tiled mode budgets
   the files under `t/` per level (baseline + 10%) with a 32 kB cap per tile, beside the folder total
   and the committed files' own baselines.
@@ -1825,14 +1827,90 @@ a cold class change although a bundle is within the budget.
   - **plain** (`pnpm build`, and so `pnpm check`): with none of the tiles it passes, takes the budget
     from the manifest's records and prints a warning (last, and on stderr) that a deploy build would
     fail; with every tile it checks them as any tile; a partial set fails;
-  - **deploy** (`pnpm build:deploy`, the Pages build): `pnpm maps:minimap:fetch` first downloads the
-    pack (from `--from`, `MINIMAP_PACK_SOURCE`, `gh release download` or `.cache/minimap-pack/`),
+  - **deploy** (`pnpm build:deploy`, the full Pages build): `pnpm maps:minimap:fetch` first downloads
+    the pack (from `--from`, `MINIMAP_PACK_SOURCE`, `gh release download` or `.cache/minimap-pack/`),
     verifies its SHA-256, that its NOTICE and manifest equal the committed ones and every tile against
     the manifest, and installs the tiles; then the audit requires every listed tile.
-  The release that holds the pack is published only when the owner authorises pushing (OD-13).
+  The release that holds the pack is published only by the owner (OD-13), after the minimap gate
+  (`minimap.ts --check --pack` on the pinned client, map-atlas.md §23.4) has passed.
   Removal on request: delete the asset and the release, commit the removal of
   `public/maps/minimap/`, redeploy Pages, and confirm that the index and tile URLs return 404
   (map-atlas.md §23.3).
+- **The Pages workflow** (`.github/workflows/pages.yml`, D-053) deploys the site to GitHub Pages on
+  every push to `main`, and when run by hand (a run on another branch builds but does not deploy).
+  - **build** job (`contents: read` only): check out; pnpm at the version `packageManager` names;
+    Node 22 with the pnpm store cache; `pnpm install --frozen-lockfile`; the QuestieDB clone, cached by
+    the pinned commit and verified by `pnpm data:fetch` (`tools/questiedb/extract.test.ts` fails under
+    CI without it); the choice of build (below) and, for the full build, the tile pack downloaded and
+    verified (`pnpm maps:minimap:fetch --from gh --repo "$GITHUB_REPOSITORY"`; the workflow's token
+    goes to this step and the release check only, never to the gates or the build); then the gates:
+    `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm data:validate`; then the build; the
+    clean-checkout check; and `dist/` uploaded as the Pages artifact.
+  - **What the gates cover.** `pnpm test` runs `extract.test.ts` on the clone, so every run includes
+    `pnpm data:check`'s checks (DATA_PROVENANCE §5). It runs `maps:validate` in the test suite's
+    form, `validate.ts --skip-tracking --skip-tool-tree --skip-minimap-tiles`
+    (`tools/maps/scripts.test.ts`): every placeholder, art, atlas and minimap check except P6 (git
+    tracking, which the clean-checkout check and the audit's required files cover), MT (the minimap
+    tool tree) and the tiles' M6, M8 and M11. `tools/maps/minimap-files.test.ts` runs M6, M8 and
+    M11 on the tiles in the full build and reports them as skipped in the painted one (map-atlas.md
+    §23.4). `tools/terrain/nav.committed.test.ts` checks the committed navigation files, all but
+    `nav:validate`'s G13 (the stage-2 input and tool tree hashes). The full `pnpm maps:validate` and
+    `pnpm nav:validate` join the workflow once MT and G13 pass; both fail until the client-derived
+    files are rebuilt on the pinned client (STATUS).
+  - **deploy** job (the only one with `pages: write` and `id-token: write`; environment
+    `github-pages`): checks that the repository's Pages source is GitHub Actions and warns when Pages
+    does not enforce HTTPS (Hosting, below), then `actions/configure-pages` and `actions/deploy-pages`.
+  - Each branch has its own concurrency group (`pages-<ref>`), and no run cancels one in progress:
+    runs of `main` deploy one at a time, the newest waiting run replacing an older one, and a run by
+    hand on another branch never replaces a waiting run of `main`. Every third-party action is pinned
+    to a full commit SHA, with its release tag in a comment.
+- **The minimap and the build** (D-053). The workflow reads the tag `pack.json` pins and asks this
+  repository for that release (`gh release view`); the download names the same repository
+  (`--repo`), so the check and the download agree, in a fork too. Then:
+  - **full**: the release exists. The pack and every tile are verified before the tests, so the
+    checks that need the tiles run on them; `pnpm build:deploy` then takes the verified pack from
+    `.cache/minimap-pack/` (no token, no download) and its audit requires every tile. Any failure
+    fails the run;
+  - **painted**: no minimap pack is released yet (or no `pack.json` is committed), so
+    `pnpm build:painted` runs: `vite build --mode painted` with the plain audit. In that mode the app
+    has one base-map style, the painted one: it never fetches the minimap index, ignores a minimap
+    choice kept in the browser without overwriting it, and the Map layers drawer shows Minimap as
+    unavailable ("This build has no minimap tiles, so the painted map is the only style."). The
+    minimap's index, manifest, NOTICE and pointer still ship, unused except the NOTICE, which About
+    and the map key link. The run says which release is missing in a warning and in its summary;
+  - **stopped**: an earlier minimap pack is released, but not the pinned one (a re-pin pushed before
+    its pack is published). The live site has the minimap and a painted build would remove it, so
+    the run fails and nothing is deployed; the site keeps its last deploy. A run by hand with
+    **painted** ticked (Actions → Pages → Run workflow) deploys the painted build instead.
+  Without the painted mode a build with the index but no tiles offers the minimap and opens in it,
+  asks for its first view's tiles, which all fail with 404 (19 requests at 1600 × 900), then falls
+  back to the painted map with a message naming a developer command (map-atlas.md §21.4).
+- **Publishing the pack later** (the owner's step, OD-13; nothing in the repository publishes it).
+  On the owner's machine, from the repository root, with the pack `pack.json` pins in
+  `.cache/minimap-pack/` (`pnpm maps:minimap:pack` writes it from the built tiles, refuses any other
+  pack, and prints this command with the values filled in):
+
+  ```bash
+  gh release create <tag> .cache/minimap-pack/<asset> --repo laurencestokes/forever-route-lab --title <tag> --notes-file public/maps/minimap/NOTICE.md
+  ```
+
+  with `<tag>` and `<asset>` from `pack.json`. The next run of the workflow (a push to `main`, or run
+  it by hand) finds the release and deploys the full site; nothing else changes.
+  **A re-pin** (a new pack: a new client build, or a change in the minimap tool's closure,
+  map-atlas.md §23.4) goes the same way: build and pack it, and publish it with the command above
+  before pushing the commit that pins it, so that push deploys the full site. A re-pin pushed first
+  stops the run (above), and the live site keeps its last deploy: publish the pack, then run the
+  workflow by hand (Actions → Pages → Run workflow), or let the next push run it.
+- **Hosting**: <https://www.lozstokes.co.uk/forever-route-lab/>, the project site under the owner's
+  user site, whose custom domain it shares. The Pages source must be **GitHub Actions** (Settings →
+  Pages → Build and deployment → Source), or the deploy job stops and says so. **Enforce HTTPS** must
+  be on: the app verifies every data, map and navigation file with WebCrypto, which browsers give
+  only to secure pages, so over plain http the app stops at its loading screen with "This browser
+  cannot verify the data". The custom domain belongs to the user-site repository,
+  `laurencestokes/laurencestokes.github.io` (its `CNAME` is `www.lozstokes.co.uk`): tick Enforce
+  HTTPS under that repository's Settings → Pages, and under this repository's Settings → Pages where
+  the option appears. The deploy job warns when the Pages API reports `https_enforced: false` or an
+  `http://` address for the site. `base: './'` lets the same build run under any path.
 - Deployable builds come from CI on a clean checkout; release builds refuse a dirty tree.
 
 Planned dependencies:
