@@ -36,8 +36,8 @@ is not a legal conclusion.
 ## How they were made
 
 - Read-only from the local client's `Data/` folder through this project's CASC reader
-  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70009, build key
-  `05215079e3905ef5922ae0b03ffefb73`. Nothing is fetched from the network.
+  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70124, build key
+  `dd3dfc2881c407299f46c2aaf34c130b`. Nothing is fetched from the network.
 - Tables: `TaxiPathNode` (1000437), `TaxiPath` (1067802), `TaxiNodes` (1068100), `Map` (1349477),
   `AreaTable` (1353545), `LFGDungeons` (1361033), `UiMapAssignment` (1957219), `ContentTuning`
   (1962930); layouts from WoWDBDefs (THIRD_PARTY_NOTICES "Format definitions").

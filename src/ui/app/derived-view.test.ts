@@ -488,27 +488,27 @@ describe('carried objective work (D-040)', () => {
   });
 
   it('says in Details which transport a step rode and where its docks come from, with the client record (TIME-7, MP-R32; TR-02)', () => {
-    const ride = (pointFrom: 'inferred' | 'user', berthWalk: boolean): SimFact => ({
+    // TIME-7 (TR-03): a client berth's walks end at its boarding point, the step between them in the wait.
+    const ride = (pointFrom: 'inferred' | 'user', arrivalBoardingYd: number | null): SimFact => ({
       kind: 'transport-ride',
       transportId: 'stormwind-auberdine',
       edgeId: 'stormwind-auberdine:0>1',
       name: 'Stormwind Harbor – Auberdine ship',
       docks: [
-        { end: 'departure', name: 'Auberdine', pointFrom, record: pointFrom === 'inferred' ? 'client transport path 11616, stop 1 of 2' : null },
-        { end: 'arrival', name: 'Stormwind Harbor', pointFrom: 'inferred', record: 'client transport path 11616, stop 2 of 2' },
+        { end: 'departure', name: 'Auberdine', pointFrom, record: pointFrom === 'inferred' ? 'client transport path 11616, stop 1 of 2' : null, boardingYd: pointFrom === 'inferred' ? 36.8 : null },
+        { end: 'arrival', name: 'Stormwind Harbor', pointFrom: 'inferred', record: 'client transport path 11616, stop 2 of 2', boardingYd: arrivalBoardingYd },
       ],
-      berthWalk,
     });
-    expect(transportSentence([ride('inferred', true)])).toBe(
-      'Stormwind Harbor – Auberdine ship: from Auberdine, dock position inferred from client transport path 11616, stop 1 of 2; to Stormwind Harbor, dock position inferred from client transport path 11616, stop 2 of 2; wait and ride times assumed; the walk to or from a berth counts the swim beside the pier as walking (assumed)',
+    expect(transportSentence([ride('inferred', 12.5)])).toBe(
+      'Stormwind Harbor – Auberdine ship: from Auberdine, dock position inferred from client transport path 11616, stop 1 of 2, boarding on walkable ground 37 yd from the berth; to Stormwind Harbor, dock position inferred from client transport path 11616, stop 2 of 2, boarding on walkable ground 13 yd from the berth; wait and ride times assumed, the step from boarding to the berth included in the wait',
     );
-    expect(transportSentence([ride('user', false)])).toBe(
+    expect(transportSentence([ride('user', null)])).toBe(
       'Stormwind Harbor – Auberdine ship: from Auberdine, at the dock you entered; to Stormwind Harbor, dock position inferred from client transport path 11616, stop 2 of 2; wait and ride times assumed',
     );
     expect(transportSentence([{ kind: 'pending-leg' }])).toBeNull();
-    const results = derivedResults(project, { steps: [{ facts: [ride('inferred', true)] }, {}] });
+    const results = derivedResults(project, { steps: [{ facts: [ride('inferred', 12.5)] }, {}] });
     const numbers = stepNumbersOf(readyState(results), view, steps[0]?.id ?? null);
-    expect(numbers.kind === 'known' ? numbers.value.transport : null).toBe(transportSentence([ride('inferred', true)]));
+    expect(numbers.kind === 'known' ? numbers.value.transport : null).toBe(transportSentence([ride('inferred', 12.5)]));
   });
 
   it('gives Details the sentence, and the summary a note counting the turn-ins that carry work', () => {
@@ -587,7 +587,7 @@ describe('group headers', () => {
 });
 
 describe('the quest log after the active step (ui-refresh.md §5.5, §8)', () => {
-  const count = { stepId: steps[1]?.id ?? ('s' as never), size: 4, capacity: 40, capacityBasis: 'client-data' as const, capacityFrom: 'ruleset' as const };
+  const count = { stepId: steps[1]?.id ?? ('s' as never), atEnd: false, size: 4, capacity: 40, capacityBasis: 'client-data' as const, capacityFrom: 'ruleset' as const };
 
   it('says the count against the capacity with its basis, a lower bound while the log before the route is unknown', () => {
     expect(questLogWords(count, 12, 'fresh', '')).toEqual({
@@ -601,6 +601,11 @@ describe('the quest log after the active step (ui-refresh.md §5.5, §8)', () =>
     expect(unknown.badgeLabel).toBe('at least 4 quests after step 12');
     expect(unknown.detail).toContain('there may be more');
     expect(questLogWords({ ...count, capacityFrom: 'project' }, 12, 'fresh', '').detail).toContain('capacity 40: your project’s value');
+    // With no step selected, the last step's log is the end of the route's (D-050 item 2).
+    expect(questLogWords({ ...count, atEnd: true }, 12, 'fresh', '')).toMatchObject({
+      detail: 'In the quest log at the end of the route (after step 12): 4 of 40 quests (capacity 40: client data).',
+      badgeLabel: '4 quests at the end of the route (after step 12)',
+    });
   });
 
   it('never claims an empty log without a walked step', () => {

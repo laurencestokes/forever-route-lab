@@ -154,7 +154,7 @@ The World of Warcraft: Forever client's painted world-map art, in two folders:
   hash, every source texture's FileDataID and content key, every parameter, the census, each tile's
   size and SHA-256, the alterations), `NOTICE.md` and `pack.json` (the pointer to the tile pack).
 - **Owner:** the artwork is Blizzard Entertainment's (© Blizzard Entertainment, Inc.): the World of
-  Warcraft: Forever client's minimap textures (1,796 at build 1.60.1.70009), altered by this
+  Warcraft: Forever client's minimap textures (1,796 at build 1.60.1.70124, the same textures as at 1.60.1.70009), altered by this
   project's tool. World of Warcraft, Warcraft and Blizzard Entertainment are trademarks or
   registered trademarks of Blizzard Entertainment, Inc. The tiles are not this project's work; this
   repository's GPL-3.0-or-later licence grants no rights over them. Forever Route Lab is not
@@ -234,7 +234,7 @@ The World of Warcraft: Forever client's painted world-map art, in two folders:
   FileDataID, CKey and the columns used, per file its SHA-256, input hash and counts) and `NOTICE.md`.
 - **Origin:** selected columns of the World of Warcraft: Forever client's `TaxiNodes`, `TaxiPath`,
   `TaxiPathNode`, `AreaTable`, `UiMapAssignment`, `LFGDungeons`, `ContentTuning` and `Map` tables at
-  build 1.60.1.70009, read-only through `tools/casc` by `tools/maps/client-tables.ts`, plus the path
+  build 1.60.1.70124 (the same table bytes as at 1.60.1.70009), read-only through `tools/casc` by `tools/maps/client-tables.ts`, plus the path
   lengths and simplified shapes this project computes from them. World of Warcraft and its game data
   are Blizzard Entertainment's (© Blizzard Entertainment, Inc.); GPL-3.0-or-later covers the
   project's own code and grants no rights over Blizzard content or client-derived values. No DB2 or

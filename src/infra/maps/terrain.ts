@@ -14,9 +14,7 @@ import { joinUrl } from '../http';
  * verifies each file's bytes against the manifest's SHA-256 before parsing (`map-resources.ts`).
  */
 
-export const TERRAIN_MANIFEST_PATH = 'maps/terrain/manifest.json';
-/** Where the deployed terrain notice is, relative to the app's base. */
-export const TERRAIN_NOTICE_PATH = 'maps/terrain/NOTICE.md';
+export { TERRAIN_MANIFEST_PATH, TERRAIN_NOTICE_PATH } from './terrain-paths';
 const TERRAIN_DIR = 'maps/terrain/';
 
 export type TerrainArcKind = 'zones' | 'coast';

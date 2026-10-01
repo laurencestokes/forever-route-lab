@@ -8,7 +8,7 @@ tsx tools/maps/minimap.ts --check`.
 
 6,647 WebP tiles of one continuous map of Kalimdor and the Eastern Kingdoms, with Zephras Isle in a
 card between them, made from the 1,796 minimap textures of the World of Warcraft: Forever client
-(`wow_classic_beta` 1.60.1.70009): Kalimdor (map 1, 988 textures), Eastern Kingdoms (map 0, 736
+(`wow_classic_beta` 1.60.1.70124): Kalimdor (map 1, 988 textures), Eastern Kingdoms (map 0, 736
 textures), Zephras Isle (map 2991, 72 textures). `index.json` tells the map which tiles exist;
 `manifest.json` lists every file with its SHA-256, every source texture with its FileDataID and
 content key, every parameter, the census and the alterations below. The tiles are not kept in the
@@ -88,8 +88,8 @@ The project follows four rules adopted from that page's conditions:
 ## How they were made
 
 - Read-only from the local client's `Data/` folder through this project's CASC reader
-  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70009, build key
-  `05215079e3905ef5922ae0b03ffefb73`. Nothing is fetched from the network. The textures are found
+  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70124, build key
+  `dd3dfc2881c407299f46c2aaf34c130b`. Nothing is fetched from the network. The textures are found
   through each map's WDT (its MAID chunk) and decoded (BLP2 DXT1, 512 × 512) by our own code.
 - Recoloured in texel space, stitched onto the atlas grid, resampled to 1 yard per pixel and reduced
   by 2 × 2 box filters for the coarser levels, then encoded as lossy WebP by sharp 0.35.4 (libwebp

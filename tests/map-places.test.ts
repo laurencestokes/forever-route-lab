@@ -85,14 +85,20 @@ describe('the committed client tables in the derived pipeline and the map’s pl
     expect(places.notes.dungeons.join(' ')).toContain('Ruins of Lordaeron (LFG tuning ?)');
     expect(places.notes.dungeons.join(' ')).toContain('2 instance maps of unknown purpose not shown: Half-Pint Tavern and Manor Mistmantle.');
     const caverns = labels.find((label) => label?.startsWith('Wailing Caverns') === true);
-    expect(caverns).toContain('LFG tuning level 17 (client LFGDungeons row 1 → ContentTuning 5254, build 1.60.1.70009; meaning unverified)');
+    expect(caverns).toContain('LFG tuning level 17 (client LFGDungeons row 1 → ContentTuning 5254, build 1.60.1.70124; meaning unverified)');
     expect(caverns).toContain('dungeon quests 16–22 (9 open to an Orc Warrior; Era quest levels from the dataset)');
 
     // MP.8: the Horde's flight points, the two known after the step, and its flights.
-    // The file's nodes the Horde may use: its own, both factions' and the one with no side (35); the
-    // two Moonglade druid flight masters, at no node of a paid path, are not drawn.
-    expect(places.counts['flight-points']).toBe(35);
-    expect(places.notes['flight-masters']).toContain("3 flight masters stand at no node of the client's paid paths (their flights cost nothing): not drawn.");
+    // The file's nodes the Horde may use: its own, both factions' and the one with no side (35), and
+    // the two Moonglade druid flight masters, at no node of the file (it keeps the paid paths'
+    // nodes), drawn from the dataset, which gives them both factions (review TR-10).
+    expect(places.counts['flight-points']).toBe(37);
+    expect(places.notes['flight-masters']).toContain(
+      "3 flight masters stand at no node of the client taxi file, which keeps only the nodes of paths that cost something (Vesprystus, Bunthen Plainswind and Silva Fil'naveth): drawn where the dataset puts them, with the dataset's faction (it records no class restriction), and their flights timed by the straight-line estimate (TIME-5).",
+    );
+    for (const id of [11798, 11800]) expect(places.flightPoints.items.find((item) => item.descriptor.id === `flight:npc:${String(id)}`)).toMatchObject({ name: expect.any(String) as unknown });
+    // Vesprystus is the Alliance's: drawn in the other faction's row.
+    expect(places.flightPoints.items.find((item) => item.descriptor.id === 'flight:npc:3838')?.descriptor.category).toBe('other-faction-flights');
     expect(places.flightsKnown).toBe(2);
     const crossroads = places.flightPoints.items.find((item) => item.descriptor.id === `flight:npc:${String(CROSSROADS)}`);
     expect(crossroads?.node).toBe(25);

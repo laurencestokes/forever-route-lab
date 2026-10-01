@@ -17,8 +17,8 @@ own notice).
 ## Provenance
 
 - Read-only from the local client's `Data/` folder through this project's CASC reader
-  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70009, build key
-  `05215079e3905ef5922ae0b03ffefb73`. Nothing is fetched from the network.
+  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70124, build key
+  `dd3dfc2881c407299f46c2aaf34c130b`. Nothing is fetched from the network.
 - Tables: `Map` (1349477), `AreaTable` (1353545), `LiquidType` (1371380).
 - `manifest.json` records the tool tree hashes of `tools/terrain` and `tools/casc`, the parameters,
   and per map an input hash: SHA-256 over the sorted (FileDataID, CKey) list of the WDT, the root

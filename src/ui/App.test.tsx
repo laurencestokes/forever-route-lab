@@ -29,7 +29,7 @@ function setup(): { store: EditorStore; stepCount: () => number } {
   const { project, dataset } = createPlaceholderWorkspace({ nowIso: NOW });
   // Deterministic ids for inserted and duplicated steps (collisionFreeIds skips the project's own).
   const store = createEditorStore({ project, ids: sequentialIdSource(1000), clock: fixedClock(NOW) });
-  render(<App store={store} data={staticDatasetSource(dataset)} projectName={PLACEHOLDER_PROJECT_NAME} version="0.0.0-test" sourceCommit={null} />);
+  render(<App store={store} data={staticDatasetSource(dataset)} projectName={PLACEHOLDER_PROJECT_NAME} version="0.0.0-test" sourceCommit={null} selectOnOpen={false} />);
   return { store, stepCount: () => store.getState().project.route.steps.length };
 }
 
@@ -434,5 +434,51 @@ describe('App over the Milestone 1 placeholder data (editing behaviour)', () => 
     expect(within(dialog).queryByRole('link', { name: 'Full data notice' })).toBeNull();
     fireEvent.click(within(dialog).getAllByRole('button', { name: 'Close' })[0] as HTMLElement);
     expect(dialog.textContent).toBe('');
+  });
+});
+
+// D-050 item 2; review UI-08: a step is selected when the app opens, the one last selected in the
+// project in this browser, else the last step (app/selection-memory.ts).
+describe('App: the step selected when a project opens (D-050 item 2; review UI-08)', () => {
+  function open(given?: EditorStore): EditorStore {
+    const { project, dataset } = createPlaceholderWorkspace({ nowIso: NOW });
+    const store = given ?? createEditorStore({ project, ids: sequentialIdSource(1000), clock: fixedClock(NOW) });
+    render(<App store={store} data={staticDatasetSource(dataset)} projectName={PLACEHOLDER_PROJECT_NAME} version="0.0.0-test" sourceCommit={null} />);
+    return store;
+  }
+  const lastId = (store: EditorStore) => store.getState().project.route.steps.at(-1)?.id ?? null;
+
+  it('selects the last step on a first open, and names the insertion point after it', () => {
+    const store = open();
+    expect(store.getState().selection.focus).toBe(lastId(store));
+    expect(store.getState().selection.stepIds.size).toBe(1);
+    const count = store.getState().project.route.steps.length;
+    expect(screen.getByRole('toolbar', { name: `Add after step ${String(count)}` })).toBeTruthy();
+  });
+
+  it('selects the step last selected in the project when it opens again', () => {
+    const store = open();
+    const second = store.getState().project.route.steps[1];
+    if (second === undefined) throw new Error('no step');
+    act(() => {
+      store.select({ kind: 'single', id: second.id });
+    });
+    cleanup();
+    expect(open().getState().selection.focus).toBe(second.id);
+  });
+
+  it('keeps a selection the project opens with, and selects the last step of a project that replaces it', () => {
+    const { project } = createPlaceholderWorkspace({ nowIso: NOW });
+    const store = createEditorStore({ project, ids: sequentialIdSource(1000), clock: fixedClock(NOW) });
+    const first = project.route.steps[0];
+    if (first === undefined) throw new Error('no step');
+    store.select({ kind: 'single', id: first.id });
+    open(store);
+    expect(store.getState().selection.focus).toBe(first.id);
+    const other = { ...project, id: 'other-project' as never, route: { ...project.route, steps: project.route.steps.slice(0, 3) } };
+    act(() => {
+      store.replaceProject(other);
+    });
+    expect(store.getState().selection.focus).toBe(other.route.steps[2]?.id);
   });
 });

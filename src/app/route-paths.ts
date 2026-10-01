@@ -33,7 +33,9 @@ import type { EditorStore } from './store';
  * - **Batches, not per path.** A new `RoutePathsInput` object (which makes the map rebuild the
  *   route layers) is issued when answers for legs it waits for arrived, at most every
  *   `minIntervalMs` (250 ms), when the shown world map changes, and when undecided legs come into
- *   view.
+ *   view. While the map moves (`hold`), one that falls due waits until the view settles, and is then
+ *   issued in a task of its own after the view's sync, so the route is never rebuilt in a gesture's
+ *   frames (D-050 item 5: the 10,000-step pans at 4×).
  * - **Pending.** An object is `pending` while a leg in the view (padded), or one that was
  *   requested, has no answer yet, so such legs are drawn as pending, never as a straight-line
  *   fallback. A leg that has no walking path (another component, no navigation on the map) is
@@ -51,6 +53,12 @@ export interface RoutePathFeed {
   readonly subscribe: (listener: () => void) => () => void;
   /** The map's view (the controller calls it on every move and surface change); null when unmounted. */
   readonly setView: (view: MapView | null) => void;
+  /**
+   * The map is moving (`true`, at a pan or zoom's start) or has settled (`false`, after `setView`):
+   * no paths object is issued while it moves; one that fell due is issued after it settles. A hold
+   * not released within `holdMaxMs` lapses.
+   */
+  readonly hold: (held: boolean) => void;
   /** The navigation model (the pipeline calls it); null for none. */
   readonly setModel: (model: NavigationTravelModel | null, runtime: NavigationRuntime | null, hints: ZoneHintResolver) => void;
   /**
@@ -76,6 +84,8 @@ export interface RoutePathFeedOptions {
   readonly smallRouteLegs?: number;
   /** View padding, as a fraction of the view's width and height on each side (default 0.25). */
   readonly padding?: number;
+  /** The longest a `hold` lasts without its release (ms, default 2,000): a gesture whose end is never reported does not stop the paths. */
+  readonly holdMaxMs?: number;
 }
 
 /** What the feed knows of one walked leg. */
@@ -94,8 +104,16 @@ interface LegRecord {
   answer: readonly WorldPoint[] | null | undefined;
   /** Asked of the worker (and not lost since). */
   requested: boolean;
+  /**
+   * The table knows the leg as walkable and no path for it is cached: until it is asked for, its
+   * answer cannot become known, so a pass does not look it up again (D-050 item 5: a 10,000-step
+   * route's off-view legs were looked up in the table and the path cache on every pass).
+   */
+  parked: boolean;
   /** The last paths object that drew it. */
   seen: Pass | null;
+  /** The paths object whose `waiting` holds it, if any (so a decided leg costs no set lookup per pass). */
+  waitingIn: Pass | null;
 }
 
 /** One paths object's bookkeeping. */
@@ -135,6 +153,11 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
   let issueTimer: unknown = null;
   let lastIssued = Number.NEGATIVE_INFINITY;
   let disposed = false;
+  const holdMaxMs = options.holdMaxMs ?? 2000;
+  /** The map moves: an object falling due waits (`wanted`) until it settles, or the hold lapses (`holdTimer`). */
+  let held = false;
+  let wanted = false;
+  let holdTimer: unknown = null;
 
   /** Walked legs by their first step (a step starts at most one walked leg). */
   const records = new Map<StepId, LegRecord>();
@@ -163,20 +186,29 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
     return { point, zoneHint: hint };
   }
 
+  /** The padded view per world map for the current view (`inView` asks it for every undecided leg of a pass). */
+  let padded = new Map<number, { readonly xMin: number; readonly xMax: number; readonly yMin: number; readonly yMax: number } | null>();
+
   function inView(leg: RouteLeg): boolean {
     if (view === null) return true;
     const own = view.bounds ?? null;
     if (own === null) return true;
-    // The view in the leg's map's yards: the view's own rectangle, or on the atlas the leg's map's entry.
-    const bounds = viewBoundsOn(view, leg.from.mapId);
-    if (bounds === null) return false;
-    const padX = (bounds.xMax - bounds.xMin) * padding;
-    const padY = (bounds.yMax - bounds.yMin) * padding;
+    const mapId = leg.from.mapId;
+    let box = padded.get(mapId);
+    if (box === undefined) {
+      // The view in the leg's map's yards: the view's own rectangle, or on the atlas the leg's map's entry.
+      const bounds = viewBoundsOn(view, mapId);
+      const padX = bounds === null ? 0 : (bounds.xMax - bounds.xMin) * padding;
+      const padY = bounds === null ? 0 : (bounds.yMax - bounds.yMin) * padding;
+      box = bounds === null ? null : { xMin: bounds.xMin - padX, xMax: bounds.xMax + padX, yMin: bounds.yMin - padY, yMax: bounds.yMax + padY };
+      padded.set(mapId, box);
+    }
+    if (box === null) return false;
     const xMin = Math.min(leg.from.x, leg.to.x);
     const xMax = Math.max(leg.from.x, leg.to.x);
     const yMin = Math.min(leg.from.y, leg.to.y);
     const yMax = Math.max(leg.from.y, leg.to.y);
-    return xMax >= bounds.xMin - padX && xMin <= bounds.xMax + padX && yMax >= bounds.yMin - padY && yMin <= bounds.yMax + padY;
+    return xMax >= box.xMin && xMin <= box.xMax && yMax >= box.yMin && yMin <= box.yMax;
   }
 
   /** The record of `leg`, new when the leg changed (other steps or points). */
@@ -186,7 +218,7 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
       r.leg = leg;
       return r;
     }
-    const fresh: LegRecord = { toStepId: leg.toStepId, mapId: leg.from.mapId, fx: leg.from.x, fy: leg.from.y, tx: leg.to.x, ty: leg.to.y, leg, request: null, answer: undefined, requested: false, seen: null };
+    const fresh: LegRecord = { toStepId: leg.toStepId, mapId: leg.from.mapId, fx: leg.from.x, fy: leg.from.y, tx: leg.to.x, ty: leg.to.y, leg, request: null, answer: undefined, requested: false, parked: false, seen: null, waitingIn: null };
     records.set(leg.fromStepId, fresh);
     return fresh;
   }
@@ -207,6 +239,7 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
     if (cached !== undefined) r.answer = cached;
     // A request the path cache dropped (its waiting list is bounded) is made again.
     else if (r.requested && !m.paths.isWaiting(r.request.key)) r.requested = false;
+    else if (!r.requested && entry !== undefined) r.parked = true;
   }
 
   function request(p: Pass, r: LegRecord): void {
@@ -250,12 +283,18 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
       r.seen = p;
       p.asked += 1;
     }
-    if (r.answer === undefined) decide(m, r);
+    if (r.answer === undefined && (r.requested || !r.parked)) decide(m, r);
     if (r.answer !== undefined) {
-      p.waiting.delete(r);
+      if (r.waitingIn === p) {
+        p.waiting.delete(r);
+        r.waitingIn = null;
+      }
       return r.answer;
     }
-    p.waiting.add(r);
+    if (r.waitingIn !== p) {
+      p.waiting.add(r);
+      r.waitingIn = p;
+    }
     if (inView(leg)) request(p, r);
     return null;
   }
@@ -291,7 +330,21 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
 
   function scheduleIssue(): void {
     if (disposed || issueTimer !== null) return;
+    if (held) {
+      wanted = true;
+      return;
+    }
     issueTimer = timers.set(issue, Math.max(0, lastIssued + minIntervalMs - now()));
+  }
+
+  /** The map has settled (or the hold lapsed): an object that fell due meanwhile is issued, in a task of its own. */
+  function release(): void {
+    if (holdTimer !== null) timers.clear(holdTimer);
+    holdTimer = null;
+    held = false;
+    if (!wanted) return;
+    wanted = false;
+    scheduleIssue();
   }
 
   function onBatch(batch: NavigationBatch): void {
@@ -324,6 +377,21 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
       if (pass !== null) for (const r of pass.waiting) if (r.answer === undefined && !holdsPending(r)) n += 1;
       return n;
     },
+    hold(next) {
+      if (disposed || next === held) return;
+      if (!next) {
+        release();
+        return;
+      }
+      held = true;
+      // An object already due waits for the view to settle too.
+      if (issueTimer !== null) {
+        timers.clear(issueTimer);
+        issueTimer = null;
+        wanted = true;
+      }
+      holdTimer = timers.set(release, holdMaxMs);
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => {
@@ -334,6 +402,7 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
       const previous = view;
       const before = drawnMaps;
       view = next;
+      padded = new Map();
       drawnMaps = new Set(next === null ? [] : viewMapIds(next));
       if (next === null || pass === null) return;
       if (previous === null ? pass.asked > 0 : [...drawnMaps].some((mapId) => !before.has(mapId))) {
@@ -369,6 +438,8 @@ export function createRoutePathFeed(options: RoutePathFeedOptions): RoutePathFee
       disposed = true;
       if (issueTimer !== null) timers.clear(issueTimer);
       issueTimer = null;
+      if (holdTimer !== null) timers.clear(holdTimer);
+      holdTimer = null;
       unsubscribeBatches?.();
       listeners.clear();
     },

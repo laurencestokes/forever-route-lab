@@ -9,6 +9,7 @@ import { isAtlasSurface, mapViewOf, type ConnectorDescriptor, type LayerId, type
 import { createMapLayers, RELIEF_OPACITY } from '../map/layers';
 import { fixedClock } from './clock';
 import { atlasInstruction, createMapController, insetNote, viewAtZoom, type MapControllerOptions } from './map-controller';
+import { createMapClusterer } from './map-clusters';
 import {
   createDrawnRouteFilter,
   createRouteInputBuilder,
@@ -57,6 +58,7 @@ function setup(steps: RouteStep[] = acceptStepsAt(ACROSS), options: Partial<MapC
     timing: null,
     objectUrls: null,
     atlas: true,
+    clusters: createMapClusterer().of,
     ...options,
   });
   const adapter = (): FakeAdapter => {

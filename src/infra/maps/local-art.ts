@@ -2,7 +2,8 @@ import { uiMapId, type UiMapId, type WorldMapId } from '../../domain/ids';
 import { isFullUiRectangle, type MapGeometry } from '../../geo';
 import { sha256Hex, type Sha256Digest } from '../hash';
 import { type FetchLike, joinUrl } from '../http';
-import { contentTypeOfName, type ImageContentType, readImageHeader } from './image-header';
+import type * as ImageHeaderModule from './image-header';
+import { contentTypeOfName, type ImageContentType } from './image-types';
 
 /**
  * Local map art at runtime (docs/MAPS.md §5.3 "Set manifest", §5.6 "Runtime behaviour" step 7;
@@ -185,7 +186,14 @@ export function createLocalArt(section: unknown, local: MapGeometry, opts: Local
     if (hash !== entry.sha256) {
       return refused('changed', `${entry.url} changed after the set was activated (SHA-256 ${short(hash)}, the manifest records ${short(entry.sha256)}); run tools/maps validate --activate again`);
     }
-    const header = readImageHeader(new Uint8Array(bytes));
+    // The header reader loads with the first image verified: local art only (dev and preview), so not in the entry chunk.
+    let reader: typeof ImageHeaderModule;
+    try {
+      reader = await import('./image-header');
+    } catch (error) {
+      return refused('unavailable', `${entry.url}: its reader could not be loaded (${error instanceof Error ? error.message : String(error)})`);
+    }
+    const header = reader.readImageHeader(new Uint8Array(bytes));
     if (!header.ok) return refused('malformed', `${entry.url}: ${header.error}`);
     const { contentType, width, height } = header.header;
     if (contentType !== entry.contentType || width !== entry.width || height !== entry.height) {

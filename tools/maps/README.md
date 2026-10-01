@@ -21,7 +21,7 @@ D-026, D-033). Everything here runs in Node under `tsx`; the coordinate maths it
 | `pnpm tsx tools/maps/lib/make-db2-rows.ts [--check]` | Regenerates (or checks) the committed rows file from the two research CSVs, where they exist |
 | `pnpm tsx tools/maps/convert.ts [--out <dir>] [--report <file>] [--check] [--all]` | Milestone 3b, needs the pinned client at `WOW_INSTALL`: composes the painted art of every UiMap with art and writes the committed `public/maps/art/` (images, `manifest.json`, `NOTICE.md`); since step ATL.10 (D-042 O5) only the images still drawn one at a time are written (`DEPLOYED_ART_UIMAPS`: 1459, 1460, 1461, 2521, 2524; within the 1.0 MB `art` budget), while the manifest keeps every composed UiMap's `sources` record for the atlas build; the report goes to `generated/maps-art-report.json`; `--check` compares instead of writing; `--all` writes every composed image (the set before ATL.10) to another folder named by `--out`, never deployed |
 | `pnpm maps:tints --art <dir> [--check]` | `tsx tools/maps/tints.ts`: the fallback zone tint (map-presentation.md §12.4; step MP.10) from the painted zone images and the terrain zone arcs: writes `public/maps/tint/` (`tints.json`, `NOTICE.md`, `manifest.json`); `--check` compares instead of writing. Since ATL.10 the zone images come from a `convert.ts --all --out <dir>` folder (needs the client; its images are byte-identical to those deployed before ATL.10), and `tints.json` records their count and one SHA-256 over their SHA-256s; the committed `public/maps/art/` is refused |
-| `pnpm tsx tools/maps/import.ts --build 1.60.1.70009 [--out <dir>] [--check]` | Milestone 3b, needs the pinned client: writes the developer-local `local-maps/geometry.local.json` from the client's `UiMap` and `UiMapAssignment` (and removes `maps.manifest.json`) |
+| `pnpm tsx tools/maps/import.ts --build 1.60.1.70124 [--out <dir>] [--check]` | Milestone 3b, needs the pinned client: writes the developer-local `local-maps/geometry.local.json` from the client's `UiMap` and `UiMapAssignment` (and removes `maps.manifest.json`) |
 
 Common options: `--questiedb-repo <dir>` (default: the pin's `cachePath`, `.cache/questiedb`, the
 checkout `tools/questiedb/fetch.ts` provides), `--commit <40-hex sha>` (must equal the pin; there
@@ -132,7 +132,7 @@ The manifest's `art` section lists every art file that passed L3, keyed by UiMap
 entry against the local geometry at load and each file's SHA-256 and headers when it is first
 drawn (docs/MAPS.md §5.3, §5.6).
 
-`import.ts --build 1.60.1.70009` writes `geometry.local.json` from the client's own tables through
+`import.ts --build 1.60.1.70124` (the pin since 2026-09-30, D-050) writes `geometry.local.json` from the client's own tables through
 `tools/casc` (`lib/local-build.ts`); it passes L0-L4 and L7, with the committed frame hash and
 identical shared rows. Local art can still be placed by hand, for example wow.export Zones-tab PNGs
 saved as `local-maps/art/<uiMapId>.png` (docs/MAPS.md §5.4 (c)), or copied from the committed art;

@@ -4,7 +4,7 @@ import { makeTravelStep } from '../domain/step-factory';
 import type { NavLegsProgress } from '../nav/worker/client';
 import { NavWorkerError, type NavLegQuery, type NavLegResult } from '../nav/worker/protocol';
 import { fixedClock } from './clock';
-import { type Command, insertNote, setStepLocation } from './commands';
+import { type Command, insertNote, setStepLocation, updateStepNote } from './commands';
 import { createDerivedStore, type DerivedResults, pendingTravelReason, pendingTravelText, provisionalNote } from './derived';
 import { createDerivedPipeline, type DerivedPipeline, SELECTION_SETTLE_MS } from './derived-pipeline';
 import { acceptStepsAt, MAP_TEST_DATASET, mapTestSteps, mapTestWorkspace } from './map-test-helpers';
@@ -92,7 +92,14 @@ interface Setup {
   readonly runtime: NavigationRuntime;
 }
 
-function setup(opts: { readonly steps?: RouteStep[]; readonly navigation?: 'checking' | 'available' | NavigationState; readonly rewalkMs?: number; readonly selectionSettleMs?: number } = {}): Setup {
+function setup(
+  opts: {
+    readonly steps?: RouteStep[];
+    readonly navigation?: 'checking' | 'available' | NavigationState;
+    readonly rewalkMs?: number;
+    readonly selectionSettleMs?: number;
+  } = {},
+): Setup {
   const workspace = mapTestWorkspace(opts.steps ?? mapTestSteps(), T0);
   const store = createEditorStore({ project: workspace.project, ids: sequentialIdSource(1000), clock: fixedClock(T0) });
   const timers = new ManualTimers();
@@ -207,14 +214,17 @@ describe('derived pipeline: walks and publishing', () => {
     if (step === undefined) throw new Error('no step');
     s.store.select({ kind: 'single', id: step.id });
     const selected = s.handle.store.getState().selected;
-    expect(selected).toMatchObject({ revision: 0, stepId: step.id, index: 2 });
+    expect(selected).toMatchObject({ revision: 0, stepId: step.id, index: 2, atEnd: false });
     expect(selected?.record.step).toBe(step);
     // Step 3 accepts quest 2: in the log after it, not before.
     expect(selected?.before.questLog.has(2 as never)).toBe(false);
     expect(selected?.after.questLog.has(2 as never)).toBe(true);
     expect(s.pipeline.walks).toBe(1);
+    // With no step selected: the state after the last step (D-050 item 2; review PR-13).
     s.store.select({ kind: 'none' });
-    expect(s.handle.store.getState().selected).toBeNull();
+    const last = s.steps[s.steps.length - 1];
+    expect(s.handle.store.getState().selected).toMatchObject({ stepId: last?.id, index: s.steps.length - 1, atEnd: true });
+    expect(s.pipeline.walks).toBe(1);
     // Any other step's state, from the store's action.
     expect(s.handle.store.stateBefore(3)?.questLog.has(2 as never)).toBe(true);
     expect(s.handle.store.stateBefore(s.steps.length + 1)).toBeNull();
@@ -223,8 +233,10 @@ describe('derived pipeline: walks and publishing', () => {
   it('publishes the quest state after the focus step in a task of its own, with the zone spans, and rebuilds it only for a new walk or step (MP.3)', () => {
     const s = setup();
     s.timers.advance(0);
-    // No focus: no route state, but the spans are built.
-    expect(s.handle.store.getState().questState).toBeNull();
+    // No focus: the state after the last step (D-050 item 2; review PR-13), and the spans.
+    const last = s.steps[s.steps.length - 1];
+    const atEnd = s.handle.store.getState().questState;
+    expect(atEnd).toMatchObject({ stepId: last?.id, stepIndex: s.steps.length - 1, atEnd: true });
     expect(s.handle.store.getState().zoneSpans?.size).toBeGreaterThan(0);
     const accept = s.steps[2];
     const turnIn = s.steps[4];
@@ -232,10 +244,10 @@ describe('derived pipeline: walks and publishing', () => {
     s.store.select({ kind: 'single', id: accept.id });
     // The selection is published at once; the quest state follows in its own task.
     expect(s.handle.store.getState().selected?.stepId).toBe(accept.id);
-    expect(s.handle.store.getState().questState).toBeNull();
+    expect(s.handle.store.getState().questState).toBe(atEnd);
     s.timers.advance(0);
     const model = s.handle.store.getState().questState;
-    expect(model).toMatchObject({ revision: 0, stepId: accept.id, stepIndex: 2, who: 'Orc Warrior' });
+    expect(model).toMatchObject({ revision: 0, stepId: accept.id, stepIndex: 2, atEnd: false, who: 'Orc Warrior' });
     // Step 3 accepts Cull (2): in the log after it, with its objective open.
     expect(model?.quests.get(2 as never)).toMatchObject({ cls: 'in-log', mark: 'in-progress' });
     // A re-publish for the same walk and step keeps the model.
@@ -256,7 +268,7 @@ describe('derived pipeline: walks and publishing', () => {
     expect(after?.quests.get(2 as never)).toBe(before?.quests.get(2 as never));
     s.store.select({ kind: 'none' });
     s.timers.advance(0);
-    expect(s.handle.store.getState().questState).toBeNull();
+    expect(s.handle.store.getState().questState).toMatchObject({ revision: 1, stepId: s.handle.store.getState().results?.project.route.steps.at(-1)?.id, atEnd: true });
   });
 
   it('hands the rows a short form of each issue that drops the step’s own quest (review UI-01)', () => {
@@ -272,30 +284,88 @@ describe('derived pipeline: walks and publishing', () => {
     expect(results.shortIssue(issue, null)).toBe(short);
   });
 
-  it('rebuilds the quest state once for a moving selection, for the step it stops on, with the app’s settle time (review UI-04)', () => {
+  it('rebuilds the quest state after the paint for a change to a still selection, and once, where it stops, for a moving one (review UI-04; D-050 item 5)', () => {
     const s = setup({ selectionSettleMs: SELECTION_SETTLE_MS });
     s.timers.advance(0);
-    const [, , third, fourth, fifth] = s.steps;
-    if (third === undefined || fourth === undefined || fifth === undefined) throw new Error('no step');
-    const models = new Set<unknown>();
+    const [, , third, fourth, fifth, sixth] = s.steps;
+    if (third === undefined || fourth === undefined || fifth === undefined || sixth === undefined) throw new Error('no step');
+    // The models built after the first (the state at the end of the route, with no step selected).
+    const models: unknown[] = [];
     const unsubscribe = s.handle.store.subscribe(() => {
       const model = s.handle.store.getState().questState;
-      if (model !== null) models.add(model);
+      if (model !== null && !model.atEnd && models.at(-1) !== model) models.push(model);
     });
-    const built = () => models.size;
-    const before = built();
-    // Three steps a held arrow key apart (its repeat is about 33 ms): no rebuild while it moves.
+    // A still selection: the selection is published at once, its quest state after the next paint
+    // (a zero-delay timer here), not after the settle.
     s.store.select({ kind: 'single', id: third.id });
+    expect(s.handle.store.getState().selected?.stepId).toBe(third.id);
+    expect(models).toHaveLength(0);
+    s.timers.advance(0);
+    expect(models).toHaveLength(1);
+    expect(s.handle.store.getState().questState?.stepId).toBe(third.id);
+    // Three changes a held arrow key apart (its repeat is about 33 ms): the selection moves, so no rebuild until it has been still for the settle time.
     s.timers.advance(30);
     s.store.select({ kind: 'single', id: fourth.id });
     s.timers.advance(30);
     s.store.select({ kind: 'single', id: fifth.id });
+    s.timers.advance(30);
+    s.store.select({ kind: 'single', id: sixth.id });
     s.timers.advance(SELECTION_SETTLE_MS - 1);
-    expect(built()).toBe(before);
+    expect(models).toHaveLength(1);
     s.timers.advance(1);
-    expect(built()).toBe(before + 1);
-    expect(s.handle.store.getState().questState?.stepId).toBe(fifth.id);
+    expect(models).toHaveLength(2);
+    expect(s.handle.store.getState().questState?.stepId).toBe(sixth.id);
     unsubscribe();
+  });
+
+  it('takes an edit’s quest state into the walk’s own task after a quick walk (D-050 item 5)', () => {
+    const s = setup();
+    s.timers.advance(0);
+    const [first] = s.steps;
+    if (first === undefined) throw new Error('no step');
+    s.store.select({ kind: 'single', id: first.id });
+    s.timers.advance(0);
+    const before = s.handle.store.getState().questState;
+    // Count the timer tasks that run until the quest state for the edited project is published.
+    let tasks = 0;
+    let tasksToState: number | null = null;
+    const set = s.timers.set.bind(s.timers);
+    s.timers.set = (callback, ms) =>
+      set(() => {
+        tasks += 1;
+        callback();
+      }, ms);
+    const unsubscribe = s.handle.store.subscribe(() => {
+      const state = s.handle.store.getState();
+      if (tasksToState === null && state.questState !== before && state.results?.project === s.store.getState().project) tasksToState = tasks;
+    });
+    s.store.dispatch(updateStepNote(first.id, 'edited'));
+    s.timers.advance(0);
+    // One task: the walk published its results, then the quest state, with no task between them.
+    expect(tasksToState).toBe(1);
+    expect(s.handle.store.getState().questState?.stepId).toBe(first.id);
+    unsubscribe();
+  });
+
+  it('makes the quest givers’ and turn-ins’ clusters in the quest-state task and hands them to the map with the places (D-050 item 6)', () => {
+    const s = setup();
+    s.timers.advance(0);
+    const [, , third] = s.steps;
+    if (third === undefined) throw new Error('no step');
+    s.store.select({ kind: 'single', id: third.id });
+    s.timers.advance(0);
+    const state = s.handle.store.getState();
+    const model = state.questState;
+    const clusters = state.places?.clusters;
+    if (model === null || clusters === undefined || clusters === null) throw new Error('no quest state or clusters');
+    // The model's inputs are the ones made: the same source object each time, for the map's sync to look up.
+    const givers = clusters('available-quests', model.map.givers);
+    expect(clusters('available-quests', model.map.givers)).toBe(givers);
+    expect(clusters('turn-ins', model.map.turnIns)).toBe(clusters('turn-ins', model.map.turnIns));
+    // A later publish of the same pipeline hands the same clusterer.
+    s.store.select({ kind: 'single', id: s.steps[1]?.id ?? third.id });
+    s.timers.advance(SELECTION_SETTLE_MS);
+    expect(s.handle.store.getState().places?.clusters).toBe(clusters);
   });
 
   it('reports a walk that throws as failed and starts afresh on the next change', () => {

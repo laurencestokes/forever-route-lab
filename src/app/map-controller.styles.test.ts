@@ -5,7 +5,9 @@ import { ATLAS_LAYOUT } from '../geo/atlas-layout';
 import { MINIMAP_TEMPLATE, syntheticIndex, TEST_TEMPLATE } from '../../tests/support/atlas-tiles';
 import { createMapStyleSetting, MAP_LAYERS_STORAGE_KEY, MAP_STYLE_STORAGE_KEY, type AtlasIndexLoad, type KeyValueStorage, type MapResources, type MapStyleSetting, type TerrainManifestLoad } from '../infra/maps';
 import type { LayerId, MapContainer, MapDescriptor, MapStyle } from '../map/adapter';
+import type { ClustersOf } from '../map/layers';
 import { fixedClock } from './clock';
+import { createMapClusterer } from './map-clusters';
 import { createMapController, type MapControllerOptions } from './map-controller';
 import { acceptStepsAt, fakeAdapterFactory, mapTestWorkspace, type FakeAdapter } from './map-test-helpers';
 import { createEditorStore } from './store';
@@ -133,6 +135,34 @@ describe('two map styles in the controller (map-atlas.md §21; MM.1)', () => {
     expect(s.controller.getStatus().style).toEqual({ chosen: 'minimap', shown: 'minimap', unavailable: null });
     expect(artNotes(s.controller)).toContain(MINIMAP_TILES_NOTE);
     expect(indexes.styles()).toEqual(['minimap']);
+  });
+
+  it('sends the tile band before building any other layer, so the first view’s images are asked for first (review MR-07)', async () => {
+    const indexes = deferredIndexes();
+    // The quest givers' clusters are asked for while their layer is built (the view is at the world
+    // band): what the art layer holds then tells whether the band went first.
+    let adapter: FakeAdapter | null = null;
+    const artWhenBuilt: (readonly string[])[] = [];
+    const clusterer = createMapClusterer();
+    const clusters: ClustersOf = (layer, input) => {
+      if (adapter !== null) artWhenBuilt.push(artIds(adapter));
+      return clusterer.of(layer, input);
+    };
+    const s = setup(indexes.atlas, null, { clusters });
+    adapter = s.adapter;
+    const before = s.adapter.callsOf('setLayer').length;
+    indexes.resolve('minimap', loaded('minimap'));
+    await vi.waitFor(() => {
+      expect(artIds(s.adapter)).toEqual(['atlas-tiles:minimap']);
+    });
+    const layers = s.adapter.callsOf('setLayer').slice(before).map((call) => call.layer);
+    expect(layers[0]).toBe('art');
+    // The givers were built after the band had been sent.
+    expect(artWhenBuilt.at(-1)).toEqual(['atlas-tiles:minimap']);
+    // And at a pan that changes other layers, the band (unchanged) is not sent again.
+    const sent = s.adapter.callsOf('setLayer').length;
+    s.adapter.pan({ zoom: -2 });
+    expect(s.adapter.callsOf('setLayer').slice(sent).map((call) => call.layer)).not.toContain('art');
   });
 
   it('opens in the painted style when this browser chose it, and fetches no minimap index', async () => {

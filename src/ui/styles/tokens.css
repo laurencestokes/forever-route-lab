@@ -145,7 +145,11 @@
  * or gold, so the difficulty colours still sit on near-neutral ground. The accent, severity,
  * difficulty and provenance colours are unchanged. The tile is the default button's fill; the later
  * band (--frl-surface-later) is drawn under the route steps after the selection (D-048 B);
- * --frl-danger is the error hue on purpose (destructive and error share one meaning).
+ * --frl-danger is the error hue on purpose (destructive and error share one meaning). A route row's
+ * hover (--frl-row-hover) must show on the plain panel and on the later band alike (review UI-06):
+ * in light it lies between the two, 1.09:1 against the surface and 1.10:1 against the band, where
+ * --frl-surface-hover was 1.04:1 on the band; in dark it is --frl-surface-hover, 1.19:1 and 1.37:1.
+ * The dark band is 1.16:1 against the surface (it was 1.07:1).
  */
 :root,
 [data-theme='light'] {
@@ -157,6 +161,7 @@
   --frl-surface-hover: #eeebe5;
   --frl-surface-sunken: #ebe7e0;
   --frl-surface-later: #ebe7e0;
+  --frl-row-hover: #f4f2ed;
   --frl-border: #dcd6cc;
   --frl-border-strong: #777064;
   --frl-fg: #1b1916;
@@ -205,7 +210,8 @@
     --frl-surface-raised: #201e1a;
     --frl-surface-hover: #2a2722;
     --frl-surface-sunken: #141210;
-    --frl-surface-later: #11100d;
+    --frl-surface-later: #050403;
+    --frl-row-hover: var(--frl-surface-hover);
     --frl-border: #35312a;
     --frl-border-strong: #827a6d;
     --frl-fg: #ebe7e0;
@@ -254,7 +260,8 @@
   --frl-surface-raised: #201e1a;
   --frl-surface-hover: #2a2722;
   --frl-surface-sunken: #141210;
-  --frl-surface-later: #11100d;
+  --frl-surface-later: #050403;
+  --frl-row-hover: var(--frl-surface-hover);
   --frl-border: #35312a;
   --frl-border-strong: #827a6d;
   --frl-fg: #ebe7e0;

@@ -6,7 +6,7 @@
   },
   "schema": 1,
   "kind": "client-zones",
-  "build": "1.60.1.70009",
+  "build": "1.60.1.70124",
   "decision": "D-039 C",
   "selection": {
     "zones": "every AreaTable row that a UiMapAssignment row names as its AreaID (the zones, cities, battlegrounds and new Forever zones of the world map), ascending by id"

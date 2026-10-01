@@ -23,7 +23,7 @@
  *
  * Usage: pnpm maps:placeholder
  *        pnpm tsx tools/maps/import.ts --placeholder [--questiedb-repo <dir>] [--commit <sha>] [--rows <file>] [--out <dir>] [--check]
- *        pnpm tsx tools/maps/import.ts --build 1.60.1.70009 [--out <dir>] [--check]
+ *        pnpm tsx tools/maps/import.ts --build 1.60.1.70124 [--out <dir>] [--check]
  *   --check  compare with the files on disk instead of writing them (exit 1 on a difference)
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

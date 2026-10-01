@@ -6,7 +6,7 @@
   },
   "schema": 1,
   "kind": "client-dungeons",
-  "build": "1.60.1.70009",
+  "build": "1.60.1.70124",
   "decision": "D-039 E",
   "selection": {
     "lfg": "LFGDungeons rows with TypeID 0 (the dungeon and raid rows; the zone rows are 4 and the battlegrounds 5), ascending by id",

@@ -9,7 +9,7 @@ maps:validate`.
 792 WebP tiles of one continuous map of Kalimdor and the Eastern Kingdoms, with Zephras Isle in a
 card between them, composed from 50 of the World of Warcraft world map's painted images (zones,
 cities and the Zephras Isle map) of the World of Warcraft: Forever client (`wow_classic_beta`
-1.60.1.70009); 2 continent images were read for their land colouring and are not drawn. `index.json`
+1.60.1.70124); 2 continent images were read for their land colouring and are not drawn. `index.json`
 tells the map which tiles exist; `manifest.json` lists every file with its SHA-256, every source
 image with its pixel hash, every parameter, the censuses and the alterations below.
 
@@ -90,8 +90,8 @@ The project follows four rules adopted from that page's conditions:
 ## How they were made
 
 - Read-only from the local client's `Data/` folder through this project's CASC reader
-  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70009, build key
-  `05215079e3905ef5922ae0b03ffefb73`. Nothing is fetched from the network. Each source image is the
+  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70124, build key
+  `dd3dfc2881c407299f46c2aaf34c130b`. Nothing is fetched from the network. Each source image is the
   same lossless raster `tools/maps/convert.ts` composes, checked against the pixel hash the art
   manifest records for it.
 - Composited at 4 yards per pixel, reduced by 2×2 box filters for the coarser levels and recomposed

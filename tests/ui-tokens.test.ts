@@ -377,6 +377,36 @@ describe('WCAG AA contrast', () => {
     });
   }
 
+  // Review UI-06: the dark band was 1.07:1 and the light hover 1.04:1 on the band. The row hover
+  // (--frl-row-hover) must show over both backgrounds a row sits on, the plain panel and the band.
+  for (const theme of ['light', 'dark'] as const) {
+    it(`shows the later band and a hovered row on it, with every row pair still passing (${theme}; review UI-06)`, () => {
+      const surface = tokenColour(theme, 'surface');
+      const band = tokenColour(theme, 'surface-later');
+      if (theme === 'dark') expect(contrast(band, surface)).toBeGreaterThanOrEqual(1.15);
+      const hover = tokenColour(theme, 'row-hover');
+      const failures: string[] = [];
+      for (const [name, base] of [['surface', surface], ['surface-later', band]] as const) {
+        const hovered = composite(hover, base);
+        const distinct = contrast(hovered, base);
+        if (distinct < 1.08) failures.push(`hover on ${name}: ${distinct.toFixed(3)} < 1.08`);
+        for (const fg of TEXT_TOKENS) {
+          const ratio = contrast(tokenColour(theme, fg), hovered);
+          if (ratio < 4.5) failures.push(`${fg} on hovered ${name}: ${ratio.toFixed(2)}`);
+        }
+        for (const fg of ['border-strong', 'drop-indicator', 'focus']) {
+          const ratio = contrast(tokenColour(theme, fg), hovered);
+          if (ratio < 3) failures.push(`${fg} on hovered ${name}: ${ratio.toFixed(2)}`);
+        }
+        for (const d of [...DIFFICULTIES, 'unknown']) {
+          const silhouette = Math.max(contrast(tokenColour(theme, `difficulty-${d}`), hovered), contrast(tokenColour(theme, 'difficulty-well'), hovered));
+          if (silhouette < 3) failures.push(`${d} disc on hovered ${name}: ${silhouette.toFixed(2)}`);
+        }
+      }
+      expect(failures).toEqual([]);
+    });
+  }
+
   it('keeps the report-only pairs decorative and faint (the tile, the later band, the XP ticks)', () => {
     for (const theme of ['light', 'dark'] as const) {
       // The tile reads as filled but its edge carries the shape (ui-refresh.md §9.5: 1.20 to 1.30:1).

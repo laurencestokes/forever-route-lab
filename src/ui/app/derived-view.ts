@@ -129,8 +129,11 @@ function itemsBeforeAcceptSentence(facts: readonly SimFact[]): string | null {
 /** Where a dock's position comes from, as Details words it (SIMULATION TIME-7). */
 function dockWords(dock: TransportDockFact): string {
   switch (dock.pointFrom) {
-    case 'inferred':
-      return `${dock.name}, dock position inferred from ${dock.record ?? 'the client taxi file'}`;
+    case 'inferred': {
+      // TIME-7: the walks end at the berth's boarding point, the step between them is in the wait.
+      const boarding = dock.boardingYd === null || dock.boardingYd === 0 ? '' : `, boarding on walkable ground ${formatInteger(Math.round(dock.boardingYd))} yd from the berth`;
+      return `${dock.name}, dock position inferred from ${dock.record ?? 'the client taxi file'}${boarding}`;
+    }
     case 'user':
       return `${dock.name}, at the dock you entered`;
     case 'dock-npc':
@@ -150,8 +153,8 @@ export function transportSentence(facts: readonly SimFact[]): string | null {
     if (fact.kind !== 'transport-ride') continue;
     const [departure, arrival] = fact.docks;
     const docks = [departure, arrival].flatMap((dock) => (dock === undefined ? [] : [`${dock.end === 'departure' ? 'from' : 'to'} ${dockWords(dock)}`]));
-    const berth = fact.berthWalk ? '; the walk to or from a berth counts the swim beside the pier as walking (assumed)' : '';
-    return `${fact.name}: ${docks.join('; ')}; wait and ride times assumed${berth}`;
+    const boarding = fact.docks.some((dock) => dock.boardingYd !== null && dock.boardingYd > 0) ? ', the step from boarding to the berth included in the wait' : '';
+    return `${fact.name}: ${docks.join('; ')}; wait and ride times assumed${boarding}`;
   }
   return null;
 }
@@ -978,6 +981,8 @@ export function validationCounts(state: DerivedState | null): IssueCounts | null
 /** The quest log after the selection's focus step (`DerivedState.selected`), as the status bar and the Quest log tab count it. */
 export interface QuestLogCount {
   readonly stepId: StepId;
+  /** No step is selected: the count is after the last step, at the end of the route (D-050 item 2). */
+  readonly atEnd: boolean;
   readonly size: number;
   readonly capacity: number;
   readonly capacityBasis: RuleBasis;
@@ -990,13 +995,20 @@ export function questLogCountOf(state: DerivedState | null): QuestLogCount | nul
   const results = state?.results ?? null;
   if (selected === null || results === null) return null;
   const capacity = results.rules.values.questLogCapacity;
-  return { stepId: selected.stepId, size: selected.after.questLog.size, capacity: capacity.value, capacityBasis: capacity.basis, capacityFrom: capacity.from };
+  return { stepId: selected.stepId, atEnd: selected.atEnd, size: selected.after.questLog.size, capacity: capacity.value, capacityBasis: capacity.basis, capacityFrom: capacity.from };
 }
 
 export function sameQuestLogCount(a: QuestLogCount | null, b: QuestLogCount | null): boolean {
   return (
     a === b ||
-    (a !== null && b !== null && a.stepId === b.stepId && a.size === b.size && a.capacity === b.capacity && a.capacityBasis === b.capacityBasis && a.capacityFrom === b.capacityFrom)
+    (a !== null &&
+      b !== null &&
+      a.stepId === b.stepId &&
+      a.atEnd === b.atEnd &&
+      a.size === b.size &&
+      a.capacity === b.capacity &&
+      a.capacityBasis === b.capacityBasis &&
+      a.capacityFrom === b.capacityFrom)
   );
 }
 
@@ -1020,6 +1032,12 @@ export interface QuestLogWords {
   readonly badgeLabel: string | null;
 }
 
+/** Whose quest log it is: "after step 12", or, with no step selected, "at the end of the route (after step 55)" (D-050 item 2). */
+export function questLogWhere(count: Pick<QuestLogCount, 'atEnd'>, stepNumber: number): string {
+  const step = `step ${formatInteger(stepNumber)}`;
+  return count.atEnd ? `at the end of the route (after ${step})` : `after ${step}`;
+}
+
 /**
  * The quest log after the active step in words (ui-refresh.md §5.5, §8). `priorHistory` is the
  * character's: when the log before the route is `unknown`, the count is a lower bound. Unknown stays
@@ -1028,15 +1046,15 @@ export interface QuestLogWords {
 export function questLogWords(count: QuestLogCount | null, stepNumber: number | null, priorHistory: 'fresh' | 'listed' | 'unknown', why: string): QuestLogWords {
   if (count === null || stepNumber === null) return { text: '?', detail: `Quest log unknown: ${why}.`, badge: null, badgeLabel: null };
   const bound = priorHistory === 'unknown';
-  const step = `step ${formatInteger(stepNumber)}`;
+  const after = questLogWhere(count, stepNumber);
   const basis = count.capacityFrom === 'project' ? 'your project’s value' : CAPACITY_BASIS[count.capacityBasis];
   const size = formatInteger(count.size);
   const capacity = formatInteger(count.capacity);
   const lower = bound ? ' The quests in the log before the route are not known, so there may be more.' : '';
   return {
     text: `${bound ? '≥' : ''}${size} / ${capacity}`,
-    detail: `In the quest log after ${step}: ${bound ? 'at least ' : ''}${size} of ${capacity} quests (capacity ${capacity}: ${basis}).${lower}`,
+    detail: `In the quest log ${after}: ${bound ? 'at least ' : ''}${size} of ${capacity} quests (capacity ${capacity}: ${basis}).${lower}`,
     badge: `${bound ? '≥' : ''}${size}`,
-    badgeLabel: `${bound ? 'at least ' : ''}${plural(count.size, 'quest')} after ${step}`,
+    badgeLabel: `${bound ? 'at least ' : ''}${plural(count.size, 'quest')} ${after}`,
   };
 }

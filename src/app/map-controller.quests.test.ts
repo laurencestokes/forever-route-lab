@@ -65,7 +65,7 @@ function setup(withDerived = true, dataset: DatasetView = MAP_TEST_DATASET) {
     timers.advance(0);
   };
   timers.advance(0);
-  return { store, controller, adapter, select, pipeline, handle };
+  return { store, controller, adapter, select, pipeline, handle, timers };
 }
 
 const markersOf = (adapter: FakeAdapter, layer: LayerId): readonly MarkerDescriptor[] =>
@@ -123,13 +123,25 @@ describe('map controller: the quest layers from the quest state (MP.3)', () => {
     expect(markersOf(s.adapter(), 'available-quests')).toEqual([]);
   });
 
-  it('falls back to the quests open by race and class without route state, and says so', () => {
+  it('with no step selected, shows the state after the last step, as the status bar does (D-050 item 2; review PR-13)', () => {
     const s = setup();
-    // No active step yet: no model.
-    const [giver] = markersOf(s.adapter(), 'available-quests');
-    expect(giver?.mark).toBeUndefined();
-    expect(s.controller.labelFor(giver?.ref ?? { kind: 'surface', mapId: 1 as never })).toMatch(/ · quests open to an Orc Warrior \(no route state yet\)$/);
+    const steps = s.store.getState().project.route.steps;
+    expect(s.handle.store.getState().questState).toMatchObject({ stepId: steps.at(-1)?.id, atEnd: true });
+    const notes = s.controller.getStatus().layers.find((layer) => layer.layer === 'turn-ins')?.notes ?? [];
+    expect(notes[0]).toMatch(new RegExp(`^After step ${String(steps.length)}: `));
+    // Selecting a step and clearing the selection again goes back to it.
+    s.select(0);
+    expect(s.controller.getStatus().layers.find((layer) => layer.layer === 'available-quests')?.notes[0]).toMatch(/^After step 1: /);
+    s.store.select({ kind: 'none' });
+    s.timers.advance(0);
+    expect(s.controller.getStatus().layers.find((layer) => layer.layer === 'turn-ins')?.notes[0]).toMatch(new RegExp(`^After step ${String(steps.length)}: `));
+  });
+
+  it('falls back to the quests open by race and class without route state, and says so', () => {
     const none = setup(false);
+    const [giver] = markersOf(none.adapter(), 'available-quests');
+    expect(giver?.mark).toBeUndefined();
+    expect(none.controller.labelFor(giver?.ref ?? { kind: 'surface', mapId: 1 as never })).toMatch(/ · quests open to an Orc Warrior \(no route state yet\)$/);
     none.select(0);
     expect(markersOf(none.adapter(), 'available-quests')[0]?.mark).toBeUndefined();
     expect(none.controller.getStatus().layers.find((layer) => layer.layer === 'available-quests')?.notes[0]).toMatch(/^Quests open to an Orc Warrior \(no route state yet\): /);

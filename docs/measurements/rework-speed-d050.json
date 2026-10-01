@@ -1,0 +1,1038 @@
+{
+  "$comment": [
+    "D-050 items 5 and 6 (the rework follow-up): the speed regressions of docs/reviews/review-map-ui-rework.md fixed without re-baselining, and the quest givers' clusters moved into the derived publish to bring the entry chunk under the 248.5 kB stop rule. Measured 2026-09-30 on the working tree over commit eff4341 (uncommitted), against a build of eff4341 itself (git archive, the same node_modules).",
+    "Load: other agents were building and testing on the machine throughout (Windows load 28-70 %, a Vite dev server and Chrome sessions of theirs), so every comparison here is an interleaved A/B (before, after, before, after …) and is reported as the median with its min and max. Single slow frames and the absolute 4× figures are less certain than on a calm machine.",
+    "Browser: headless Chrome 154 over CDP, the production build served by .cache/perf-fix/harness/serve.mjs (text gzip-compressed, as GitHub Pages sends it), 1366 × 768 at DPR 1.5, the minimap style, the harness of .cache/map-ui-build/harness (atl9.mjs, unchanged in what it measures). selectionToPaintMs / editToPaintMs: from the pointerdown to the frame after the last map call within the quiet period; lastMapCall: when that call ended. 10k-x4: the 10,000-step project of UR.2b at 4×, five drags and a long drag at the zone band.",
+    "Node: the benches bundled with esbuild (as vite build bundles) and run interleaved, HEAD then tree, five pairs; the --check verdicts are the committed commands under tsx."
+  ],
+  "date": "2026-09-30",
+  "entryChunk": {
+    "gzipKb": {
+      "before": 248.98,
+      "after": 246.82,
+      "budget": 250,
+      "stopRule": 248.5
+    },
+    "basis": "MEASURED: tools/build/audit-dist.ts on a build of eff4341 and of the tree (index chunk 236.89 → 234.73 kB; shell-support 11.76 and http 0.32 kB unchanged).",
+    "inContextGzipBytes": {
+      "src/map/layers.ts": {
+        "before": 15344,
+        "after": 14942
+      },
+      "src/app/map-controller.ts": {
+        "before": 12552,
+        "after": 12661
+      },
+      "src/app/map-model.ts": {
+        "before": 2440,
+        "after": 2550
+      },
+      "src/map/adapter.ts": {
+        "before": 2531,
+        "after": 2516
+      },
+      "src/map/marks.ts": {
+        "before": 1479,
+        "after": 1500
+      },
+      "src/infra/maps/map-resources.ts": {
+        "before": 821,
+        "after": 937
+      },
+      "src/infra/maps/image-header.ts": {
+        "before": 1786,
+        "after": 0
+      },
+      "src/infra/maps/terrain.ts": {
+        "before": 1623,
+        "after": 0
+      },
+      "src/infra/maps/local-art.ts": {
+        "before": 1101,
+        "after": 1109
+      },
+      "src/infra/maps/art-manifest.ts": {
+        "before": 576,
+        "after": 717
+      },
+      "src/infra/maps/image-types.ts": {
+        "before": 0,
+        "after": 576
+      },
+      "src/infra/maps/terrain-paths.ts": {
+        "before": 0,
+        "after": 14
+      }
+    },
+    "moves": [
+      "The clusters (their cells, pins and hover words) moved from src/map/layers.ts into src/app/map-clusters.ts, made in the derived pipeline's quest-state task and handed to the layer builder by the places model (PlacesModel.clusters): about −1.1 kB, less +0.7 kB of the builder's new focus and split caches (layers.ts 15.34 → 14.94 kB in context).",
+      "The terrain byproducts' guards (terrain.ts, 1.62 kB) and the image-header reader (image-header.ts, 1.79 kB, local art only) load as chunks of their own with their first file; their paths and the image types stay in the entry (terrain-paths.ts, image-types.ts)."
+    ]
+  },
+  "nodeBenches": {
+    "mapEdit": {
+      "$comment": "tests/bench/map-edit.bench.ts: the 10,000-step route over Durotar at zone zoom (−2), the real controller and map/layers over the fake adapter. selectionChangeContinent is the new case (the continent band, clusters); HEAD's figure is the same case run on eff4341's sources.",
+      "ab": {
+        "head": {
+          "selectionChange": {
+            "median": 2.5,
+            "min": 2.3,
+            "max": 2.7,
+            "n": 5
+          },
+          "moveStep": {
+            "median": 6.6,
+            "min": 6.4,
+            "max": 7.2,
+            "n": 5
+          },
+          "moveStepP90": {
+            "median": 7.3,
+            "min": 7.2,
+            "max": 7.9,
+            "n": 5
+          },
+          "insertNote": {
+            "median": 3.6,
+            "min": 3.6,
+            "max": 3.6,
+            "n": 5
+          },
+          "editNote": {
+            "median": 2.4,
+            "min": 2.4,
+            "max": 2.5,
+            "n": 5
+          },
+          "atlasSelectionChange": {
+            "median": 2,
+            "min": 2,
+            "max": 2.2,
+            "n": 5
+          },
+          "atlasMoveStep": {
+            "median": 6.7,
+            "min": 6.4,
+            "max": 7.2,
+            "n": 5
+          },
+          "atlasMoveStepP90": {
+            "median": 7.7,
+            "min": 7,
+            "max": 8.4,
+            "n": 5
+          }
+        },
+        "tree": {
+          "selectionChange": {
+            "median": 1.3,
+            "min": 1.1,
+            "max": 1.6,
+            "n": 5
+          },
+          "moveStep": {
+            "median": 4.7,
+            "min": 4.6,
+            "max": 5.6,
+            "n": 5
+          },
+          "moveStepP90": {
+            "median": 5.6,
+            "min": 5.4,
+            "max": 6.8,
+            "n": 5
+          },
+          "insertNote": {
+            "median": 3.6,
+            "min": 3.4,
+            "max": 4,
+            "n": 5
+          },
+          "editNote": {
+            "median": 2.4,
+            "min": 2.3,
+            "max": 2.5,
+            "n": 5
+          },
+          "atlasSelectionChange": {
+            "median": 0.8,
+            "min": 0.8,
+            "max": 0.9,
+            "n": 5
+          },
+          "atlasMoveStep": {
+            "median": 4.8,
+            "min": 4.5,
+            "max": 5,
+            "n": 5
+          },
+          "atlasMoveStepP90": {
+            "median": 5.4,
+            "min": 5.3,
+            "max": 6,
+            "n": 5
+          }
+        }
+      },
+      "selectionChangeContinentMs": {
+        "head": {
+          "median": 1.9,
+          "min": 1.9,
+          "max": 2,
+          "n": 3
+        },
+        "tree": {
+          "median": 0.8,
+          "min": 0.8,
+          "max": 0.8,
+          "n": 5
+        }
+      },
+      "checkRuns": [
+        {
+          "selectionChange": {
+            "min": 0.82,
+            "median": 1.24,
+            "p90": 2.22
+          },
+          "moveStep": {
+            "min": 4.6,
+            "median": 5.19,
+            "p90": 5.79
+          },
+          "insertNote": 3.75,
+          "editNote": 2.44,
+          "atlasSelectionChange": 0.84,
+          "atlasMoveStep": {
+            "min": 4.78,
+            "median": 5.03,
+            "p90": 5.96
+          },
+          "selectionChangeContinent": 0.89
+        },
+        {
+          "selectionChange": {
+            "min": 0.79,
+            "median": 1.26,
+            "p90": 1.59
+          },
+          "moveStep": {
+            "min": 4.58,
+            "median": 4.8,
+            "p90": 5.61
+          },
+          "insertNote": 3.65,
+          "editNote": 2.46,
+          "atlasSelectionChange": 1.07,
+          "atlasMoveStep": {
+            "min": 4.54,
+            "median": 4.64,
+            "p90": 5.56
+          },
+          "selectionChangeContinent": 0.85
+        },
+        {
+          "selectionChange": {
+            "min": 0.8,
+            "median": 1.35,
+            "p90": 1.68
+          },
+          "moveStep": {
+            "min": 4.45,
+            "median": 4.7,
+            "p90": 5.32
+          },
+          "insertNote": 3.73,
+          "editNote": 2.52,
+          "atlasSelectionChange": 0.86,
+          "atlasMoveStep": {
+            "min": 4.52,
+            "median": 4.67,
+            "p90": 5.44
+          },
+          "selectionChangeContinent": 0.93
+        }
+      ],
+      "checkVerdicts": [
+        "Within 25% of the stored baseline; the two-builder atlas case within it and within 8 ms.",
+        "Within 25% of the stored baseline; the two-builder atlas case within it and within 8 ms.",
+        "Within 25% of the stored baseline; the two-builder atlas case within it and within 8 ms."
+      ]
+    },
+    "mapPaths": {
+      "$comment": "tests/bench/map-paths.bench.ts: the same route with the walking-path feed; newPaths is what a new paths object costs the map. moveStep was 8.0 ms in Node against the 8 ms budget in the review (PERF-09).",
+      "ab": {
+        "head": {
+          "moveStep": {
+            "median": 7.1,
+            "min": 6.9,
+            "max": 7.4,
+            "n": 5
+          },
+          "insertNote": {
+            "median": 4,
+            "min": 3.8,
+            "max": 4.7,
+            "n": 5
+          },
+          "editNote": {
+            "median": 2.6,
+            "min": 2.5,
+            "max": 2.7,
+            "n": 5
+          },
+          "newPaths": {
+            "median": 2.6,
+            "min": 2.5,
+            "max": 2.9,
+            "n": 5
+          },
+          "pan": {
+            "median": 0.3,
+            "min": 0.3,
+            "max": 0.4,
+            "n": 5
+          }
+        },
+        "tree": {
+          "moveStep": {
+            "median": 5.9,
+            "min": 5.7,
+            "max": 6.1,
+            "n": 5
+          },
+          "insertNote": {
+            "median": 3.7,
+            "min": 3.6,
+            "max": 3.9,
+            "n": 5
+          },
+          "editNote": {
+            "median": 2.5,
+            "min": 2.4,
+            "max": 2.6,
+            "n": 5
+          },
+          "newPaths": {
+            "median": 2.3,
+            "min": 2.1,
+            "max": 2.4,
+            "n": 5
+          },
+          "pan": {
+            "median": 0.3,
+            "min": 0.3,
+            "max": 0.4,
+            "n": 5
+          }
+        }
+      },
+      "checkVerdict": "Every route edit with walking paths is within the 8 ms budget (median). Within 25% of the stored baseline."
+    },
+    "derived": {
+      "$comment": "tests/bench/derived.bench.ts. Both A/Bs show the tree at the speed of eff4341 under the same conditions (review TR-04 found the same): the stored baseline is out of reach on this machine as it was on 2026-09-30 afternoon for both (eff4341 itself, bundled: classChange about 66 ms against its stored bundled 43.2 ms). At the session start, calmer, eff4341 passed --check twice (classChange 52.9 and 53.5 ms). classChange is 91 % the engine walk and the validator (a CPU profile), outside this change. --check now normalises by the CPU probe (the engine and validate benches’ method), which takes back only part of such load (probe 48 ms against 40); the baselines are unchanged. questState is new: the task a selection change waits for, clusters included.",
+      "ab": {
+        "head": {
+          "firstWalk": {
+            "median": 57,
+            "min": 44,
+            "max": 68.6,
+            "n": 5
+          },
+          "editStart": {
+            "median": 32.2,
+            "min": 25.3,
+            "max": 35.5,
+            "n": 5
+          },
+          "editMiddle": {
+            "median": 19.8,
+            "min": 12.5,
+            "max": 24.1,
+            "n": 5
+          },
+          "classChange": {
+            "median": 72.1,
+            "min": 66,
+            "max": 84.8,
+            "n": 5
+          },
+          "classToggle": {
+            "median": 48.6,
+            "min": 41.7,
+            "max": 51.6,
+            "n": 5
+          },
+          "navEditStart": {
+            "median": 50.6,
+            "min": 42.5,
+            "max": 56.1,
+            "n": 5
+          },
+          "navEditMiddle": {
+            "median": 26.5,
+            "min": 22,
+            "max": 28.8,
+            "n": 5
+          },
+          "taxiArrives": {
+            "median": 55,
+            "min": 48.3,
+            "max": 57,
+            "n": 5
+          }
+        },
+        "tree": {
+          "firstWalk": {
+            "median": 57.2,
+            "min": 46.5,
+            "max": 67.8,
+            "n": 5
+          },
+          "editStart": {
+            "median": 31.2,
+            "min": 25.7,
+            "max": 39,
+            "n": 5
+          },
+          "editMiddle": {
+            "median": 20.8,
+            "min": 15.7,
+            "max": 21,
+            "n": 5
+          },
+          "classChange": {
+            "median": 71.7,
+            "min": 64.7,
+            "max": 78.5,
+            "n": 5
+          },
+          "classToggle": {
+            "median": 47.3,
+            "min": 42.3,
+            "max": 49.7,
+            "n": 5
+          },
+          "navEditStart": {
+            "median": 48.5,
+            "min": 40.4,
+            "max": 57.5,
+            "n": 5
+          },
+          "navEditMiddle": {
+            "median": 26.6,
+            "min": 22.1,
+            "max": 34.6,
+            "n": 5
+          },
+          "taxiArrives": {
+            "median": 52.5,
+            "min": 48.6,
+            "max": 63.7,
+            "n": 5
+          }
+        }
+      },
+      "abLate": {
+        "$comment": "Three pairs after the browser runs had finished (Windows load 14 %).",
+        "head": {
+          "firstWalk": {
+            "median": 46.7,
+            "min": 46.1,
+            "max": 49,
+            "n": 3
+          },
+          "editStart": {
+            "median": 26.8,
+            "min": 25.6,
+            "max": 26.9,
+            "n": 3
+          },
+          "editMiddle": {
+            "median": 14,
+            "min": 13.5,
+            "max": 14.9,
+            "n": 3
+          },
+          "classChange": {
+            "median": 66.7,
+            "min": 65.5,
+            "max": 67.9,
+            "n": 3
+          },
+          "navEditStart": {
+            "median": 41.7,
+            "min": 41.1,
+            "max": 42.1,
+            "n": 3
+          },
+          "navEditMiddle": {
+            "median": 21.8,
+            "min": 20.7,
+            "max": 22.5,
+            "n": 3
+          }
+        },
+        "tree": {
+          "firstWalk": {
+            "median": 46.4,
+            "min": 46.3,
+            "max": 46.4,
+            "n": 3
+          },
+          "editStart": {
+            "median": 25.5,
+            "min": 25.2,
+            "max": 26.2,
+            "n": 3
+          },
+          "editMiddle": {
+            "median": 14.7,
+            "min": 13.1,
+            "max": 16.2,
+            "n": 3
+          },
+          "classChange": {
+            "median": 65.8,
+            "min": 65.5,
+            "max": 67.5,
+            "n": 3
+          },
+          "navEditStart": {
+            "median": 41.4,
+            "min": 39,
+            "max": 42,
+            "n": 3
+          },
+          "navEditMiddle": {
+            "median": 21.2,
+            "min": 21.1,
+            "max": 21.4,
+            "n": 3
+          }
+        }
+      },
+      "checkRuns": [
+        {
+          "probeMs": {
+            "before": 43.19,
+            "after": 53.16,
+            "mean": 48.18
+          },
+          "firstWalk": 55.18,
+          "editStart": 35.58,
+          "editMiddle": 20.96,
+          "classChange": 80.2,
+          "navEditStart": 43.72,
+          "navEditMiddle": 23.02,
+          "taxiArrives": 56.2,
+          "questState": {
+            "min": 9.47,
+            "median": 15.1,
+            "p90": 16.83
+          }
+        },
+        {
+          "probeMs": {
+            "before": 42.42,
+            "after": 53.52,
+            "mean": 47.97
+          },
+          "firstWalk": 58.19,
+          "editStart": 38.18,
+          "editMiddle": 19.14,
+          "classChange": 79.05,
+          "navEditStart": 43.02,
+          "navEditMiddle": 21.46,
+          "taxiArrives": 50.86,
+          "questState": {
+            "min": 9.14,
+            "median": 14.1,
+            "p90": 17.66
+          }
+        },
+        {
+          "probeMs": {
+            "before": 42.65,
+            "after": 53.23,
+            "mean": 47.94
+          },
+          "firstWalk": 55.32,
+          "editStart": 35.55,
+          "editMiddle": 19.91,
+          "classChange": 78.41,
+          "navEditStart": 40.75,
+          "navEditMiddle": 22.86,
+          "taxiArrives": 49.92,
+          "questState": {
+            "min": 10,
+            "median": 14.94,
+            "p90": 16.69
+          }
+        }
+      ],
+      "checkVerdicts": [
+        "CPU probe 48.18 ms (reference 40 ms): medians × 0.83 | Slower than the stored baseline by more than 25%: |   editMiddle: 17.4 ms normalised (20.96 ms at probe 48.18 ms), baseline 13.4 ms (+30%) |   classChange: 66.58 ms normalised (80.2 ms at probe 48.18 ms), baseline 51.49 ms (+29%) |   navEditStart: 36.3 ms normalised (43.72 ms at probe 48.18 ms), baseline 27.02 ms (+34%)",
+        "CPU probe 47.97 ms (reference 40 ms): medians × 0.83 | Slower than the stored baseline by more than 25%: |   classChange: 65.92 ms normalised (79.05 ms at probe 47.97 ms), baseline 51.49 ms (+28%) |   navEditStart: 35.87 ms normalised (43.02 ms at probe 47.97 ms), baseline 27.02 ms (+33%)",
+        "CPU probe 47.94 ms (reference 40 ms): medians × 0.83 | Slower than the stored baseline by more than 25%: |   classChange: 65.42 ms normalised (78.41 ms at probe 47.94 ms), baseline 51.49 ms (+27%) |   navEditStart: 34 ms normalised (40.75 ms at probe 47.94 ms), baseline 27.02 ms (+26%)"
+      ]
+    }
+  },
+  "browser": {
+    "10k-x4": {
+      "after": {
+        "probeMs": {
+          "median": 172,
+          "min": 171,
+          "max": 173,
+          "n": 3
+        },
+        "firstArtAfterChunkMs": {
+          "median": 2805,
+          "min": 2732,
+          "max": 3056,
+          "n": 3
+        },
+        "firstTileRequestMs": {
+          "median": 2781,
+          "min": 2677,
+          "max": 3002,
+          "n": 3
+        },
+        "workspaceReadyMs": {
+          "median": 1224,
+          "min": 1116,
+          "max": 1294,
+          "n": 3
+        },
+        "panP95": {
+          "median": 8.6,
+          "min": 8.4,
+          "max": 8.6,
+          "n": 3
+        },
+        "panP99": {
+          "median": 46.1,
+          "min": 45.9,
+          "max": 48.7,
+          "n": 3
+        },
+        "panMaxFrame": {
+          "median": 95.4,
+          "min": 93,
+          "max": 175.3,
+          "n": 3
+        },
+        "panFramesOver33": {
+          "median": 14,
+          "min": 13,
+          "max": 15,
+          "n": 3
+        },
+        "panLongestTask": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "n": 3
+        },
+        "panSyncP50": {
+          "median": 34.5,
+          "min": 33.3,
+          "max": 36.5,
+          "n": 3
+        },
+        "panSyncMax": {
+          "median": 41.4,
+          "min": 41,
+          "max": 45.3,
+          "n": 3
+        },
+        "longDragP99": {
+          "median": 8.7,
+          "min": 8.7,
+          "max": 9,
+          "n": 3
+        },
+        "longDragMax": {
+          "median": 38.3,
+          "min": 37.1,
+          "max": 47,
+          "n": 3
+        }
+      },
+      "before": {
+        "probeMs": {
+          "median": 174,
+          "min": 174,
+          "max": 175,
+          "n": 3
+        },
+        "firstArtAfterChunkMs": {
+          "median": 3277,
+          "min": 3091,
+          "max": 3287,
+          "n": 3
+        },
+        "firstTileRequestMs": {
+          "median": 3379,
+          "min": 3182,
+          "max": 3391,
+          "n": 3
+        },
+        "workspaceReadyMs": {
+          "median": 1270,
+          "min": 1171,
+          "max": 1293,
+          "n": 3
+        },
+        "panP95": {
+          "median": 8.7,
+          "min": 7.1,
+          "max": 13.8,
+          "n": 3
+        },
+        "panP99": {
+          "median": 61.1,
+          "min": 55.5,
+          "max": 62.5,
+          "n": 3
+        },
+        "panMaxFrame": {
+          "median": 104.2,
+          "min": 101,
+          "max": 118.2,
+          "n": 3
+        },
+        "panFramesOver33": {
+          "median": 21,
+          "min": 19,
+          "max": 23,
+          "n": 3
+        },
+        "panLongestTask": {
+          "median": 74,
+          "min": 58,
+          "max": 78,
+          "n": 3
+        },
+        "panSyncP50": {
+          "median": 44.9,
+          "min": 43.2,
+          "max": 45.4,
+          "n": 3
+        },
+        "panSyncMax": {
+          "median": 68.9,
+          "min": 55.6,
+          "max": 74,
+          "n": 3
+        },
+        "longDragP99": {
+          "median": 8.8,
+          "min": 7.1,
+          "max": 14,
+          "n": 3
+        },
+        "longDragMax": {
+          "median": 46.6,
+          "min": 34.8,
+          "max": 55.6,
+          "n": 3
+        }
+      }
+    },
+    "x1": {
+      "after": {
+        "probeMs": {
+          "median": 39,
+          "min": 39,
+          "max": 40,
+          "n": 3
+        },
+        "selectionToPaintMs": {
+          "median": 40.1,
+          "min": 5.6,
+          "max": 116,
+          "n": 42
+        },
+        "selectionLastMapCallMs": {
+          "median": 23.8,
+          "min": 2.4,
+          "max": 63.2,
+          "n": 42
+        },
+        "editToPaintMs": {
+          "median": 53.8,
+          "min": 45.6,
+          "max": 67,
+          "n": 36
+        },
+        "editLastMapCallMs": {
+          "median": 39.1,
+          "min": 34.2,
+          "max": 48,
+          "n": 36
+        },
+        "editDerivedMs": {
+          "median": 24.3,
+          "min": 20.7,
+          "max": 27.1,
+          "n": 36
+        },
+        "firstArtAfterChunkMs": {
+          "median": 524,
+          "min": 456,
+          "max": 551,
+          "n": 6
+        },
+        "firstTileRequestMs": {
+          "median": 720,
+          "min": 612,
+          "max": 737,
+          "n": 6
+        },
+        "workspaceReadyMs": {
+          "median": 533,
+          "min": 508,
+          "max": 545,
+          "n": 6
+        }
+      },
+      "before": {
+        "probeMs": {
+          "median": 39,
+          "min": 39,
+          "max": 40,
+          "n": 3
+        },
+        "selectionToPaintMs": {
+          "median": 93.4,
+          "min": 6.2,
+          "max": 199.3,
+          "n": 42
+        },
+        "selectionLastMapCallMs": {
+          "median": 78.9,
+          "min": 2.6,
+          "max": 106.3,
+          "n": 42
+        },
+        "editToPaintMs": {
+          "median": 59.1,
+          "min": 45.1,
+          "max": 67.7,
+          "n": 36
+        },
+        "editLastMapCallMs": {
+          "median": 45,
+          "min": 36.3,
+          "max": 53.5,
+          "n": 36
+        },
+        "editDerivedMs": {
+          "median": 25.3,
+          "min": 20.9,
+          "max": 30.1,
+          "n": 36
+        },
+        "firstArtAfterChunkMs": {
+          "median": 627,
+          "min": 545,
+          "max": 639,
+          "n": 6
+        },
+        "firstTileRequestMs": {
+          "median": 750,
+          "min": 670,
+          "max": 829,
+          "n": 6
+        },
+        "workspaceReadyMs": {
+          "median": 522,
+          "min": 512,
+          "max": 557,
+          "n": 6
+        }
+      }
+    },
+    "x4": {
+      "after": {
+        "probeMs": {
+          "median": 171,
+          "min": 170,
+          "max": 174,
+          "n": 3
+        },
+        "selectionToPaintMs": {
+          "median": 268.8,
+          "min": 11.7,
+          "max": 691.1,
+          "n": 42
+        },
+        "selectionLastMapCallMs": {
+          "median": 150.3,
+          "min": 10.2,
+          "max": 362.3,
+          "n": 42
+        },
+        "editToPaintMs": {
+          "median": 331,
+          "min": 303.3,
+          "max": 363.6,
+          "n": 36
+        },
+        "editLastMapCallMs": {
+          "median": 207.6,
+          "min": 190.1,
+          "max": 242.9,
+          "n": 36
+        },
+        "editDerivedMs": {
+          "median": 135,
+          "min": 123.6,
+          "max": 162.1,
+          "n": 36
+        },
+        "firstArtAfterChunkMs": {
+          "median": 2065,
+          "min": 1549,
+          "max": 2189,
+          "n": 6
+        },
+        "firstTileRequestMs": {
+          "median": 2230,
+          "min": 1708,
+          "max": 2263,
+          "n": 6
+        },
+        "workspaceReadyMs": {
+          "median": 1135,
+          "min": 1055,
+          "max": 1219,
+          "n": 6
+        }
+      },
+      "before": {
+        "probeMs": {
+          "median": 172,
+          "min": 171,
+          "max": 174,
+          "n": 3
+        },
+        "selectionToPaintMs": {
+          "median": 288.4,
+          "min": 10.6,
+          "max": 744.5,
+          "n": 41
+        },
+        "selectionLastMapCallMs": {
+          "median": 174.9,
+          "min": 9.1,
+          "max": 458.3,
+          "n": 42
+        },
+        "editToPaintMs": {
+          "median": 359.4,
+          "min": 291.9,
+          "max": 436.7,
+          "n": 36
+        },
+        "editLastMapCallMs": {
+          "median": 266.4,
+          "min": 197.4,
+          "max": 337.2,
+          "n": 36
+        },
+        "editDerivedMs": {
+          "median": 149.5,
+          "min": 120.5,
+          "max": 183.2,
+          "n": 36
+        },
+        "firstArtAfterChunkMs": {
+          "median": 2293,
+          "min": 1804,
+          "max": 2526,
+          "n": 6
+        },
+        "firstTileRequestMs": {
+          "median": 2630,
+          "min": 2039,
+          "max": 2871,
+          "n": 6
+        },
+        "workspaceReadyMs": {
+          "median": 1116,
+          "min": 1074,
+          "max": 1237,
+          "n": 6
+        }
+      }
+    }
+  },
+  "profiles": {
+    "$comment": "CPU profiles (CDP Profiler, 100-200 µs sampling) of unminified production builds of eff4341 and of the tree, and node --cpu-prof of the bundled benches; the figures are the profiles' own and are slower than the minified build.",
+    "selectionChange": "Node, 10,000 steps: 97 % of a selection change was the spawn layers collected again for the new focus (mergeGroups 0.5 ms, a marker per point, the id sort), the active split re-scanning every piece (0.25 ms) and the focus pan's re-rank. Now: the points before the focus are kept per input and the layers keyed on the groups a focus holds; a selection that focuses none of a layer's groups leaves it untouched.",
+    "moveStep": "Node: the drawn route renumbered in a 10,000-entry map at every edit (0.75 ms), every step id hashed for the route pieces (about 1 ms), the split, and a positions map rebuilt for the focus check of an insert. Now incremental.",
+    "selectionToMap1x": "Browser, eff4341: the pins waited for the 60 ms settle (UI-04), then the quest-state task (12-21 ms unminified at 1×). Now after the next paint for a still selection.",
+    "editToMap1x": "Browser: the edit's React render (10-13 ms), the frame, the walk's zero-delay timer, then the quest state in a task of its own. Now the quest state runs in the walk's task after a quick walk (≤ 8 ms). Tried and withdrawn: walking before the edit's first frame (a microtask) made everything paint in one frame at about 50 ms, but moved the edit's own first paint from about 25 ms to about 50 ms (unminified, 1×).",
+    "pans10k4x": "Browser, 4×, unminified, 5 drags: eff4341 ran 16 map syncs, p50 40 ms, most of them walking-path passes issued every 250 ms while dragging (each a full 10,000-step route walk, pathOf 144 ms of 590 ms in all). The tree: 8 syncs, none during a drag; pathOf 40 ms. The post-drag work is the view's sync (Leaflet adding and removing the re-ranked step markers, about 20 ms of it) and one paths pass.",
+    "firstArt4x": "Browser, 4×, unminified, cold, 50 Mbit/s (tree): the workspace is ready at about 1.2 s; React's first render and commit take about 620 ms (390 ms of layout effects, a re-render set off by the map region's width measurement in MapPanel, src/ui); the map's mount and route fit about 430 ms. The index arrives at 1.28 s but its reader's continuation runs only after those tasks. The reader chunk now loads with the index (requested at 1.25 s, not 2.25 s), and each sync sends the tile band before building any other layer.",
+    "clusterWarm": "Node: every level of every map for the quests open by race and class (908 groups, 959 points): 3.6 ms median (2.2-7.2), in the quest-state task."
+  },
+  "firstViewBytes": {
+    "$comment": "Review MR-06, measured on the view the app opens at (the sample route's fit, zoom −2.11, the 684 × 690 map panel), cold, 50 Mbit/s: resource timing read before anything touches the map (the instrument's Zoom in/out capture, which loads 16 more tiles, is not installed). firstViewBytes: the tiles in the view plus the index. The budget (§24.2, ≤ 100 kB) was written for the atlas fit view (85 kB).",
+    "verdict": "FAIL on the view the app opens at",
+    "budgetBytes": 100000,
+    "minimap": {
+      "panelCssPx": [
+        684,
+        690
+      ],
+      "openingZoomTiles": {
+        "-2": {
+          "n": 15,
+          "bytes": 193100
+        },
+        "-6": {
+          "n": 4,
+          "bytes": 21252
+        }
+      },
+      "tilesInView": 15,
+      "tileBytesInView": 193100,
+      "indexBytes": 2255,
+      "firstViewBytes": 195355,
+      "allTileRequestsUntilSettled": 19,
+      "allTileBytesUntilSettled": 214352,
+      "underlayImages": 4
+    },
+    "painted": {
+      "panelCssPx": [
+        684,
+        690
+      ],
+      "openingZoomTiles": {
+        "-2": {
+          "n": 13,
+          "bytes": 119972
+        },
+        "-3": {
+          "n": 2,
+          "bytes": 23344
+        },
+        "-5": {
+          "n": 13,
+          "bytes": 91346
+        }
+      },
+      "tilesInView": 13,
+      "tileBytesInView": 119972,
+      "indexBytes": 1316,
+      "firstViewBytes": 121288,
+      "allTileRequestsUntilSettled": 28,
+      "allTileBytesUntilSettled": 234662,
+      "underlayImages": 13
+    }
+  }
+}

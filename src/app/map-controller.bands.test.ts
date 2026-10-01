@@ -5,6 +5,7 @@ import { DEFAULT_LOD } from '../map/layers';
 import { fixedClock } from './clock';
 import { insertNote } from './commands';
 import { createMapController, type MapControllerOptions } from './map-controller';
+import { createMapClusterer } from './map-clusters';
 import { acceptStepsAt, fakeAdapterFactory, MAP_TEST_DATASET, mapTestWorkspace, type FakeAdapter } from './map-test-helpers';
 import { createEditorStore } from './store';
 import { MAP_WORDING } from './map-wording';
@@ -40,6 +41,7 @@ function setup(steps: RouteStep[] = acceptStepsAt(POINTS), options: Partial<MapC
     describeStep: (step, index) => `${String(index + 1)} · ${step.kind}`,
     timing: null,
     objectUrls: null,
+    clusters: createMapClusterer().of,
     ...options,
   });
   controller.attach(factory.factory, EL);

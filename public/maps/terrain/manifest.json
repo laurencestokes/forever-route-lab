@@ -10,14 +10,14 @@
   "decision": "D-032",
   "client": {
     "product": "wow_classic_beta",
-    "version": "1.60.1.70009",
-    "buildKey": "05215079e3905ef5922ae0b03ffefb73"
+    "version": "1.60.1.70124",
+    "buildKey": "dd3dfc2881c407299f46c2aaf34c130b"
   },
   "tool": {
     "toolTreeHash": {
-      "tools/terrain/byproducts.ts": "da6354cf3a2e488388311932dc1d42cbe70b4b5584e910388a702964fff45610"
+      "tools/terrain/byproducts.ts": "e5308403a11775df680fbe2ae34a6a8945fce77984509e2c9b727e6b2ce4e369"
     },
-    "treeMethod": "module closure of tools/terrain/byproducts.ts (37 files, tools/terrain/lib/tool-tree.ts)",
+    "treeMethod": "module closure of tools/terrain/byproducts.ts (41 files, tools/terrain/lib/tool-tree.ts)",
     "zlib": "1.3.0.1-motley-82a5fec"
   },
   "parameters": {

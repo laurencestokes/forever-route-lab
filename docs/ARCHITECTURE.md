@@ -26,7 +26,7 @@ Forever levelling routes.
 | react-leaflet is neutral | react-leaflet 3-5 is Hippocratic-2.1 | Leaflet 1.9.4 (BSD-2) behind our `MapAdapter` (D-005) |
 | wow.export is the extractor | GUI-only; with defaults it uploads the install's `Cache/` files to a third party | Not scripted; manual fallback in CDN mode only (D-011) |
 | Era rules apply | Forever XP tuning is server-side and unknown; quest log 40; TBC-style riding; race masks exceed 32 bits | Versioned **Ruleset** with per-value provenance and visible Era fallback (D-008); arithmetic mask tests (D-012) |
-| Build 1.60.1.69977 | Local client is 1.60.1.70009; QuestieDB's frame is 69893; UiMapAssignment is identical in both | Data frame pinned to 69893; local build recorded as observed (D-013) |
+| Build 1.60.1.69977 | Local client was 1.60.1.70009 and is 1.60.1.70124 since 2026-09-30; QuestieDB's frame is 69893; UiMapAssignment is identical in all three | Data frame pinned to 69893; local build recorded as observed (D-013); client tools re-pinned to 70124 (D-050, [reviews/repin-70124.md](reviews/repin-70124.md)) |
 
 ## 2. Principles
 
@@ -736,7 +736,7 @@ the Milestone 3b design step, within the §14 budgets.
 - **Nodes.** Each dataset flight master takes the file's row nearest it on its world map within
   `CLIENT_NODE_MATCH_YARDS` (50 yd, INFERRED, as TIME-6's rule): its `taxiNodeId`, the row's name
   (so RXP `.fly Crossroads` matches "Crossroads, The Barrens") and its side flags (`clientSides`,
-  an INFERRED decode). At 1.60.1.70009, 60 of the 63 flight masters stand within 11.5 yd of a row;
+  an INFERRED decode). At 1.60.1.70009 (and at 1.60.1.70124, whose taxi tables are the same bytes), 60 of the 63 flight masters stand within 11.5 yd of a row;
   Vesprystus and the two Moonglade druid flight masters, whose paths cost nothing, stand at none
   (`report.client.unmatchedMasters`). The 5 rows no flight master stands at (the new Forever
   nodes) are nodes of their own (`origin: 'client'`, key `taxi:<id>`), and replace the cited seeds

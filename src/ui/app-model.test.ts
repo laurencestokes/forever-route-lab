@@ -31,6 +31,7 @@ import {
   sameItems,
   selectedRowKeys,
   selectionMessage,
+  startZonePreference,
   stepRowModel,
   stepTitle,
   type RouteView,
@@ -275,6 +276,14 @@ describe('instance-presence spawns (COORD-2, code-F5)', () => {
     // a caller that knows the zones' sides names the character's first
     expect(questZoneName(several([dunMorogh, own]), cutting, (id) => id === (1411 as UiMapId))).toBe('Durotar and 1 other zone');
     expect(questZoneName(several([dunMorogh, own]), cutting, () => false)).toBe('Dun Morogh and 1 other zone');
+    // Without route state the rows prefer the character's start zone, then its start continent.
+    const inDurotar: Location = { source: { space: 'zone', uiMapId: 1411 as UiMapId, x: 50, y: 50, frame: 'forever', lexemes: null }, label: null, radius: null };
+    const prefer = startZonePreference(several([dunMorogh, own]), inDurotar);
+    expect(questZoneName(several([dunMorogh, own]), cutting, prefer)).toBe('Durotar and 1 other zone');
+    expect(startZonePreference(base, null)).toBeUndefined();
+    const onKalimdor: Location = { source: { space: 'world', mapId: 1 as WorldMapId, x: 0, y: 0, uiMapId: null, lexemes: null }, label: null, radius: null };
+    expect(several([dunMorogh, own]).zone(1411 as UiMapId)?.worldMapId).toBe(1);
+    expect(questZoneName(several([dunMorogh, own]), cutting, startZonePreference(several([dunMorogh, own]), onKalimdor))).toBe('Durotar and 1 other zone');
   });
 });
 

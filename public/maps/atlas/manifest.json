@@ -16,13 +16,13 @@
   },
   "client": {
     "product": "wow_classic_beta",
-    "version": "1.60.1.70009",
-    "buildKey": "05215079e3905ef5922ae0b03ffefb73"
+    "version": "1.60.1.70124",
+    "buildKey": "dd3dfc2881c407299f46c2aaf34c130b"
   },
   "tool": {
     "toolTreeHash": {
-      "tools/casc": "3a592830d9c7ebd1357cb54f36ebb35a3bf6b0f1",
-      "tools/maps": "ee68f47f82aef473e4048fbe2b21fdef038d4bb0"
+      "tools/casc": "e86ad111c21609a6734bd7210394c465ff92d28e",
+      "tools/maps": "da6718bc78c6d8ee28ff05ca1eb50d5bf19c7845"
     },
     "treeMethod": "git",
     "encoder": {

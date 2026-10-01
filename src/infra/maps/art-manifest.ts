@@ -1,6 +1,6 @@
 import { uiMapId, type UiMapId, worldMapId, type WorldMapId } from '../../domain/ids';
 import { joinUrl } from '../http';
-import { contentTypeOfName, type ImageContentType } from './image-header';
+import { contentTypeOfName, type ImageContentType } from './image-types';
 
 /**
  * The committed painted map art's manifest (`public/maps/art/manifest.json`; docs/MAPS.md §5,

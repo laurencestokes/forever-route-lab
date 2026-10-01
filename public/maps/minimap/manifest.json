@@ -15,12 +15,12 @@
   },
   "client": {
     "product": "wow_classic_beta",
-    "version": "1.60.1.70009",
-    "buildKey": "05215079e3905ef5922ae0b03ffefb73"
+    "version": "1.60.1.70124",
+    "buildKey": "dd3dfc2881c407299f46c2aaf34c130b"
   },
   "tool": {
     "entry": "tools/maps/minimap.ts",
-    "toolTreeHash": "7c125c2d7b487845f3f5d60894338a8723105d5edc0c7c9c9713986e92891212",
+    "toolTreeHash": "729fbc2bd01a9ea873ded549363c1441ef9f7dec670fb4ae6a1ba2d4192f2227",
     "toolFiles": 61,
     "node": "v22.13.1",
     "encoder": {
@@ -36,11 +36,6 @@
       "effort": 6,
       "smartSubsample": true,
       "preset": "drawing"
-    },
-    "remanifest": {
-      "fromToolTreeHash": "831a2dc37617930ceaeaa52499be8fd1abfafc9b3e83fe4fa275195344cc47fa",
-      "fromPackSha256": "00ea08f95aaa4828ce9b9500a0b133f6a2101f464c6d0f02992c42e0b8052f0a",
-      "why": "on 2026-09-30 the installed Forever client moved from the pinned 1.60.1.70009 to 1.60.1.70124 (.build.info), so minimap.ts cannot run; the tiles are unchanged, only the tool tree hash, the NOTICE and alterations wording and the pack name changed (review findings MD-01, MD-02, MD-05)"
     }
   },
   "unit": "one atlas unit is one yard; E grows east, S grows south; each world map is placed by translation only; display only, never a distance (D-017)",
@@ -3751,7 +3746,7 @@
       { "table": "LiquidType", "fileDataId": 1371380, "ckey": "ddd1be6948c742b457f88bad605d652a", "hazardIds": [3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 1174, 1177, 1267, 1268, 1269, 1284, 1295] }
     ],
     "terrain": {
-      "manifestSha256": "b8a46587d42de472323520cc0bf6724451aa775b9f02a37f8173efc5fadfdc5e",
+      "manifestSha256": "79ea1c98b58bb43586a41d73ca71c36fd9990edb096ee278de6abaddf4c4679f",
       "reliefs": [
         { "mapId": 0, "path": "public/maps/terrain/0/relief.png", "sha256": "f100bd96532ebca6dadbbb02b834fdd5dbbca1323ad1881b08fb640ec2e39f56" },
         { "mapId": 1, "path": "public/maps/terrain/1/relief.png", "sha256": "ac6d18144727d7f3deb6cf1886e0faffeb2c780a13257320aa3591a651d94174" }

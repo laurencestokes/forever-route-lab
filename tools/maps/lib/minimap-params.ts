@@ -41,9 +41,10 @@ export const PHASE_MAPS_NOT_DRAWN: readonly { readonly mapId: number; readonly r
 ];
 
 /**
- * The minimap tiles per map at the pinned build 1.60.1.70009 (MEASURED by the probe's raw MAID walk,
- * `.cache/minimap-probe-final.json`): recorded, not assumed. The build records the counts it finds,
- * and check M4 reports any change.
+ * The minimap tiles per map, MEASURED at 1.60.1.70009 by the probe's raw MAID walk
+ * (`.cache/minimap-probe-final.json`) and unchanged at the pin 1.60.1.70124, where every texture
+ * keeps its CKey (docs/reviews/repin-70124.md): recorded, not assumed. The build records the counts
+ * it finds, and check M4 reports any change.
  */
 export const RECORDED_TILE_COUNTS: Readonly<Record<string, number>> = { '1': 988, '0': 736, '2991': 72 };
 

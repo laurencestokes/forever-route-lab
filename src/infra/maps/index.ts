@@ -15,7 +15,8 @@ export {
   type LoadedGeometry,
   type LocalMapSetStatus,
 } from './geometry-loader';
-export { contentTypeOfName, readImageHeader, type ImageContentType, type ImageHeader, type ImageHeaderResult } from './image-header';
+export { contentTypeOfName, type ImageContentType } from './image-types';
+export type { ImageHeader, ImageHeaderResult } from './image-header';
 export type { LocalArt, LocalArtBounds, LocalArtEntry, LocalArtLoad, LocalArtStatus } from './local-art';
 export { ART_MANIFEST_PATH, ART_NOTICE_PATH, parseArtManifest, type ArtImage, type ArtManifest, type ArtRect, type UnplacedArt } from './art-manifest';
 export type { AtlasIndexFile } from './atlas-index';
@@ -44,16 +45,5 @@ export {
   type TerrainArcsLoad,
   type TerrainManifestLoad,
 } from './map-resources';
-export {
-  parseTerrainArcs,
-  parseTerrainManifest,
-  TERRAIN_MANIFEST_PATH,
-  TERRAIN_NOTICE_PATH,
-  type TerrainArcFile,
-  type TerrainArcKind,
-  type TerrainArcs,
-  type TerrainManifest,
-  type TerrainMap,
-  type TerrainRect,
-  type TerrainRelief,
-} from './terrain';
+export { TERRAIN_MANIFEST_PATH, TERRAIN_NOTICE_PATH } from './terrain-paths';
+export type { TerrainArcFile, TerrainArcKind, TerrainArcs, TerrainManifest, TerrainMap, TerrainRect, TerrainRelief } from './terrain';

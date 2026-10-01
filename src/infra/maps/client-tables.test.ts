@@ -102,7 +102,7 @@ describe('guards', () => {
   };
 
   it('reads the manifest’s three files with their URLs and counts', () => {
-    expect(manifest.build).toBe('1.60.1.70009');
+    expect(manifest.build).toBe('1.60.1.70124');
     expect(manifest.files.taxi).toMatchObject({ path: 'maps/client/taxi.json', url: 'base/maps/client/taxi.json', counts: { nodes: 65, flights: 286, transports: 14 } });
     expect(parseClientTablesManifest({ ...manifestJson, kind: 'art' }, '')).toBe('kind is not client-tables');
     const files = manifestJson['files'] as readonly Record<string, unknown>[];
@@ -112,7 +112,7 @@ describe('guards', () => {
   });
 
   it('refuses a taxi file with a dangling node, a bad shape, stops off the path’s maps or counts other than the manifest’s', () => {
-    expect(typeof parseClientTaxi(committed('taxi.json'), file('taxi'), '1.60.1.70009')).toBe('object');
+    expect(typeof parseClientTaxi(committed('taxi.json'), file('taxi'), '1.60.1.70124')).toBe('object');
     expect(parseClientTaxi(committed('taxi.json'), file('taxi'), '1.60.1.99999')).toMatch(/is not the manifest's 1\.60\.1\.99999/);
     const flight = (json: Record<string, unknown>) => (json['flights'] as Record<string, unknown>[])[0] as Record<string, unknown>;
     expect(parseClientTaxi(edit('taxi.json', (j) => { flight(j)['from'] = 99999; }), file('taxi'))).toMatch(/names a node the file does not list/);

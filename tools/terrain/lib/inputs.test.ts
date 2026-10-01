@@ -20,7 +20,7 @@ const inputs = (name: string): unknown => JSON.parse(readFileSync(join(TERRAIN_D
 describe('the committed inputs parse and validate (G15)', () => {
   it('build.json', () => {
     const c = readBuildConfig();
-    expect(c.pin).toEqual({ product: 'wow_classic_beta', version: '1.60.1.70009', buildKey: '05215079e3905ef5922ae0b03ffefb73' });
+    expect(c.pin).toEqual({ product: 'wow_classic_beta', version: '1.60.1.70124', buildKey: 'dd3dfc2881c407299f46c2aaf34c130b' });
     expect(c.settings.name).toBe('c05r1+n12+e5+s60');
     expect(c.recastNavigation).toBe('0.43.1');
     expect(() => parseBuildConfig({ ...c, settings: { ...c.settings, tileVoxels: 300 } })).toThrow(/multiple/);

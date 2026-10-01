@@ -20,6 +20,7 @@ import {
   type ServiceKind,
   STEP_TOKEN,
 } from '../map/adapter';
+import type { ClustersOf } from '../map/layers';
 import type { FlightSides, MarkState } from '../map/marks';
 import { DIFFICULTY_LABELS, questDifficulty } from '../rules/difficulty';
 import type { EffectiveRules } from '../rules/precedence';
@@ -148,6 +149,13 @@ export interface PlacesModel {
    * (ui-refresh.md §10.3); absent or null until built (the controller then names the frame).
    */
   readonly zoneAt?: ((point: WorldPoint) => UiMapId | null) | null;
+  /**
+   * The quest givers' and turn-ins' clusters (`app/map-clusters.ts`; map-presentation.md §25.2.5;
+   * D-050 item 6), made in the derived publish for the model's inputs and on first use for any
+   * other, so neither the clustering nor its words are in the entry chunk; absent or null until
+   * built (the layers then count their points per zone below the zone band).
+   */
+  readonly clusters?: ClustersOf | null;
 }
 
 const NO_ITEMS: PlaceLayerInput = { items: [], unplaced: 0 };
@@ -361,8 +369,11 @@ export function createPlacesBuilder(): (input: PlacesInput) => PlacesModel {
 
     // Flight points and flights.
     const base = flightBaseOf(input.graph, input.view, input.character.faction, input.character.race, input.character.class);
-    // With the taxi file, the flight points are its nodes (map-presentation.md §9): a flight master at no node of a paid path is not drawn.
-    const drawnBase = taxi === null ? base : base.filter((node) => node.row !== null);
+    // With the taxi file, the flight points are its nodes (map-presentation.md §9), and the dataset's
+    // flight masters at no node of it (review TR-10: the file keeps only the paid paths' rows, so
+    // Vesprystus and the Moonglade masters, whose flights cost nothing, have none) are drawn as the
+    // dataset gives them; a cited seed with no row stays out.
+    const drawnBase = taxi === null ? base : base.filter((node) => node.row !== null || node.node.npcId !== null);
     const flightPoints = flightPointItems(drawnBase, known, input.character.priorHistory === 'unknown', who);
     const lines = taxi === null ? null : linesOf(taxi, input.character.faction, input.rules);
     const routePairs = taxi === null || input.legs === null ? NO_PAIRS : routePairsOf(input.records, input.graph, input.legs, input.startKnown, input.character.faction);
@@ -735,7 +746,11 @@ function flightPointNotes(input: PlacesInput, base: readonly FlightBase[], who: 
   if (noPosition > 0) notes.push(`${plural(noPosition, 'flight master has', 'flight masters have')} no position in the dataset: not drawn.`);
   const report = input.graph.report.client;
   if (report !== null && report.unmatchedMasters.length > 0) {
-    notes.push(`${plural(report.unmatchedMasters.length, 'flight master stands', 'flight masters stand')} at no node of the client's paid paths (their flights cost nothing): not drawn.`);
+    const one = report.unmatchedMasters.length === 1;
+    const names = report.unmatchedMasters.map((id) => input.view.npc(id)?.name ?? `NPC ${String(id)}`);
+    notes.push(
+      `${plural(report.unmatchedMasters.length, 'flight master stands', 'flight masters stand')} at no node of the client taxi file, which keeps only the nodes of paths that cost something (${listWords(names)}): drawn where the dataset puts ${one ? 'it' : 'them'}, with the dataset's faction (it records no class restriction), and ${one ? 'its' : 'their'} flights timed by the straight-line estimate (TIME-5).`,
+    );
   }
   return notes;
 }

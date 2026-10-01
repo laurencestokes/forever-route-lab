@@ -18,7 +18,7 @@ describe('parseArtManifest', () => {
     const parsed = parseArtManifest(committed(), './');
     if (typeof parsed === 'string') throw new Error(parsed);
     expect(parsed.owner).toBe('Blizzard Entertainment');
-    expect(parsed.build).toBe('1.60.1.70009');
+    expect(parsed.build).toBe('1.60.1.70124');
     // The three battlegrounds and Darkspear Islands (their own surfaces), and Zephras Isle (the atlas card's picture when the tiles cannot be used).
     expect(parsed.images.map((image) => [image.uiMapId, image.name, image.bounds.mapId])).toEqual([
       [1459, 'Alterac Valley', 30],

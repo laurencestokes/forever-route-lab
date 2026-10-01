@@ -61,13 +61,14 @@ function setup() {
 }
 
 describe('AvailableQuests with route state (MP.3)', () => {
-  it('says there is no route state yet while the route is simulated and while no step is selected', () => {
+  it('says there is no route state yet while the route is simulated; with no step selected it shows the end of the route (D-050 item 2)', () => {
     const s = setup();
     expect(screen.getByText(/^Quests open to an Orc Warrior \(no route state yet\): the route is still being simulated\./)).toBeTruthy();
     act(() => {
       s.timers.advance(0);
     });
-    expect(screen.getByText(/^Quests open to an Orc Warrior \(no route state yet\): select a step to see which quests are available after it\./)).toBeTruthy();
+    const last = String(s.steps.length);
+    expect(screen.getByText(new RegExp(`^At the end of the route \\(after step ${last}\\), level (at least )?\\d+: .* Accept adds the quest’s accept step at the end of the route,`))).toBeTruthy();
   });
 
   it('lists the quests available after the active step in their giver’s zone, with the span and count, and each quest’s giver', () => {

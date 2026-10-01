@@ -10,12 +10,10 @@ import {
   type DungeonEntrances,
   entrancesOf,
   factionsOfSides,
-  inferredBerths,
   inferredDock,
   findTaxiNodes,
   instanceKindOf,
   isFlightMaster,
-  isInferredBerth,
   isInstanceMap,
   nearestEntrance,
   nearestTaxiNode,
@@ -391,6 +389,7 @@ describe('seedTravelGraph: the committed client taxi file (D-039 B; TIME-6, TIME
       pointFrom: 'inferred',
       npcId: null,
       record: 'client transport path 11616, stop 1 of 2',
+      boarding: { point: at(KALIMDOR, 6534, 908), fromBerthYd: 36.8 },
     });
     expect(edge?.to).toMatchObject({ point: at(EK, -8654, 1344), pointFrom: 'inferred', record: 'client transport path 11616, stop 2 of 2' });
     // Rut'theran ↔ Auberdine: both docks on Kalimdor, so the navigation model may use it (NAV-08).
@@ -419,15 +418,17 @@ describe('seedTravelGraph: the committed client taxi file (D-039 B; TIME-6, TIME
     expect(open !== undefined && taxiNodeOpenTo(open, 'Alliance')).toBe(true); // no side named: unknown, open
   });
 
-  it('lists the inferred docks as berths (TIME-7), and never a user dock', () => {
-    expect(inferredBerths(graph)).toEqual([at(KALIMDOR, 6548, 942), at(EK, -8654, 1344), at(EK, 2, 2), at(KALIMDOR, 8532, 1024), at(KALIMDOR, 6594, 760)]);
-    expect(isInferredBerth(graph, at(KALIMDOR, 6548, 942))).toBe(true);
-    expect(isInferredBerth(graph, at(KALIMDOR, 6548, 943))).toBe(false);
-    expect(isInferredBerth(graph, at(EK, 6548, 942))).toBe(false);
+  it('gives an inferred dock the boarding point the berth table has for its berth, and never a user dock (TIME-7; TR-03)', () => {
+    const edge = transportEdges(graph, 'stormwind-auberdine:0>1')[0];
+    expect(edge?.from).toMatchObject({ point: at(KALIMDOR, 6548, 942), pointFrom: 'inferred', boarding: { point: at(KALIMDOR, 6534, 908), fromBerthYd: 36.8 } });
+    expect(edge?.to).toMatchObject({ point: at(EK, -8654, 1344), boarding: { point: at(EK, -8648, 1333), fromBerthYd: 12.5 } });
+    // A stop the table does not know (the fixture's (2, 2)) keeps its berth for its walks.
+    for (const dock of graph.transports.flatMap((e) => [e.from, e.to])) {
+      if (dock.point?.x === 2 && dock.point.y === 2) expect(dock.boarding).toBeUndefined();
+    }
     const withUser = seedTravelGraph(source(FIXTURE), rules, { taxi: TAXI, userDocks: [{ transportId: 'stormwind-auberdine', stop: 0, point: at(KALIMDOR, 6500, 900) }] });
-    expect(isInferredBerth(withUser, at(KALIMDOR, 6500, 900))).toBe(false);
-    expect(isInferredBerth(withUser, at(KALIMDOR, 6548, 942))).toBe(false);
-    expect(inferredBerths(seedTravelGraph(source(FIXTURE), rules))).toEqual([]);
+    expect(transportEdges(withUser, 'stormwind-auberdine:0>1')[0]?.from.boarding).toBeUndefined();
+    expect(withDeparture(edge ?? (null as never), at(KALIMDOR, 6500, 900))?.from.boarding).toBeUndefined();
   });
 
   it('reports what it made of the file', () => {

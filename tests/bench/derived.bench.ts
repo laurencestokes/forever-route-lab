@@ -7,7 +7,15 @@
  *   pnpm exec tsx tests/bench/derived.bench.ts --budget      (exit 1 when an edit median is over 50 ms,
  *                                                             or a startup task's over 100 ms)
  *   pnpm exec tsx tests/bench/derived.bench.ts --check <file> (exit 1 on a regression over 25% of the
- *                                                             file's `derived10000` medians)
+ *                                                             file's `derived10000` medians, probe-normalised)
+ *
+ * **Probe-normalised check** (D-050 item 5; review TR-04): the review found the stored medians out
+ * of reach on a loaded machine for the committed tree and its parent alike (an interleaved A/B: the
+ * tree at 0.95 to 1.02 of its parent). So, as the engine and validate benches do (PERF-04), the
+ * script times the CPU probe (`cpuProbe`, a 2e7 square-root loop) before and after its cases, and
+ * `--check` compares each median × `PROBE_REFERENCE_MS` / probe (the probe on this machine when
+ * calm, 40 ms) with the stored one, which was taken at about that probe. The baselines are unchanged;
+ * the raw medians are printed beside the normalised ones.
  *
  * The route is tests/bench/engine.bench.ts's (the same builder, so the numbers compare with
  * `route10000` and `validate10000` in docs/measurements/engine-m6.json): the sample character's
@@ -25,6 +33,9 @@
  * - `editMiddle`: step 5,000's note changed: from checkpoint 4,864;
  * - `editEnd`: the last step's note changed;
  * - `select`: the selection moved to another step (no walk: `stateBefore` twice);
+ * - `questState` (D-050 items 5 and 6): the task that follows a selection change, which the map's
+ *   pins wait for: the quest state at the new step, the places and labels, and the quest givers' and
+ *   turn-ins' clusters (`app/map-clusters.ts`); timed around `flush`, reported, not checked;
  * - `classChange`: the character's class changed to one not seen lately (a settings edit that
  *   changes the context: a new dataset view, graph, walker and validator, so a cold walk; the
  *   classes rotate through three, more than the pipeline's four cached views hold);
@@ -68,7 +79,7 @@ import type { RouteStep } from '../../src/domain/route';
 import { makeAcceptStep, makeCompleteStep, makeGrindStep, makeHearthStep, makeTurnInStep } from '../../src/domain/step-factory';
 import type { ClientTableLoad, ClientTaxi } from '../../src/infra/maps/client-tables';
 import { fakeServer, nodeSha256, publicSite } from '../support/fake-fetch';
-import { committedTaxi } from './bench-support';
+import { committedTaxi, cpuProbe, PROBE_REFERENCE_MS } from './bench-support';
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string): string => {
@@ -245,6 +256,8 @@ function bench(b: Bench, action: (i: number) => void, read: () => number = () =>
   return stats(times);
 }
 
+// The CPU probe, before the cases and after them (`--check` normalises by their mean).
+const probeBefore = cpuProbe();
 const firstTimes: number[] = [];
 let issues = 0;
 for (let i = 0; i < WARM + RUNS; i += 1) {
@@ -286,6 +299,18 @@ const select = bench(
   },
   () => selectMs,
 );
+
+// The quest-state task after a selection change (the map's pins follow when it has published).
+const questTimes: number[] = [];
+for (let i = 0; i < WARM + RUNS; i += 1) {
+  const step = b.store.getState().project.route.steps[((i + 40) * 211) % STEPS];
+  if (step === undefined) continue;
+  b.store.select({ kind: 'single', id: step.id });
+  const t0 = performance.now();
+  b.pipeline.flush();
+  if (i >= WARM) questTimes.push(performance.now() - t0);
+}
+const questState = stats(questTimes);
 
 // A settings edit that changes the context (class, so the dataset view): a new view, graph, walker.
 const ROTATION = ['SHAMAN', 'WARRIOR', 'HUNTER'] as const;
@@ -376,8 +401,10 @@ for (let i = 0; i < WARM + RUNS; i += 1) {
 }
 const taxiArrives = { sinceChangeMs: stats(taxiArrivals.since), taskMs: stats(taxiArrivals.task) };
 
-const route = { steps: STEPS, issues, firstWalk, editStart, editMiddle, editEnd, select, classChange, classToggle, navigationArrives, navEditStart, navEditMiddle, taxiArrives };
-console.log(JSON.stringify({ runs: RUNS, warm: WARM, node: process.version, platform: `${process.platform} ${process.arch}`, [`derived${String(STEPS)}`]: route }, null, 2));
+const route = { steps: STEPS, issues, firstWalk, editStart, editMiddle, editEnd, select, questState, classChange, classToggle, navigationArrives, navEditStart, navEditMiddle, taxiArrives };
+const probeAfter = cpuProbe();
+const probeMs = round((probeBefore + probeAfter) / 2);
+console.log(JSON.stringify({ runs: RUNS, warm: WARM, node: process.version, platform: `${process.platform} ${process.arch}`, probeMs: { before: probeBefore, after: probeAfter, mean: probeMs }, [`derived${String(STEPS)}`]: route }, null, 2));
 if (BUDGET) {
   const edits = (['editStart', 'editMiddle', 'editEnd', 'select', 'classChange', 'classToggle', 'navEditStart', 'navEditMiddle'] as const).filter((name) => route[name].median > BUDGET_MS);
   const startup = [
@@ -407,10 +434,14 @@ if (CHECK !== null) {
       navEditStart: navEditStart.median,
       taxiArrives: taxiArrives.sinceChangeMs.median,
     };
-    const found = Object.entries(current).flatMap(([name, now]) => {
+    const found = Object.entries(current).flatMap(([name, raw]) => {
       const was = baseline[name]?.median;
-      return was !== undefined && now > was * REGRESSION ? [`${name}: ${String(now)} ms median, baseline ${String(was)} ms (+${String(Math.round((now / was - 1) * 100))}%)`] : [];
+      const now = round((raw * PROBE_REFERENCE_MS) / probeMs);
+      return was !== undefined && now > was * REGRESSION
+        ? [`${name}: ${String(now)} ms normalised (${String(raw)} ms at probe ${String(probeMs)} ms), baseline ${String(was)} ms (+${String(Math.round((now / was - 1) * 100))}%)`]
+        : [];
     });
+    console.error(`CPU probe ${String(probeMs)} ms (reference ${String(PROBE_REFERENCE_MS)} ms): medians × ${String(round(PROBE_REFERENCE_MS / probeMs))}`);
     if (found.length > 0) {
       console.error(`Slower than the stored baseline by more than 25%:\n  ${found.join('\n  ')}`);
       process.exitCode = 1;

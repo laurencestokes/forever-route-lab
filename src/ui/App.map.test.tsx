@@ -37,7 +37,7 @@ async function setup(strict = false): Promise<Setup> {
   const store = createEditorStore({ project: workspace.project, ids: sequentialIdSource(100), clock: fixedClock(NOW) });
   const fake = fakeAdapterFactory();
   const map: MapEngineSetup = { geometry: workspace.geometry, art: null, loadAdapter: () => Promise.resolve(fake.factory) };
-  const app = <App store={store} data={workspace.data} projectName="Map test" map={map} version="0.0.0-test" sourceCommit={null} />;
+  const app = <App store={store} data={workspace.data} projectName="Map test" map={map} version="0.0.0-test" sourceCommit={null} selectOnOpen={false} />;
   render(strict ? <StrictMode>{app}</StrictMode> : app);
   await act(async () => {
     await Promise.resolve();

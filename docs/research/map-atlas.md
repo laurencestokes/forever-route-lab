@@ -47,7 +47,10 @@ a figure a report gave without a measurement, kept only as a target. **UNKNOWN**
 **Units and machine.** Sizes are gzip level 6 of each file on its own (the dist audit's measure), in
 decimal units (1 kB = 1,000 B). Zoom `z` is Leaflet's `CRS.Simple` zoom: `2^z` pixels per yard, so
 tile level `z` holds `2^−z` yards per pixel. Client: build 1.60.1.70009 (`wow_classic_beta`, build key
-`05215079…`), read only through `tools/casc` from `.build.info` and `Data/`. Machine: Ryzen 7 7800X3D
+`05215079…`), read only through `tools/casc` from `.build.info` and `Data/`. Since 2026-09-30 the pin is
+1.60.1.70124 (build key `dd3dfc28…`, D-050): every painting, minimap texture, ADT and table the tools read
+keeps its CKey, and the art, atlas and minimap rebuild byte for byte apart from their manifests, NOTICEs
+and pack pointer, so every figure measured at 70009 holds ([reviews/repin-70124.md](../reviews/repin-70124.md)). Machine: Ryzen 7 7800X3D
 (16 threads), 32 GB, RTX 4090, Windows 11, Node 22.13.1, sharp 0.35.4 (libvips 8.18.6, libwebp 1.6.0).
 
 **Evidence** (gitignored; `<ma>` is `.cache/map-atlas`):
@@ -2362,6 +2365,12 @@ a release, nor bandwidth usage".
 - **The provenance chain**: the manifest records the client build, every input's FDID and CKey, the
   tool tree hash and the encoder versions; `--check` on the client machine proves the tiles equal the
   tool's output for those inputs; CI proves the deployed tiles equal the manifest.
+- **Gate record, re-pin to 1.60.1.70124 (2026-09-30, D-050; review finding MD-01 cleared).**
+  `minimap.ts --pack` and then `minimap.ts --check --pack` passed on the pinned client: tool tree
+  `729fbc2b…` (61 files), tiles tree `42b33cc8…` (all 6,647 tiles and `index.json` byte-identical to the
+  70009 build), pack `minimap-tiles-42b33cc815cd-2bc7fa6b0071.tar`, 58,071,040 B, SHA-256 `2bc7fa6b…`,
+  tag `minimap-1.60.1.70124-42b33cc815cd-2bc7fa6b0071`. The manifest no longer carries the stopgap
+  `tool.remanifest` record, and `maps:validate` MT passes. No pack is published (OD-13).
 
 ---
 

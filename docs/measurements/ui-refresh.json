@@ -37,6 +37,61 @@
       "budgetKb": 250,
       "stopLineKb": 248.5,
       "basis": "MEASURED (dist audit of pnpm build, 2026-09-30, gzip level 6: index 236.89 + shell-support 11.76 + http 0.32; pnpm build:deploy 248.97 kB). Every fixer of the joint review together measured 251.12 kB; the final verification then moved the pins’ half of map/marks into src/map/marks-pins.ts (a 1.39 kB chunk the lazy map chunk and the drawer share) and the Viewing chip’s ring lookup (app/map-viewing.ts, geo/zone-rings.ts) into the derived pipeline (the places’ zoneAt). Under the budget; 0.48 kB above the 248.5 kB stop rule (ui-refresh.md §10.3)."
+    },
+    "d050": {
+      "kB": 246.82,
+      "deltaKB": -2.16,
+      "basis": "MEASURED (dist audit, 2026-09-30): MEASURED: tools/build/audit-dist.ts on a build of eff4341 and of the tree (index chunk 236.89 → 234.73 kB; shell-support 11.76 and http 0.32 kB unchanged). The clusters (their cells, pins and hover words) moved from src/map/layers.ts into src/app/map-clusters.ts, made in the derived pipeline's quest-state task and handed to the layer builder by the places model (PlacesModel.clusters): about −1.1 kB, less +0.7 kB of the builder's new focus and split caches (layers.ts 15.34 → 14.94 kB in context). The terrain byproducts' guards (terrain.ts, 1.62 kB) and the image-header reader (image-header.ts, 1.79 kB, local art only) load as chunks of their own with their first file; their paths and the image types stay in the entry (terrain-paths.ts, image-types.ts). Under the 248.5 kB stop rule by 1.68 kB.",
+      "inContextGzipBytes": {
+        "src/map/layers.ts": {
+          "before": 15344,
+          "after": 14942
+        },
+        "src/app/map-controller.ts": {
+          "before": 12552,
+          "after": 12661
+        },
+        "src/app/map-model.ts": {
+          "before": 2440,
+          "after": 2550
+        },
+        "src/map/adapter.ts": {
+          "before": 2531,
+          "after": 2516
+        },
+        "src/map/marks.ts": {
+          "before": 1479,
+          "after": 1500
+        },
+        "src/infra/maps/map-resources.ts": {
+          "before": 821,
+          "after": 937
+        },
+        "src/infra/maps/image-header.ts": {
+          "before": 1786,
+          "after": 0
+        },
+        "src/infra/maps/terrain.ts": {
+          "before": 1623,
+          "after": 0
+        },
+        "src/infra/maps/local-art.ts": {
+          "before": 1101,
+          "after": 1109
+        },
+        "src/infra/maps/art-manifest.ts": {
+          "before": 576,
+          "after": 717
+        },
+        "src/infra/maps/image-types.ts": {
+          "before": 0,
+          "after": 576
+        },
+        "src/infra/maps/terrain-paths.ts": {
+          "before": 0,
+          "after": 14
+        }
+      }
     }
   },
   "ur2bRouteListBaseline": {

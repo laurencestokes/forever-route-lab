@@ -156,8 +156,9 @@
   line-height: normal;
 }
 
+/* The row hover shows on the later band as on the panel (review UI-06). */
 .frl-row:hover {
-  --frl-row-bg: var(--frl-surface-hover);
+  --frl-row-bg: var(--frl-row-hover);
 }
 
 .frl-row.is-selected {

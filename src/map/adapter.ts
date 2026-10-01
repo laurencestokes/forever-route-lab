@@ -1906,6 +1906,11 @@ export type MapEvent =
   | { readonly type: 'click'; readonly point: WorldPoint; readonly hit: MapHit | null; readonly zones: readonly UiMapId[] }
   /** The pointer entered an item (`hit`), or left the last one (`hit` null, `point` null). */
   | { readonly type: 'hover'; readonly point: WorldPoint | null; readonly hit: MapHit | null }
+  /**
+   * A pan or zoom began (Leaflet `movestart`): work that can wait for the view to settle waits, so no
+   * long task lands in the gesture's frames (D-050 item 5). A `move` follows when it settles.
+   */
+  | { readonly type: 'movestart' }
   /** The view settled after a pan or zoom (Leaflet `moveend`). Rebuild view-dependent layers here. */
   | { readonly type: 'move'; readonly view: MapViewState }
   /** The zoom settled (Leaflet `zoomend`); a `move` follows. */

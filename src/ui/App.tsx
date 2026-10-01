@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { EditorStore } from '../app';
 import type { DatasetSource } from '../app/dataset-source';
 import { cachedDatasetSource, datasetBaseView } from '../app/dataset-views';
 import type { StepId, WorldMapId } from '../domain/ids';
 import { createMapController, type MapEngineSetup } from '../app/map-exports';
+import { followSelection } from '../app/selection-memory';
 import { useDerivedStore, useEditor } from '../app/react';
 import { type ActiveRow, buildRouteView, mapStepLabel } from './app-model';
 import { AppSidePanel } from './app/AppSidePanel';
@@ -72,12 +73,18 @@ export interface AppProps {
   readonly sourceCommit: string | null;
   /**
    * Where the shell keeps its per-browser preferences (rows, panel widths, collapse, map focus;
-   * `view-prefs.ts`); default the browser's `localStorage`, null for none (kept for the page load).
+   * `view-prefs.ts`) and each project's last selected step (`app/selection-memory.ts`); default the
+   * browser's `localStorage`, null for none (kept for the page load).
    */
   readonly prefsStorage?: (() => PrefsStorage | null) | undefined;
+  /**
+   * Select a step when a project opens (D-050 item 2; review UI-08): the one last selected in it,
+   * else the last step. Default true; component tests of other behaviour start with none selected.
+   */
+  readonly selectOnOpen?: boolean | undefined;
 }
 
-export function App({ store, data, projectName, routeNotice = null, geometrySummary = null, map = null, version, sourceCommit, prefsStorage = browserStorage }: AppProps) {
+export function App({ store, data, projectName, routeNotice = null, geometrySummary = null, map = null, version, sourceCommit, prefsStorage = browserStorage, selectOnOpen = true }: AppProps) {
   const source = useMemo(() => cachedDatasetSource(data), [data]);
   const route = useEditor(store, selectRoute);
   const imports = useEditor(store, selectImports);
@@ -131,6 +138,10 @@ export function App({ store, data, projectName, routeNotice = null, geometrySumm
   }, []);
   const searchRef = useRef<HTMLInputElement>(null);
   const routeRef = useRef<HTMLDivElement>(null);
+
+  // A step is selected when a project opens (D-050 item 2; review UI-08): the one last selected in
+  // it, else the last step. Before paint, and before the announcements subscribe, so it is not read out.
+  useLayoutEffect(() => (selectOnOpen ? followSelection(store, prefsStorage) : undefined), [store, prefsStorage, selectOnOpen]);
 
   const [announcer] = useState(createAnnouncer);
   // The map's quest layers read the quest state after the active step (map-presentation.md §7; MP.3).

@@ -28,7 +28,6 @@ import type {
   MapDescriptor,
   MapRef,
   MapView,
-  ClusterMember,
   MarkerBadge,
   MarkerDescriptor,
   MarkerKind,
@@ -58,7 +57,7 @@ import type {
   WorldSurfaceInfo,
   ZoneFillDescriptor,
 } from './adapter';
-import { CLUSTER_LEVELS, clusterLevelAt, type MarkDifficulty, type MarkState } from './marks';
+import { clusterLevelAt, type MarkState } from './marks';
 
 export { CLUSTER_LEVELS, clusterLevelAt } from './marks';
 
@@ -78,7 +77,13 @@ export { CLUSTER_LEVELS, clusterLevelAt } from './marks';
  * - **Level of detail** (MAPS §7.2): at the world and continent bands (below `zoneZoom` without a
  *   band), spawn layers fold their points into one aggregate glyph per (layer, zone) at the points'
  *   centroid; the points of focused (selected or hovered) quests stay raw at any zoom. Layers
- *   listed in `rawAtAnyZoom` never aggregate.
+ *   listed in `rawAtAnyZoom` never aggregate. Quest givers and turn-ins fold into clusters instead
+ *   (map-presentation.md §25.2.5), whose cells and pins the derived pipeline makes once per input
+ *   (`ClusterSource`, `app/map-clusters.ts`; D-050 item 6), per-zone counts until it has.
+ * - **The focus is cheap** (D-050 item 5): a spawn layer keeps its points and plain markers per
+ *   input (`SpawnBase`) and is keyed on the groups a focus holds, so a selection change remakes only
+ *   the focused groups' markers, and the route layers keep each piece's range of positions, so a
+ *   moved active step re-splits only the pieces it crosses.
  * - **Hard path cap per surface**: every canvas layer has a budget in each band and each band's
  *   budgets sum to at most `pathCapPerSurface`. Over budget, focused items are kept first, then those nearest the viewport
  *   centre (ties by id), and `stats.notDrawn` says how many were left out. The memoised builders
@@ -135,7 +140,7 @@ export interface LodSettings {
    * budgets; D-047): not every layer draws at every band, so each band's canvas layers (all but the
    * image layers `relief` and `art`) sum to at most `pathCapPerSurface`, and the image layers cap
    * images. On the atlas the active maps share each budget (`partBudgets`). A cluster of quest
-   * givers (step MP.4a) will count as one item, and a cluster is never trimmed by the cap.
+   * givers counts as one item (step MP.4a), and a cluster is never trimmed by the cap.
    */
   readonly budgets: Readonly<Record<MapBand, Readonly<Record<LayerId, number>>>>;
   /** Spawn layers drawn raw at every zoom (flight masters: a few hundred at most, and useful at continent zoom). */
@@ -679,7 +684,7 @@ function nearest(candidates: readonly Candidate[], indices: readonly number[], c
     return candidate === undefined ? Infinity : distanceSq(candidate.anchor, center);
   });
   // The count-th smallest distance: everything nearer is kept, and ties at it go by id.
-  const threshold = Float64Array.from(distances).sort()[count - 1] ?? Infinity;
+  const threshold = count <= 0 || count > distances.length ? Infinity : kthSmallest(Float64Array.from(distances), count - 1);
   const out: number[] = [];
   const ties: number[] = [];
   indices.forEach((index, i) => {
@@ -689,6 +694,37 @@ function nearest(candidates: readonly Candidate[], indices: readonly number[], c
   });
   out.push(...ties.sort(byId).slice(0, count - out.length));
   return out;
+}
+
+/**
+ * The `k`-th smallest value of `values` (0-based), reordering them in place: a selection with the
+ * middle element as pivot, so no sort of every distance at each re-rank (a 10,000-step route's step
+ * markers are re-ranked at every pan that moves the ranking cell; D-050 item 5). The value, and so
+ * what the cap keeps, is the one a full sort gives.
+ */
+function kthSmallest(values: Float64Array, k: number): number {
+  let lo = 0;
+  let hi = values.length - 1;
+  while (lo < hi) {
+    const pivot = values[lo + Math.floor((hi - lo) / 2)] ?? 0;
+    let i = lo;
+    let j = hi;
+    while (i <= j) {
+      while ((values[i] ?? 0) < pivot) i += 1;
+      while ((values[j] ?? 0) > pivot) j -= 1;
+      if (i <= j) {
+        const swap = values[i] ?? 0;
+        values[i] = values[j] ?? 0;
+        values[j] = swap;
+        i += 1;
+        j -= 1;
+      }
+    }
+    if (k <= j) hi = j;
+    else if (k >= i) lo = i;
+    else break;
+  }
+  return values[k] ?? Infinity;
 }
 
 /**
@@ -1302,7 +1338,8 @@ export function outlinesDrawn(layer: OutlineLayerId, band: MapBand, minimap: boo
 // =============================================================================================
 // Spawn layers (available quests, objectives, turn-ins, flight masters)
 
-const SPAWN_MARKER: Readonly<Record<SpawnLayerId, MarkerKind>> = {
+/** Each spawn layer's marker kind. */
+export const SPAWN_MARKER: Readonly<Record<SpawnLayerId, MarkerKind>> = {
   'available-quests': 'quest-start',
   objectives: 'objective',
   'turn-ins': 'quest-end',
@@ -1316,7 +1353,7 @@ const SPAWN_NOUNS: Readonly<Record<SpawnLayerId, readonly [string, string]>> = {
   'flight-masters': ['flight master', 'flight masters'],
 };
 
-interface MergedGroup {
+export interface MergedGroup {
   readonly key: string;
   readonly subject: PointSubject;
   readonly label: string;
@@ -1327,8 +1364,20 @@ interface MergedGroup {
   readonly quests: readonly MarkerQuest[];
 }
 
-/** Groups by subject, ascending by key; the first group's label and spawns are kept and quest ids united. */
-function mergeGroups(groups: readonly PointGroupInput[]): readonly MergedGroup[] {
+/** The merged groups of each groups array (inputs are immutable): a selection change merges nothing again. */
+const mergedGroups = new WeakMap<readonly PointGroupInput[], readonly MergedGroup[]>();
+
+/** Groups by subject, ascending by key; the first group's label and spawns are kept and quest ids united. Once per groups array. */
+export function mergeGroups(groups: readonly PointGroupInput[]): readonly MergedGroup[] {
+  let merged = mergedGroups.get(groups);
+  if (merged === undefined) {
+    merged = mergeGroupsNow(groups);
+    mergedGroups.set(groups, merged);
+  }
+  return merged;
+}
+
+function mergeGroupsNow(groups: readonly PointGroupInput[]): readonly MergedGroup[] {
   const byKey = new Map<string, { readonly group: PointGroupInput; readonly quests: QuestId[]; readonly marks: Map<QuestId, MarkerMark | null> }>();
   for (const group of groups) {
     const key = subjectKey(group.subject);
@@ -1398,7 +1447,7 @@ export function categoryOfMarkState(state: MarkState | null): MapCategoryId {
 }
 
 /** A spawn layer's item's category: quest givers by their state, then each layer's own row. */
-function spawnCategory(layer: SpawnLayerId, mark: MarkerMark | undefined | null): MapCategoryId {
+export function spawnCategory(layer: SpawnLayerId, mark: MarkerMark | undefined | null): MapCategoryId {
   switch (layer) {
     case 'available-quests':
       return categoryOfMarkState(mark?.state ?? null);
@@ -1411,7 +1460,7 @@ function spawnCategory(layer: SpawnLayerId, mark: MarkerMark | undefined | null)
   }
 }
 
-// ---- Clusters (map-presentation.md §25.2.5; step MP.4a)
+// ---- Clusters (map-presentation.md §25.2.5; step MP.4a; D-050 item 6)
 
 /**
  * The layers clustered below the zone band: quest givers and turn-ins, each kind apart. The other
@@ -1419,180 +1468,76 @@ function spawnCategory(layer: SpawnLayerId, mark: MarkerMark | undefined | null)
  */
 export const CLUSTERED_LAYERS: readonly SpawnLayerId[] = ['available-quests', 'turn-ins'];
 
-/** One point a cluster may fold: a placed spawn of a quest giver or finisher that is not in focus. */
-interface ClusterPoint {
-  readonly group: MergedGroup;
-  readonly spawn: SpawnPoint;
-  readonly spawnIndex: number;
-  readonly world: WorldPoint;
-  /** The raw marker the point is drawn as when its cell holds it alone. */
-  readonly single: Candidate;
+/** One point of a cluster cell: the id of the marker it is drawn as alone, its merged group's key and its published zone. */
+export interface ClusterCellPoint {
+  readonly id: string;
+  readonly group: string;
+  readonly zone: UiMapId | null;
 }
 
-/** Quest-mark rank for a cluster's members and a stack's state: the best first (available, may be, needs; ready, in progress, record unknown). */
-const MEMBER_RANK: Readonly<Partial<Record<MarkState, number>>> = {
-  available: 0,
-  uncertain: 1,
-  locked: 2,
-  'unlocks-soon': 3,
-  'low-level': 4,
-  ready: 0,
-  'in-progress': 1,
-  'record-unknown': 2,
-};
-
-const memberRank = (member: ClusterMember): number => (member.mark === null ? 9 : (MEMBER_RANK[member.mark.state] ?? 9));
-
-const STATE_WORDS: Readonly<Partial<Record<MarkState, readonly [one: string, many: string]>>> = {
-  available: ['available', 'available'],
-  uncertain: ['may be available', 'may be available'],
-  locked: ['needs a prerequisite', 'need a prerequisite'],
-  'unlocks-soon': ['unlocks soon', 'unlock soon'],
-  'low-level': ['low level', 'low level'],
-  ready: ['ready', 'ready'],
-  'in-progress': ['in progress', 'in progress'],
-  'record-unknown': ['record unknown', 'record unknown'],
-};
-
-const DIFFICULTY_WORDS: Readonly<Record<MarkDifficulty, string>> = {
-  trivial: 'trivial',
-  standard: 'standard',
-  difficult: 'difficult',
-  verydifficult: 'very difficult',
-  impossible: 'impossible',
-};
-
-const DIFFICULTY_ORDER: readonly MarkDifficulty[] = ['trivial', 'standard', 'difficult', 'verydifficult', 'impossible'];
+/** One cell of a cluster level's grid on one world map, with its points in group and spawn order. */
+export interface ClusterCell {
+  readonly cx: number;
+  readonly cy: number;
+  readonly points: readonly ClusterCellPoint[];
+}
 
 /**
- * A cluster's hover (§25.2.5), without a step number (the label provider adds "After step N: "):
- * "12 quests at 7 givers near here: 9 available, 2 may be available, 1 needs a prerequisite; 7
- * standard, 5 difficult. Zoom in to separate them."
+ * A clustered layer's input, clustered (§25.2.5; D-050 item 6): every level's cells, made once per
+ * input in the derived publish (`app/map-clusters.ts`, outside the entry chunk), and the cluster
+ * pins of their points. The builder leaves out the points it draws raw (a focused quest's, the
+ * zone jumped to), so a selection change remakes only the cells it touches.
  */
-export function clusterLabel(layer: SpawnLayerId, members: readonly ClusterMember[], places: number): string {
-  const quests = plural(members.length, 'quest', 'quests');
-  const where = layer === 'turn-ins' ? `to turn in at ${plural(places, 'place', 'places')}` : `at ${plural(places, 'giver', 'givers')}`;
-  const byState = new Map<MarkState, number>();
-  const byDifficulty = new Map<MarkDifficulty, number>();
-  let unknownDifficulty = 0;
-  let stated = 0;
-  for (const member of members) {
-    const mark = member.mark;
-    if (mark === null) continue;
-    stated += 1;
-    byState.set(mark.state, (byState.get(mark.state) ?? 0) + 1);
-    if (mark.difficulty === null) unknownDifficulty += 1;
-    else byDifficulty.set(mark.difficulty, (byDifficulty.get(mark.difficulty) ?? 0) + 1);
-  }
-  const states = [...byState.entries()]
-    .sort(([a], [b]) => (MEMBER_RANK[a] ?? 9) - (MEMBER_RANK[b] ?? 9))
-    .map(([state, n]) => {
-      const words = STATE_WORDS[state] ?? [state, state];
-      return `${groupDigits(n)} ${n === 1 ? words[0] : words[1]}`;
-    });
-  const difficulties = DIFFICULTY_ORDER.filter((key) => (byDifficulty.get(key) ?? 0) > 0).map((key) => `${groupDigits(byDifficulty.get(key) ?? 0)} ${DIFFICULTY_WORDS[key]}`);
-  if (unknownDifficulty > 0 && difficulties.length > 0) difficulties.push(`${groupDigits(unknownDifficulty)} of unknown difficulty`);
-  const detail = stated === 0 ? '' : `: ${states.join(', ')}${difficulties.length > 0 ? `; ${difficulties.join(', ')}` : ''}`;
-  return `${quests} ${where} near here${detail}. Zoom in to separate them.`;
+export interface ClusterSource {
+  /** Level `level`'s cells on `mapId` that hold points, ordered by (cx, cy). */
+  cells(mapId: WorldMapId, level: number): readonly ClusterCell[];
+  /** The cluster pin of `members` (two or more indices into the cell's points, ascending); null for all of them. */
+  cluster(cell: ClusterCell, level: number, mapId: WorldMapId, members: readonly number[] | null): LayerCandidate;
 }
-
-/** The members' best mark (the pin's glyph and badge), with a difficulty only when every member of that rank shares it. */
-function clusterMark(members: readonly ClusterMember[]): MarkerMark | undefined {
-  const [first] = members;
-  if (first?.mark === null || first === undefined) return undefined;
-  const rank = memberRank(first);
-  const top = members.filter((member) => memberRank(member) === rank);
-  const difficulty = top.every((member) => member.mark?.difficulty === first.mark?.difficulty) ? first.mark.difficulty : null;
-  return { state: first.mark.state, difficulty, dungeonQuest: top.some((member) => member.mark?.dungeonQuest === true), progress: null };
-}
-
-const minDistanceSqIndex = (points: readonly WorldPoint[], x: number, y: number): number => {
-  let best = 0;
-  let bestSq = Infinity;
-  points.forEach((point, index) => {
-    const dx = point.x - x;
-    const dy = point.y - y;
-    const sq = dx * dx + dy * dy;
-    if (sq < bestSq) {
-      bestSq = sq;
-      best = index;
-    }
-  });
-  return best;
-};
 
 /**
- * The clusters of one grid level (§25.2.5): the points of each cell of `level` yards on the view's
- * world map, a cell with one point drawn as that point's own pin, a cell with more as one cluster
- * pin anchored at the member point nearest the cell's centroid (so its point is always a real giver).
- * The cluster counts quests (one member per quest, best state first), its places and its points.
+ * The clusters of a clustered layer's input (the derived pipeline's `PlacesModel.clusters`), the
+ * same object for the same input; asked only below the zone band.
  */
-function clustersAt(layer: SpawnLayerId, points: readonly ClusterPoint[], mapId: WorldMapId, level: number, kind: MarkerKind): { readonly candidates: readonly Candidate[]; readonly clustered: number } {
-  const cells = new Map<string, { readonly cx: number; readonly cy: number; readonly members: ClusterPoint[] }>();
-  for (const point of points) {
-    const cx = Math.floor(point.world.x / level);
-    const cy = Math.floor(point.world.y / level);
-    const key = `${String(cx)}:${String(cy)}`;
-    const cell = cells.get(key) ?? { cx, cy, members: [] };
-    cell.members.push(point);
-    cells.set(key, cell);
-  }
+export type ClustersOf = (layer: SpawnLayerId, input: SpawnLayerInput) => ClusterSource;
+
+/**
+ * The clusters and lone points of `level` on `mapId` (§25.2.5): a cell with one point the layer does
+ * not draw raw is that point's own marker, a cell with more is one cluster pin; the cap applies to
+ * them and never trims a cluster.
+ */
+function clusteredCandidates(
+  source: ClusterSource,
+  base: SpawnBase,
+  mapId: WorldMapId,
+  level: number,
+  drawnRaw: (point: ClusterCellPoint) => boolean,
+): { readonly candidates: readonly Candidate[]; readonly clustered: number } {
   const candidates: Candidate[] = [];
   let clustered = 0;
-  for (const cell of [...cells.values()].sort((a, b) => a.cx - b.cx || a.cy - b.cy)) {
-    const members = cell.members;
-    const [only] = members;
-    if (members.length === 1 && only !== undefined) {
-      candidates.push(only.single);
+  for (const cell of source.cells(mapId, level)) {
+    const points = cell.points;
+    // Null while every point so far is folded: the whole cell.
+    let kept: number[] | null = null;
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      if (point === undefined) continue;
+      if (drawnRaw(point)) {
+        kept ??= Array.from({ length: i }, (_, k) => k);
+        continue;
+      }
+      kept?.push(i);
+    }
+    const count = kept === null ? points.length : kept.length;
+    if (count === 0) continue;
+    if (count === 1) {
+      const only = points[kept?.[0] ?? 0];
+      const entry = only === undefined ? undefined : base.byId.get(only.id);
+      if (entry !== undefined) candidates.push(entry.normal);
       continue;
     }
-    clustered += members.length;
-    const worlds = members.map((member) => member.world);
-    const n = worlds.length;
-    const centroidX = worlds.reduce((sum, p) => sum + p.x, 0) / n;
-    const centroidY = worlds.reduce((sum, p) => sum + p.y, 0) / n;
-    const anchor = worlds[minDistanceSqIndex(worlds, centroidX, centroidY)] ?? { mapId, x: centroidX, y: centroidY };
-    const quests = new Map<QuestId, { readonly quest: MarkerQuest; readonly subjects: Set<string> }>();
-    const places = new Set<string>();
-    for (const member of members) {
-      places.add(member.group.key);
-      for (const quest of member.group.quests) {
-        const entry = quests.get(quest.questId) ?? { quest, subjects: new Set<string>() };
-        entry.subjects.add(member.group.key);
-        quests.set(quest.questId, entry);
-      }
-    }
-    const clusterMembers: ClusterMember[] = [...quests.values()]
-      .map(({ quest, subjects }) => ({ questId: quest.questId, mark: quest.mark, category: spawnCategory(layer, quest.mark), subjects: [...subjects].sort(compareStrings) }))
-      .sort((a, b) => memberRank(a) - memberRank(b) || a.questId - b.questId);
-    const bounds: WorldBounds = {
-      mapId,
-      xMin: Math.min(...worlds.map((p) => p.x)),
-      xMax: Math.max(...worlds.map((p) => p.x)),
-      yMin: Math.min(...worlds.map((p) => p.y)),
-      yMax: Math.max(...worlds.map((p) => p.y)),
-    };
-    const ref: MapRef = { kind: 'cluster', layer, bounds, quests: clusterMembers.length, places: places.size };
-    const label = clusterLabel(layer, clusterMembers, places.size);
-    const mark = clusterMark(clusterMembers);
-    const descriptor: MarkerDescriptor = {
-      type: 'marker',
-      id: `cluster:${layer}:${String(level)}:${String(cell.cx)}:${String(cell.cy)}`,
-      point: { mapId: anchor.mapId, x: anchor.x, y: anchor.y },
-      kind,
-      style: 'neutral',
-      emphasis: 'normal',
-      label,
-      badges: [],
-      ref,
-      count: 1,
-      refs: [ref],
-      labels: [label],
-      ...(mark === undefined ? {} : { mark }),
-      category: clusterMembers[0]?.category ?? spawnCategory(layer, null),
-      cluster: { members: clusterMembers, places: places.size, points: n, bounds, cellYards: level },
-    };
-    candidates.push({ descriptor, tier: 1, anchor: pointAnchor(anchor) });
+    clustered += count;
+    candidates.push(source.cluster(cell, level, mapId, kept));
   }
   return { candidates, clustered };
 }
@@ -1639,32 +1584,50 @@ function collectLog(log: LogObjectivesInput, mapId: WorldMapId, focusQuests: Rea
   return { areas: areas.sort(byDescriptorId), counted: counted.sort(byDescriptorId) };
 }
 
-/** A spawn layer's points before the level of detail: the raw markers, the points that fold (by zone, or into clusters), the counts. */
-interface SpawnPoints {
-  readonly raw: readonly Candidate[];
-  /** Points that fold into a zone count or a cluster, in group and spawn order. */
-  readonly folding: readonly ClusterPoint[];
+/** A candidate a layer draws: its descriptor, its tier under the cap (0: focused, kept first) and where it is ranked from. */
+export type LayerCandidate = Candidate;
+
+/** One placed point of a spawn layer on the builder's world map, with its plain marker, and its strong one once a focus asks for it. */
+interface SpawnEntry {
+  readonly group: MergedGroup;
+  readonly groupIndex: number;
+  readonly spawn: SpawnPoint;
+  readonly world: WorldPoint;
+  readonly normal: Candidate;
+  strong: Candidate | null;
+}
+
+/**
+ * A spawn layer's input on one world map before the focus and the level of detail (D-050 item 5;
+ * the map-edit bench's selection change): its merged groups' placed points with their plain
+ * markers, in group and spawn order and in marker-id order, and the counts. A selection change only
+ * picks from it: the focused groups' points take their strong marker, and nothing else is rebuilt.
+ */
+interface SpawnBase {
+  readonly entries: readonly SpawnEntry[];
+  /** `entries` in marker-id order: the raw markers' order before stacks are merged. */
+  readonly sorted: readonly SpawnEntry[];
+  readonly byId: ReadonlyMap<string, SpawnEntry>;
+  /** Group indices by quest id, so a focus finds its groups without scanning them all. */
+  readonly byQuest: ReadonlyMap<number, readonly number[]>;
+  readonly groupKeys: readonly string[];
   readonly unresolved: ReasonTally;
   readonly otherSurfaces: number;
 }
 
-function spawnPoints(
-  ctx: LayerContext,
-  layer: SpawnLayerId,
-  input: SpawnLayerInput,
-  mapId: WorldMapId,
-  aggregate: boolean,
-  focusQuests: ReadonlySet<number>,
-  rawZone: UiMapId | null,
-  where: Whereabouts | null,
-): SpawnPoints {
+function spawnBaseOf(ctx: LayerContext, layer: SpawnLayerId, input: SpawnLayerInput, mapId: WorldMapId, where: Whereabouts | null): SpawnBase {
   const unresolved = new ReasonTally();
   let otherSurfaces = 0;
-  const raw: Candidate[] = [];
-  const folding: ClusterPoint[] = [];
+  const entries: SpawnEntry[] = [];
+  const byQuest = new Map<number, number[]>();
   const kind = SPAWN_MARKER[layer];
-  for (const group of mergeGroups(input.groups)) {
-    const isFocused = group.questIds.some((id) => focusQuests.has(id));
+  const groups = mergeGroups(input.groups);
+  groups.forEach((group, groupIndex) => {
+    for (const id of group.questIds) {
+      const known = byQuest.get(id);
+      if (known === undefined) byQuest.set(id, [groupIndex]);
+      else known.push(groupIndex);
+    }
     const category = spawnCategory(layer, group.mark);
     group.spawns.forEach((spawn, spawnIndex) => {
       const world = spawn.world;
@@ -1681,42 +1644,99 @@ function spawnPoints(
         point: world,
         kind,
         style: 'neutral',
-        emphasis: isFocused ? 'strong' : 'normal',
+        emphasis: 'normal',
         label: group.label,
         badges: spawnBadges(spawn),
         ref: { kind: 'spawn', subject: group.subject, spawnIndex, questIds: group.questIds },
         ...(group.mark === undefined ? {} : { mark: group.mark }),
         category,
       });
-      const candidate: Candidate = { descriptor, tier: isFocused ? 0 : 1, anchor: pointAnchor(world) };
-      // The zone the user jumped to is drawn raw at any zoom, like a focused quest's points.
-      if (aggregate && !isFocused && (rawZone === null || spawn.uiMapId !== rawZone)) folding.push({ group, spawn, spawnIndex, world, single: candidate });
-      else raw.push(candidate);
+      entries.push({ group, groupIndex, spawn, world, normal: { descriptor, tier: 1, anchor: pointAnchor(world) }, strong: null });
     });
+  });
+  const sorted = [...entries].sort((a, b) => compareStrings(a.normal.descriptor.id, b.normal.descriptor.id));
+  return {
+    entries,
+    sorted,
+    byId: new Map(entries.map((entry) => [entry.normal.descriptor.id, entry])),
+    byQuest,
+    groupKeys: groups.map((group) => group.key),
+    unresolved,
+    otherSurfaces,
+  };
+}
+
+/** A point's marker when its group is in focus: strong, in the focused tier (made once per point). */
+function strongOf(entry: SpawnEntry): Candidate {
+  if (entry.strong === null) {
+    const normal = entry.normal;
+    entry.strong = { descriptor: { ...(normal.descriptor as MarkerDescriptor), emphasis: 'strong' }, tier: 0, anchor: normal.anchor };
   }
-  return { raw, folding, unresolved, otherSurfaces };
+  return entry.strong;
+}
+
+/** The groups a focus holds, and a memo key for them: the same groups give the same key, whichever quests brought them. */
+interface FocusedGroups {
+  readonly key: string;
+  readonly groups: ReadonlySet<number>;
+}
+
+const NO_FOCUSED_GROUPS: FocusedGroups = { key: '', groups: new Set() };
+
+function focusedGroupsOf(base: SpawnBase, focusQuests: readonly QuestId[]): FocusedGroups {
+  if (focusQuests.length === 0) return NO_FOCUSED_GROUPS;
+  const groups = new Set<number>();
+  for (const id of focusQuests) for (const index of base.byQuest.get(id) ?? []) groups.add(index);
+  return groups.size === 0 ? NO_FOCUSED_GROUPS : { key: sortedUniqueNumbers([...groups]).join(','), groups };
+}
+
+/** A spawn layer's points before the level of detail: the raw markers, the points that fold (by zone, or into clusters), the counts. */
+interface SpawnPoints {
+  /** Drawn raw: every point at the zone and close bands; a focused group's and the zone jumped to's when folding. In marker-id order. */
+  readonly raw: readonly Candidate[];
+  /** Points that fold into a zone count or a cluster, in group and spawn order. */
+  readonly folding: readonly SpawnEntry[];
+  readonly unresolved: ReasonTally;
+  readonly otherSurfaces: number;
+}
+
+function spawnPoints(base: SpawnBase, aggregate: boolean, focused: FocusedGroups, rawZone: UiMapId | null): SpawnPoints {
+  // The zone the user jumped to is drawn raw at any zoom, like a focused quest's points.
+  const isRaw = (entry: SpawnEntry): boolean => !aggregate || focused.groups.has(entry.groupIndex) || (rawZone !== null && entry.spawn.uiMapId === rawZone);
+  const raw: Candidate[] = [];
+  for (const entry of base.sorted) if (isRaw(entry)) raw.push(focused.groups.has(entry.groupIndex) ? strongOf(entry) : entry.normal);
+  return { raw, folding: aggregate ? base.entries.filter((entry) => !isRaw(entry)) : [], unresolved: base.unresolved, otherSurfaces: base.otherSurfaces };
+}
+
+/** What a clustered layer folds into clusters below the zone band (`clusteredCandidates`). */
+interface ClusterPlan {
+  readonly source: ClusterSource;
+  readonly base: SpawnBase;
+  readonly level: number;
+  readonly focused: FocusedGroups;
+  readonly rawZone: UiMapId | null;
 }
 
 function collectSpawns(
   ctx: LayerContext,
   layer: SpawnLayerId,
-  input: SpawnLayerInput,
+  points: SpawnPoints,
   mapId: WorldMapId,
   aggregate: boolean,
   focusQuests: ReadonlySet<number>,
-  rawZone: UiMapId | null,
-  where: Whereabouts | null = null,
   log: LogObjectivesInput | null = null,
-  points: SpawnPoints = spawnPoints(ctx, layer, input, mapId, aggregate, focusQuests, rawZone, where),
-  level: number | null = null,
+  clusters: ClusterPlan | null = null,
+  stacks: StackCache | null = null,
 ): Collected {
   const { raw, unresolved, otherSurfaces } = points;
   // Raw markers by id, stacks merged, focused ones on top.
-  const markers = focusedLast(mergeStacks([...raw].sort(byDescriptorId)));
-  if (level !== null) {
-    // Quest givers and turn-ins cluster below the zone band (§25.2.5): each level's cells; the cap
+  const markers = focusedLast(mergeStacks(raw, stacks));
+  if (clusters !== null) {
+    // Quest givers and turn-ins cluster below the zone band (§25.2.5): the level's cells; the cap
     // applies to the clusters, never trimming one.
-    const { candidates, clustered } = clustersAt(layer, points.folding, mapId, level, SPAWN_MARKER[layer]);
+    const { source, base, level, focused, rawZone } = clusters;
+    const focusedKeys = new Set([...focused.groups].map((index) => base.groupKeys[index]));
+    const { candidates, clustered } = clusteredCandidates(source, base, mapId, level, (point) => focusedKeys.has(point.group) || (rawZone !== null && point.zone === rawZone));
     return { candidates: [...candidates, ...markers], aggregated: 0, clustered, unresolved, otherSurfaces };
   }
   let aggregated = 0;
@@ -1781,10 +1801,11 @@ export function spawnLayerAggregatesIn(layer: SpawnLayerId, view: Pick<MapView, 
 }
 
 /**
- * A spawn layer for the view: raw markers at zone zoom, per-zone aggregates at continent zoom
- * (except `rawAtAnyZoom` layers), the points of `focusQuests` raw and `strong` at any zoom, and
- * the points of `rawZone` (the zone the user jumped to, by the points' published UiMap) raw at any
- * zoom. Markers at the identical point are merged.
+ * A spawn layer for the view: raw markers at zone zoom; zoomed out, quest givers and turn-ins in
+ * the clusters of `clusters` (per-zone aggregates without them) and the other layers in per-zone
+ * aggregates (except `rawAtAnyZoom` layers); the points of `focusQuests` raw and `strong` at any
+ * zoom, and the points of `rawZone` (the zone the user jumped to, by the points' published UiMap)
+ * raw at any zoom. Markers at the identical point are merged.
  */
 export function buildSpawnLayer(
   ctx: LayerContext,
@@ -1793,13 +1814,15 @@ export function buildSpawnLayer(
   view: MapView,
   focusQuests: readonly QuestId[] = [],
   rawZone: UiMapId | null = null,
+  clusters: ClustersOf | null = null,
 ): LayerContent {
   const aggregate = spawnLayerAggregatesIn(layer, view, ctx.lod);
   const level = aggregate && CLUSTERED_LAYERS.includes(layer) ? clusterLevelAt(view.zoom) : null;
-  const focus = new Set<number>(focusQuests);
-  const where = whereaboutsOf(ctx, view);
-  const points = spawnPoints(ctx, layer, input, view.mapId, aggregate, focus, rawZone, where);
-  const collected = collectSpawns(ctx, layer, input, view.mapId, aggregate, focus, rawZone, where, null, points, level);
+  const base = spawnBaseOf(ctx, layer, input, view.mapId, whereaboutsOf(ctx, view));
+  const focused = focusedGroupsOf(base, focusQuests);
+  const source = level === null ? null : (clusters?.(layer, input) ?? null);
+  const plan = source === null || level === null ? null : { source, base, level, focused, rawZone };
+  const collected = collectSpawns(ctx, layer, spawnPoints(base, aggregate, focused, rawZone), view.mapId, aggregate, new Set<number>(focusQuests), null, plan);
   return contentOf(layer, collected, view, ctx);
 }
 
@@ -2061,7 +2084,12 @@ function walkRoute(route: RouteInput, override: LineStyle | null, paths: RoutePa
   const unresolved = new ReasonTally();
   const counts = new Map<WorldMapId, { along: number; pending: number; fallback: number }>();
   let run: OpenRun | null = null;
-  let previous: { readonly step: RouteStepInput; readonly point: WorldPoint } | null = null;
+  // Two scratch ends, reused step after step: a 10,000-step walk (a new paths object walks it again) allocates no pair per step (D-050 item 5).
+  const ends: [{ step: RouteStepInput; point: WorldPoint }, { step: RouteStepInput; point: WorldPoint }] = [
+    { step: route.steps[0] as RouteStepInput, point: { mapId: 0 as WorldMapId, x: 0, y: 0 } },
+    { step: route.steps[0] as RouteStepInput, point: { mapId: 0 as WorldMapId, x: 0, y: 0 } },
+  ];
+  let previous: { step: RouteStepInput; point: WorldPoint } | null = null;
   let departure: LegStyle | null = null;
   const close = (): void => {
     if (run !== null && run.steps.length >= 2) runs.push(run);
@@ -2091,11 +2119,17 @@ function walkRoute(route: RouteInput, override: LineStyle | null, paths: RoutePa
       transitions.push({ from: previous.step, fromPoint: previous.point, to: step, toPoint: point, leg });
       run = openRun(point.mapId, null, step, point);
     } else {
-      const drawing = drawLeg(previous, { step, point }, leg, override, paths, cache);
+      const current = previous === ends[0] ? ends[1] : ends[0];
+      current.step = step;
+      current.point = point;
+      const drawing = drawLeg(previous, current, leg, override, paths, cache);
       if (drawing.path !== null) {
-        const tally = counts.get(point.mapId) ?? { along: 0, pending: 0, fallback: 0 };
+        let tally = counts.get(point.mapId);
+        if (tally === undefined) {
+          tally = { along: 0, pending: 0, fallback: 0 };
+          counts.set(point.mapId, tally);
+        }
         tally[drawing.path] += 1;
-        counts.set(point.mapId, tally);
       }
       // A walked leg that does not move draws nothing: inside a run of pending or fallback legs it
       // keeps the run's style, so the run is not cut at every stationary step (PERF-2 with walking
@@ -2109,7 +2143,10 @@ function walkRoute(route: RouteInput, override: LineStyle | null, paths: RoutePa
       run.style = style;
       extendRun(run, drawing, step, point);
     }
-    previous = { step, point };
+    const next: { step: RouteStepInput; point: WorldPoint } = previous === ends[0] ? ends[1] : ends[0];
+    next.step = step;
+    next.point = point;
+    previous = next;
     departure = step.departs;
   }
   close();
@@ -2144,17 +2181,34 @@ export function routePieces(
   max: number = ROUTE_PIECE_MAX_VERTICES,
   min: number = ROUTE_PIECE_MIN_VERTICES,
 ): readonly (readonly [number, number])[] {
+  return piecesBy(stepIds.length, (i) => stepHash(stepIds[i] ?? '') % ROUTE_PIECE_MODULUS === 0, max, min);
+}
+
+/** `routePieces` over `count` vertices, with `boundary(i)` telling whether vertex `i`'s step is a boundary step. */
+function piecesBy(count: number, boundary: (i: number) => boolean, max: number, min: number): readonly (readonly [number, number])[] {
   const pieces: (readonly [number, number])[] = [];
   let start = 0;
-  for (let i = 1; i < stepIds.length; i += 1) {
+  for (let i = 1; i < count; i += 1) {
     const length = i - start + 1;
-    const boundary = length >= min && stepHash(stepIds[i] ?? '') % ROUTE_PIECE_MODULUS === 0;
-    if (i === stepIds.length - 1 || length >= max || boundary) {
+    if (i === count - 1 || length >= max || (length >= min && boundary(i))) {
       pieces.push([start, i]);
       start = i;
     }
   }
   return pieces;
+}
+
+/** Whether each step input's id hashes to a boundary (`routePieces`), once per input object: an edit hashes only the steps it made (D-050 item 5). */
+const boundarySteps = new WeakMap<RouteStepInput, boolean>();
+
+function isBoundaryStep(step: RouteStepInput | undefined): boolean {
+  if (step === undefined) return false;
+  let boundary = boundarySteps.get(step);
+  if (boundary === undefined) {
+    boundary = stepHash(step.stepId) % ROUTE_PIECE_MODULUS === 0;
+    boundarySteps.set(step, boundary);
+  }
+  return boundary;
 }
 
 /** One polyline of a run: an inclusive vertex range, the last step at or before its first vertex, and the base of its id. */
@@ -2183,8 +2237,6 @@ function runVertexOf(run: OpenRun, index: number): number {
   return run.stepVertex[index] ?? 0;
 }
 
-const stepIdOf = (step: RouteStepInput): string => step.stepId;
-
 /**
  * A run's polylines, each of at most `max` vertices, by step range. The steps are cut into pieces
  * as without paths (`routePieces`, content-defined boundaries). A piece whose legs' path points
@@ -2194,7 +2246,7 @@ const stepIdOf = (step: RouteStepInput): string => step.stepId;
  */
 function runPieces(run: OpenRun, max: number = ROUTE_PIECE_MAX_VERTICES): readonly StepPiece[] {
   const out: StepPiece[] = [];
-  for (const [a, b] of routePieces(run.steps.map(stepIdOf))) {
+  for (const [a, b] of piecesBy(run.steps.length, (i) => isBoundaryStep(run.steps[i]), ROUTE_PIECE_MAX_VERTICES, ROUTE_PIECE_MIN_VERTICES)) {
     const end = runVertexOf(run, b);
     let start = runVertexOf(run, a);
     if (end - start + 1 <= max) {
@@ -2467,14 +2519,39 @@ export function buildProposal(ctx: LayerContext, route: RouteInput | null, view:
 export interface ActiveSplit {
   readonly at: number;
   readonly positions: ReadonlyMap<StepId, number>;
+  /** Changes whenever `positions` does (the controller updates one map in place); absent: the map is never changed. */
+  readonly version?: number;
 }
 
-const sameSplit = (a: ActiveSplit | null, b: ActiveSplit | null): boolean => a === b || (a !== null && b !== null && a.at === b.at && a.positions === b.positions);
+const sameSplit = (a: ActiveSplit | null, b: ActiveSplit | null): boolean =>
+  a === b || (a !== null && b !== null && a.at === b.at && a.positions === b.positions && a.version === b.version);
 
 const isAfter = (split: ActiveSplit, stepId: StepId): boolean => {
   const position = split.positions.get(stepId);
   return position !== undefined && position > split.at;
 };
+
+/**
+ * The least and greatest position of a route piece's steps after its first vertex (−1 for a step
+ * not drawn, which is never after the split), per positions map and version (D-050 item 5): a
+ * selection change moves only `at`, so a piece wholly before or after it is decided by these two.
+ */
+const pieceRanges = new WeakMap<PolylineDescriptor, { readonly positions: ReadonlyMap<StepId, number>; readonly version: number | undefined; readonly min: number; readonly max: number }>();
+
+function pieceRange(piece: PolylineDescriptor, stepIds: readonly StepId[], split: ActiveSplit): { readonly min: number; readonly max: number } {
+  const kept = pieceRanges.get(piece);
+  if (kept !== undefined && kept.positions === split.positions && kept.version === split.version) return kept;
+  let min = Infinity;
+  let max = -1;
+  for (let i = 1; i < stepIds.length; i += 1) {
+    const position = split.positions.get(stepIds[i] ?? ('' as StepId)) ?? -1;
+    if (position < min) min = position;
+    if (position > max) max = position;
+  }
+  const range = { positions: split.positions, version: split.version, min, max };
+  pieceRanges.set(piece, range);
+  return range;
+}
 
 /** Each piece's split forms by the vertex it splits at (0: all of it after), so a split that returns gives the same objects. */
 const splitPieces = new WeakMap<PolylineDescriptor, Map<number, readonly PolylineDescriptor[]>>();
@@ -2486,16 +2563,22 @@ const splitPieces = new WeakMap<PolylineDescriptor, Map<number, readonly Polylin
  * active step stays solid. The part before keeps the piece's id; the part after is `<id>>after`,
  * and a piece wholly after keeps its id, restyled in place.
  */
-function splitPiece(piece: PolylineDescriptor, split: ActiveSplit): readonly PolylineDescriptor[] | null {
+function splitPiece(piece: PolylineDescriptor, split: ActiveSplit, moved: boolean): readonly PolylineDescriptor[] | null {
   if (piece.ref.kind !== 'run' || piece.style === 'proposal') return null;
   const ref = piece.ref;
   const ids = ref.stepIds;
   let at = -1;
-  for (let i = 0; i + 1 < ids.length; i += 1) {
-    const next = ids[i + 1];
-    if (next !== undefined && isAfter(split, next)) {
-      at = i;
-      break;
+  // Only the split moved (a selection change): a piece wholly before or after it needs no step looked up.
+  const range = moved ? pieceRange(piece, ids, split) : null;
+  if (range !== null && range.max <= split.at) return null;
+  if (range !== null && range.min > split.at) at = 0;
+  else {
+    for (let i = 0; i + 1 < ids.length; i += 1) {
+      const next = ids[i + 1];
+      if (next !== undefined && isAfter(split, next)) {
+        at = i;
+        break;
+      }
     }
   }
   if (at < 0) return null;
@@ -2535,15 +2618,16 @@ function splitBead(bead: MarkerDescriptor, split: ActiveSplit): MarkerDescriptor
  * A route layer's content as drawn with the split: the route line's pieces split at the active step
  * and the step beads after it faded (`splitPiece`, `splitBead`); the content itself when nothing is
  * after it or there is no split. The counts stay the layer's own: a split piece is one piece drawn
- * in two styles.
+ * in two styles. `moved`: the content and positions are those of the last split and only `at`
+ * changed, so each piece's range of positions is kept and read (`pieceRange`).
  */
-export function splitContent(content: LayerContent, split: ActiveSplit | null): LayerContent {
+export function splitContent(content: LayerContent, split: ActiveSplit | null, moved = false): LayerContent {
   if (split === null) return content;
   let changed = false;
   const items: MapDescriptor[] = [];
   for (const item of content.items) {
     if (item.type === 'polyline') {
-      const pieces = splitPiece(item, split);
+      const pieces = splitPiece(item, split, moved);
       if (pieces === null) items.push(item);
       else {
         changed = true;
@@ -3011,6 +3095,10 @@ class Slot {
   byId: ReadonlyMap<string, MapDescriptor> = new Map();
   /** Ids kept the last time the cap bit (empty when everything fitted). */
   held: ReadonlySet<string> = new Set();
+  /** A spawn layer's points before the focus, for the input, map and placements they were made for (`spawnBaseFor`). */
+  base: { readonly input: SpawnLayerInput; readonly mapId: WorldMapId; readonly placedKey: string | null; readonly base: SpawnBase } | null = null;
+  /** Merged stacks by their first member, so a focus change re-merges only the stacks it touched. */
+  readonly stacks: StackCache = new WeakMap();
 }
 
 const sameKey = (a: readonly unknown[] | null, b: readonly unknown[]): boolean =>
@@ -3140,6 +3228,11 @@ export type LayerCall =
        * after the active step), drawn instead of `input`'s flight masters; `flight-masters` only.
        */
       readonly places?: PlaceLayerInput | null;
+      /**
+       * The clusters of `input` below the zone band (`available-quests` and `turn-ins`; D-050 item 6),
+       * from the derived pipeline. Absent or null (the pipeline has not loaded): per-zone counts instead.
+       */
+      readonly clusters?: ClustersOf | null;
     }
   /** `after`: the active step's split (`ActiveSplit`); the pieces and beads after it are drawn as such. Absent or null: none. */
   | { readonly layer: 'route-line'; readonly route: RouteInput; readonly paths: RoutePathsInput | null; readonly after?: ActiveSplit | null }
@@ -3306,22 +3399,23 @@ export function createMapLayers(options: MapLayersOptions): MapLayers {
         const places = layer === 'flight-masters' ? (call.places ?? null) : null;
         if (places !== null) return { key: [places, mapId, placesKeyOf(ctx, view, places)], collect: () => collectPlaces(places, mapId, routeSurfaceOf(ctx, view), null) };
         const aggregate = spawnLayerAggregatesIn(layer, view, lod);
-        const focusKey = questFocusKey(focusQuests);
         // The raw zone matters only while the layer aggregates.
         const zone = aggregate ? call.rawZone : null;
         const log = layer === 'objectives' ? (call.log ?? null) : null;
         // Quest givers and turn-ins cluster below the zone band: the level is a lookup by zoom, and
-        // every level is made once per input (map-presentation.md §25.2.5), in `clusterLevels`.
+        // every level is made once per input in the derived publish (`ClusterSource`, D-050 item 6).
         const level = aggregate && CLUSTERED_LAYERS.includes(layer) ? clusterLevelAt(view.zoom) : null;
-        const key = [input, mapId, aggregate, focusKey, zone, placedKey, log];
+        const source = level === null ? null : (call.clusters?.(layer, input) ?? null);
+        const target = slot(layer);
+        const base = spawnBaseFor(target, layer, input, mapId, placedKey, view);
+        // Keyed on the focused groups, not the quests: a focus that changes no group of this layer changes nothing here.
+        const focused = focusedGroupsOf(base, focusQuests);
+        // The log's outlines and counted marks follow the focused quests themselves (§7.4), at the zone and close bands.
+        const logFocus = log !== null && !aggregate ? questFocusKey(focusQuests) : null;
         return {
-          key: [...key, level],
-          collect: () => {
-            if (level === null) return collectSpawns(ctx, layer, input, mapId, aggregate, new Set(focusQuests), zone, whereaboutsOf(ctx, view), log);
-            return clusterLevels(layer, key, () => spawnPoints(ctx, layer, input, mapId, aggregate, new Set(focusQuests), zone, whereaboutsOf(ctx, view)), (points, at) =>
-              collectSpawns(ctx, layer, input, mapId, aggregate, new Set(focusQuests), zone, null, null, points, at),
-            ).get(level) ?? NOTHING_COLLECTED;
-          },
+          key: [input, mapId, aggregate, focused.key, zone, placedKey, log, logFocus, level, source],
+          collect: () =>
+            collectSpawns(ctx, layer, spawnPoints(base, aggregate, focused, zone), mapId, aggregate, new Set<number>(focusQuests), log, source === null || level === null ? null : { source, base, level, focused, rawZone: zone }, target.stacks),
         };
       }
       case 'route-line': {
@@ -3369,24 +3463,13 @@ export function createMapLayers(options: MapLayersOptions): MapLayers {
     }
   }
 
-  /**
-   * Every cluster level of one clustered layer's input (map-presentation.md §25.2.5, review UR-06):
-   * made together, once per input (the givers and their states change only at a derived publish),
-   * and kept while the input is the same, so a zoom across levels is a lookup, never a rebuild.
-   */
-  const clusterMemo = new Map<SpawnLayerId, { readonly key: readonly unknown[]; readonly levels: ReadonlyMap<number, Collected> }>();
-  function clusterLevels(
-    layer: SpawnLayerId,
-    key: readonly unknown[],
-    points: () => SpawnPoints,
-    collect: (points: SpawnPoints, level: number) => Collected,
-  ): ReadonlyMap<number, Collected> {
-    const kept = clusterMemo.get(layer);
-    if (kept !== undefined && sameKey(kept.key, key)) return kept.levels;
-    const shared = points();
-    const levels = new Map(CLUSTER_LEVELS.map((level) => [level, collect(shared, level)] as const));
-    clusterMemo.set(layer, { key, levels });
-    return levels;
+  /** A spawn layer's points before the focus (`SpawnBase`), kept per slot while its input, map and placements are the same. */
+  function spawnBaseFor(target: Slot, layer: SpawnLayerId, input: SpawnLayerInput, mapId: WorldMapId, placedKey: string | null, view: MapView): SpawnBase {
+    const kept = target.base;
+    if (kept !== null && kept.input === input && kept.mapId === mapId && kept.placedKey === placedKey) return kept.base;
+    const base = spawnBaseOf(ctx, layer, input, mapId, whereaboutsOf(ctx, view));
+    target.base = { input, mapId, placedKey, base };
+    return base;
   }
 
   function prebuild(call: LayerCall, view: MapView): boolean {
@@ -3399,7 +3482,9 @@ export function createMapLayers(options: MapLayersOptions): MapLayers {
   function splitOnce(layer: LayerId, content: LayerContent, split: ActiveSplit | null): LayerContent {
     const last = splits.get(layer);
     if (last !== undefined && last.content === content && sameSplit(last.split, split)) return last.out;
-    let out = splitContent(content, split);
+    // The same content and positions, a new `at`: only the split moved (a selection change).
+    const moved = last !== undefined && last.content === content && split !== null && last.split !== null && last.split.positions === split.positions && last.split.version === split.version;
+    let out = splitContent(content, split, moved);
     // The same items as the last output (a selection change that moves no piece's style): its object.
     if (last !== undefined && out !== last.out && out.items.length === last.out.items.length && out.items.every((item, i) => item === last.out.items[i]) && plainEqual(out.stats, last.out.stats)) out = last.out;
     splits.set(layer, { content, split, out });

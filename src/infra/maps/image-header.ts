@@ -13,7 +13,9 @@
  * Pure (no DOM, no Node, no bitwise operators), so tools and the app share it.
  */
 
-export type ImageContentType = 'image/png' | 'image/webp';
+import type { ImageContentType } from './image-types';
+
+export { contentTypeOfName, type ImageContentType } from './image-types';
 
 export interface ImageHeader {
   readonly contentType: ImageContentType;
@@ -183,9 +185,3 @@ export function readImageHeader(bytes: Uint8Array): ImageHeaderResult {
   return fail('not a PNG or WebP file');
 }
 
-/** The content type a file name's extension promises (`.png`, `.webp`), or null for any other name. */
-export function contentTypeOfName(name: string): ImageContentType | null {
-  if (/\.png$/.test(name)) return 'image/png';
-  if (/\.webp$/.test(name)) return 'image/webp';
-  return null;
-}

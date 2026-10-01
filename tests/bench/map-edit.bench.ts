@@ -22,6 +22,11 @@
  * `setLayer` and the canvas redraw on top (docs/measurements/map-m3.json `browser`), so these
  * figures alone do not show the budget is met.
  *
+ * **The continent band** (D-050 items 5 and 6): selection changes with the view zoomed out to the
+ * continent band over Durotar (−4.2), where the quest givers and turn-ins are clusters (their index
+ * made once, as the derived pipeline makes it in its publish, `app/map-clusters.ts`), and a focused
+ * quest's giver leaves its cell: `selectionChangeContinent`, reported, not checked.
+ *
  * **The two-builder atlas case** (docs/research/map-atlas.md §8.2, §9.2; step ATL.4): the same
  * route and actions on the atlas surface (the controller's `atlas` option), with the view on
  * Durotar's east coast at zone zoom, where Kalimdor's and the Eastern Kingdoms' builders are both
@@ -35,6 +40,7 @@
 import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { createEditorStore, type EditorStore, fixedClock, insertNote, moveSelected, updateStepNote } from '../../src/app';
+import { createMapClusterer } from '../../src/app/map-clusters';
 import { createMapController } from '../../src/app/map-controller';
 import { fakeAdapterFactory } from '../../src/app/map-test-helpers';
 import { sequentialIdSource } from '../../src/app/shell-support';
@@ -167,6 +173,8 @@ function run(workspace: Workspace, project: ProjectV1, atlas = false) {
     timing: null,
     objectUrls: null,
     atlas,
+    // The app's clusters come with the pipeline's places model; here the same clusterer, without one.
+    clusters: createMapClusterer().of,
   });
   const attachStart = performance.now();
   controller.attach(factory, { nodeType: 1, ownerDocument: null });
@@ -188,6 +196,17 @@ function run(workspace: Workspace, project: ProjectV1, atlas = false) {
     store.select({ kind: 'single', id: step.id });
     controller.setActiveStep(step.id);
   });
+  // Zoomed out to the continent band (clusters), then back to the zone view for the edits.
+  const zoneView = adapter.getView();
+  adapter.pan({ zoom: -4.2 });
+  const continentBand = store.getState().view.map.zoomBand;
+  const selectionChangeContinent = bench((i) => {
+    const step = placed[(Math.abs(i) * 97 + 2000) % placed.length];
+    if (step === undefined) return;
+    store.select({ kind: 'single', id: step.id });
+    controller.setActiveStep(step.id);
+  });
+  if (zoneView !== null) adapter.pan({ x: zoneView.center.x, y: zoneView.center.y, zoom: zoneView.zoom, mapId: zoneView.mapId });
   store.select({ kind: 'single', id: target.id });
   controller.setActiveStep(target.id);
   const setsBefore = adapter.callsOf('setLayer').length;
@@ -209,6 +228,7 @@ function run(workspace: Workspace, project: ProjectV1, atlas = false) {
     routeStepsDrawn: routeSteps === undefined ? null : { drawn: routeSteps.drawn, notDrawn: routeSteps.notDrawn },
     attachMs,
     selectionChange: { totalMs: selectionChange, storeOnlyMs: { median: storeOnly.selectionChange.median } },
+    selectionChangeContinent: { band: continentBand, totalMs: selectionChangeContinent },
     moveStep: {
       totalMs: moveStep,
       storeOnlyMs: { median: storeOnly.moveStep.median },

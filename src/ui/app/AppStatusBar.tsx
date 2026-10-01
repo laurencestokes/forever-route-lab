@@ -110,7 +110,13 @@ export const AppStatusBar = memo(function AppStatusBar({ store, view, dataset, a
   const identity = dataset.identity;
   const logStep = logCount === null ? null : (view.numberOfStep.get(logCount.stepId) ?? null);
   const noResults = noResultsReason(derived);
-  const logWhy = derived === null || derived.results === null ? `${noResults.charAt(0).toLowerCase()}${noResults.slice(1)}` : 'select a step to see the quest log after it';
+  // With no step selected the log is the last step's (D-050 item 2): only an empty route, or a step not walked yet, has none.
+  const logWhy =
+    derived === null || derived.results === null
+      ? `${noResults.charAt(0).toLowerCase()}${noResults.slice(1)}`
+      : derived.results.project.route.steps.length === 0
+        ? 'the route has no steps yet'
+        : 'working out the state after the selected step';
   const questLog = questLogWords(logCount, logStep, character.priorHistory, logWhy);
 
   const metrics = useMemo(() => routeMetricsView(derived, revision, mapName), [derived, revision, mapName]);

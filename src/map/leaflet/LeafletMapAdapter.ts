@@ -125,6 +125,7 @@ import {
   type LabelInk,
   type Measure,
   type PlacementInput,
+  type PlacementResult,
 } from './labels';
 import { createMapPerf, pagePerformance, type MapPerf, type PerformanceLike } from './perf';
 import { SmoothWheel, type SmoothWheelOptions } from './smooth-wheel';
@@ -436,6 +437,16 @@ interface VisiblePin {
 /** A pin's key in the adapter's pin bookkeeping: `layer/id`. */
 const pinKey = (layer: LayerId, id: string): string => `${layer}/${id}`;
 
+/** What a label placement depends on (§13.2): the surface, the drawn area, and each label's anchor, priority and forms. */
+function placementKey(surface: SurfaceId | null, inputs: readonly PlacementInput[], area: Box): string {
+  const parts = [String(surface), `${String(area.x0)},${String(area.y0)},${String(area.x1)},${String(area.y1)}`];
+  for (const input of inputs) {
+    parts.push(`${input.id}@${String(input.x)},${String(input.y)}#${String(input.priority)}`);
+    for (const form of input.forms) parts.push(`${form.kind}${String(form.width)}x${String(form.height)}/${String(form.size)}`);
+  }
+  return parts.join('|');
+}
+
 /** The layers whose pins stack at the zone and close bands and whose items the mask applies to. */
 const PIN_LAYERS: readonly LayerId[] = PIN_LAYER_IDS;
 
@@ -584,6 +595,13 @@ export class LeafletMapAdapter implements MapAdapter {
   private labelItems: readonly LabelDescriptor[] = [];
   /** Whether each label was in range at the last draw, for the range hysteresis. */
   private labelShown: ReadonlyMap<string, boolean> = new Map();
+  /**
+   * The last label placement and what it was placed from (§13.2; review PR-16): the labels'
+   * anchors, forms and the drawn area. A redraw with the same inputs keeps it, so a selection
+   * change or an edit, which change only the obstacles (focused marks, step beads, pins), never
+   * moves a label; the next view change places them again round the obstacles of that moment.
+   */
+  private labelPlacement: { readonly key: string; readonly result: PlacementResult } | null = null;
   private labelStats: LabelRenderStats = EMPTY_LABEL_RENDER_STATS;
   /** The zoom band of the last settled view (`nextBand`, as the controller keeps it); null before mounting. */
   private band: MapBand | null = null;
@@ -844,6 +862,9 @@ export class LeafletMapAdapter implements MapAdapter {
       const point = this.worldOf(event.latlng);
       if (point !== null) this.emit({ type: 'click', point, hit: null, zones: this.zonesAt(point) });
     });
+    map.on('movestart', () => {
+      this.emit({ type: 'movestart' });
+    });
     map.on('moveend', () => {
       this.rememberView();
       this.settleBand();
@@ -988,6 +1009,7 @@ export class LeafletMapAdapter implements MapAdapter {
     this.labels = null;
     this.labelItems = [];
     this.labelShown = new Map();
+    this.labelPlacement = null;
     this.band = null;
     this.grid = null;
     this.scaleControl = null;
@@ -2636,8 +2658,16 @@ export class LeafletMapAdapter implements MapAdapter {
         byId.set(label.id, label);
         inputs.push({ id: label.id, name: label.text, priority: label.priority, x: p.x, y: p.y, forms: labelForms(label, px, measure, palette.font, wordsOf(label)) });
       }
-      const obstacles = this.labelObstacles();
-      const result = placeLabels(inputs, obstacles.hard, area, obstacles.soft);
+      // Placed again only when the labels' inputs or the drawn area change (§13.2: "an edit or a
+      // selection change never moves a label"; review PR-16); the obstacles are read then.
+      const key = placementKey(this.surface, inputs, area);
+      let result: PlacementResult;
+      if (this.labelPlacement?.key === key) result = this.labelPlacement.result;
+      else {
+        const obstacles = this.labelObstacles();
+        result = placeLabels(inputs, obstacles.hard, area, obstacles.soft);
+        this.labelPlacement = { key, result };
+      }
       ctx.save();
       for (const entry of result.placed) {
         const label = byId.get(entry.id);

@@ -15,7 +15,12 @@ import type { Wdc5Layout } from './wdc5';
 
 export const WOWDBDEFS_COMMIT = 'cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd';
 export const WOWDBDEFS_REPOSITORY = 'https://github.com/wowdev/WoWDBDefs';
-/** The build whose definition blocks are copied (the Forever pin, D-013 / terrain-navigation §2). */
+/**
+ * The build whose definition blocks are copied: the Forever pin until 2026-09-30 (D-013,
+ * terrain-navigation §2). The pin is now 1.60.1.70124 (D-050), whose files of every generated table
+ * carry the same layout hashes, which `parseWdc5` checks on every read, so the blocks are kept.
+ * Every table whose 70009 CKey was recorded also has the same CKey (docs/reviews/repin-70124.md).
+ */
 export const LAYOUT_BUILD = '1.60.1.70009';
 
 /** Tables the terrain (3b.1-3b.4) and map-art (3b.8) pipelines read. */

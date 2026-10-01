@@ -4,7 +4,9 @@ import type { RouteStep, StepId } from '../domain';
  * Route-list selection (docs/ARCHITECTURE.md §12.1). `anchor` is where a shift-click range
  * starts; `focus` is the last step acted on (the keyboard cursor). Both are null or the id of a
  * step in the route; `stepIds` only ever holds ids of steps in the route. Selection is view state:
- * it is never persisted and never enters a command's result.
+ * it is not in the project and never enters a command's result. Only the last focus step is kept,
+ * per project and per browser, to select it when the project next opens (`selection-memory.ts`,
+ * D-050 item 2).
  */
 export interface Selection {
   readonly stepIds: ReadonlySet<StepId>;

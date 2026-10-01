@@ -7,7 +7,7 @@ import { effectiveRules, FOREVER_BETA } from '../rules';
 import { createAcceptChecks } from '../validate/availability';
 import { stateWith, type StateFields } from '../validate/test-helpers';
 import { MAP_TEST_DUROTAR, MAP_TEST_KALIMDOR, stubDataset, stubNpc, stubQuest, worldSpawn } from './map-test-helpers';
-import { LEVEL_WINDOW, PREREQUISITE_WINDOW, type QuestStateInput, type QuestStateModel, questStateModel, sameEntry, turnInOf } from './quest-state';
+import { DRAW_LEVEL_CEILING, DRAWN_ROWS, LEVEL_WINDOW, PREREQUISITE_WINDOW, type QuestStateInput, type QuestStateModel, questStateModel, sameEntry, turnInOf } from './quest-state';
 import { noStateText, withArticle } from './quest-state-text';
 import { questsForCharacter } from './shell-support';
 import { zoneSpans } from './zone-levels';
@@ -299,6 +299,58 @@ describe('questStateModel: the Available tab’s groups and the map’s givers',
     const full = model({ rules: effectiveRules(FOREVER_BETA, { questLogCapacity: 4 }), checks: createAcceptChecks({ dataset: DATASET, rules: effectiveRules(FOREVER_BETA, { questLogCapacity: 4 }) }) });
     expect(full.log).toEqual({ size: 4, capacity: 4, full: true });
     expect(entryOf(full, 1).cls).toBe('available');
+  });
+});
+
+describe('the map’s level ceiling (D-050 item 3; review PR-18)', () => {
+  const OTHER = npcId(20);
+  const other = [{ kind: 'npc' as const, id: OTHER }];
+  // At level 10: a quest at the ceiling, one just above it, and a level-60 repeatable open from level 1.
+  const ceilingQuests: readonly QuestRecord[] = [
+    q(1, { name: 'Open door' }),
+    q(40, { name: 'At the ceiling', level: 10 + DRAW_LEVEL_CEILING, minLevel: 1, starters: other }),
+    q(41, { name: 'Just above', level: 10 + DRAW_LEVEL_CEILING + 1, minLevel: 1, starters: other }),
+    q(42, { name: 'Copper bars', level: 60, minLevel: 1, starters: other }),
+  ];
+  const dataset = stubDataset({
+    quests: ceilingQuests,
+    npcs: [stubNpc({ id: GIVER, name: 'Gornek' }), stubNpc({ id: OTHER, name: 'Miner Cromwell' })],
+    spawns: { 'npc:10': [worldSpawn(MAP_TEST_KALIMDOR, 0, -4000, MAP_TEST_DUROTAR)], 'npc:20': [worldSpawn(MAP_TEST_KALIMDOR, 30, -4000, MAP_TEST_DUROTAR)] },
+    zones: [{ uiMapId: MAP_TEST_DUROTAR, name: 'Durotar', worldMapId: MAP_TEST_KALIMDOR }],
+  });
+  const m = model({
+    dataset,
+    state: stateWith({ level: 10 }),
+    checks: createAcceptChecks({ dataset, rules: RULES }),
+    open: questsForCharacter(dataset, CHARACTER).open,
+    spans: zoneSpans(dataset, GEOMETRY, CHARACTER),
+  });
+  const drawnIds = (input: { readonly groups: readonly { readonly questIds: readonly unknown[] }[] }) => input.groups.flatMap((group) => group.questIds);
+
+  it('keeps quests more than 5 levels above the character off the givers’ layer, and still lists them', () => {
+    expect(entryOf(m, 41).cls).toBe('available');
+    expect(entryOf(m, 42)).toMatchObject({ cls: 'available', row: 'available', difficulty: 'impossible' });
+    expect(drawnIds(m.map.givers)).toEqual([questId(1), questId(40)]);
+    expect(m.counts.aboveCeiling).toBe(2);
+    expect(m.counts.rows.available).toBe(4);
+    expect(m.groups.flatMap((group) => group.questIds)).toEqual(expect.arrayContaining([questId(41), questId(42)]));
+  });
+
+  it('counts them in the notes as an assumption', () => {
+    expect(m.map.notes.givers.join(' ')).toContain(`Not drawn by the level ceiling (an assumption): 2 quests are more than ${String(DRAW_LEVEL_CEILING)} levels above the character's level; the Available tab lists them.`);
+    expect(model().map.notes.givers.join(' ')).not.toContain('level ceiling');
+  });
+
+  it('draws one all the same when it is in focus, and applies to the drawer’s other rows too', () => {
+    expect(drawnIds(m.giversOf([questId(42)]))).toEqual([questId(42)]);
+    expect(drawnIds(m.giversFor(DRAWN_ROWS, [questId(42)]))).toEqual([questId(1), questId(40), questId(42)]);
+    expect(drawnIds(m.giversFor(new Set(['available'] as const), []))).toEqual([questId(1), questId(40)]);
+  });
+
+  it('holds back nothing at a level of 55 or more', () => {
+    const high = model({ dataset, state: stateWith({ level: 55 }), checks: createAcceptChecks({ dataset, rules: RULES }), open: questsForCharacter(dataset, CHARACTER).open, spans: zoneSpans(dataset, GEOMETRY, CHARACTER) });
+    expect(high.counts.aboveCeiling).toBe(0);
+    expect(drawnIds(high.map.givers)).toContain(questId(42));
   });
 });
 

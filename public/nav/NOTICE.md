@@ -17,7 +17,7 @@ This is **derived data, not game files and not map art**. It was computed by thi
 the Forever client's terrain heights and holes, liquids, per-chunk and WMO area ids, and the
 collision of placed objects (WMO and M2 models), read with this project's own read-only CASC
 reader from the client's `Data` folder, pinned to product `wow_classic_beta`, version
-`1.60.1.70009`, build key `05215079e3905ef5922ae0b03ffefb73` (D-028). No ADT, WMO, M2, BLP or DB2 file, and
+`1.60.1.70124`, build key `dd3dfc2881c407299f46c2aaf34c130b` (D-028). No ADT, WMO, M2, BLP or DB2 file, and
 no painted map art, is included. The polygons carry top-level zone ids (AreaTable ids) derived
 from the same data (D-034 item 3). Which small parts of the mesh are kept also depends on the
 QuestieDB-derived dataset in `data/`: a part that a dataset spawn stands on is never pruned

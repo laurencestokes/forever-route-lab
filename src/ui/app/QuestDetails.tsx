@@ -8,7 +8,7 @@ import { effectiveQuestLevel, questDifficultyAt, questOpenTo, SCALING_QUEST_LEVE
 import type { CharacterProfile } from '../../domain/project';
 import type { DatasetView, QuestRecord } from '../../domain/dataset';
 import type { QuestId } from '../../domain/ids';
-import { characterName, questZoneName } from '../app-model';
+import { characterName, questZoneName, startZonePreference } from '../app-model';
 import { entityWhereText, objectiveText, objectiveWhere, upstreamProvenanceText } from './detail-text';
 import {
   Button,
@@ -198,7 +198,8 @@ export function QuestDetails({ questId, dataset, character, actions, baseDataset
       term: 'Race and class',
       value: open === null ? 'Unknown: the race or class mask cannot be read' : `${open ? 'Open' : 'Not open'} to ${characterName(character)}`,
     },
-    { term: 'Zone', value: questZoneName(dataset, quest) ?? 'Unknown' },
+    // The giver's place on the character's side first (review QA-20), with the count of the others.
+    { term: 'Zone', value: questZoneName(dataset, quest, startZonePreference(dataset, character.startLocation)) ?? 'Unknown' },
     { term: 'Starts at', value: <Stops dataset={dataset} refs={quest.starters} /> },
     { term: 'Ends at', value: <Stops dataset={dataset} refs={quest.finishers} /> },
     {

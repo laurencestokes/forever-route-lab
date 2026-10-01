@@ -9,12 +9,12 @@
   },
   "pin": {
     "product": "wow_classic_beta",
-    "version": "1.60.1.70009",
-    "buildKey": "05215079e3905ef5922ae0b03ffefb73"
+    "version": "1.60.1.70124",
+    "buildKey": "dd3dfc2881c407299f46c2aaf34c130b"
   },
   "client": {
-    "rootCKey": "051a7757e36b884b1f8f9fd368b662e8",
-    "encodingCKey": "d8e6b4d7ee686bb4d62a0d3b8c8e0726",
+    "rootCKey": "227f492b183bd18b67e9928bf260bcfb",
+    "encodingCKey": "9056b58c75855c2b1ef5e404519798d4",
     "tables": [
       {
         "table": "Map",
@@ -39,8 +39,8 @@
     ]
   },
   "tool": {
-    "toolTreeHash": "bed17e28fd78d6f959c65ebecc6314099443dad24a61df0484b6c661e82af2d4",
-    "toolFiles": 63,
+    "toolTreeHash": "0e5cb74eff98f0b77aeba90cef04ac19b703382fe76c59a71747dd672cf027a2",
+    "toolFiles": 64,
     "nodeMajor": 22,
     "recastNavigation": {
       "version": "0.43.1",

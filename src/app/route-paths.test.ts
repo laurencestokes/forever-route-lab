@@ -114,6 +114,39 @@ describe('route paths: feed and map controller', () => {
     expect(s.feed.current()?.pending).toBe(false);
   });
 
+  it('hold new paths while the map moves, and draw them once it settles, in a task after its sync (D-050 item 5)', async () => {
+    const s = setup();
+    s.controller.attach(s.factory.factory, EL);
+    s.feed.setModel(s.selection.navigation, s.runtime, s.selection.hints);
+    s.timers.advance(0);
+    s.service.answerAll();
+    await settle();
+    // A pan begins before the batch is applied: no new paths object while it lasts, however long.
+    s.adapter().emit({ type: 'movestart' });
+    s.timers.advance(100);
+    s.timers.advance(1000);
+    expect(styles(s.routeLine())).toEqual(['route-pending']);
+    // It settles: the view's own sync first, the paths in the next task.
+    s.adapter().pan({ x: 1 });
+    expect(styles(s.routeLine())).toEqual(['route-pending']);
+    s.timers.advance(0);
+    expect(styles(s.routeLine())).toEqual(['route']);
+  });
+
+  it('lapse a hold whose end is never reported (holdMaxMs)', async () => {
+    const s = setup(mapTestSteps(), { holdMaxMs: 500 });
+    s.controller.attach(s.factory.factory, EL);
+    s.feed.setModel(s.selection.navigation, s.runtime, s.selection.hints);
+    s.timers.advance(0);
+    s.service.answerAll();
+    await settle();
+    s.feed.hold(true);
+    s.timers.advance(400);
+    expect(styles(s.routeLine())).toEqual(['route-pending']);
+    s.timers.advance(100);
+    expect(styles(s.routeLine())).toEqual(['route']);
+  });
+
   it('draw a leg without a walking path as a fallback once nothing is pending', async () => {
     const s = setup();
     const [a, b] = [endpoint(1, 0, -4000), endpoint(1, 10, -4010)];

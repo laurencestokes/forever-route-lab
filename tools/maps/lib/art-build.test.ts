@@ -194,7 +194,7 @@ describe('building the art set in memory', () => {
       const manifest = JSON.parse(build.manifestText) as { client: { version: string } };
       manifest.client.version = '1.60.1.69999';
       writeFile(dir, 'manifest.json', JSON.stringify(manifest));
-      expect(committedArtChecks(dir, syntheticPlaceholder()).checks[0]?.problems).toEqual(['client wow_classic_beta 1.60.1.69999 (05215079e3905ef5922ae0b03ffefb73) is not the pin wow_classic_beta 1.60.1.70009']);
+      expect(committedArtChecks(dir, syntheticPlaceholder()).checks[0]?.problems).toEqual([`client wow_classic_beta 1.60.1.69999 (${CLIENT_PIN.buildKey}) is not the pin wow_classic_beta ${CLIENT_PIN.version}`]);
     });
   });
 });

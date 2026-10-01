@@ -430,13 +430,15 @@ export function checkMapFolders(
       if (!inside.includes(pointerPath)) problems.push({ rule: 'map-folder', path: pointerPath, message: `${folder.name}: the pack pointer is missing` });
       else if (listed.size > 0) problems.push(...checkPackPointer(distDir, folder.name, pointerPath, prefix, externalPrefix, listed));
     }
+    /** Files present that the manifest lists with their SHA-256. */
+    const verified: string[] = [];
     for (const path of inside) {
       if (path === noticePath || path === manifestPath || path === pointerPath) continue;
       const sha256 = listed.get(path);
       if (sha256 === undefined) problems.push({ rule: 'map-folder', path, message: `${folder.name}: not listed in ${manifestPath}` });
       else if (createHash('sha256').update(readFileSync(join(distDir, path))).digest('hex') !== sha256) {
         problems.push({ rule: 'map-folder', path, message: `${folder.name}: SHA-256 differs from ${manifestPath}` });
-      }
+      } else verified.push(path);
     }
     const present = new Set(inside);
     const missing = [...listed.keys()].filter((path) => !present.has(path));
@@ -472,7 +474,10 @@ export function checkMapFolders(
       }
     }
     violations.push(...problems);
-    if (problems.length === 0) for (const path of listed.keys()) allowed.add(path);
+    // The images the folder vouches for: every listed one when it has no problem; otherwise the
+    // present files whose SHA-256 matches, so a partial set (thousands of tiles) is reported by the
+    // folder's own line and not once more per tile by the image rule (the final verification's nit).
+    for (const path of problems.length === 0 ? listed.keys() : verified) allowed.add(path);
   }
   return { allowedImages: allowed, violations, notes, recorded };
 }
@@ -655,7 +660,8 @@ export interface EntryChunkReport {
   readonly lazy: LazyChunksReport;
   /**
    * Scripts the entry or its lazy chunks emit as separate assets: module workers
-   * (`new Worker(new URL('./x.worker.ts', import.meta.url))`, such as the navigation worker). Vite
+   * (`new Worker(new URL(<the worker module>, import.meta.url))`, such as the navigation worker;
+   * written so because tools/terrain/lib/tool-tree.ts reads a literal path there as an import). Vite
    * lists them under the importing chunk's `assets`, not its imports. Reported, not gated.
    */
   readonly workers: readonly SizedFile[];

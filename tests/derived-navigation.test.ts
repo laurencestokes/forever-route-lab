@@ -163,7 +163,7 @@ describe('same-map transports on the committed navmesh (D-034 item 2, terrain-na
 });
 
 describe('inferred docks on the committed navmesh and taxi file (TIME-7; NAV-08, review TR-03, TR-06)', () => {
-  it("rides the Auberdine – Rut'theran boat from the file's inferred docks, and prices the swims beside the piers as walking", { timeout: 120_000 }, async () => {
+  it("rides the Auberdine – Rut'theran boat from the file's inferred docks, walking to and from their boarding points (D-050 item 4)", { timeout: 120_000 }, async () => {
     const server = fakeServer(site(new Map([...publicSite(), ...readDirectory('public/maps/client', 'maps/client/')])), BASE);
     const workspace = await loadWorkspace({ fetch: server.fetch, baseUrl: BASE, sha256: nodeSha256, nowIso: NOW, yieldToRender: () => Promise.resolve() });
     const taxiLoad = await createClientTables({ fetch: server.fetch, baseUrl: BASE, sha256: nodeSha256 }).taxi();
@@ -198,16 +198,21 @@ describe('inferred docks on the committed navmesh and taxi file (TIME-7; NAV-08,
     };
 
     // The navmesh snaps a berth to the water surface: the plain walk from Caylais Moonfeather to the
-    // 11616 Auberdine berth is a long swim, which the walker and the same-map rule count as walking.
+    // 11616 Auberdine berth is a long swim. The walks go to the dock's boarding point instead, on
+    // walkable ground 36.8 yd from the berth (TIME-7, src/rules/berths.ts), with no swim.
     const caylais = at(3841);
-    const auberdine = transportEdges(graph, 'stormwind-auberdine:0>1')[0]?.from.point ?? null;
+    const dock = transportEdges(graph, 'stormwind-auberdine:0>1')[0]?.from;
+    const auberdine = dock?.point ?? null;
     expect(auberdine).toEqual({ mapId: 1, x: 6548, y: 942 });
-    if (auberdine === null) throw new Error('no inferred Auberdine dock');
-    expect(await navigation.runtime.scheduler.computeLegs(model, [{ from: caylais, to: { point: auberdine, zoneHint: 0 } }])).toMatchObject({ complete: true });
+    expect(dock?.boarding).toEqual({ point: { mapId: 1, x: 6534, y: 908 }, fromBerthYd: 36.8 });
+    if (auberdine === null || dock?.boarding === undefined) throw new Error('no inferred Auberdine dock');
+    const boarding = { point: dock.boarding.point, zoneHint: 0 };
+    expect(await navigation.runtime.scheduler.computeLegs(model, [{ from: caylais, to: { point: auberdine, zoneHint: 0 } }, { from: caylais, to: boarding }])).toMatchObject({ complete: true });
     expect(model.leg(caylais, { point: auberdine, zoneHint: 0 }, speeds).warnings.some((warning) => warning.kind === 'long-swim')).toBe(true);
+    expect(model.leg(caylais, boarding, speeds)).toMatchObject({ method: 'navigation', pending: false, warnings: [] });
 
     // Innkeeper Shaussiy (Auberdine) to Vesprystus (Rut'theran Village): no walking path, so the
-    // boat from the inferred docks, with the walks to and from the berths counted as walking.
+    // boat from the inferred docks, walking to and from their boarding points.
     const inn = at(6737);
     const rutheran = at(3838);
     expect(sameMapTransports(graph, worldMapId(1)).map((edge) => edge.id)).toEqual(['rutheran-auberdine:0>1', 'rutheran-auberdine:1>0']);
@@ -217,8 +222,9 @@ describe('inferred docks on the committed navmesh and taxi file (TIME-7; NAV-08,
     expect(boat.seconds.basis).toBe('assumption');
     expect(boat.warnings.filter((warning) => warning.kind === 'long-swim')).toEqual([]);
 
-    // The walker's own transport step from Caylais to Stormwind: no SIM-21 for the berth walks, and
-    // the ride's fact (Details) names both inferred docks with their records.
+    // The walker's own transport step from Caylais to Stormwind: the walks end at the boarding
+    // points, with no swim and no SIM-21, and the ride's fact (Details) names both inferred docks
+    // with their records and their boarding points' distances from the berths.
     const ids = sequentialIdSource(9000);
     const location = (id: number): Location => {
       const source = spawnOf(id).source;
@@ -237,7 +243,10 @@ describe('inferred docks on the committed navmesh and taxi file (TIME-7; NAV-08,
       ['dock', 'navigation', false, []],
       ['step', 'navigation', false, []],
     ]);
-    expect(crossing?.legs[0]?.seconds.basis).toBe('assumption');
+    expect(crossing?.legs.map((leg) => [leg.to.point, leg.from.point])).toEqual([
+      [{ mapId: 1, x: 6534, y: 908 }, crossing?.legs[0]?.from.point],
+      [crossing?.legs[1]?.to.point, { mapId: 0, x: -8648, y: 1333 }],
+    ]);
     expect(issues.filter((issue) => issue.stepId === steps[1]?.id).map((issue) => issue.code)).not.toContain('SIM021-long-swim');
     expect(crossing?.estimate.facts).toContainEqual({
       kind: 'transport-ride',
@@ -245,10 +254,9 @@ describe('inferred docks on the committed navmesh and taxi file (TIME-7; NAV-08,
       edgeId: 'stormwind-auberdine:0>1',
       name: 'Stormwind Harbor – Auberdine ship',
       docks: [
-        { end: 'departure', name: 'Auberdine', pointFrom: 'inferred', record: 'client transport path 11616, stop 1 of 2' },
-        { end: 'arrival', name: 'Stormwind Harbor', pointFrom: 'inferred', record: 'client transport path 11616, stop 2 of 2' },
+        { end: 'departure', name: 'Auberdine', pointFrom: 'inferred', record: 'client transport path 11616, stop 1 of 2', boardingYd: 36.8 },
+        { end: 'arrival', name: 'Stormwind Harbor', pointFrom: 'inferred', record: 'client transport path 11616, stop 2 of 2', boardingYd: 12.5 },
       ],
-      berthWalk: true,
     });
 
     // Menethil and Southshore are one navmesh component (a swim across the water joins them), so

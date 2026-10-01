@@ -38,7 +38,8 @@ import { zoneRating, type ZoneRating, type ZoneSpan, type ZoneSpans } from './zo
  *   window); outside the window, with its reason.
  * - **Windows** (ASSUMPTIONs of the design, to tune with the owner): the level window is a required
  *   level at most the character's level + 3; the prerequisite window is a quest level above grey and
- *   at most the character's level + 4.
+ *   at most the character's level + 4. The map's level ceiling (D-050 item 3, an ASSUMPTION too)
+ *   keeps quests more than 5 levels above the character off the givers' layer; the lists keep them.
  * - **A lower-bound level** never locks a quest for level: its VAL-4 is a doubt, so the quest is
  *   "may be available" with the lower bound in words.
  * - **Turn-ins** (§7.5): ready when the walk marks every objective done; in progress when an accept
@@ -99,6 +100,14 @@ export const DRAWN_ROWS: ReadonlySet<QuestRow> = new Set<QuestRow>(['available',
 export const LEVEL_WINDOW = 3;
 /** The prerequisite window: a quest level at most this far above the character's, and above grey (§7.2, ASSUMPTION). */
 export const PREREQUISITE_WINDOW = 4;
+/**
+ * The map's level ceiling (D-050 item 3; review PR-18; ASSUMPTION): a quest whose level for the
+ * character is more than this many levels above the character's level after the step is not drawn
+ * among the quest givers, so level-60 repeatables and event quests do not fill a city at level 9.
+ * The Available tab still lists it, the layer notes count it, and a quest opened in Details or found
+ * by the drawer's search is drawn all the same. A quest of unknown level is never held back by it.
+ */
+export const DRAW_LEVEL_CEILING = 5;
 
 export type TurnInKind = 'ready' | 'in-progress' | 'record-unknown';
 
@@ -175,6 +184,8 @@ export interface QuestStateCounts {
   readonly ready: number;
   /** Log quests with open objectives placed on a map. */
   readonly objectives: number;
+  /** Quests of the rows drawn by default that the level ceiling keeps off the map (`DRAW_LEVEL_CEILING`); the lists still show them. */
+  readonly aboveCeiling: number;
 }
 
 /** What the givers' layer notes say it cannot draw (MAP-HONEST-4). */
@@ -225,6 +236,8 @@ export interface QuestStateModel {
   /** The active step: the state is the one after it. */
   readonly stepId: StepId;
   readonly stepIndex: number;
+  /** No step is selected, so `stepId` is the last step: the state at the end of the route (D-050 item 2; review PR-13). */
+  readonly atEnd: boolean;
   /** "Orc Warrior". */
   readonly who: string;
   /** The character's level after the step (the known-XP lower bound when `levelLowerBound`). */
@@ -258,6 +271,8 @@ export interface QuestStateInput {
   readonly revision: number;
   readonly stepId: StepId;
   readonly stepIndex: number;
+  /** The step is the last one because no step is selected (default false). */
+  readonly atEnd?: boolean;
   /** The character state after the active step (`SelectedStepState.after`). */
   readonly state: ReadonlyCharacterState;
   /** The walk's records, for the steps that complete the log quests' objectives. */
@@ -786,7 +801,7 @@ const n = (value: number): string => value.toLocaleString('en-GB');
 const counted = (value: number, one: string, many: string): string => `${n(value)} ${value === 1 ? one : many}`;
 
 /** The layer notes (§7.2's "counted in the notes by reason", MAP-HONEST-5), without step numbers. */
-function layerNotes(counts: QuestStateCounts, who: string, log: QuestStateModel['log'], giverNotes: GiverNotes, turnInNotes: TurnInNotes): QuestLayerNotes {
+function layerNotes(counts: QuestStateCounts, who: string, log: QuestStateModel['log'], giverNotes: GiverNotes, turnInNotes: TurnInNotes, levelLowerBound: boolean): QuestLayerNotes {
   const { rows, outside, classes } = counts;
   const givers = [
     `${counted(rows.available, 'quest', 'quests')} available, ${n(rows['may-be-available'])} may be available (uncertain) and ${n(rows['needs-prerequisite'])} need a prerequisite, open to ${withArticle(who)} (dataset quests).`,
@@ -801,6 +816,11 @@ function layerNotes(counts: QuestStateCounts, who: string, log: QuestStateModel[
     'level-unknown': 'have no known level',
     event: 'are holiday or event quests',
   };
+  if (counts.aboveCeiling > 0) {
+    givers.push(
+      `Not drawn by the level ceiling (an assumption): ${counted(counts.aboveCeiling, 'quest is', 'quests are')} more than ${String(DRAW_LEVEL_CEILING)} levels above the character's level${levelLowerBound ? ' (itself a lower bound)' : ''}; the Available tab lists ${counts.aboveCeiling === 1 ? 'it' : 'them'}.`,
+    );
+  }
   const reasons = OUTSIDE_REASONS.filter((reason) => outside[reason] > 0).map((reason) => `${n(outside[reason])} ${words[reason]}`);
   if (reasons.length > 0) givers.push(`Outside the windows: ${reasons.join(', ')}.`);
   if (log.full) givers.push(`The quest log is full (${n(log.size)} of ${n(log.capacity)}): nothing can be accepted until a quest is turned in.`);
@@ -947,8 +967,13 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
     if (entry.turnIn?.kind === 'ready') ready += 1;
   }
 
-  // The map's inputs.
-  const drawn = entries.filter((entry) => entry.row !== null && DRAWN_ROWS.has(entry.row));
+  // The map's inputs; the level ceiling keeps quests far above the character off the map (D-050 item 3).
+  const ceiling = characterLevel + DRAW_LEVEL_CEILING;
+  const aboveCeiling = (entry: QuestStateEntry): boolean => entry.level !== null && entry.level > ceiling;
+  const drawnByDefault = (entry: QuestStateEntry): boolean => entry.row !== null && DRAWN_ROWS.has(entry.row) && !aboveCeiling(entry);
+  const drawn = entries.filter(drawnByDefault);
+  let heldBack = 0;
+  for (const entry of entries) if (entry.row !== null && DRAWN_ROWS.has(entry.row) && aboveCeiling(entry)) heldBack += 1;
   const givers = placeGroups(dataset, drawn, (record) => record.starters, '', GIVER_RANK);
   const logEntries = entries.filter((entry) => entry.cls === 'in-log');
   const turnIns = placeGroups(dataset, logEntries, (record) => record.finishers, 'turn in ', TURN_IN_RANK);
@@ -1020,7 +1045,7 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
       .sort((a, b) => a - b)
       .flatMap((id) => {
         const entry = quests.get(id);
-        return entry === undefined || entry.cls === 'in-log' || entry.cls === 'done' || (entry.row !== null && DRAWN_ROWS.has(entry.row)) ? [] : [entry];
+        return entry === undefined || entry.cls === 'in-log' || entry.cls === 'done' || drawnByDefault(entry) ? [] : [entry];
       });
     const key = extra.map((entry) => String(entry.questId)).join(',');
     if (focused?.key !== key) focused = { key, input: { groups: placeGroups(dataset, extra, (record) => record.starters, '', GIVER_RANK).groups } };
@@ -1031,7 +1056,7 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
   let shownRows: { readonly key: string; readonly input: SpawnLayerInput } | null = null;
   let withFocused: { readonly extra: SpawnLayerInput; readonly input: SpawnLayerInput } | null = null;
   const giversFor = (rowsShown: ReadonlySet<QuestRow>, ids: readonly QuestId[]): SpawnLayerInput => {
-    const inRows = (entry: QuestStateEntry): boolean => entry.row !== null && entry.row !== 'turn-ins' && rowsShown.has(entry.row);
+    const inRows = (entry: QuestStateEntry): boolean => entry.row !== null && entry.row !== 'turn-ins' && rowsShown.has(entry.row) && !aboveCeiling(entry);
     const defaults = rowsShown.size === DRAWN_ROWS.size && [...DRAWN_ROWS].every((row) => rowsShown.has(row));
     if (defaults) {
       const extra = giversOf(ids);
@@ -1047,7 +1072,7 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
   };
 
   const capacity = rules.values.questLogCapacity.value;
-  const counts: QuestStateCounts = { classes, outside, rows, availableGivers: availableGivers.size, ready, objectives: objectives.quests };
+  const counts: QuestStateCounts = { classes, outside, rows, availableGivers: availableGivers.size, ready, objectives: objectives.quests, aboveCeiling: heldBack };
   const log = { size: state.questLog.size, capacity, full: state.questLog.size >= capacity };
   const giverNotes: GiverNotes = { itemStarted: givers.itemOnly, noStarter: givers.none, spawnlessGivers: givers.spawnlessGroups, spawnlessQuests: givers.spawnlessQuests };
   const turnInNotes: TurnInNotes = { unknownQuests, noPosition, spawnless: turnIns.spawnlessQuests };
@@ -1056,6 +1081,7 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
     revision: input.revision,
     stepId: input.stepId,
     stepIndex: input.stepIndex,
+    atEnd: input.atEnd ?? false,
     who,
     level: characterLevel,
     levelLowerBound: lowerBound,
@@ -1070,7 +1096,7 @@ export function questStateModel(input: QuestStateInput): QuestStateModel {
       turnIns: { groups: turnIns.groups },
       turnInNotes,
       log: objectives.input,
-      notes: layerNotes(counts, who, log, giverNotes, turnInNotes),
+      notes: layerNotes(counts, who, log, giverNotes, turnInNotes, lowerBound),
     },
     giversOf,
     giversFor,

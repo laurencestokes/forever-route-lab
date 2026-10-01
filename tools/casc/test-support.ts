@@ -602,7 +602,7 @@ export function synthLayout(fields: Wdc5Layout['fields'], options: Partial<Pick<
  * `tools/terrain/build.json` (step 3b.3) becomes the pin the build tools read; these tests keep
  * their own copy because their expected counts belong to this build only.
  */
-export const FOREVER_TEST_PIN = { product: 'wow_classic_beta', version: '1.60.1.70009', buildKey: '05215079e3905ef5922ae0b03ffefb73' } as const;
+export const FOREVER_TEST_PIN = { product: 'wow_classic_beta', version: '1.60.1.70124', buildKey: 'dd3dfc2881c407299f46c2aaf34c130b' } as const;
 
 export type ClientStatus = { readonly available: true; readonly install: string } | { readonly available: false; readonly reason: string };
 

@@ -208,6 +208,36 @@ describe('the labels canvas (map-presentation.md §5.5, §13)', () => {
     expect(s.adapter.renderStats().paths).toBe(2);
   });
 
+  it('keeps a label where it was placed while only its obstacles change, and places it again at the next view (§13.2; review PR-16)', () => {
+    const where = (): unknown => calls.filter((call) => call.name === 'fillText' && call.args[0] === 'Durotar').map((call) => [call.args[1], call.args[2]]).at(-1);
+    const focused: MarkerDescriptor = { ...giver(3143, GORNEK), emphasis: 'strong' };
+    const s = setup();
+    s.adapter.setViewport({ center: GORNEK, zoom: -2 });
+    s.adapter.setLayer('labels', content('labels', [zoneLabel('label:durotar', GORNEK, 'Durotar')]));
+    runFrames();
+    const before = where();
+    expect(before).toBeDefined();
+    // A selection change focuses the giver under the label (a hard obstacle): the label stays put.
+    calls.length = 0;
+    s.adapter.setLayer('available-quests', content('available-quests', [focused]));
+    s.adapter.refreshLabels();
+    runFrames();
+    expect(where()).toEqual(before);
+    // The next view places it again, clear of the focused pin: not where it would be without it.
+    const next = { center: { ...GORNEK, x: GORNEK.x + 40 }, zoom: -2 };
+    calls.length = 0;
+    s.adapter.setViewport(next);
+    runFrames();
+    const moved = where();
+    const plain = setup();
+    plain.adapter.setViewport(next);
+    plain.adapter.setLayer('labels', content('labels', [zoneLabel('label:durotar', GORNEK, 'Durotar')]));
+    calls.length = 0;
+    runFrames();
+    expect(moved).toBeDefined();
+    expect(moved).not.toEqual(where());
+  });
+
   it('numbers the beads at the zone and close bands after the frame, the active step first, never a stack', () => {
     const s = setup();
     const near = { ...GORNEK, x: GORNEK.x + 2 };

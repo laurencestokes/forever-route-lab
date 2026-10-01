@@ -62,7 +62,7 @@ export type SimFact =
   /**
    * TIME-7, engine: the transport a step rode, and where its docks' positions come from. Not an
    * issue: Details says it. An inferred dock carries its client record (map-presentation.md §10,
-   * MP-R32), and a berth's walk is priced as walking (`berthWalk`, `berthTravel`).
+   * MP-R32) and how far its boarding point is from the berth (`boardingYd`).
    */
   | {
       readonly kind: 'transport-ride';
@@ -71,8 +71,6 @@ export type SimFact =
       readonly edgeId: string;
       readonly name: string;
       readonly docks: readonly TransportDockFact[];
-      /** Whether a walk to or from an inferred berth was priced as walking (TIME-7). */
-      readonly berthWalk: boolean;
     }
   /** SIM-15 (TIME-9, TIME-12): objective or grind time that cannot be estimated. */
   | {
@@ -143,6 +141,12 @@ export interface TransportDockFact {
   readonly pointFrom: 'dock-npc' | 'user' | 'inferred' | null;
   /** For an inferred dock, "client transport path 11167, stop 2 of 3"; null otherwise. */
   readonly record: string | null;
+  /**
+   * For a client berth, the straight-line yards from the berth to its boarding point, where the
+   * walks end (TIME-7; the step between them is part of the wait); null for other docks and for a
+   * berth without a boarding point.
+   */
+  readonly boardingYd: number | null;
 }
 
 /**

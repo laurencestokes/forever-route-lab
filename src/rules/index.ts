@@ -1,3 +1,4 @@
+export * from './berths';
 export * from './difficulty';
 export * from './precedence';
 export * from './riding';

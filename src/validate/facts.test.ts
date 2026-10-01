@@ -75,7 +75,7 @@ describe('fact to issue', () => {
         { kind: 'mob-level-assumed', npcId: npcId(3098) },
         { kind: 'position-unknown', cause: 'start-unset' },
         { kind: 'objectives-before-accept', questId: questId(790), objectives: [0] },
-        { kind: 'transport-ride', transportId: 'stormwind-auberdine', edgeId: 'stormwind-auberdine:0>1', name: 'Stormwind Harbor – Auberdine ship', docks: [], berthWalk: true },
+        { kind: 'transport-ride', transportId: 'stormwind-auberdine', edgeId: 'stormwind-auberdine:0>1', name: 'Stormwind Harbor – Auberdine ship', docks: [] },
       ]),
     ).toEqual([]);
   });

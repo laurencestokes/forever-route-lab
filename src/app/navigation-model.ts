@@ -18,9 +18,9 @@ import { hasNavLegFlag, isWalkable, navLegRequest, NavigationPathCache, type Nav
  *   with both docks on the map, D-034 item 2) are tried: the walk to the departure dock from the
  *   table, the transport, the walk from the arrival dock; the cheapest wins, method
  *   `same-map-transport`, its basis combined by SIMULATION §8 (a transport time that is an
- *   assumption makes the total one). A walk to or from a client berth (`berths`, TIME-7) prices
- *   its swim at the ground speed and raises no long-swim. Without one: the fallback plus
- *   `no-walking-path`.
+ *   assumption makes the total one). A client berth's dock endpoint is its boarding point on
+ *   walkable ground (TIME-7, src/rules/berths.ts), so its walks need no rule of their own. Without
+ *   one: the fallback plus `no-walking-path`.
  * - **An endpoint with no polygon within 6 yd:** the fallback plus `off-navmesh`.
  * - **A map without navigation data**, or one whose files failed closed: the fallback, for good
  *   (not pending, no warning), as the straight-line model itself would give.
@@ -45,12 +45,6 @@ export interface SameMapTransport {
   readonly to: TravelEndpoint;
   /** Wait plus ride, with the transport's own basis. */
   readonly seconds: Estimated<number>;
-  /**
-   * Which docks are client berths, the committed taxi file's inferred stops (SIMULATION TIME-7):
-   * a walk to or from one prices its swim as the walk along the pier and raises no long-swim.
-   * Absent: neither.
-   */
-  readonly berths?: { readonly from: boolean; readonly to: boolean };
 }
 
 /** The directed same-map transport edges of a map (both directions listed separately). */
@@ -96,22 +90,16 @@ function entrySeconds(e: NavLegEntry, speeds: TravelSpeeds): number | null {
   return ground + swim + e.c / 10;
 }
 
-/**
- * The warnings of one or more walkable entries (passages merged, the longest swim kept); the
- * entries in `berthWalks` (walks to or from a client berth, TIME-7) raise no long-swim.
- */
-function warningsOf(entries: readonly NavLegEntry[], berthWalks: readonly NavLegEntry[] = []): TravelWarning[] {
+/** The warnings of one or more walkable entries (passages merged, the longest swim kept). */
+function warningsOf(entries: readonly NavLegEntry[]): TravelWarning[] {
   const out: TravelWarning[] = [];
   const passages = [...new Set(entries.flatMap((e) => (hasNavLegFlag(e.flags, 'unverifiedPassage') ? e.passages : [])))];
   if (passages.length > 0) out.push({ kind: 'unverified-passage', passages });
   if (entries.some((e) => hasNavLegFlag(e.flags, 'ambiguousFloor'))) out.push({ kind: 'ambiguous-floor' });
-  const swims = entries.filter((e) => hasNavLegFlag(e.flags, 'longSwim') && !berthWalks.includes(e)).map((e) => e.swimRun);
+  const swims = entries.filter((e) => hasNavLegFlag(e.flags, 'longSwim')).map((e) => e.swimRun);
   if (swims.length > 0) out.push({ kind: 'long-swim', longestSwimYd: Math.max(...swims) / 10 });
   return out;
 }
-
-/** A client berth's walk (TIME-7): its swim at the ground speed, standing for the walk along the pier. */
-const berthSpeeds = (speeds: TravelSpeeds): TravelSpeeds => ({ groundYps: speeds.groundYps, swimYps: speeds.groundYps });
 
 /** The warnings of an entry with no flags: shared, so the common leg allocates none. */
 const NO_WARNINGS: readonly TravelWarning[] = [];
@@ -164,7 +152,7 @@ export function createNavigationTravelModel(options: NavigationTravelModelOption
    * in the table yet (it records those); null when no composition exists.
    */
   const viaTransport = (from: TravelEndpoint, to: TravelEndpoint, speeds: TravelSpeeds): TravelLeg | 'pending' | null => {
-    let best: { total: number; transport: SameMapTransport; walks: readonly NavLegEntry[]; berthWalks: readonly NavLegEntry[] } | null = null;
+    let best: { total: number; transport: SameMapTransport; walks: readonly NavLegEntry[] } | null = null;
     let pending = false;
     for (const t of docksOn(from.point.mapId)) {
       if (t.seconds.value === null || t.seconds.basis === 'unknown') continue;
@@ -179,14 +167,11 @@ export function createNavigationTravelModel(options: NavigationTravelModelOption
         continue;
       }
       if (!isWalkable(e1) || !isWalkable(e2)) continue;
-      const fromBerth = t.berths?.from === true;
-      const toBerth = t.berths?.to === true;
-      const w1 = entrySeconds(e1, fromBerth ? berthSpeeds(speeds) : speeds);
-      const w2 = entrySeconds(e2, toBerth ? berthSpeeds(speeds) : speeds);
+      const w1 = entrySeconds(e1, speeds);
+      const w2 = entrySeconds(e2, speeds);
       if (w1 === null || w2 === null) continue;
       const total = w1 + t.seconds.value + w2;
-      const berthWalks = [...(fromBerth ? [e1] : []), ...(toBerth ? [e2] : [])];
-      if (best === null || total < best.total) best = { total, transport: t, walks: [e1, e2], berthWalks };
+      if (best === null || total < best.total) best = { total, transport: t, walks: [e1, e2] };
     }
     // A walk still missing could make another transport cheaper: until all are known, the leg is
     // pending and its seconds are the fallback's (the TravelLeg contract).
@@ -197,7 +182,7 @@ export function createNavigationTravelModel(options: NavigationTravelModelOption
       seconds: basis === 'unknown' ? unknownEstimate() : estimate(best.total, basis, best.transport.seconds.eraFallback),
       method: 'same-map-transport',
       pending: false,
-      warnings: warningsOf(best.walks, best.berthWalks),
+      warnings: warningsOf(best.walks),
     };
   };
 

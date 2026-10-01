@@ -47,7 +47,6 @@ import type {
   RouteStepInput,
   SpawnLayerInput,
   StepPlacement,
-  MarkerMark,
   ZoneFillDescriptor,
 } from './adapter';
 import {
@@ -96,11 +95,8 @@ import {
   flightsKept,
   spawnLayerAggregatesIn,
   viewLodLevel,
+  type ClustersOf,
   type LayerCall,
-  categoryOfMarkState,
-  clusterLabel,
-  CLUSTER_LEVELS,
-  clusterLevelAt,
 } from './layers';
 
 const geometry = fixtureGeometry();
@@ -872,6 +868,21 @@ describe('createMapLayers (memoised per layer)', () => {
     expect(focused).not.toBe(continent);
     // On the Eastern Kingdoms only the Stormwind City point is drawn.
     expect(ids(layers.spawns('objectives', givers, view(0)))).toEqual(['spawn:npc:100:2']);
+  });
+  it('keys a spawn layer on the groups a focus holds, not its quests: a focus on none of its groups changes nothing (D-050 item 5)', () => {
+    const layers = createMapLayers({ geometry });
+    const plain = layers.spawns('available-quests', givers, view(1));
+    // A quest no giver of this layer offers: the same content object, nothing collected again.
+    expect(layers.spawns('available-quests', givers, view(1), [questId(99999)])).toBe(plain);
+    const focused = layers.spawns('available-quests', givers, view(1), [GORNEK_QUEST]);
+    expect(focused).not.toBe(plain);
+    // Only the focused group's markers change, to strong: every other descriptor is the same object.
+    const changed = focused.items.filter((item) => !plain.items.includes(item));
+    expect(changed.length).toBeGreaterThan(0);
+    expect(changed.every((item) => item.type === 'marker' && item.emphasis === 'strong')).toBe(true);
+    expect(focused.items.length).toBe(plain.items.length);
+    // And back: the plain markers again, as they were.
+    expect(layers.spawns('available-quests', givers, view(1)).items).toEqual(plain.items);
   });
 
   it('keeps unchanged descriptors (and the items array) when only stats change', () => {
@@ -1836,21 +1847,22 @@ describe('MapLayers.prebuild (map-atlas.md §8.2: the other band in idle time)',
     const zone = worldView(MAP_1, -3.2);
     const drawn = layers.part(call, continent).finish();
     const collected = reads();
-    // Built ahead: collected once, the drawn content untouched.
+    // Built ahead, from the points the builder already holds for this input (its `SpawnBase`): the
+    // input is not read again, and the drawn content is untouched.
     expect(layers.prebuild(call, zone)).toBe(true);
-    expect(reads()).toBe(collected + 1);
+    expect(reads()).toBe(collected);
     expect(layers.part(call, continent).finish()).toBe(drawn);
     // Already there: nothing to do.
     expect(layers.prebuild(call, zone)).toBe(false);
     expect(layers.prebuild(call, continent)).toBe(false);
     // The crossing finds it: no collect, and the zone band's raw points.
     const crossed = layers.part(call, zone).finish();
-    expect(reads()).toBe(collected + 1);
+    expect(reads()).toBe(collected);
     expect(crossed.items.every((item) => item.type === 'marker')).toBe(true);
     expect(drawn.items.every((item) => item.type === 'aggregate')).toBe(true);
     // And back across: the previous band is kept as the spare, so nothing is collected either.
     expect(layers.part(call, continent).finish().items).toEqual(drawn.items);
-    expect(reads()).toBe(collected + 1);
+    expect(reads()).toBe(collected);
   });
 
   // Review MR-01: the padded view doubles with each zoom level, so a band crossing on the atlas
@@ -1956,9 +1968,12 @@ describe('per-band budgets (map-presentation.md §5.2, §25.7; D-047)', () => {
     const folded = buildSpawnLayer(ctx, 'objectives', givers, { ...view(1, -3.45), band: 'continent' });
     expect(folded.stats.aggregated).toBeGreaterThan(0);
     expect(folded.items.every((item) => item.type === 'aggregate')).toBe(true);
-    // Quest givers cluster there instead (map-presentation.md §25.2.5), and not at the zone band.
-    expect(buildSpawnLayer(ctx, 'available-quests', givers, { ...view(1, -3.45), band: 'continent' }).stats.clustered).toBeTypeOf('number');
-    expect(buildSpawnLayer(ctx, 'available-quests', givers, { ...view(1, -3.45), band: 'zone' }).stats.clustered).toBeUndefined();
+    // Quest givers cluster there instead (map-presentation.md §25.2.5) when the pipeline has handed
+    // their clusters (app/map-clusters.ts; here a source with no cells), and not at the zone band.
+    const noCells: ClustersOf = () => ({ cells: () => [], cluster: () => { throw new Error('no cell'); } });
+    expect(buildSpawnLayer(ctx, 'available-quests', givers, { ...view(1, -3.45), band: 'continent' }, [], null, noCells).stats.clustered).toBe(0);
+    expect(buildSpawnLayer(ctx, 'available-quests', givers, { ...view(1, -3.45), band: 'continent' }).stats.clustered).toBeUndefined();
+    expect(buildSpawnLayer(ctx, 'available-quests', givers, { ...view(1, -3.45), band: 'zone' }, [], null, noCells).stats.clustered).toBeUndefined();
     expect(spawnLayerAggregatesIn('available-quests', { zoom: -3.45, band: 'world' })).toBe(true);
     expect(spawnLayerAggregatesIn('available-quests', { zoom: -3.45, band: 'close' })).toBe(false);
     expect(spawnLayerAggregatesIn('flight-masters', { zoom: -6, band: 'world' })).toBe(false);
@@ -2176,180 +2191,6 @@ describe('the log’s objectives under the budget (map-presentation.md §7.4)', 
     expect(ids(content)).toContain('area:2:x:0');
     expect(ids(content)).toContain('count:2:npc:5:x');
     expect(content.stats.notDrawn).toBe(22);
-  });
-});
-
-// Clusters (step MP.4a) -------------------------------------------------------------------------
-
-describe('clusters below the zone band (map-presentation.md §25.2.5)', () => {
-  /*
-   * Clusters below the zone band (docs/research/map-presentation.md §25.2.5; D-047; step MP.4a): quest
-   * givers and turn-ins fold into the cells of a nested yard grid (512, 1,024, 2,048, 4,096 yd), each
-   * cluster anchored at a member, counting quests, places and points, coloured by the group rule; the
-   * cap applies to clusters and never trims one.
-   */
-
-  const geometry = fixtureGeometry();
-  const ctx = layerContextOf(geometry);
-  const KALIMDOR = worldMapId(1);
-  const DUROTAR = uiMapId(1411);
-
-  const spawnAt = (x: number, y: number): SpawnPoint => ({
-    source: { space: 'world', mapId: KALIMDOR, x, y, uiMapId: DUROTAR, lexemes: null },
-    world: { mapId: KALIMDOR, x, y },
-    uiMapId: DUROTAR,
-  });
-
-  const mark = (state: MarkerMark['state'], difficulty: MarkerMark['difficulty'] = 'standard'): MarkerMark => ({ state, difficulty, dungeonQuest: false, progress: null });
-
-  /** A giver at (x, y) with its quests and their states. */
-  function giver(id: number, x: number, y: number, quests: readonly (readonly [number, MarkerMark | null])[]): PointGroupInput {
-    const best = quests[0]?.[1] ?? null;
-    return {
-      subject: { kind: 'npc', id: npcId(id) },
-      label: `Giver ${String(id)}`,
-      questIds: quests.map(([q]) => questId(q)),
-      spawns: [spawnAt(x, y)],
-      quests: quests.map(([q, m]) => ({ questId: questId(q), mark: m })),
-      ...(best === null ? {} : { mark: best }),
-    };
-  }
-
-  /** A continent-band view at the zoom where a level is used, centred on the points. */
-  const at = (zoom: number) => ({ mapId: KALIMDOR, zoom, center: { x: 1000, y: -4000 }, band: 'continent' as const });
-
-  const clusters = (items: readonly unknown[]): MarkerDescriptor[] => items.filter((item): item is MarkerDescriptor => (item as MarkerDescriptor).cluster !== undefined);
-
-  describe('cluster levels (§25.2.5)', () => {
-    it('uses the power of two at or above 1.25 D in yards: 1,024 over most of the continent band, 512 at its top, 2,048 or more in the world band', () => {
-      expect(CLUSTER_LEVELS).toEqual([512, 1024, 2048, 4096]);
-      expect(clusterLevelAt(Math.log2(0.022))).toBe(1024);
-      expect(clusterLevelAt(Math.log2(0.0325))).toBe(1024);
-      expect(clusterLevelAt(Math.log2(0.06))).toBe(512);
-      expect(clusterLevelAt(Math.log2(0.087))).toBe(512);
-      expect(clusterLevelAt(Math.log2(0.01))).toBe(2048);
-      expect(clusterLevelAt(Math.log2(0.004))).toBe(4096);
-      expect(clusterLevelAt(-12)).toBe(4096);
-    });
-  });
-
-  describe('clusters of quest givers and turn-ins (§25.2.5)', () => {
-    // Three givers within one 1,024 yd cell (x 0 to 1,024, y −4,096 to −3,072), one far away.
-    const input: SpawnLayerInput = {
-      groups: [
-        giver(1, 100, -3500, [
-          [11, mark('available', 'standard')],
-          [12, mark('uncertain', 'standard')],
-        ]),
-        giver(2, 200, -3600, [[21, mark('available', 'standard')]]),
-        giver(3, 320, -3400, [[11, mark('available', 'standard')]]),
-        giver(4, 9000, -3500, [[41, mark('available', 'difficult')]]),
-      ],
-    };
-    const zoom = Math.log2(0.03);
-
-    it('folds a cell’s points into one cluster anchored at the member nearest their centroid, counting quests, places and points', () => {
-      const content = buildSpawnLayer(ctx, 'available-quests', input, at(zoom));
-      const [cluster] = clusters(content.items);
-      if (cluster?.cluster === undefined) throw new Error('no cluster');
-      // Quests 11, 12 and 21: quest 11 has two givers here, and counts once.
-      expect(cluster.cluster.members.map((member) => member.questId)).toEqual([11, 21, 12]);
-      expect(cluster.cluster).toMatchObject({ places: 3, points: 3, cellYards: 1024 });
-      expect(cluster.cluster.members[0]?.subjects).toEqual(['npc:1', 'npc:3']);
-      // The anchor is a real giver's point: the one nearest the centroid (206.7, −3,500).
-      expect(cluster.point).toMatchObject({ x: 200, y: -3600 });
-      expect(cluster.ref).toMatchObject({ kind: 'cluster', layer: 'available-quests', quests: 3, places: 3, bounds: { xMin: 100, xMax: 320, yMin: -3600, yMax: -3400 } });
-      expect(cluster.refs).toEqual([cluster.ref]);
-      // Best state first: the pin's glyph and badge are the first member's, its category too.
-      expect(cluster.mark?.state).toBe('available');
-      expect(cluster.category).toBe('available');
-      // The lone far giver is its own pin, not a cluster of one.
-      expect(content.items.find((item) => item.id === 'spawn:npc:4:0')).toMatchObject({ type: 'marker', mark: { state: 'available' } });
-      expect(content.stats).toMatchObject({ clustered: 3, aggregated: 0, drawn: 2 });
-    });
-
-    it('words its hover with its quests’ states and difficulties, and its turn-ins as places', () => {
-      const content = buildSpawnLayer(ctx, 'available-quests', input, at(zoom));
-      expect(clusters(content.items)[0]?.label).toBe('3 quests at 3 givers near here: 2 available, 1 may be available; 3 standard. Zoom in to separate them.');
-      const members = [
-        { questId: questId(1), mark: mark('ready', 'standard'), category: 'turn-ins' as const, subjects: ['npc:1'] },
-        { questId: questId(2), mark: mark('in-progress', null), category: 'turn-ins' as const, subjects: ['npc:2'] },
-      ];
-      expect(clusterLabel('turn-ins', members, 2)).toBe('2 quests to turn in at 2 places near here: 1 ready, 1 in progress; 1 standard, 1 of unknown difficulty. Zoom in to separate them.');
-      // Without route state: no state words.
-      expect(clusterLabel('available-quests', [{ questId: questId(1), mark: null, category: 'available', subjects: ['npc:1'] }], 2)).toBe('1 quest at 2 givers near here. Zoom in to separate them.');
-    });
-
-    it('nests: every level’s clusters split only where a cell halves, never on a pan', () => {
-      const many: SpawnLayerInput = {
-        groups: Array.from({ length: 40 }, (_, i) => giver(100 + i, 900 + (i % 8) * 190, -4500 + Math.floor(i / 8) * 210, [[1000 + i, mark('available', 'standard')]])),
-      };
-      const memberSets = (level: number): Set<string>[] => {
-        const zoomFor = { 512: Math.log2(0.07), 1024: Math.log2(0.03), 2048: Math.log2(0.01), 4096: Math.log2(0.004) }[level] ?? 0;
-        expect(clusterLevelAt(zoomFor)).toBe(level);
-        const content = buildSpawnLayer(ctx, 'available-quests', many, { ...at(zoomFor), band: zoomFor < Math.log2(0.022) ? 'world' : 'continent' });
-        return content.items.map((item) => new Set((item as MarkerDescriptor).cluster?.members.map((member) => String(member.questId)) ?? (item as MarkerDescriptor).refs.flatMap((ref) => (ref.kind === 'spawn' ? ref.questIds.map(String) : []))));
-      };
-      for (const [fine, coarse] of [
-        [512, 1024],
-        [1024, 2048],
-        [2048, 4096],
-      ] as const) {
-        const coarser = memberSets(coarse);
-        for (const set of memberSets(fine)) expect(coarser.some((big) => [...set].every((id) => big.has(id))), `${String(fine)} in ${String(coarse)}`).toBe(true);
-      }
-      // A pan changes no cluster: the grid is fixed in yards.
-      const a = buildSpawnLayer(ctx, 'available-quests', many, at(Math.log2(0.03)));
-      const b = buildSpawnLayer(ctx, 'available-quests', many, { ...at(Math.log2(0.03)), center: { x: 5000, y: 3000 } });
-      expect([...a.items].map((item) => item.id).sort()).toEqual([...b.items].map((item) => item.id).sort());
-    });
-
-    it('applies the cap to clusters, never trimming one: every drawn cluster’s count is whole, and the note counts the rest', () => {
-      const spread: SpawnLayerInput = {
-        groups: Array.from({ length: 12 }, (_, i) => [giver(200 + 2 * i, i * 3000, -4000, [[2000 + 2 * i, mark('available')]]), giver(201 + 2 * i, i * 3000 + 50, -4000, [[2001 + 2 * i, mark('available')]])]).flat(),
-      };
-      const small = layerContextOf(geometry, createLod({ budgets: { 'available-quests': 5 } }));
-      const content = buildSpawnLayer(small, 'available-quests', spread, at(Math.log2(0.03)));
-      expect(content.items).toHaveLength(5);
-      expect(content.stats.notDrawn).toBe(7);
-      for (const item of clusters(content.items)) expect(item.cluster?.members).toHaveLength(2);
-    });
-
-    it('makes every level once per input, so a zoom across levels is a lookup (review UR-06)', () => {
-      let reads = 0;
-      const groups = input.groups;
-      const counted: SpawnLayerInput = {
-        get groups() {
-          reads += 1;
-          return groups;
-        },
-      };
-      const layers = createMapLayers({ geometry });
-      const call = { layer: 'available-quests' as const, input: counted, focusQuests: [], rawZone: null };
-      layers.part(call, at(Math.log2(0.03))).finish();
-      const after = reads;
-      for (const z of [Math.log2(0.07), Math.log2(0.01), Math.log2(0.004), Math.log2(0.03)]) layers.part(call, { ...at(z), band: z < Math.log2(0.022) ? 'world' : 'continent' }).finish();
-      expect(reads).toBe(after);
-      // Each level's content is its own: at 512 yd the three givers fall into two cells.
-      expect(clusters(layers.part(call, at(Math.log2(0.07))).finish().items).map((item) => item.cluster?.cellYards)).toEqual([512]);
-      expect(clusters(layers.part(call, at(Math.log2(0.03))).finish().items).map((item) => item.cluster?.cellYards)).toEqual([1024]);
-    });
-
-    it('keeps the focused quests’ points raw and strong, outside the clusters', () => {
-      const content = buildSpawnLayer(ctx, 'available-quests', input, at(zoom), [questId(21)]);
-      expect(content.items.find((item) => item.id === 'spawn:npc:2:0')).toMatchObject({ emphasis: 'strong' });
-      expect(clusters(content.items)[0]?.cluster?.members.map((member) => member.questId)).toEqual([11, 12]);
-    });
-
-    it('files each item under its drawer row (§25.3.2): quest givers by their state', () => {
-      // The builder's table matches the adapter's (map-categories.test.ts compares them, as map/layers may not import map/adapter).
-      expect(categoryOfMarkState('locked')).toBe('needs-prerequisite');
-      expect(categoryOfMarkState(null)).toBe('available');
-      const content = buildSpawnLayer(ctx, 'available-quests', { groups: [giver(9, 0, 0, [[9, mark('locked')]])] }, { mapId: KALIMDOR, zoom: -2, center: null });
-      expect(content.items[0]).toMatchObject({ category: 'needs-prerequisite' });
-      expect(buildSpawnLayer(ctx, 'turn-ins', { groups: [giver(9, 0, 0, [[9, mark('ready')]])] }, { mapId: KALIMDOR, zoom: -2, center: null }).items[0]).toMatchObject({ category: 'turn-ins' });
-      expect(buildSpawnLayer(ctx, 'flight-masters', { groups: [giver(9, 0, 0, [])] }, { mapId: KALIMDOR, zoom: -2, center: null }).items[0]).toMatchObject({ category: 'flight-points' });
-    });
   });
 });
 

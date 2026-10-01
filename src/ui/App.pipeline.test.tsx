@@ -35,7 +35,7 @@ function setup() {
   });
   render(
     <DerivedStoreProvider store={handle.store}>
-      <App store={store} data={workspace.data} projectName="Pipeline test" version="0.0.0-test" sourceCommit={null} />
+      <App store={store} data={workspace.data} projectName="Pipeline test" version="0.0.0-test" sourceCommit={null} selectOnOpen={false} />
     </DerivedStoreProvider>,
   );
   return { store, handle, pipeline, timers };

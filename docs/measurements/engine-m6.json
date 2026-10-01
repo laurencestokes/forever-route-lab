@@ -787,6 +787,116 @@
         "median": 38.58,
         "p90": 52.42
       }
+    },
+    "d050Recheck": {
+      "$comment": "D-050 item 5 (2026-09-30): the baseline above is unchanged. The tree walks at the speed of eff4341 (an interleaved A/B, five pairs); --check now divides each median by the CPU probe (× 40 / probe), as the engine and validate benches do. Details in rework-speed-d050.json (nodeBenches.derived).",
+      "ab": {
+        "head": {
+          "firstWalk": {
+            "median": 57,
+            "min": 44,
+            "max": 68.6,
+            "n": 5
+          },
+          "editStart": {
+            "median": 32.2,
+            "min": 25.3,
+            "max": 35.5,
+            "n": 5
+          },
+          "editMiddle": {
+            "median": 19.8,
+            "min": 12.5,
+            "max": 24.1,
+            "n": 5
+          },
+          "classChange": {
+            "median": 72.1,
+            "min": 66,
+            "max": 84.8,
+            "n": 5
+          },
+          "classToggle": {
+            "median": 48.6,
+            "min": 41.7,
+            "max": 51.6,
+            "n": 5
+          },
+          "navEditStart": {
+            "median": 50.6,
+            "min": 42.5,
+            "max": 56.1,
+            "n": 5
+          },
+          "navEditMiddle": {
+            "median": 26.5,
+            "min": 22,
+            "max": 28.8,
+            "n": 5
+          },
+          "taxiArrives": {
+            "median": 55,
+            "min": 48.3,
+            "max": 57,
+            "n": 5
+          }
+        },
+        "tree": {
+          "firstWalk": {
+            "median": 57.2,
+            "min": 46.5,
+            "max": 67.8,
+            "n": 5
+          },
+          "editStart": {
+            "median": 31.2,
+            "min": 25.7,
+            "max": 39,
+            "n": 5
+          },
+          "editMiddle": {
+            "median": 20.8,
+            "min": 15.7,
+            "max": 21,
+            "n": 5
+          },
+          "classChange": {
+            "median": 71.7,
+            "min": 64.7,
+            "max": 78.5,
+            "n": 5
+          },
+          "classToggle": {
+            "median": 47.3,
+            "min": 42.3,
+            "max": 49.7,
+            "n": 5
+          },
+          "navEditStart": {
+            "median": 48.5,
+            "min": 40.4,
+            "max": 57.5,
+            "n": 5
+          },
+          "navEditMiddle": {
+            "median": 26.6,
+            "min": 22.1,
+            "max": 34.6,
+            "n": 5
+          },
+          "taxiArrives": {
+            "median": 52.5,
+            "min": 48.6,
+            "max": 63.7,
+            "n": 5
+          }
+        }
+      },
+      "checkVerdicts": [
+        "CPU probe 48.18 ms (reference 40 ms): medians × 0.83 | Slower than the stored baseline by more than 25%: |   editMiddle: 17.4 ms normalised (20.96 ms at probe 48.18 ms), baseline 13.4 ms (+30%) |   classChange: 66.58 ms normalised (80.2 ms at probe 48.18 ms), baseline 51.49 ms (+29%) |   navEditStart: 36.3 ms normalised (43.72 ms at probe 48.18 ms), baseline 27.02 ms (+34%)",
+        "CPU probe 47.97 ms (reference 40 ms): medians × 0.83 | Slower than the stored baseline by more than 25%: |   classChange: 65.92 ms normalised (79.05 ms at probe 47.97 ms), baseline 51.49 ms (+28%) |   navEditStart: 35.87 ms normalised (43.02 ms at probe 47.97 ms), baseline 27.02 ms (+33%)",
+        "CPU probe 47.94 ms (reference 40 ms): medians × 0.83 | Slower than the stored baseline by more than 25%: |   classChange: 65.42 ms normalised (78.41 ms at probe 47.94 ms), baseline 51.49 ms (+27%) |   navEditStart: 34 ms normalised (40.75 ms at probe 47.94 ms), baseline 27.02 ms (+26%)"
+      ]
     }
   }
 }

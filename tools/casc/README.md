@@ -34,7 +34,7 @@ import { resolveInstall } from './paths';
 const casc = LocalCasc.open({
   install: resolveInstall(),
   product: 'wow_classic_beta',
-  pin: { product: 'wow_classic_beta', version: '1.60.1.70009', buildKey: '05215079e3905ef5922ae0b03ffefb73' }, // optional; gate G1
+  pin: { product: 'wow_classic_beta', version: '1.60.1.70124', buildKey: 'dd3dfc2881c407299f46c2aaf34c130b' }, // optional; gate G1
 });
 const wdt = casc.file(782779);   // CascFile; throws CascError on any problem
 casc.close();
@@ -71,7 +71,7 @@ const parent = areas.byId.get(363)?.num('ParentAreaID');             // 14 (Duro
 
 | Member | Meaning |
 |---|---|
-| `DB2` (`layouts.ts`, generated) | `DB2.<Table>` = `{ fileDataId, layout }` for AreaTable, GameObjects, LiquidType, Map, TransportAnimation, UiMap, UiMapArt, UiMapArtStyleLayer, UiMapArtTile, UiMapAssignment, UiMapXMapArt, WMOAreaTable, WorldMapOverlay, WorldMapOverlayTile at build 1.60.1.70009 (`LAYOUT_BUILD`) |
+| `DB2` (`layouts.ts`, generated) | `DB2.<Table>` = `{ fileDataId, layout }` for AreaTable, GameObjects, LiquidType, Map, TransportAnimation, UiMap, UiMapArt, UiMapArtStyleLayer, UiMapArtTile, UiMapAssignment, UiMapXMapArt, WMOAreaTable, WorldMapOverlay, WorldMapOverlayTile from WoWDBDefs' 1.60.1.70009 blocks (`LAYOUT_BUILD`). The client pin is 1.60.1.70124 (since 2026-09-30, D-050): its files carry the same layout hashes, which `parseWdc5` checks on every read |
 | `readDb2(casc, table, { requireComplete? })` | Reads the file with `zero-fill` and parses it with its layout and the zero-filled ranges |
 | `parseWdc5(bytes, layout, { encryptedRanges?, requireComplete? })` | The WDC5 parser behind it (`wdc5.ts`) |
 | `Wdc5Table` | `{ layout, header, sections, storage, rows, byId, skippedSections }`. `rows` is in file order (section, record), then copy-table rows. |
@@ -140,7 +140,7 @@ Most callers never need these; they are exported for tests and tools:
 | `casc.test.ts` | A whole synthetic install (`test-support.ts`): open, files, headerless and placeholder entries, encryption, corruption, pin; install paths; the source discipline scan (G16) |
 | `wdc5.test.ts` | Synthetic WDC5 tables for every storage type, strings across sections, encrypted sections, layout checks; the DBD reader |
 | `layouts.test.ts` | The generated layouts' shape; the committed file against the generator (skipped with a banner without the research copies) |
-| `casc.client.test.ts` | Against the pinned client at `WOW_INSTALL`: §2.1's counts, the WDTs, Map, AreaTable, WMOAreaTable, LiquidType, and the CSV comparison. Without the client it prints a `SKIPPED` banner to stderr and passes. |
+| `casc.client.test.ts` | Against the pinned client at `WOW_INSTALL`: §2.1's counts, the WDTs, Map, AreaTable, WMOAreaTable, LiquidType, and the CSV comparison (the 1.60.1.70009 CSVs, run only while the ten tables keep their 70009 CKeys). Without the client it prints a `SKIPPED` banner to stderr and passes. |
 
 `test-support.ts` also exports `pinnedClientStatus()`, `announceSkip()` and `FOREVER_TEST_PIN`
 for other tools' client tests (for example `tools/terrain/lib/terrain.client.test.ts`).

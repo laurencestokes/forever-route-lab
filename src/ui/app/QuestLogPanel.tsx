@@ -20,7 +20,7 @@ import {
   QuestObjectiveRow,
   type QuestRowAction,
 } from '../kit';
-import { noResultsReason, questLogCountOf, questLogWords, sameQuestLogCount } from './derived-view';
+import { noResultsReason, questLogCountOf, questLogWhere, questLogWords, sameQuestLogCount } from './derived-view';
 import type { QuestActions } from './QuestDetails';
 import { selectCharacter } from './selectors';
 
@@ -50,7 +50,8 @@ const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text
 const selectSelected = (s: DerivedState | null) => s?.selected ?? null;
 const selectWhy = (s: DerivedState | null): string => {
   if (s === null || s.results === null) return noResultsReason(s);
-  return s.selected === null ? 'Select a step to see the quest log after it' : 'Working out the state after the selected step';
+  // With no step selected the log is the last step's (D-050 item 2), so only an empty route has none.
+  return s.selected === null && s.results.project.route.steps.length === 0 ? 'The route has no steps yet' : 'Working out the state after the selected step';
 };
 
 export interface QuestLogPanelProps {
@@ -88,17 +89,18 @@ export const QuestLogPanel = memo(function QuestLogPanel({ store, view, dataset,
   }
   const words = questLogWords(count, stepNumber, character.priorHistory, why);
   const step = formatInteger(stepNumber);
+  const where = questLogWhere(selected, stepNumber);
   const level = selected.after.level;
   const unavailable = questActions?.unavailable ?? null;
   const add = questActions?.add;
   const entries = [...selected.after.questLog.entries()];
   return (
-    <PanelSection title={`Quest log after step ${step}`} aside={<span className="frl-num" title={words.detail}>{words.text}</span>}>
+    <PanelSection title={selected.atEnd ? 'Quest log at the end of the route' : `Quest log after step ${step}`} aside={<span className="frl-num" title={words.detail}>{words.text}</span>}>
       <p className="frl-app-hint">{words.detail}</p>
       {entries.length === 0 ? (
-        <p className="frl-app-hint">{`No quests in the log after step ${step}.`}</p>
+        <p className="frl-app-hint">{`No quests in the log ${where}.`}</p>
       ) : (
-        <QuestGrid label={`Quest log after step ${step}`}>
+        <QuestGrid label={`Quest log ${where}`}>
           {entries.flatMap(([id, entry]) => {
             const record = dataset.quest(id);
             const state = logQuestState(entry, record);

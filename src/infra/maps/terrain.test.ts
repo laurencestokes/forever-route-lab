@@ -30,7 +30,7 @@ const fileOf = (mapId: number, kind: 'zones' | 'coast'): TerrainArcFile => {
 describe('parseTerrainManifest', () => {
   it('reads the committed manifest: the relief, zone outlines and coastline of both continents', () => {
     const parsed = manifest();
-    expect(parsed.build).toBe('1.60.1.70009');
+    expect(parsed.build).toBe('1.60.1.70124');
     expect(parsed.maps.map((map) => [map.mapId, map.name])).toEqual([
       [0, 'Eastern Kingdoms'],
       [1, 'Kalimdor'],

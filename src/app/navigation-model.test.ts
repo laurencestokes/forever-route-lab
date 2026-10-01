@@ -103,29 +103,20 @@ describe('navigation TravelModel', () => {
     expect(model.path(A, B)).toBeNull();
   });
 
-  it('prices a walk to or from a client berth with its swim at the ground speed, without long-swim (TIME-7, TR-03)', () => {
-    const berthA = endpoint(1, 1000, 1000);
-    const berthB = endpoint(1, 3000, 1000);
+  it('prices a swim to a dock at the swim speed, with its warning: a client berth’s endpoint is its boarding point on walkable ground (TIME-7, TR-03)', () => {
+    const dockA = endpoint(1, 1000, 1000);
+    const dockB = endpoint(1, 3000, 1000);
     const swim = (ground: number, swimTenths: number): NavLegResult => walkable(ground, { swimTenths, longestSwimYd: swimTenths / 10, flags: swimTenths > 2000 ? ['long-swim'] : [] });
-    const boat = (berths: SameMapTransport['berths']): SameMapTransport => ({ id: 'boat', from: berthA, to: berthB, seconds: estimate(120, 'assumption'), ...(berths === undefined ? {} : { berths }) });
-    const priced = (berths: SameMapTransport['berths']) => {
-      const { model, fill } = setup([boat(berths)]);
-      fill(A, B, otherComponent());
-      fill(A, berthA, swim(700, 3000)); // 70 yd on foot, then 300 yd "swim" to the berth
-      fill(berthB, B, swim(1400, 944));
-      return model.leg(A, B, SPEEDS);
-    };
-    // Both docks berths: every yard at 7 yd/s, and the 300 yd swim raises nothing.
-    expect(priced({ from: true, to: true })).toEqual({ seconds: estimate((70 + 300) / 7 + 120 + (140 + 94.4) / 7, 'assumption'), method: 'same-map-transport', pending: false, warnings: [] });
-    // Not berths (a user dock): the swim at the swim speed, with its warning.
-    expect(priced(undefined)).toEqual({
+    const { model, fill } = setup([{ id: 'boat', from: dockA, to: dockB, seconds: estimate(120, 'assumption') }]);
+    fill(A, B, otherComponent());
+    fill(A, dockA, swim(700, 3000)); // 70 yd on foot, then 300 yd swimming to the dock
+    fill(dockB, B, swim(1400, 944));
+    expect(model.leg(A, B, SPEEDS)).toEqual({
       seconds: estimate(70 / 7 + 300 / 4.72 + 120 + 140 / 7 + 94.4 / 4.72, 'assumption'),
       method: 'same-map-transport',
       pending: false,
       warnings: [{ kind: 'long-swim', longestSwimYd: 300 }],
     });
-    // Only the arrival a berth: the departure walk keeps its swim and its warning.
-    expect(priced({ from: false, to: true }).warnings).toEqual([{ kind: 'long-swim', longestSwimYd: 300 }]);
   });
 
   it('skips a transport whose dock is off the walking component', () => {

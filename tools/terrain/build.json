@@ -7,7 +7,7 @@
   ],
   "schema": 1,
   "kind": "nav-build",
-  "pin": { "product": "wow_classic_beta", "version": "1.60.1.70009", "buildKey": "05215079e3905ef5922ae0b03ffefb73" },
+  "pin": { "product": "wow_classic_beta", "version": "1.60.1.70124", "buildKey": "dd3dfc2881c407299f46c2aaf34c130b" },
   "recastNavigation": "0.43.1",
   "maps": [
     { "id": 0, "name": "Eastern Kingdoms", "wdtFileDataId": 775971 },

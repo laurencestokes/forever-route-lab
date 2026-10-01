@@ -280,6 +280,15 @@ _None._
 
 ## Exact next tasks
 
+**Moved to a cloud session 2026-10-01.** `main` is pushed, with every commit verified. The rework
+follow-up is on the branch `rework-followup` (its final verification did not run). Its reports and
+the critic's findings to fix are in [docs/reviews/rework-followup.md](docs/reviews/rework-followup.md),
+and the re-pin diff is in [docs/reviews/repin-70124.md](docs/reviews/repin-70124.md). Outside the
+owner's machine there is:
+- no WoW client, so the client-gated `--check` steps cannot run;
+- no minimap tiles (the app falls back to the painted style);
+- no `.cache/`.
+
 **1. Rework follow-up (D-050):**
 1. Re-pin to client 1.60.1.70124 and rebuild everything client-derived with the byte-identical
    checks; review the diff; clear MD-01 and G13.
@@ -287,7 +296,7 @@ _None._
    the 10,000-step pan at 4×, first art at 4× and the first-view bytes.
 3. Move clustering into the derived publish (entry chunk under 248.5 kB).
 4. Default state and level ceiling (D-050 items 2 and 3).
-5. Left-panel readability against WoWF-QRP. Mocks go to the owner first.
+5. Left-panel readability: the owner chose layout B+ (D-051). Mock it, measure it, then build it after the entry trim.
 6. TR-03 berths, and the remaining minors listed in the review.
 
 **2. Deployment:** needs the owner's go-ahead to push (OD-13). It then covers the Pages workflow,

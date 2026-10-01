@@ -253,13 +253,20 @@ describe('StepRow, two lines (the default, D-048 A)', () => {
 describe('StepRow, one line (the compact View choice)', () => {
   const oneLine = { density: 'one-line' as const, selected: false, active: false };
 
-  it('renders one option with the number, the 18px mark, the verb, title and level', () => {
+  it('renders one option with the number, the 18px mark, the title and level; the "!" says accept, so the name has the room (review UI-15)', () => {
     render(<StepRow model={base} {...oneLine} />);
     const option = screen.getByRole('option');
     expect(option.className).toContain('frl-row--one-line');
     expect(option.getAttribute('aria-selected')).toBe('false');
     expect(option.textContent).toContain('12');
-    expect(option.textContent).toContain('Accept Placeholder quest A');
+    expect(option.textContent).toContain('Placeholder quest A');
+    expect(option.querySelector('.frl-steprow__verb')).toBeNull();
+    // The tooltip and the row's name keep the verb.
+    expect(option.querySelector('.frl-steprow__title')?.getAttribute('title')).toMatch(/^Accept Placeholder quest A/);
+    expect(option.getAttribute('aria-label')).toContain('Accept');
+    // A step whose mark does not say its verb keeps it.
+    const { container } = render(<StepRow model={{ ...base, kind: 'complete', mark: null }} {...oneLine} />);
+    expect(container.querySelector('.frl-steprow__verb')).not.toBeNull();
     expect(option.textContent).toContain('7.4');
     expect(option.querySelector('.frl-quest-mark--compact')).not.toBeNull();
     expect(option.querySelector('[data-difficulty="difficult"]')).not.toBeNull();

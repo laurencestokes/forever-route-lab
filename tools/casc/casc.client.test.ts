@@ -4,7 +4,10 @@
  * reads only `.build.info` and `Data/{config,data}`, and writes nothing.
  *
  * With the research CSVs present (.cache/experiments/maps, docs/MAPS.md §8.3), every column of
- * ten tables is compared with the reader's values.
+ * ten tables is compared with the reader's values. The CSVs are of build 1.60.1.70009, so the test
+ * first checks that each table's content key (CKey) at the pin is still the one it had there: the
+ * CSVs then describe the same bytes (all ten are unchanged at 1.60.1.70124,
+ * docs/reviews/repin-70124.md).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +30,21 @@ it('finds the pinned client, or says loudly why the client tests are skipped', (
 
 const CSV_DIR = fileURLToPath(new URL('../../.cache/experiments/maps/', import.meta.url));
 const CSV_TABLES: readonly Db2TableName[] = ['AreaTable', 'Map', 'UiMap', 'UiMapAssignment', 'UiMapArt', 'UiMapArtTile', 'UiMapArtStyleLayer', 'UiMapXMapArt', 'WorldMapOverlay', 'WorldMapOverlayTile'];
+/** The build of the research CSVs (docs/MAPS.md §8.3). */
+const CSV_BUILD = '1.60.1.70009';
+/** Each CSV table's CKey at 1.60.1.70009, as the 70009 art, nav and terrain manifests recorded it. */
+const CSV_CKEYS: Readonly<Record<string, string>> = {
+  AreaTable: '65ca0ed314f02647991a9cf56cf63513',
+  Map: 'c7f3134e35c4f8c8bfd736e0a4ed3046',
+  UiMap: '09796a314cff8d65232a5347f4390c28',
+  UiMapAssignment: '6288c474b5d128c8f96eda7c0202ad9d',
+  UiMapArt: 'e03d4286cd499a4968e3f7a8afda8ae9',
+  UiMapArtTile: 'd4dba09ea4040d1d1da86169c2850e3a',
+  UiMapArtStyleLayer: 'fa9b39b1cec60f14c150e9405a3d7066',
+  UiMapXMapArt: 'b9708709153e2acbaea84133e52fcb34',
+  WorldMapOverlay: 'c4fc3c1f6f8929bdabab037e1817cf7f',
+  WorldMapOverlayTile: 'bc0effbfa0eeb557c9b335ec102e5023',
+};
 
 describe.skipIf(!status.available)('LocalCasc on the pinned Forever client', () => {
   let casc: LocalCasc;
@@ -40,11 +58,14 @@ describe.skipIf(!status.available)('LocalCasc on the pinned Forever client', () 
     casc.close();
   });
 
-  it('opens with the counts recorded in terrain-navigation.md §2.1', () => {
+  it('opens with the counts recorded in terrain-navigation.md §2.1, restated at 1.60.1.70124', () => {
     expect(casc.build.version).toBe(FOREVER_TEST_PIN.version);
-    expect(casc.stats.indexEntries).toBe(2_161_431);
+    // The local indices cover every product in the shared Data/ folder, so this count moves when any
+    // of them updates (2,161,431 at 1.60.1.70009 on 2026-09-26).
+    expect(casc.stats.indexEntries).toBe(2_161_303);
     expect(casc.stats.encodingPages).toBe(23_425);
-    expect(casc.stats.root).toEqual({ blocks: 1_182, entries: 2_747_339, fileDataIds: 1_435_081, encryptedFlagFileDataIds: 4_970 });
+    // 2,747,339 root entries at 1.60.1.70009; the other root counts are unchanged.
+    expect(casc.stats.root).toEqual({ blocks: 1_182, entries: 2_747_341, fileDataIds: 1_435_081, encryptedFlagFileDataIds: 4_970 });
     console.info(`casc open: ${JSON.stringify(casc.stats.openMs)} ms (not asserted)`);
   });
 
@@ -91,9 +112,13 @@ describe.skipIf(!status.available)('LocalCasc on the pinned Forever client', () 
     expect(hazards).toEqual([3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 1174, 1177, 1267, 1268, 1269, 1284, 1295]);
   });
 
-  const csvPresent = CSV_TABLES.every((t) => existsSync(`${CSV_DIR}${t}_1.60.1.70009.csv`));
+  it('holds the ten CSV tables as the same bytes as at 1.60.1.70009 (equal CKeys)', () => {
+    expect(Object.fromEntries(CSV_TABLES.map((name) => [name, casc.ckeyOf(DB2[name].fileDataId)]))).toEqual(CSV_CKEYS);
+  });
+
+  const csvPresent = CSV_TABLES.every((t) => existsSync(`${CSV_DIR}${t}_${CSV_BUILD}.csv`));
   it('has the research CSVs, or says loudly why the CSV comparison is skipped', () => {
-    if (!csvPresent) announceSkip('DB2 reader against the research CSVs', 'the 1.60.1.70009 CSVs are not in .cache/experiments/maps');
+    if (!csvPresent) announceSkip('DB2 reader against the research CSVs', `the ${CSV_BUILD} CSVs are not in .cache/experiments/maps`);
     expect(typeof csvPresent).toBe('boolean');
   });
   it.skipIf(!csvPresent)('agrees with every column of the research CSVs of ten tables', () => {
@@ -101,7 +126,7 @@ describe.skipIf(!status.available)('LocalCasc on the pinned Forever client', () 
       const table = readDb2(casc, DB2[name]);
       const { layout } = DB2[name];
       // The CSVs are CRLF files whose quoted values may also hold CRLF; compare with LF on both sides.
-      const csv = parseCsv(readFileSync(`${CSV_DIR}${name}_1.60.1.70009.csv`, 'utf8').replace(/\r\n/g, '\n'));
+      const csv = parseCsv(readFileSync(`${CSV_DIR}${name}_${CSV_BUILD}.csv`, 'utf8').replace(/\r\n/g, '\n'));
       expect(table.rows.length, name).toBe(csv.records.length);
       const cell = (row: Wdc5Row, column: string): string | number => {
         if (column === layout.id) return row.id;

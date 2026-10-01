@@ -354,13 +354,25 @@ function RowMark({ model, compact }: { readonly model: StepRowModel; readonly co
   return <StepMark kind={model.kind} size={size} className="frl-steprow__mark" />;
 }
 
-/** Line 1's title: the verb in the muted ink, then what it acts on (one ellipsis for both). */
-function TitleText({ model, withDetail }: { readonly model: StepRowModel; readonly withDetail: boolean }) {
+/** Whether the row's mark is a quest's "!" or "?", which says accept or turn in by itself (`RowMark`). */
+const markSaysVerb = (model: StepRowModel): boolean => (model.kind === 'accept' || model.kind === 'turnin') && model.mark !== null;
+
+/**
+ * Line 1's title: the verb in the muted ink, then what it acts on (one ellipsis for both). `verb`
+ * false leaves the verb to the mark (one-line rows, review UI-15); the tooltip and the row's name
+ * keep it.
+ */
+function TitleText({ model, withDetail, verb = true }: { readonly model: StepRowModel; readonly withDetail: boolean; readonly verb?: boolean }) {
   const detail = withDetail && model.detail !== null ? model.detail : null;
   const full = `${model.verb} ${model.title}`;
   return (
     <span className="frl-steprow__title" title={detail === null ? full : `${full} · ${detail}`}>
-      <span className="frl-steprow__verb">{model.verb}</span> {model.title}
+      {verb && (
+        <>
+          <span className="frl-steprow__verb">{model.verb}</span>{' '}
+        </>
+      )}
+      {model.title}
       {detail !== null && <span className="frl-steprow__detail"> {detail}</span>}
     </span>
   );
@@ -445,7 +457,8 @@ export function StepRow({
       <RowFrame {...frame} label={label} className={className} data={data}>
         {number}
         <RowMark model={model} compact />
-        <TitleText model={model} withDetail />
+        {/* The "!" or "?" says accept or turn in: one-line rows give its room to the name (review UI-15). */}
+        <TitleText model={model} withDetail verb={!markSaysVerb(model)} />
         <Chain model={model} />
         {actions}
         {provenance}

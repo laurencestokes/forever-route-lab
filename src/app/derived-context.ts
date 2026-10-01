@@ -143,13 +143,15 @@ export function createZoneHintResolver(geometry: MapGeometry, nav: NavManifest):
 const samePoint = (a: WorldPoint, b: WorldPoint): boolean => a.mapId === b.mapId && a.x === b.x && a.y === b.y;
 
 /**
- * A dock's endpoint as the engine's walker makes it (src/engine/places.ts `dock`): a dock NPC's
- * spawn at the dock point with that spawn's hint, else the point with hint 0. The same endpoint
- * gives the same leg-table key, so the model's compositions and the walker's dock walks share legs.
+ * A dock's endpoint as the engine's walker makes it (src/engine/places.ts `dock`): a client
+ * berth's boarding point with hint 0 (TIME-7), a dock NPC's spawn at the dock point with that
+ * spawn's hint, else the point with hint 0. The same endpoint gives the same leg-table key, so the
+ * model's compositions and the walker's dock walks share legs.
  */
 function dockEndpoint(dock: TransportDock, spawns: DatasetView['spawns'], hints: ZoneHintResolver): TravelEndpoint | null {
   const point = dock.point;
   if (point === null) return null;
+  if (dock.boarding !== undefined) return { point: dock.boarding.point, zoneHint: 0 };
   if (dock.npcId === null) return { point, zoneHint: 0 };
   const spawn: SpawnPoint | undefined = spawns({ kind: 'npc', id: dock.npcId }).find((candidate) => candidate.world !== null && samePoint(candidate.world, point));
   return spawn === undefined || spawn.world === null ? { point, zoneHint: 0 } : { point: spawn.world, zoneHint: hints.spawn(spawn, spawn.world) };
@@ -159,8 +161,8 @@ function dockEndpoint(dock: TransportDock, spawns: DatasetView['spawns'], hints:
  * The same-map transports of a TravelGraph for the navigation model (terrain-navigation.md §9.3
  * case 2, D-034 item 2): edges with both docks positioned on one world map, open to the faction
  * (unknown factions count as open, as TIME-7 treats them), with wait plus ride carrying the
- * rules' provenance, and which docks are client berths (inferred stops, whose walks count their
- * swim as the walk along the pier, TIME-7). Per map, computed once.
+ * rules' provenance; a client berth's walks end at its boarding point (TIME-7). Per map,
+ * computed once.
  */
 export function sameMapTransportsOf(graph: TravelGraph, faction: Faction, spawns: DatasetView['spawns'], hints: ZoneHintResolver): SameMapTransports {
   const byMap = new Map<WorldMapId, readonly SameMapTransport[]>();
@@ -174,9 +176,7 @@ export function sameMapTransportsOf(graph: TravelGraph, faction: Faction, spawns
         const to = dockEndpoint(edge.to, spawns, hints);
         if (from === null || to === null) continue;
         const seconds = sumEstimates([withBasis(edge.waitS.value, ruleInput(edge.waitS)), withBasis(edge.rideS.value, ruleInput(edge.rideS))]);
-        // Inferred docks are client berths in the water beside the pier (TIME-7): their walks count as walking.
-        const berths = { from: edge.from.pointFrom === 'inferred', to: edge.to.pointFrom === 'inferred' };
-        out.push({ id: edge.id, from, to, seconds, ...(berths.from || berths.to ? { berths } : {}) });
+        out.push({ id: edge.id, from, to, seconds });
       }
       list = out;
       byMap.set(mapId, list);

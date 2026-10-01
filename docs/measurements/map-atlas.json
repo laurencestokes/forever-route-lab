@@ -9463,5 +9463,206 @@
         "result": "pass (exact figures equal; quality median 1.26 %, at most 5.69 % above the references)"
       }
     }
+  },
+  "d050": {
+    "$comment": "D-050 item 5 (2026-09-30), after the ATL.9/MM.8 re-run of atl9mm8Final: the 10,000-step pans at 4×, first art at 1× and 4×, and the first-view bytes on the view the app opens at (review MR-06), as an interleaved A/B with a build of eff4341 on a loaded machine. Details in rework-speed-d050.json (browser, firstViewBytes).",
+    "pans10kAt4x": {
+      "before": {
+        "probeMs": {
+          "median": 174,
+          "min": 174,
+          "max": 175,
+          "n": 3
+        },
+        "firstArtAfterChunkMs": {
+          "median": 3277,
+          "min": 3091,
+          "max": 3287,
+          "n": 3
+        },
+        "firstTileRequestMs": {
+          "median": 3379,
+          "min": 3182,
+          "max": 3391,
+          "n": 3
+        },
+        "workspaceReadyMs": {
+          "median": 1270,
+          "min": 1171,
+          "max": 1293,
+          "n": 3
+        },
+        "panP95": {
+          "median": 8.7,
+          "min": 7.1,
+          "max": 13.8,
+          "n": 3
+        },
+        "panP99": {
+          "median": 61.1,
+          "min": 55.5,
+          "max": 62.5,
+          "n": 3
+        },
+        "panMaxFrame": {
+          "median": 104.2,
+          "min": 101,
+          "max": 118.2,
+          "n": 3
+        },
+        "panFramesOver33": {
+          "median": 21,
+          "min": 19,
+          "max": 23,
+          "n": 3
+        },
+        "panLongestTask": {
+          "median": 74,
+          "min": 58,
+          "max": 78,
+          "n": 3
+        },
+        "panSyncP50": {
+          "median": 44.9,
+          "min": 43.2,
+          "max": 45.4,
+          "n": 3
+        },
+        "panSyncMax": {
+          "median": 68.9,
+          "min": 55.6,
+          "max": 74,
+          "n": 3
+        },
+        "longDragP99": {
+          "median": 8.8,
+          "min": 7.1,
+          "max": 14,
+          "n": 3
+        },
+        "longDragMax": {
+          "median": 46.6,
+          "min": 34.8,
+          "max": 55.6,
+          "n": 3
+        }
+      },
+      "after": {
+        "probeMs": {
+          "median": 172,
+          "min": 171,
+          "max": 173,
+          "n": 3
+        },
+        "firstArtAfterChunkMs": {
+          "median": 2805,
+          "min": 2732,
+          "max": 3056,
+          "n": 3
+        },
+        "firstTileRequestMs": {
+          "median": 2781,
+          "min": 2677,
+          "max": 3002,
+          "n": 3
+        },
+        "workspaceReadyMs": {
+          "median": 1224,
+          "min": 1116,
+          "max": 1294,
+          "n": 3
+        },
+        "panP95": {
+          "median": 8.6,
+          "min": 8.4,
+          "max": 8.6,
+          "n": 3
+        },
+        "panP99": {
+          "median": 46.1,
+          "min": 45.9,
+          "max": 48.7,
+          "n": 3
+        },
+        "panMaxFrame": {
+          "median": 95.4,
+          "min": 93,
+          "max": 175.3,
+          "n": 3
+        },
+        "panFramesOver33": {
+          "median": 14,
+          "min": 13,
+          "max": 15,
+          "n": 3
+        },
+        "panLongestTask": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "n": 3
+        },
+        "panSyncP50": {
+          "median": 34.5,
+          "min": 33.3,
+          "max": 36.5,
+          "n": 3
+        },
+        "panSyncMax": {
+          "median": 41.4,
+          "min": 41,
+          "max": 45.3,
+          "n": 3
+        },
+        "longDragP99": {
+          "median": 8.7,
+          "min": 8.7,
+          "max": 9,
+          "n": 3
+        },
+        "longDragMax": {
+          "median": 38.3,
+          "min": 37.1,
+          "max": 47,
+          "n": 3
+        }
+      }
+    },
+    "firstArtAfterChunkMs": {
+      "x1": {
+        "before": {
+          "median": 627,
+          "min": 545,
+          "max": 639,
+          "n": 6
+        },
+        "after": {
+          "median": 524,
+          "min": 456,
+          "max": 551,
+          "n": 6
+        }
+      },
+      "x4": {
+        "before": {
+          "median": 2293,
+          "min": 1804,
+          "max": 2526,
+          "n": 6
+        },
+        "after": {
+          "median": 2065,
+          "min": 1549,
+          "max": 2189,
+          "n": 6
+        }
+      }
+    },
+    "firstViewBytes": {
+      "verdict": "FAIL on the view the app opens at",
+      "minimap": 195355,
+      "painted": 121288,
+      "budget": 100000
+    }
   }
 }

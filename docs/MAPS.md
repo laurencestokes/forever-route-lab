@@ -46,7 +46,7 @@ Rule: **never copy maps, tiles, geometry or code from any other WoW route-planne
 |---|---|---|
 | Map source | The developer's **own** Forever client (local CASC, read-only) or Blizzard's public CDN for the same build. No third-party map images are used. | §2, §5 |
 | WoW flavour / product | WoW Forever = product **`wow_classic_beta`** (`.flavor.info` in `<wow-install>/_classic_beta_`) | Local install, read only |
-| Client build | **1.60.1.70009**, Build Key `05215079e3905ef5922ae0b03ffefb73`. The brief said 69977; the launcher updated the client on 2026-09-25 (D-013). | `<wow-install>/.build.info`; `us.version.battle.net/wow_classic_beta/versions` |
+| Client build | **1.60.1.70124**, Build Key `dd3dfc2881c407299f46c2aaf34c130b`: the pin of every client tool since 2026-09-30 (D-050), when the launcher updated the client. Before that, **1.60.1.70009**, Build Key `05215079e3905ef5922ae0b03ffefb73` (the brief said 69977; the launcher updated the client on 2026-09-25, D-013). Every DB2 table and file the tools read has the same CKey at both builds, and every rebuild is byte-identical apart from the manifests and NOTICEs ([reviews/repin-70124.md](reviews/repin-70124.md)). | `<wow-install>/.build.info`; `us.version.battle.net/wow_classic_beta/versions` |
 | Data frame | **1.60.1.69893**, QuestieDB's DBC target (D-013). `UiMapAssignment` is byte-identical at 69893 and 70009. | [coordinates §10-11](research/coordinates.md) |
 | Frame compatibility | A local map set is accepted when its rows for the 49 shared zone frames **hash-equal** the committed rows, not when build strings match (D-018, F09). It may only **add** UiMaps: a local row for a UiMap the committed file already has must be identical, or the whole set is rejected (ARCHITECTURE §6). | §5.6 |
 | Map art | UI world-map art: `UiMapXMapArt → UiMapArt → UiMapArtStyleLayer + UiMapArtTile` BLP tiles, plus `WorldMapOverlay(Tile)` explored overlays. Every Forever map with 1002 × 668 art uses 4 × 3 tiles of 256 px. **Committed and deployed** with a manifest and NOTICE (D-033, which superseded D-018's art rule), extracted by `tools/maps/convert.ts` (§5.4 (b)): since step ATL.10 (D-042 O5) `public/maps/art/` holds only the images still drawn one at a time (Alterac Valley 1459, Warsong Gulch 1460, Arathi Basin 1461, Zephras Isle 2521, Darkspear Islands 2524); the zone, city and continent paintings of maps 0 and 1 reach the site composed into the painted atlas's tiles (`public/maps/atlas/`, `tools/maps/atlas.ts`). | DB2 at 70009 (§3) |
@@ -66,11 +66,11 @@ Rule: **never copy maps, tiles, geometry or code from any other WoW route-planne
 | Fact | Value | Evidence |
 |---|---|---|
 | Install root | `<wow-install>` (**strictly read-only**) | — |
-| `.build.info` | One row: `Product=wow_classic_beta`, `Version=1.60.1.70009`, `Branch=us`, `Active=1`, CDN Key `9b3c456dbb837d133a026d380c7c13e9`, `CDN Path tpr/wow`. Its `Tags` column includes account-region tags: do not copy it. | Read 2026-09-25 |
+| `.build.info` | One row: `Product=wow_classic_beta`, `Version=1.60.1.70124`, `Branch=us`, `Active=1`, Build Key `dd3dfc2881c407299f46c2aaf34c130b`, CDN Key `43061ca8e9f0e2603c8ab50bcae97c2d`, `CDN Path tpr/wow` (on 2026-09-25: `Version=1.60.1.70009`, CDN Key `9b3c456dbb837d133a026d380c7c13e9`). Its `Tags` column includes account-region tags: do not copy it. | Read 2026-09-30 (and 2026-09-25) |
 | CASC storage | `<wow-install>/Data/` (`data/`, `indices/`, `config/`, `ecache/`, plus one small folder per installed product such as `wow_classic_beta/`), shared by every installed flavour | Directory listing only |
 | Flavour folder | `<wow-install>/_classic_beta_/` holds `WowB.exe`, `.flavor.info` (`wow_classic_beta`), `Interface/`, `Fonts/` and more. **Never read `WTF/`, `Cache/`, `Logs/` or SavedVariables.** | — |
 | Public CDN | Patch server `https://us.version.battle.net/wow_classic_beta/versions` serves 1.60.1.70009 with the same BuildConfig, so the exact client build can also be streamed without a local install. Whether any files are **encrypted** is UNVERIFIED. | Fetched 2026-09-25 |
-| Forever builds seen | 1.60.1.69876 (2026-09-16), 69893 (09-16), 69913 (09-18), 69977 (09-23), 70009 (09-24) | wago.tools `/api/builds`, WoWDBDefs `BUILD` lines |
+| Forever builds seen | 1.60.1.69876 (2026-09-16), 69893 (09-16), 69913 (09-18), 69977 (09-23), 70009 (09-24); 70124 (installed by 2026-09-30) | wago.tools `/api/builds`, WoWDBDefs `BUILD` lines; 70124 from `.build.info` only |
 
 Each local map set comes from exactly one build and records it (§5.3). Whether a set can be used
 with the committed data is decided by the frame hash (§5.6), not by comparing build strings.
@@ -83,7 +83,10 @@ build matches" could never match, because the data frame is 69893 and the client
 ## 3. What the Forever client contains (1.60.1.70009)
 
 Values in this section are individual client-derived values. Each is cited by table and, where
-relevant, column, at build 1.60.1.70009, as D-022 allows. Bulk tables stay local; the committed
+relevant, column, at build 1.60.1.70009, as D-022 allows. The pin has been 1.60.1.70124 since
+2026-09-30; every table and texture of this section that the tools read has the same CKey there
+(`UiMapLink` was not re-read), so these values hold at 70124 too
+([reviews/repin-70124.md](reviews/repin-70124.md)). Bulk tables stay local; the committed
 placeholder's 61 `UiMapAssignment` rows are the one recorded exception (D-018, D-026).
 
 | Kind | Content |
@@ -383,8 +386,8 @@ every local-set check passes (§5.5); its presence is what makes the set active 
 `local-maps/`. `set` is a label, `<product>-<build>`. As built (`tools/maps/lib/local-set.ts`):
 
 ```jsonc
-{ "schema": 1, "redistribution": "local-only", "set": "wow_classic_beta-1.60.1.70009",
-  "product": "wow_classic_beta", "build": "1.60.1.70009", "buildKey": "05215079e3905ef5922ae0b03ffefb73",
+{ "schema": 1, "redistribution": "local-only", "set": "wow_classic_beta-1.60.1.70124",
+  "product": "wow_classic_beta", "build": "1.60.1.70124", "buildKey": "dd3dfc2881c407299f46c2aaf34c130b",
   "source": { "method": "tacttool-local | tacttool-cdn | wow.export-gui",
               "tools": { "TACTTool": "<commit/version>", "DBC2CSV": "<version>" },
               "wowdbdefs": "cf84e010f84ba9c8d48fd61730f92bf0d8f2b1cd" },     // from assets-source/…/source.json
@@ -427,7 +430,7 @@ tools and encoder give the same bytes. Abridged:
 { "_generated": { "by": "tools/maps convert", "notice": "NOTICE.md", "edit": "do not edit; …" },
   "schema": 1, "kind": "map-art",
   "artwork": { "owner": "Blizzard Entertainment", "notice": "NOTICE.md", "decision": "D-033", "what": "…" },
-  "client": { "product": "wow_classic_beta", "version": "1.60.1.70009", "buildKey": "05215079e3905ef5922ae0b03ffefb73" },
+  "client": { "product": "wow_classic_beta", "version": "1.60.1.70124", "buildKey": "dd3dfc2881c407299f46c2aaf34c130b" },
   "tool": { "toolTreeHash": { "tools/casc": "<git tree id>", "tools/maps": "<git tree id>" }, "treeMethod": "git",
             "layouts": "WoWDBDefs cf84e010… (tools/casc/layouts.ts, build 1.60.1.70009)",
             "encoder": { "name": "sharp", "sharp": "0.35.4", "libvips": "8.18.6", "libwebp": "1.6.0", "platform": "win32-x64" },
@@ -477,9 +480,9 @@ the tools' READMEs.
    tile FDID to `extract-list.txt`.
 
 *As built (Milestone 3b):* steps 2-4 are replaced by one command that needs neither TACTTool nor
-DBC2CSV. `pnpm tsx tools/maps/import.ts --build 1.60.1.70009 [--out <dir>] [--check]` opens the
+DBC2CSV. `pnpm tsx tools/maps/import.ts --build 1.60.1.70124 [--out <dir>] [--check]` opens the
 client through `tools/casc` (read-only; `.build.info` and `Data/` under `WOW_INSTALL`, pinned to
-1.60.1.70009 and its build key: any other build is refused), reads `UiMap` and `UiMapAssignment`
+1.60.1.70124 and its build key since 2026-09-30, 1.60.1.70009 before: any other build is refused), reads `UiMap` and `UiMapAssignment`
 with `readDb2` (every column equals the research CSVs, `tools/casc/casc.client.test.ts`), removes
 `local-maps/maps.manifest.json` and writes `local-maps/geometry.local.json`: 60 UiMaps and 61 rows,
 the values as the float32s the DB2 stores, `inputs.tables` with each table's rows, FileDataID and
@@ -551,7 +554,8 @@ that build's `source.json`. A developer who wants art in a local set copies comm
 
 **(c) Manual fallback (wow.export GUI).**
 
-1. Start wow.export 0.2.19. **Choose "CDN" → Beta: World of Warcraft Classic 1.60.1.70009**, or
+1. Start wow.export 0.2.19. **Choose "CDN" → Beta: World of Warcraft Classic at the pinned build
+   (1.60.1.70124 since 2026-09-30; 1.60.1.70009 before)**, or
    disable cache collection (§4.1) before selecting the local folder.
 2. Data tab: select the §1 tables → Export as CSV → copy to `csv/`.
 3. Zones tab (optional): export zone PNGs. They match the `convert.ts` output for zones, but
@@ -1597,6 +1601,14 @@ The 49 remaining rows equal `conversion.json` `target_bounds` bit for bit (check
    `tools/maps/inputs/db2-rows-1.60.1.70009.json`, and writes both placeholder files. It reads no
    CSV and makes no request to wago.tools. `--check` compares instead of writing.
 2. `pnpm maps:validate` runs R1, P0-P7 (§5.5).
+
+**Re-pin check (2026-09-30, D-050).** At the pin 1.60.1.70124, `UiMap` and `UiMapAssignment` have the
+CKeys they had at 1.60.1.70009, and `import.ts --build 1.60.1.70124` writes a local geometry whose 60
+UiMaps and 61 rows pass L4 against the committed placeholder: the frame hash is `2cb10551…` and every
+row, the 12 `db2-csv` rows included, is identical. So the rows file keeps its 70009 citations (the CSVs
+it cites are of that build), and `import.ts --placeholder --check` and `make-db2-rows.ts --check` pass
+unchanged ([reviews/repin-70124.md](reviews/repin-70124.md)). Relabelling the rows to 70124 would need
+70124 CSVs or a rows format that cites a client extraction; that is the architect's call.
 
 **Writing the rows file (once, Milestone 2; done).** `tools/maps/lib/make-db2-rows.ts`
 implements steps 1-2 (and, with the QuestieDB checkout, checks that the other 49 CSV rows are

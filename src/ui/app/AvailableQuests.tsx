@@ -9,7 +9,7 @@ import { effectiveQuestLevel, questDifficultyAt, questsForCharacter, requiredLev
 import type { DatasetView, QuestRecord } from '../../domain/dataset';
 import type { QuestId } from '../../domain/ids';
 import type { Difficulty } from '../../rules/difficulty';
-import { characterName, entityName, questName, questZoneName, sameItems } from '../app-model';
+import { characterName, entityName, questName, questZoneName, sameItems, startZonePreference, type ZonePreference } from '../app-model';
 import {
   AssumedMarker,
   Button,
@@ -255,6 +255,8 @@ const StateRow = memo(function StateRow({ entry, dataset, lowerBound, extra, inR
 interface OpenRowProps extends RowCommon {
   readonly quest: QuestRecord;
   readonly startLevel: number;
+  /** Which of the quest's places the row names first (review QA-20): the character's start zone, then its start continent. */
+  readonly prefer: ZonePreference | undefined;
   /** Extra text before the zone and starter (the unreadable-mask reason). */
   readonly note: string | undefined;
 }
@@ -263,8 +265,8 @@ interface OpenRowProps extends RowCommon {
  * One quest open by race and class, without route state: its availability at a step is not known,
  * so it is drawn "may be" (the dashed ring), with difficulty at the start level (a lower bound).
  */
-const OpenRow = memo(function OpenRow({ quest, dataset, startLevel, inRoute, note, onOpen, onAccept, unavailable, where }: OpenRowProps) {
-  const zone = questZoneName(dataset, quest);
+const OpenRow = memo(function OpenRow({ quest, dataset, startLevel, prefer, inRoute, note, onOpen, onAccept, unavailable, where }: OpenRowProps) {
+  const zone = questZoneName(dataset, quest, prefer);
   const starter = quest.starters[0];
   const required = requiredLevelAbove(quest, startLevel);
   const detail = [note ?? null, required === null ? null : `requires ${String(required)}`, zone, starter === undefined ? null : `from ${entityName(dataset, starter)}`, inRoute ? 'in the route' : null]
@@ -315,6 +317,7 @@ interface OpenQuestPagesProps extends Omit<RowCommon, 'inRoute'> {
   readonly quests: readonly QuestRecord[];
   readonly unknown: readonly QuestRecord[];
   readonly startLevel: number;
+  readonly prefer: ZonePreference | undefined;
   readonly inRoute: ReadonlySet<QuestId>;
   readonly who: string;
   readonly searching: boolean;
@@ -324,7 +327,7 @@ interface OpenQuestPagesProps extends Omit<RowCommon, 'inRoute'> {
  * The open quests matching one search, a page at a time, then those whose masks cannot be read.
  * Its parent keys it on the search, so the page count starts over whenever the search changes.
  */
-function OpenQuestPages({ quests, unknown, startLevel, inRoute, who, searching, ...common }: OpenQuestPagesProps) {
+function OpenQuestPages({ quests, unknown, startLevel, prefer, inRoute, who, searching, ...common }: OpenQuestPagesProps) {
   const [limit, setLimit] = useState(AVAILABLE_PAGE_SIZE);
   const shown = useMemo(() => quests.slice(0, limit), [quests, limit]);
   const shownUnknown = unknown.slice(0, AVAILABLE_PAGE_SIZE);
@@ -339,13 +342,13 @@ function OpenQuestPages({ quests, unknown, startLevel, inRoute, who, searching, 
       )}
       <QuestGrid label="Quests">
         {shown.map((quest) => (
-          <OpenRow key={quest.id} quest={quest} startLevel={startLevel} inRoute={inRoute.has(quest.id)} note={undefined} {...common} />
+          <OpenRow key={quest.id} quest={quest} startLevel={startLevel} prefer={prefer} inRoute={inRoute.has(quest.id)} note={undefined} {...common} />
         ))}
         {shownUnknown.length > 0 && (
           <QuestGroupHeader gridKey="group:unknown" title="Unknown availability" count={formatInteger(unknown.length)} words={`Race or class unknown, ${plural(unknown.length, 'quest')}`} />
         )}
         {shownUnknown.map((quest) => (
-          <OpenRow key={quest.id} quest={quest} startLevel={startLevel} inRoute={inRoute.has(quest.id)} note={UNREADABLE_MASK_REASON} {...common} />
+          <OpenRow key={quest.id} quest={quest} startLevel={startLevel} prefer={prefer} inRoute={inRoute.has(quest.id)} note={UNREADABLE_MASK_REASON} {...common} />
         ))}
       </QuestGrid>
       <MoreButton
@@ -515,7 +518,9 @@ const selectNoStateWhy = (s: DerivedState | null): string | null => {
   if (s === null) return null;
   if (s.status === 'loading') return 'the route is still being simulated';
   if (s.status === 'failed') return 'the route could not be simulated';
-  return s.selected === null ? 'select a step to see which quests are available after it' : 'working out the quests after the selected step';
+  // With no step selected the state is the last step's (D-050 item 2), so only an empty route has none.
+  if (s.selected === null) return s.results !== null && s.results.project.route.steps.length === 0 ? 'the route has no steps yet' : 'working out the quests after the selected step';
+  return s.selected.atEnd ? 'working out the quests at the end of the route' : 'working out the quests after the selected step';
 };
 
 /**
@@ -558,6 +563,8 @@ export const AvailableQuests = memo(function AvailableQuests({ store, dataset, s
   const matching = useMemo(() => open.filter((q) => matches(q, needle)), [open, needle]);
   const matchingUnknown = useMemo(() => unknown.filter((q) => matches(q, needle)), [unknown, needle]);
   const who = characterName(character);
+  // Without route state a row names its giver's place on the character's side first (review QA-20).
+  const prefer = useMemo(() => startZonePreference(dataset, character.startLocation), [dataset, character.startLocation]);
   const placeholder = dataset.identity.dataRevision === 'placeholder';
   const searching = needle !== '';
   // Opening a quest shows it in Details and puts it in focus on the map (its givers, objectives
@@ -584,7 +591,7 @@ export const AvailableQuests = memo(function AvailableQuests({ store, dataset, s
   const where = step !== NO_STEP ? `after step ${step}` : nothingSelected ? 'at the end of the route' : 'after the selection';
   const hint =
     model !== null
-      ? `After step ${step}, ${model.summary} Accept adds the quest’s accept step after the selection, at the spawn nearest the step before it; Details adds all three steps.`
+      ? `${model.atEnd ? `At the end of the route (after step ${step})` : `After step ${step}`}, ${model.summary} Accept adds the quest’s accept step ${model.atEnd ? 'at the end of the route' : 'after the selection'}, at the spawn nearest the step before it; Details adds all three steps.`
       : noStateWhy === null
         ? `Quests open to your ${who} by race and class. This list does not check availability at a step (level, prerequisites, quest log): the Validation tab checks each accept in the route. Difficulty here is taken at the start level.`
         : `${noStateText(who)}: ${noStateWhy}. Until then this list does not check availability (level, prerequisites, quest log), and difficulty is taken at the start level.`;
@@ -627,7 +634,7 @@ export const AvailableQuests = memo(function AvailableQuests({ store, dataset, s
         <p className="frl-app-hint">{searching ? `No quests match “${search.trim()}”.` : 'No quests in the dataset.'}</p>
       ) : (
         <>
-          <OpenQuestPages key={needle} quests={matching} unknown={matchingUnknown} startLevel={character.startLevel} inRoute={inRoute} who={who} searching={searching} {...common} />
+          <OpenQuestPages key={needle} quests={matching} unknown={matchingUnknown} startLevel={character.startLevel} prefer={prefer} inRoute={inRoute} who={who} searching={searching} {...common} />
         </>
       )}
       {model === null && closed.length > 0 && <p className="frl-app-hint">{`${plural(closed.length, 'quest')} not shown: not open to ${who}.`}</p>}

@@ -36,6 +36,7 @@ function setup(): EditorStore {
       geometrySummary={GEOMETRY}
       version="0.0.0-test"
       sourceCommit={null}
+      selectOnOpen={false}
     />,
   );
   return store;

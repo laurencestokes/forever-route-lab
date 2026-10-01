@@ -350,19 +350,25 @@ steps MP.8 and MP.9 (docs/research/map-presentation.md §9, §10).
 | The flight's `model` is `taxi-path` for TIME-6 (it was `local`) | TIME-6 | `src/sim/taxi.ts` |
 
 **Travel review of the map rework (2026-09-30, findings TR-01 to TR-14).** Applied with the fixes;
-the berth rule (TR-03) is the fixer's choice among the review's options and waits for the
-architect's ruling.
+the berth rule (TR-03) was the fixer's choice among the review's options until the architect's
+ruling (D-050 item 4, in the next table) replaced it.
 
 | Change | Where | Driver |
 |---|---|---|
 | A transport step that names no record and no dock no longer chooses its service among inferred docks: they count as unpositioned for the choice, so the step stays unknown with SIM-3, as before the file loaded, until it names its transport | TIME-7 | TR-01 |
 | A ride records its edge and where each dock's position comes from, with an inferred dock's client record (`transport-ride`, not an issue); Details words it ("dock position inferred from client transport path 11616, stop 1 of 2"). The map popover's "Add transport" adds the transport by id and no longer copies the inferred stop into `TransportRef.dock`, so the graph keeps it `inferred` | TIME-7 | TR-02; map-presentation.md §10 (MP-R32) |
-| A walk to or from an inferred dock (a client berth, in the water beside the pier) prices its swimming yards at the ground speed and raises no SIM-21: the swim stands for the walk along the pier (assumption) | TIME-7 | TR-03 |
+| A walk to or from an inferred dock (a client berth, in the water beside the pier) prices its swimming yards at the ground speed and raises no SIM-21: the swim stands for the walk along the pier (assumption). **Superseded** by the boarding-point rule (D-050 item 4, below) | TIME-7 | TR-03 |
 | The same-map transport rule fires only between navmesh components: at nav revision of 1.60.1.70009 that is Rut'theran ↔ Auberdine; Menethil and Southshore are one component (a swim across the water joins them), so the rule never fires there | TIME-7 | TR-06, NAV-08 |
 | While the taxi file loads the results are provisional (`final` false, `taxiPending` true, with the note "loading the client taxi file"); they become final with the walk after it loads or fails | TIME-5, TIME-6 | TR-07 |
 | A taxi node's factions are one source for the engine and the map: the committed row's sides when they name one, else the flight master's; a flight whose departure or destination is not open to the character's faction is still timed, with `SIM024-flight-faction` | TIME-5, TIME-6, 7.7 | TR-08 |
 | A journey the file covers only through flight points the character does not know is timed by TIME-5 with `SIM007-flight-unknown-path-journey`; one the file does not cover at all stays the ordinary fallback, without an issue | TIME-6, 7.7 | TR-09 |
 | The TravelGraph's taxi edges say which flights exist; their lengths are TIME-6's per-leg data only (`localTaxi`), and the report says which set the edges are (`edgeSource`) | TIME-6 | TR-13 |
+
+**The rework follow-up (D-050, 2026-09-30).**
+
+| Change | Where | Driver |
+|---|---|---|
+| Walks to and from an inferred dock end at its boarding point, the nearest walkable navmesh point within 100 yd of the berth (measured: the nearest points a walk can end on are 12.5 to 95.2 yd from the nine boat berths, so the 40 yd first proposed would miss five); the step to the berth is part of the wait, with no swim leg; `transport-ride` records `boardingYd`. The berth table is `src/rules/berths.ts`, checked by `tests/berth-boarding.test.ts` on the committed files | TIME-7 | D-050 item 4; TR-03 |
 
 ## 2. Levels and XP required
 
@@ -1380,7 +1386,8 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
   factions, basis }`, ARCHITECTURE §9.1). `TransportRef.id` names the record; `TransportRef.dock`,
   a user-entered location, replaces the record's departure point.
   - `seconds = ground(state.location -> from) + waitS + rideS`; then `state.location = to`, followed
-    by ground travel to the step's location if it has one on the arrival map. `waitS` goes to
+    by ground travel to the step's location if it has one on the arrival map. For a client berth,
+    `from` and `to` are the docks' boarding points (below). `waitS` goes to
     `breakdown.waiting`, the walk and `rideS` to `breakdown.travel`.
   - `waitS` and `rideS` default to `transportWaitSeconds` and `transportRideSeconds` (60 s each,
     ASSUMPTION: wait = half an `UNKNOWN` cycle) unless the TravelGraph record carries its own values
@@ -1412,25 +1419,41 @@ routing. Errors compare flight time only, without `flightMasterSeconds`.
   - A transport whose `factions` excludes the character's faction emits `SIM014-transport-faction`
     (warning). Faction restrictions are `UNKNOWN` in the client data (forever-game-rules.md 6.5).
   - Transports do not use the taxi model.
-  - **Client berths (review TR-03; the fixer's choice, pending the architect's ruling):** an
-    inferred dock is the ship's stop, which lies in the water beside its pier, 13 to 15 yd from the
-    nearest walkable polygon on the committed navmesh. The runtime snap puts a point over the pier
-    on the water surface below the deck (the lowest floor), so the navmesh walk to a berth ends
-    with a swim along the shore (400 yd from the Auberdine flight master to the path-11616 berth;
-    SIM-21 on every step that used such a dock). A walk to or from an
-    inferred dock (the walker's dock and onward walks, a walk from a berth where a ride left the
-    character, and the same-map rule's walks) therefore prices its swimming yards at the ground
-    speed, raises no long-swim warning (SIM-21), and is an assumption: the swim stands for the walk
-    along the pier. Measured on the committed navmesh from each dock's town flight master, against
-    the walk to the nearest point within 100 yd of the berth that the snap puts on a walkable
-    polygon plus the straight rest at the run speed: the rule is within +12 % to -14 % at five of
-    the seven berths (the swim-speed price was +8 % to +34 % there), and 38 % and 47 % short at the
-    path-11167 Auberdine berth, where the walk along the piers (419 yd) is much longer than the
-    navmesh path through the water (271 yd), and at Rut'theran, where the nearest walkable point found is 95 yd
-    away and its walk still swims 72 yd, so that comparison is the weakest
-    (`.cache/map-ui-build/fix-travel/berth-compare.json`; a research note, not a gate). Other
-    options the review named, a boarding point per dock or a snap that prefers the deck, need a
-    navigation-data change and remain open.
+  - **Client berths and boarding points (architect's rule, D-050 item 4; review TR-03).** An
+    inferred dock is the ship's stop, which lies in the water beside its pier. The navigation
+    data's snap puts that point, and a point on the deck above the water, on the water surface
+    (the lowest floor), so a walk to the berth itself ended with a swim along the shore (400 yd
+    from the Auberdine flight master to the path-11616 berth, with SIM-21). The rule:
+    - Walks to and from an inferred dock (the walker's dock walk, the walk on from the arrival, a
+      transport without a location, which leaves the character there, and the same-map rule's
+      walks) end at the dock's **boarding point**: the nearest point within `BOARDING_RADIUS_YD`
+      of the berth whose navmesh snap, with no zone hint, is walkable ground (a polygon that is not
+      water, and not ambiguous between components). Candidates are the berth's 1 yd grid, nearest
+      first, then by x, then by y.
+    - The step between the boarding point and the berth is part of the transport's wait: it has
+      no leg, no swim and no time of its own. The ride's `transport-ride` fact records how far each
+      boarding point is from its berth (`boardingYd`), and Details says so.
+    - A berth without a boarding point keeps its walk to the berth, priced as the navigation data
+      gives it (swim and SIM-21 included). User docks and dock NPCs' spawns are not berths.
+    - **The radius is measured, not the 40 yd first proposed.** On the committed navmesh (nav
+      revision `aefbc78d…`, client 1.60.1.70009), every boat berth lies 13.1 to 15.1 yd from the
+      nearest walkable polygon, but the snap there still takes the water under the deck, so no walk
+      can end on it. The nearest points where a walk does end on walkable ground are, from their
+      berths: Stormwind Harbor 12.5 yd, Auberdine 15.8 yd (path 11167), 16.1 yd (path 293) and
+      36.8 yd (path 11616), Powderfuse Port 42.7 yd, Steamwheedle Port 58.6 yd, Southshore
+      65.5 yd, Menethil 81.6 yd and Rut'theran 95.2 yd. 40 yd would leave five of the nine without
+      one, so `BOARDING_RADIUS_YD` is 100 yd. From each town's nearest flight point the walk to the
+      boarding point needs no swim, where the walk to the berth swam 61 to 400 yd. Rut'theran's
+      boarding point is on a part of the pier the navmesh joins to the village only through water:
+      the walk from Vesprystus swims 72 yd, priced as a swim (under SIM-21's 200 yd). The sky
+      transports' stops at Dalaran and Mulgore are on walkable ground already (0 yd).
+    - The boarding points are a table derived from the committed navmesh and taxi file
+      (`src/rules/berths.ts`, with the nav revision it was measured on). `tests/berth-boarding.test.ts`
+      searches them again on the committed files and fails when they differ, so the re-pin's rebuilt
+      navmesh (D-050 item 1) cannot leave them stale. A table entry applies only while the file's
+      stop is still at the berth it records.
+    - Basis: `assumption` for the wait's cover of the step to the berth, as for the wait itself.
+      This replaces the fixer's interim rule (the swim priced at the ground speed, without SIM-21).
 - **TravelGraph seed:** the client ships the Era transports (paths 241, 285, 292, 293, 295, 301, 302,
   303, 436) and the Forever paths 11616, 11167, 11391, 11398 and 11457 (forever-game-rules.md
   section 6.5). A path in the client does not prove the transport runs on the server, so each

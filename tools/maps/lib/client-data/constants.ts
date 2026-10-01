@@ -5,7 +5,7 @@
  */
 
 /** The client build the tables are read from (`LocalCasc.open({ pin })` refuses any other). */
-export const CLIENT_TABLES_PIN = { product: 'wow_classic_beta', version: '1.60.1.70009', buildKey: '05215079e3905ef5922ae0b03ffefb73' } as const;
+export const CLIENT_TABLES_PIN = { product: 'wow_classic_beta', version: '1.60.1.70124', buildKey: 'dd3dfc2881c407299f46c2aaf34c130b' } as const;
 
 /** The tool's entry point: the root of its module closure (the manifest's tool tree hash). */
 export const CLIENT_TABLES_ENTRY = 'tools/maps/client-tables.ts';

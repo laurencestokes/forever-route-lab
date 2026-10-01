@@ -5,7 +5,9 @@ import { decodeUtf8, type FetchLike, joinUrl } from '../http';
 import { ART_MANIFEST_PATH, parseArtManifest, type ArtManifest } from './art-manifest';
 import type * as AtlasIndexModule from './atlas-index';
 import type { AtlasIndexFile } from './atlas-index';
-import { parseTerrainArcs, parseTerrainManifest, TERRAIN_MANIFEST_PATH, type TerrainArcKind, type TerrainArcs, type TerrainManifest } from './terrain';
+import type * as TerrainModule from './terrain';
+import type { TerrainArcKind, TerrainArcs, TerrainManifest } from './terrain';
+import { TERRAIN_MANIFEST_PATH } from './terrain-paths';
 
 /**
  * The committed map resources at runtime (D-032, D-033, D-042; terrain-navigation.md §13,
@@ -16,7 +18,9 @@ import { parseTerrainArcs, parseTerrainManifest, TERRAIN_MANIFEST_PATH, type Ter
  * has (the relief without the art, the zone frames without either) and shows the reason.
  *
  * - The two manifests are fetched revalidated (`no-cache`), like the data manifest, and parsed by
- *   hand-written guards (`art-manifest.ts`, `terrain.ts`).
+ *   hand-written guards (`art-manifest.ts`, `terrain.ts`). The terrain guards and the atlas index's
+ *   are chunks of their own, loaded with their first file, so neither is in the entry chunk (D-050
+ *   item 6); each starts loading with its file's request, not after it.
  * - An arc file is fetched, its bytes hashed with WebCrypto and compared with the terrain
  *   manifest's SHA-256 before it is parsed. A mismatch is fetched once more past the HTTP cache
  *   (a copy cached from an earlier deploy), as data files are, before it fails.
@@ -125,7 +129,36 @@ export function createMapResources(opts: MapResourcesOptions): MapResources {
   const terrainMemo = memo<TerrainManifestLoad>();
   const arcsMemo = memo<TerrainArcsLoad>();
 
-  const terrain = (): Promise<TerrainManifestLoad> => terrainMemo(TERRAIN_MANIFEST_PATH, () => manifest(TERRAIN_MANIFEST_PATH, parseTerrainManifest));
+  /** The terrain guards (their own chunk), asked for with the first terrain file; a failed load is tried again. */
+  let terrainReader: Promise<typeof TerrainModule> | null = null;
+  const terrainParser = (): Promise<typeof TerrainModule> => {
+    terrainReader ??= import('./terrain').catch((error: unknown) => {
+      terrainReader = null;
+      throw error;
+    });
+    return terrainReader;
+  };
+  const readerFailure = (path: string, error: unknown): MapResourceFailure => unavailable(`${path}: its reader could not be loaded (${error instanceof Error ? error.message : String(error)})`);
+
+  const terrain = (): Promise<TerrainManifestLoad> =>
+    terrainMemo(TERRAIN_MANIFEST_PATH, async () => {
+      const reader = terrainParser();
+      // Both at once: the reader loads while the manifest is fetched.
+      reader.catch(() => undefined);
+      const fetched = await get(TERRAIN_MANIFEST_PATH, 'no-cache');
+      if (fetched.kind === 'failed') return fetched;
+      let parser: typeof TerrainModule;
+      try {
+        parser = await reader;
+      } catch (error) {
+        return readerFailure(TERRAIN_MANIFEST_PATH, error);
+      }
+      const json = parseJson(fetched.bytes);
+      // A deployed site without the file may answer with its fallback page.
+      if (json === undefined) return invalid(`${TERRAIN_MANIFEST_PATH} is not JSON`);
+      const parsed = parser.parseTerrainManifest(json, opts.baseUrl);
+      return typeof parsed === 'string' ? invalid(`${TERRAIN_MANIFEST_PATH}: ${parsed}`) : { kind: 'loaded', manifest: parsed };
+    });
 
   async function loadArcs(mapId: WorldMapId, kind: TerrainArcKind): Promise<TerrainArcsLoad> {
     const index = await terrain();
@@ -147,7 +180,13 @@ export function createMapResources(opts: MapResourcesOptions): MapResources {
     if (result.problem !== null) return invalid(`${path} failed its integrity check: ${result.problem}`);
     const json = parseJson(result.bytes);
     if (json === undefined) return invalid(`${path} is not UTF-8 JSON`);
-    const arcs = parseTerrainArcs(json, file);
+    let parser: typeof TerrainModule;
+    try {
+      parser = await terrainParser();
+    } catch (error) {
+      return readerFailure(path, error);
+    }
+    const arcs = parser.parseTerrainArcs(json, file);
     return typeof arcs === 'string' ? invalid(`${path}: ${arcs}`) : { kind: 'loaded', arcs };
   }
 
@@ -156,16 +195,19 @@ export function createMapResources(opts: MapResourcesOptions): MapResources {
     atlas: (expectedHash, style = 'painted') => {
       const path = INDEX_PATHS[style];
       return atlasMemo(`${path}#${expectedHash}`, async () => {
+        // The parser stays out of the entry chunk; it loads while the index is fetched, not after it
+        // (review MR-07: at 4× its request waited for the main thread for about a second).
+        const reader = import('./atlas-index');
+        reader.catch(() => undefined);
         const fetched = await get(path, 'no-cache');
         if (fetched.kind === 'failed') return fetched;
         const json = parseJson(fetched.bytes);
         if (json === undefined) return invalid(`${path} is not JSON`);
-        // The parser stays out of the entry chunk: it loads with the index, when the atlas first mounts.
         let parser: typeof AtlasIndexModule;
         try {
-          parser = await import('./atlas-index');
+          parser = await reader;
         } catch (error) {
-          return unavailable(`${path}: its reader could not be loaded (${error instanceof Error ? error.message : String(error)})`);
+          return readerFailure(path, error);
         }
         const file = parser.parseAtlasIndex(json, opts.baseUrl, style);
         if (typeof file === 'string') return invalid(`${path}: ${file}`);

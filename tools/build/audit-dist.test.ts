@@ -700,6 +700,11 @@ describe('a map folder whose tiles come from a release-asset pack (external, D-0
     const partial = checkMapFolders(distDir, listFiles(distDir), [minimap], repoRoot);
     expect(partial.violations.map((v) => v.message)).toEqual(['minimap: listed in maps/minimap/manifest.json but missing (a partial set of the pack)']);
     expect(partial.recorded.size).toBe(0);
+    // ... and says so once: the tiles it has are listed and verified, so the image rule adds no line per tile
+    expect(partial.allowedImages.has('maps/minimap/t/0/0/0.webp')).toBe(true);
+    const partialAudit = auditDist({ distDir, repoRoot, requirements: { ...requirements, mapFolders: [withBaselines()] } });
+    expect(partialAudit.violations.filter((v) => v.rule === 'image')).toEqual([]);
+    expect(rulesOf(partialAudit.violations)).toEqual(['map-folder maps/minimap/t/0/1/0.webp']);
     // every tile: both modes pass, measured from the files
     writeFiles(distDir, { 'maps/minimap/t/0/1/0.webp': t2 });
     const whole = checkMapFolders(distDir, listFiles(distDir), [minimap], repoRoot, { deploy: true });

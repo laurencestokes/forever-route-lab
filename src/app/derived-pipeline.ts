@@ -38,6 +38,7 @@ import { cachedDatasetSource, datasetBaseView } from './dataset-views';
 import type { NavUnavailable } from './navigation-legs';
 import { type ClientTableState, createPlacesBuilder, type PlacesModel } from './map-places';
 import { buildMapLabels, zoneShapesOf, type ZoneShapes } from './map-labels';
+import { createMapClusterer } from './map-clusters';
 import { buildZoneFill } from './map-zone-fill';
 import { zoneOfPoint } from './map-viewing';
 import type { NavigationTravelModel } from './navigation-model';
@@ -75,12 +76,22 @@ import { zoneSpans, type ZoneSpans } from './zone-levels';
  *   off for every map, so the times become final straight-line estimates (`resumePaths` tries
  *   again).
  * - **Selection.** The state before and after the selection's focus step comes from the walker's
- *   checkpoints (`stateBefore`) and is republished when the focus changes.
+ *   checkpoints (`stateBefore`) and is republished when the focus changes. With no step selected it
+ *   is the last step's (`atEnd`): the panels and the map show the state after the last step, as the
+ *   status bar does (D-050 item 2; review PR-13).
  * - **Quest state** (map-presentation.md §7.1; step MP.3): after each publish of a new walk or a
  *   new focus, a task of its own classifies every quest open to the character at the state after
  *   the focus step (`questStateModel`) and publishes it with the zones' level spans, so the
  *   selection paints first and the map's sync never waits for it. It is rebuilt only for a new
  *   project walked or a new focus step: a re-walk for navigation results changes times, not quests.
+ *   When it runs (review UI-04; D-050 item 5): after the next paint for a change to a still
+ *   selection, so the map's pins follow in about a frame; once, where it stops, for a moving one
+ *   (`selectionSettleMs`); and, after an edit whose walk was quick (`QUICK_WALK_MS`), in the walk's
+ *   own task, so the pins follow the edit with its results.
+ * - **Clusters** (map-presentation.md §25.2.5; D-050 item 6): the same task makes every cluster
+ *   level of the quest givers' and turn-ins' inputs (`app/map-clusters.ts`), which the places carry
+ *   to the map (`PlacesModel.clusters`), so neither the clustering nor its cost is in the map's sync
+ *   or the entry chunk.
  * - **Client tables** (D-039 B, E; map-presentation.md §8 to §10; steps MP.5, MP.8, MP.9): the
  *   committed taxi file and dungeon table load once, lazily and never fatally, beside the first
  *   walk. Once the taxi file has loaded, the TravelGraph is seeded with it (its nodes, its flights
@@ -109,12 +120,20 @@ export interface DerivedPipelineOptions {
   /** The least time between the end of one walk and a re-walk for navigation results (default 100 ms, §9.3). */
   readonly rewalkMs?: number;
   /**
-   * How long after the selection last moved the quest state, places and labels are rebuilt for it
-   * (review UI-04): arrowing through the list rebuilds them once, for the step it stops on, and a
-   * single change paints its selection before the rebuild. The app passes `SELECTION_SETTLE_MS`;
-   * default 0 (the next task).
+   * How long a selection counts as moving after it last changed (review UI-04; D-050 item 5): a
+   * change to a selection that was still rebuilds the quest state, places and labels right after the
+   * next paint, so its pins follow in about a frame; changes while it moves (arrowing through the
+   * list) wait until it has been still this long, so they rebuild once, for the step it stops on.
+   * Either way the selection paints before the rebuild. The app passes `SELECTION_SETTLE_MS`;
+   * default 0 (every change is a still one).
    */
   readonly selectionSettleMs?: number;
+  /**
+   * Runs a task after the next paint and returns its cancel. Default: with the page's own timers,
+   * `requestAnimationFrame` and then a zero-delay timer (a 250 ms timer too, for a page that draws no
+   * frames while hidden); with injected `timers` (tests, benchmarks), a zero-delay timer of those.
+   */
+  readonly afterPaint?: (task: () => void) => () => void;
   /** Called after each publish of new results (the composition root measures them). */
   readonly onPublished?: (results: DerivedResults) => void;
   /** Called whenever the navigation model changes (null: none), with the runtime and hints (the map's walking paths). */
@@ -272,6 +291,55 @@ interface Run {
  */
 export const SELECTION_SETTLE_MS = 60;
 
+/**
+ * A walk at most this long (ms) takes the quest state into its own task (D-050 item 5): an edit's
+ * pins then follow with its results, with one render of both, instead of a task and a render later.
+ * A longer walk (a long route, a slow machine) leaves it a task of its own, so its results paint
+ * first. ASSUMPTION: half a 60 Hz frame.
+ */
+export const QUICK_WALK_MS = 8;
+
+/** A zero-delay timer of `timers` as a cancel: the walk after an edit, and the next paint where `timers` are injected (tests and benchmarks drive them). */
+function timerAfterPaint(timers: NavTimers, task: () => void): () => void {
+  const handle = timers.set(task, 0);
+  return () => {
+    timers.clear(handle);
+  };
+}
+
+/**
+ * The page's next paint: a zero-delay timer set from an animation frame, so the task runs after the
+ * frame is drawn; a 250 ms timer too, as a page drawing no frames (a hidden tab) still gets it.
+ * Without `requestAnimationFrame`, a zero-delay timer.
+ */
+function pageAfterPaint(timers: NavTimers): (task: () => void) => () => void {
+  const scope = globalThis as { requestAnimationFrame?: (callback: () => void) => number; cancelAnimationFrame?: (handle: number) => void };
+  const frame = scope.requestAnimationFrame;
+  const cancelFrame = scope.cancelAnimationFrame;
+  if (typeof frame !== 'function' || typeof cancelFrame !== 'function') return (task) => timerAfterPaint(timers, task);
+  return (task) => {
+    let done = false;
+    let after: unknown = null;
+    const run = (): void => {
+      if (done) return;
+      done = true;
+      cancel();
+      task();
+    };
+    const handle = frame.call(globalThis, () => {
+      after = timers.set(run, 0);
+    });
+    const backstop = timers.set(run, 250);
+    const cancel = (): void => {
+      done = true;
+      cancelFrame.call(globalThis, handle);
+      timers.clear(backstop);
+      if (after !== null) timers.clear(after);
+    };
+    return cancel;
+  };
+}
+
 /** One issue shortener per dataset view (review UI-01): the rows' line 2. */
 const shorteners = new WeakMap<object, ReturnType<typeof createIssueShortener>>();
 function shortenerOf(view: DatasetView): ReturnType<typeof createIssueShortener> {
@@ -292,6 +360,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   const timers = options.timers ?? defaultNavTimers;
   const now = options.now ?? (() => 0);
   const selectionSettleMs = options.selectionSettleMs ?? 0;
+  const afterPaint = options.afterPaint ?? (options.timers === undefined ? pageAfterPaint(timers) : (task: () => void) => timerAfterPaint(timers, task));
   const rewalkMs = options.rewalkMs ?? 100;
 
   let navigation: NavigationState = options.navigation ?? NAVIGATION_CHECKING;
@@ -312,13 +381,17 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   let releaseHold: (() => void) | null = null;
   /** The every-map failure this pipeline set after an unexpected run failure (`resumePaths` clears it). */
   let runFailure: NavUnavailable | null = null;
-  let editTimer: unknown = null;
+  /** The scheduled walk's cancel (a zero-delay timer: the edit paints first, and rapid edits coalesce). */
+  let editCancel: (() => void) | null = null;
   let rewalkTimer: unknown = null;
   /** The quest state's own task, and what the published model was built from. */
   let questTimer: unknown = null;
+  /** A quest-state run waiting for the next paint (a still selection's change), and when the selection last changed. */
+  let questPaint: (() => void) | null = null;
+  let selectionChangedAt = Number.NEGATIVE_INFINITY;
   let lastSelected: SelectedStepState | null = null;
   let publishedQuestState: QuestStateModel | null = null;
-  let questKey: { readonly project: ProjectV1; readonly stepId: StepId; readonly view: DatasetView; readonly rules: EffectiveRules } | null = null;
+  let questKey: { readonly project: ProjectV1; readonly stepId: StepId; readonly atEnd: boolean; readonly view: DatasetView; readonly rules: EffectiveRules } | null = null;
   let changeAt: number | null = null;
   let rewalkFrom = Number.POSITIVE_INFINITY;
   let lastWalkEnd = Number.NEGATIVE_INFINITY;
@@ -329,6 +402,8 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   let taxiState: ClientTableState<ClientTaxi> = { kind: 'checking' };
   let dungeonState: ClientTableState<ClientDungeons> = { kind: 'checking' };
   const placesOf = createPlacesBuilder();
+  /** The quest givers' and turn-ins' clusters (D-050 item 6): the model's made in the quest-state task, the map's other inputs on first use. */
+  const clusterer = createMapClusterer();
   /** The zone rings and label anchors per world map, once the terrain zone arcs are in (MP.7). */
   let zoneShapes: ReadonlyMap<WorldMapId, ZoneShapes> = new Map();
   let anchors: ReadonlyMap<WorldMapId, ReadonlyMap<number, WorldPoint>> = new Map();
@@ -457,17 +532,22 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
     return stepIndex.index.get(id) ?? -1;
   }
 
+  /** The state around the focus step; with no focus, around the last step (`atEnd`, D-050 item 2). */
   function selectedOf(focus: StepId | null): SelectedStepState | null {
     const c = context;
     const r = results;
-    if (focus === null || c === null || r === null || walkedProject === null) return null;
-    const index = indexOf(walkedProject, focus);
+    if (c === null || r === null || walkedProject === null) return null;
+    const steps = walkedProject.route.steps;
+    const stepId = focus ?? steps[steps.length - 1]?.id ?? null;
+    if (stepId === null) return null;
+    const index = indexOf(walkedProject, stepId);
     const record = r.records[index];
     if (index < 0 || record === undefined) return null;
     return {
       revision: r.revision,
-      stepId: focus,
+      stepId,
       index,
+      atEnd: focus === null,
       record,
       before: c.walker.stateBefore(index),
       after: c.walker.stateBefore(index + 1),
@@ -476,29 +556,45 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   }
 
   function clearTimers(): void {
-    if (editTimer !== null) timers.clear(editTimer);
+    editCancel?.();
     if (rewalkTimer !== null) timers.clear(rewalkTimer);
-    editTimer = null;
+    editCancel = null;
     rewalkTimer = null;
   }
 
+  /** Cancels a quest-state run waiting for its timer or for the next paint. */
+  function cancelQuestState(): void {
+    if (questTimer !== null) timers.clear(questTimer);
+    questTimer = null;
+    questPaint?.();
+    questPaint = null;
+  }
+
+  /** The quest state for a new walk or table, in a task of its own; a run already waiting (a moving selection's) is kept. */
+  function scheduleQuestState(): void {
+    if (disposed || questTimer !== null || questPaint !== null) return;
+    questTimer = timers.set(runQuestState, 0);
+  }
+
   /**
-   * The quest state for the published walk and focus, in a task of its own (after the selection has
-   * painted). `delay` > 0 (a selection change) restarts a timer already set, so a moving selection
-   * rebuilds once it stops (review UI-04); a 0 ms request keeps whichever timer is set.
+   * The quest state after a selection change (review UI-04; D-050 item 5): the selection paints
+   * first either way. A change to a still selection (none for `selectionSettleMs`) rebuilds right
+   * after that paint, so the map's pins follow in about a frame instead of after the settle; while
+   * the selection moves, each change restarts the settle wait, so arrowing through the list rebuilds
+   * once, for the step it stops on.
    */
-  function scheduleQuestState(delay = 0): void {
+  function scheduleSelectionQuestState(): void {
     if (disposed) return;
-    if (questTimer !== null) {
-      if (delay === 0) return;
-      timers.clear(questTimer);
-    }
-    questTimer = timers.set(runQuestState, delay);
+    const at = now();
+    const moving = at - selectionChangedAt <= selectionSettleMs;
+    selectionChangedAt = at;
+    cancelQuestState();
+    if (moving) questTimer = timers.set(runQuestState, selectionSettleMs);
+    else questPaint = afterPaint(runQuestState);
   }
 
   function runQuestState(): void {
-    if (questTimer !== null) timers.clear(questTimer);
-    questTimer = null;
+    cancelQuestState();
     const c = context;
     const r = results;
     const project = walkedProject;
@@ -513,7 +609,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
         return;
       }
       const key = questKey;
-      if (key !== null && key.project === r.project && key.stepId === selected.stepId && key.view === c.view && key.rules === c.rules) {
+      if (key !== null && key.project === r.project && key.stepId === selected.stepId && key.atEnd === selected.atEnd && key.view === c.view && key.rules === c.rules) {
         output.publish({ zoneSpans: spans, places: buildPlaces(c, r, selected, publishedQuestState, spans) });
         return;
       }
@@ -521,6 +617,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
         revision: r.revision,
         stepId: selected.stepId,
         stepIndex: selected.index,
+        atEnd: selected.atEnd,
         state: selected.after,
         records: r.records,
         dataset: c.view,
@@ -533,7 +630,10 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
         previous: publishedQuestState,
       });
       publishedQuestState = questState;
-      questKey = { project: r.project, stepId: selected.stepId, view: c.view, rules: c.rules };
+      questKey = { project: r.project, stepId: selected.stepId, atEnd: selected.atEnd, view: c.view, rules: c.rules };
+      // Every cluster level of the layers' inputs, here rather than in the map's sync (§25.2.5, §25.7).
+      clusterer.warm('available-quests', questState.map.givers);
+      clusterer.warm('turn-ins', questState.map.turnIns);
       output.publish({ questState, zoneSpans: spans, places: buildPlaces(c, r, selected, questState, spans) });
     } catch {
       // The quests stay "open by race and class" (the shell says there is no route state), never a guess.
@@ -569,7 +669,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       });
       const labels = labelsOf(spans, questState?.level ?? null, questState?.levelLowerBound ?? false, c.rules, anchors, model.dungeons, model.flightPoints);
       // The zone lookup too: the rings name the zone the view is on (review QA-01).
-      return { ...model, labels, zoneFill: zoneFillOf(zoneShapes, zonesState, tintsState), zoneAt: zoneAtOf(zoneShapes) };
+      return { ...model, labels, zoneFill: zoneFillOf(zoneShapes, zonesState, tintsState), zoneAt: zoneAtOf(zoneShapes), clusters: clusterer.of };
     } catch {
       return null;
     }
@@ -647,18 +747,18 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   }
 
   function scheduleWalk(): void {
-    if (disposed || editTimer !== null) return;
+    if (disposed || editCancel !== null) return;
     if (rewalkTimer !== null) {
       timers.clear(rewalkTimer);
       rewalkTimer = null;
     }
-    editTimer = timers.set(walkNow, 0);
+    editCancel = timerAfterPaint(timers, walkNow);
   }
 
   /** A re-walk for navigation results, from step `from`, at most every `rewalkMs`. */
   function requestRewalk(from: number): void {
     rewalkFrom = Math.min(rewalkFrom, from);
-    if (disposed || editTimer !== null || rewalkTimer !== null) return;
+    if (disposed || editCancel !== null || rewalkTimer !== null) return;
     const wait = Math.max(0, lastWalkEnd + rewalkMs - now());
     rewalkTimer = timers.set(walkNow, wait);
   }
@@ -675,6 +775,8 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
     if (disposed) return;
     const state = store.getState();
     const start = now();
+    // A walk of another project (an edit, not a re-walk for navigation results or a table).
+    const edited = state.project !== walkedProject;
     try {
       const c = contextFor(state.project);
       if (c !== context) {
@@ -726,11 +828,13 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       changeAt = null;
       output.publish({ status: 'ready', failure: null, results: published, selected, travel, paths });
       lastSelected = selected;
-      scheduleQuestState();
       lastWalkEnd = now();
       options.onPublished?.(published);
       notifyModel(c);
       afterWalk(c, published);
+      // An edit's quest state in this task after a quick walk (D-050 item 5), unless a moving selection waits for its own.
+      if (edited && walked - start <= QUICK_WALK_MS && questTimer === null && questPaint === null) runQuestState();
+      else scheduleQuestState();
     } catch (error) {
       // Start the next walk afresh: the walker's state may be half-way through a step.
       context = null;
@@ -875,7 +979,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       selectedFocus = state.selection.focus;
       lastSelected = selectedOf(selectedFocus);
       output.publish({ selected: lastSelected });
-      scheduleQuestState(selectionSettleMs);
+      scheduleSelectionQuestState();
     }
   }
 
@@ -892,7 +996,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
   /** Walks now when the store is ahead of the results (explicit computing needs a current walk). */
   function ensureWalked(): void {
     const state = store.getState();
-    if (editTimer !== null || rewalkTimer !== null || state.project !== walkedProject || state.revision !== walkedRevision) walkNow();
+    if (editCancel !== null || rewalkTimer !== null || state.project !== walkedProject || state.revision !== walkedRevision) walkNow();
   }
 
   /** Resolves with `promise`, or rejects with the signal's reason as soon as it aborts. */
@@ -993,8 +1097,8 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       scheduleWalk();
     },
     flush() {
-      if (editTimer !== null || rewalkTimer !== null) walkNow();
-      if (questTimer !== null) runQuestState();
+      if (editCancel !== null || rewalkTimer !== null) walkNow();
+      if (questTimer !== null || questPaint !== null) runQuestState();
     },
     checkpointIndices: () => context?.walker.checkpointIndices() ?? [],
     get walks() {
@@ -1004,8 +1108,7 @@ export function createDerivedPipeline(options: DerivedPipelineOptions): DerivedP
       if (disposed) return;
       disposed = true;
       clearTimers();
-      if (questTimer !== null) timers.clear(questTimer);
-      questTimer = null;
+      cancelQuestState();
       cancelStart();
       unsubscribeStore();
       unsubscribeBatches?.();

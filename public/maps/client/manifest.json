@@ -10,8 +10,8 @@
   "derivedFrom": "selected columns of World of Warcraft: Forever client DB2 tables, read-only through tools/casc; not game files",
   "client": {
     "product": "wow_classic_beta",
-    "version": "1.60.1.70009",
-    "buildKey": "05215079e3905ef5922ae0b03ffefb73"
+    "version": "1.60.1.70124",
+    "buildKey": "dd3dfc2881c407299f46c2aaf34c130b"
   },
   "layouts": {
     "wowdbdefs": {
@@ -22,7 +22,7 @@
   },
   "tool": {
     "toolTreeHash": {
-      "tools/maps/client-tables.ts": "6121977442ab7ef5add20b4ee28c181c3c3dc58aeb07d9757eda5a06630359c5"
+      "tools/maps/client-tables.ts": "be3ead3dc9f0b955fb0bd0924f88d002340cc706b2a334e8034f935324db1cfc"
     },
     "treeMethod": "module closure of tools/maps/client-tables.ts (29 files, tools/terrain/lib/tool-tree.ts)"
   },
@@ -50,7 +50,7 @@
       "path": "taxi.json",
       "kind": "taxi",
       "bytes": 75182,
-      "sha256": "7eb109ce65f51088eed214566df64427bd674b3e45eb9a5ea8c1700ca2709bd5",
+      "sha256": "fa434cd2cf3579969a764342548cf8a81821e318e42ee4e1a823b989859526bf",
       "tables": ["TaxiNodes", "TaxiPath", "TaxiPathNode"],
       "inputHash": "52bf60c8489c93ca762ebde56ad3347979fcb44d17c8ae8a3b411205d04e6cbd",
       "counts": {
@@ -100,7 +100,7 @@
       "path": "zones.json",
       "kind": "zones",
       "bytes": 6463,
-      "sha256": "70991c838bae69a89c4e495d8d89a68917ac55c22760970bb4e8eb3cef520d4f",
+      "sha256": "29dabb39fd2cdbf068ce3b41cb60cbe610c1f89f853ed93140d1b1122a08c99c",
       "tables": ["AreaTable", "UiMapAssignment"],
       "inputHash": "697f5b5174c8c81aee279e62e80c849aee079f984ef4497537767f1fac576646",
       "counts": {
@@ -117,7 +117,7 @@
       "path": "dungeons.json",
       "kind": "dungeons",
       "bytes": 10831,
-      "sha256": "720fa5a22ca2e3d9ab43e47b9e7a714648bd00b1e42fc0ff03ace981984d94de",
+      "sha256": "d41bd9253e978088f0316fa7423ef789a2518035c822c4c90acd6b32bee424fc",
       "tables": ["LFGDungeons", "ContentTuning", "Map", "AreaTable"],
       "inputHash": "3aef8ce9c12b024bac11928efb98debe0e4ece0528eaae767ea2712a6585ea58",
       "counts": {

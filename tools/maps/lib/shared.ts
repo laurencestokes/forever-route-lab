@@ -11,7 +11,7 @@
  * (terrain-navigation.md §2, gate G1): `LocalCasc.open({ pin })` refuses any other installed
  * build. The committed art, atlas and minimap record it.
  */
-export const CLIENT_PIN = { product: 'wow_classic_beta', version: '1.60.1.70009', buildKey: '05215079e3905ef5922ae0b03ffefb73' } as const;
+export const CLIENT_PIN = { product: 'wow_classic_beta', version: '1.60.1.70124', buildKey: 'dd3dfc2881c407299f46c2aaf34c130b' } as const;
 
 /** The committed placeholder geometry (MAPS.md §5.5). */
 export const PLACEHOLDER_DIR = 'public/maps/placeholder';

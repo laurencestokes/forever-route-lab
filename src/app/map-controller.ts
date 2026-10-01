@@ -70,6 +70,7 @@ import {
   type PlaceLayerInput,
   type ReliefInput,
   type RouteInput,
+  type RouteStepInput,
   type RoutePathsInput,
   type StepPlacement,
   type SpawnLayerId,
@@ -93,6 +94,7 @@ import {
   plainEqual,
   viewLodLevel,
   type ActiveSplit,
+  type ClustersOf,
   type LayerCall,
   type LodOverrides,
   type MapLayers,
@@ -104,6 +106,7 @@ import type { DerivedStore } from './derived';
 import type { RoutePathFeed } from './route-paths';
 import {
   createDrawnRouteFilter,
+  createPositions,
   createRouteInputBuilder,
   firstRouteMap,
   flightMasterModel,
@@ -126,6 +129,7 @@ import {
   type FlightMasterModel,
   type GiverLayerModel,
   type QuestPointsModel,
+  type Positions,
   type RouteMapSummary,
   type ZoneGroup,
 } from './map-model';
@@ -176,7 +180,8 @@ import { plainGuideText } from './ui-text';
  *   and drawn from object URLs of the verified bytes, revoked on detach.
  * - **Walking paths** (MAPS §7.4): `setRoutePaths` takes the navigation model's paths; with the
  *   walking-paths toggle on, walked legs follow them, and legs without one are drawn straight as
- *   pending or fallback.
+ *   pending or fallback. New paths wait while the map moves (`movestart` holds the feed) and are
+ *   drawn after it settles, in a task after the view's sync (D-050 item 5).
  * - **The atlas** (docs/research/map-atlas.md §8.2; D-042), on by default since ATL.10 (the `atlas`
  *   option, false only in tests): maps 0 and 1 and the Zephras Isle inset on one surface, with "Kalimdor"
  *   and "Eastern Kingdoms" as presets that fit it to one continent. Layers are built by one
@@ -189,7 +194,8 @@ import { plainGuideText } from './ui-text';
  * - **The atlas tiles** (map-atlas.md §7.2, §8.6; step ATL.7): with the atlas on, the controller
  *   loads the tile index (`MapResources.atlas`) when the map first mounts, and refuses one whose
  *   `atlasHash` is not the surface's. The modes of §8.6:
- *   - tiles: the art layer is the one `tiles` descriptor; the relief is not drawn on the atlas;
+ *   - tiles: the art layer is the one `tiles` descriptor, sent before any other layer is built, so
+ *     the first view's images are asked for first (review MR-07); the relief is not drawn on the atlas;
  *     zone rectangles are kept but not painted, and the city cards and the inset's card are framed
  *     over the tiles;
  *   - "Painted art" off: the relief per placement as the backdrop, hidden above zoom 0, with
@@ -311,6 +317,12 @@ export interface MapControllerOptions {
   readonly wording?: MapWording | null | undefined;
   /** The derived results, for the quest state after the active step (MP.3); null or omitted: the quests open by race and class. */
   readonly derived?: DerivedStore | null | undefined;
+  /**
+   * The clusters below the zone band while the places model has none (tests; D-050 item 6): the app
+   * takes them from the derived pipeline's places (`PlacesModel.clusters`), so the clustering stays
+   * out of the entry chunk. Null or omitted: per-zone counts until the places arrive.
+   */
+  readonly clusters?: ClustersOf | null | undefined;
 }
 
 /** A switcher entry that fits the atlas to one continent (map-atlas.md §5.6, §8.5): the placed map's 947 rectangle. */
@@ -1096,9 +1108,12 @@ export function createMapController(options: MapControllerOptions): MapControlle
       return input !== null && isDrawnStep(input);
     },
   };
-  const positionsOf = lastOf((steps: readonly RouteStep[]): ReadonlyMap<StepId, number> => new Map(steps.map((step, index) => [step.id, index])));
-  /** The drawn route's order by step id: one map per drawn route, so a note's text edit keeps it (M3 review PERF-2). */
-  const drawnOrderOf = lastOf((route: RouteInput): ReadonlyMap<StepId, number> => new Map(route.steps.map((step, index) => [step.stepId, index])));
+  /** Each step's position in the route (`createPositions`: renumbered in place, only where the steps changed). */
+  const stepPositions = createPositions((step: RouteStep) => step.id);
+  const positionsOf = (steps: readonly RouteStep[]): ReadonlyMap<StepId, number> => stepPositions(steps).positions;
+  /** The drawn route's order by step id, the same way; a note's text edit keeps the drawn route, so it renumbers nothing (M3 review PERF-2). */
+  const drawnPositions = createPositions((step: RouteStepInput) => step.stepId);
+  const drawnOrderOf = lastOf((route: RouteInput): Positions<StepId> => drawnPositions(route.steps));
   /**
    * Where the route line and beads split at the active step (map-presentation.md §13.6; review PR-02):
    * at the active step's place in the drawn route, or, for a step the route layers do not draw (a
@@ -1106,16 +1121,16 @@ export function createMapController(options: MapControllerOptions): MapControlle
    */
   const splitOf = lastOf((route: RouteInput, steps: readonly RouteStep[], active: StepId | null): ActiveSplit | null => {
     if (active === null) return null;
-    const positions = drawnOrderOf(route);
+    const { positions, version } = drawnOrderOf(route);
     const own = positions.get(active);
-    if (own !== undefined) return { at: own, positions };
-    const index = steps.findIndex((step) => step.id === active);
+    if (own !== undefined) return { at: own, positions, version };
+    const index = positionsOf(steps).get(active) ?? -1;
     if (index < 0) return null;
     for (let i = index - 1; i >= 0; i -= 1) {
       const at = positions.get(steps[i]?.id ?? active);
-      if (at !== undefined) return { at, positions };
+      if (at !== undefined) return { at, positions, version };
     }
-    return { at: -1, positions };
+    return { at: -1, positions, version };
   });
   type Character = EditorState['project']['character'];
   const giversOf = lastOf((dataset: DatasetView, race: Character['race'], cls: Character['class']): GiverLayerModel =>
@@ -1932,6 +1947,8 @@ export function createMapController(options: MapControllerOptions): MapControlle
     const flightMasters = flightMastersOf(dataset, character.faction, character.race, character.class).input;
     const focusNodes = flightFocus();
     const allFlights = !hiddenSet.has('all-flights');
+    // The clusters below the zone band, made in the derived publish (D-050 item 6); none before the places arrive.
+    const clusters = places?.clusters ?? options.clusters ?? null;
     // The atlas's painted art (map-atlas.md §8.6): the tiles when the index is loaded, else the relief backdrop.
     const atlasView = at.surface === 'atlas' && atlasInfo !== null;
     const mode = atlasView ? atlasMode() : 'none';
@@ -1953,9 +1970,9 @@ export function createMapController(options: MapControllerOptions): MapControlle
         coastline: { layer: 'coastline', outlines: coast, minimap: style === 'minimap' },
         'zone-outlines': { layer: 'zone-outlines', outlines: zoneLines, minimap: style === 'minimap' },
         'zone-frames': { layer: 'zone-frames', focusZone: zone, filled: !overArt, ...(tilesShown ? { overTiles: true, minimap: style === 'minimap' } : {}) },
-        'available-quests': { layer: 'available-quests', input: givers, focusQuests, rawZone: zone },
+        'available-quests': { layer: 'available-quests', input: givers, focusQuests, rawZone: zone, clusters },
         objectives: { layer: 'objectives', input: objectives, focusQuests, rawZone: zone, log },
-        'turn-ins': { layer: 'turn-ins', input: turnIns, focusQuests, rawZone: zone },
+        'turn-ins': { layer: 'turn-ins', input: turnIns, focusQuests, rawZone: zone, clusters },
         'flight-masters': { layer: 'flight-masters', input: flightMasters, focusQuests: [], rawZone: zone, places: flightPointsOf(places) },
         'route-line': { layer: 'route-line', route, paths, after },
         'route-steps': { layer: 'route-steps', route, after },
@@ -1979,14 +1996,21 @@ export function createMapController(options: MapControllerOptions): MapControlle
     return { parts, band };
   }
 
-  function build(state: EditorState, at: MapView): Map<LayerId, LayerContent> {
+  /**
+   * `early`: given the tile band's content before any other layer is built, so its first images are
+   * asked for while the rest of the sync runs (review MR-07: at 4× the first view's tiles waited for
+   * every layer to be built first).
+   */
+  function build(state: EditorState, at: MapView, early: ((layer: LayerId, content: LayerContent) => void) | null = null): Map<LayerId, LayerContent> {
     const { parts, band } = planParts(state, at, false);
     const out = new Map<LayerId, LayerContent>();
+    if (band !== null) {
+      const tiles = tilesContentOf(band);
+      out.set('art', tiles);
+      early?.('art', tiles);
+    }
     for (const layer of LAYER_IDS) {
-      if (layer === 'art' && band !== null) {
-        out.set(layer, tilesContentOf(band));
-        continue;
-      }
+      if (layer === 'art' && band !== null) continue;
       const layerParts = parts.map(({ view: part, builder, calls }) => builder.part(calls[layer], part));
       const [only] = layerParts;
       if (layerParts.length === 1 && only !== undefined) {
@@ -1995,7 +2019,13 @@ export function createMapController(options: MapControllerOptions): MapControlle
       }
       const budgets = partBudgets(
         layer,
-        layerParts.map((part) => ({ candidates: part.candidates, inView: part.inView() })),
+        // Counted in view only when the parts' candidates overflow the budget (`partBudgets` reads it then): a pan recounts no layer that fits (D-050 item 5).
+        layerParts.map((part) => ({
+          candidates: part.candidates,
+          get inView() {
+            return part.inView();
+          },
+        })),
         layers.lod,
         shareCap,
         bandOfView(at),
@@ -2088,16 +2118,18 @@ export function createMapController(options: MapControllerOptions): MapControlle
       const start = `frl:map:sync:start:${String(serial)}`;
       const end = `frl:map:sync:end:${String(serial)}`;
       safely(() => timing?.mark(start));
-      const built = build(state, view);
       const set: LayerId[] = [];
-      for (const layer of LAYER_IDS) {
-        const content = built.get(layer);
-        if (content === undefined) continue;
+      const send = (layer: LayerId, content: LayerContent): void => {
         contents.set(layer, content);
-        if (sent.get(layer) === content) continue;
+        if (sent.get(layer) === content) return;
         target.setLayer(layer, content);
         sent.set(layer, content);
         set.push(layer);
+      };
+      const built = build(state, view, send);
+      for (const layer of LAYER_IDS) {
+        const content = built.get(layer);
+        if (content !== undefined) send(layer, content);
       }
       for (const layer of LAYER_IDS) {
         const visible = state.view.map.layers[layer];
@@ -2222,7 +2254,9 @@ export function createMapController(options: MapControllerOptions): MapControlle
     const focus = state.selection.focus;
     if (focus === lastFocus) return;
     lastFocus = focus;
-    const next = focus !== null && positionsOf(state.project.route.steps).has(focus) ? focus : null;
+    // A scan, not the positions: an insert selects its new step, and renumbering every step after it
+    // here (O(n) map writes) would come before the edit is drawn (D-050 item 5).
+    const next = focus !== null && state.project.route.steps.some((step) => step.id === focus) ? focus : null;
     if (next === activeStep) return;
     activeStep = next;
     follow(next);
@@ -2423,12 +2457,17 @@ export function createMapController(options: MapControllerOptions): MapControlle
 
   function onEvent(event: MapEvent): void {
     switch (event.type) {
+      case 'movestart':
+        // New walking paths wait for the view to settle: none is drawn in the gesture's frames (D-050 item 5).
+        pathFeed?.hold(true);
+        return;
       case 'move':
       case 'surface': {
         view = bandedView(event.view);
         // The adapter's band is the controller's (review MR-03).
         if (view.band !== undefined) adapter?.setBand?.(view.band);
         pathFeed?.setView(view);
+        pathFeed?.hold(false);
         const zone = store.getState().view.map.zone;
         // The zone jumped to stops being "the zone" once it is panned out of view or left behind.
         const leftZone = zone !== null && zone !== zoneFit && !zoneShown(zone, event.view, event.type === 'move');
@@ -2625,7 +2664,7 @@ export function createMapController(options: MapControllerOptions): MapControlle
           sentSelected = undefined;
           sentNumbers = null;
           sentGrid = null;
-          for (const type of ['click', 'hover', 'move', 'zoom', 'surface', 'tiles'] as const) target.on(type, onEvent);
+          for (const type of ['click', 'hover', 'movestart', 'move', 'zoom', 'surface', 'tiles'] as const) target.on(type, onEvent);
         }
         // Content kept from an earlier mount is redrawn by the adapter; a layer is sent again only
         // when it changed (`sent` survives the remount).
@@ -2696,6 +2735,8 @@ export function createMapController(options: MapControllerOptions): MapControlle
       cancelPrebuild?.();
       cancelPrebuild = null;
       pathFeed?.setView(null);
+      // A gesture the unmount cut short holds nothing.
+      pathFeed?.hold(false);
       adapter?.destroy();
       mounted = false;
       mapHovering = false;

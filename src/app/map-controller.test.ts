@@ -25,6 +25,7 @@ import { DEFAULT_LOD, RELIEF_OPACITY } from '../map/layers';
 import { fixedClock } from './clock';
 import { insertNote, moveSelected } from './commands';
 import { BADGE_TEXT, createMapController, FIT_ROUTE_MAX_ZOOM, MAX_SYNC_MEASURES, stagePixelOf, type MapControllerOptions, type MapTiming } from './map-controller';
+import { createMapClusterer } from './map-clusters';
 import {
   fakeAdapterFactory,
   MAP_TEST_DATASET,
@@ -116,6 +117,7 @@ function setup(opts: SetupOptions = {}): Setup {
     geometry: workspace.geometry,
     describeStep: (step, index) => `${String(index + 1)} · ${step.kind}`,
     timing,
+    clusters: createMapClusterer().of,
     objectUrls: {
       create: (blob) => {
         created.push(blob);

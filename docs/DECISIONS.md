@@ -1064,3 +1064,31 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
      - fewer inline parts per row;
      - row buttons moved clear of the text.
      This is D-048 A/F refined. Mocks go to the owner before building.
+
+## D-051: Left-panel layout "B+" for readability (owner, 2026-09-30)
+
+- **Date:** 2026-09-30
+- **Decided by:** the owner chose B+ from `.cache/readability/owner-sheet.jpg`: three mocks, A, B and
+  C, beside WoWF-QRP's saved panel and today's app. The details are architect defaults, which the
+  owner may overrule.
+- **Context:** D-050 item 7. The owner found WoWF-QRP's left panel more readable. The study and
+  mocks are in `.cache/readability/`, and the critic's corrections are folded into the sheet.
+- **Decision: B+ ("balanced, row grows"):**
+  - **Row size:** fixed two-line rows of 44 px.
+  - **Difficulty:** "Lv n" with the pips under the disc replaces the chip; the disc keeps its
+    difficulty colour.
+  - **Buttons:** row buttons show only on hover, on the selected row and on the keyboard's active
+    row.
+  - **Issue shape:** drawn once.
+  - **The active row grows:** it shows its issue in full on its own line, plus the NPC and zone,
+    before the buttons take any space. The virtual list stays index × 44 px, plus one fixed extra
+    below the active row.
+  - **Measured on the mock:** titles cut fall from 13 to 4, issue words cut at rest from 22 to 7,
+    and NPC names cut at rest from 24 to 0. About 11 steps are in view.
+  - **Architect defaults:** the chain position ("2/2") is always shown on the active row and in
+    the row's accessible name and tooltip, and on other rows only where it fits; the level reads
+    "Lv n".
+  - **Before building:** B+ is mocked and measured, including the active row's issue, NPC and zone
+    being whole, and the D-040 carried-work cue.
+  - **Order:** the build follows the entry-chunk trim (D-050 item 6), because the stop rule must
+    hold.

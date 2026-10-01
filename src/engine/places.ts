@@ -42,7 +42,7 @@ export interface Places {
   nearestSpawn(ref: EntityRef, near: WorldPoint | null): SpawnChoice;
   /** A taxi node's flight master, with the hint of its spawn; null without a position. */
   taxiNode(node: TaxiNode): TravelEndpoint | null;
-  /** A transport dock; null until its position is known. */
+  /** A transport dock (a client berth's boarding point, TIME-7); null until its position is known. */
   dock(dock: TransportDock): TravelEndpoint | null;
   /** A world point with no authored source (an entrance): hint 0. */
   world(point: WorldPoint): TravelEndpoint;
@@ -130,6 +130,8 @@ export function createPlaces(context: Pick<EngineContext, 'dataset' | 'geometry'
     },
     dock(dock) {
       if (dock.point === null) return null;
+      // A client berth's walks end at its boarding point on walkable ground (TIME-7, src/rules/berths.ts).
+      if (dock.boarding !== undefined) return { point: dock.boarding.point, zoneHint: 0 };
       return dock.npcId === null ? { point: dock.point, zoneHint: 0 } : npcSpawnAt(dock.npcId, dock.point);
     },
     world(point) {

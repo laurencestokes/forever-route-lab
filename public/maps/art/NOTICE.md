@@ -8,7 +8,7 @@ maps:validate`.
 
 5 WebP images of the World of Warcraft world map's painted art (1 zone or city map, 4 battleground
 or small area maps), of the 60 UiMaps that have art in the World of Warcraft: Forever client
-(`wow_classic_beta` 1.60.1.70009). D-042 O5 (step ATL.10): only the images still drawn one at a time
+(`wow_classic_beta` 1.60.1.70124). D-042 O5 (step ATL.10): only the images still drawn one at a time
 are deployed: the battlegrounds and Darkspear Islands, which keep their own map surfaces, and
 Zephras Isle, the atlas card's picture when the tile index cannot be used. The other paintings reach
 the site as the atlas tiles (../atlas/, with its own NOTICE). Each image is stitched from the
@@ -46,8 +46,8 @@ The project follows four rules adopted from that page's conditions:
 ## How they were made
 
 - Read-only from the local client's `Data/` folder through this project's CASC reader
-  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70009, build key
-  `05215079e3905ef5922ae0b03ffefb73`. Nothing is fetched from the network.
+  (`tools/casc`), pinned to `wow_classic_beta` 1.60.1.70124, build key
+  `dd3dfc2881c407299f46c2aaf34c130b`. Nothing is fetched from the network.
 - Tables: `WorldMapOverlay` (1134579), `UiMapArt` (1957202), `UiMap` (1957206), `UiMapArtStyleLayer`
   (1957208), `UiMapArtTile` (1957210), `WorldMapOverlayTile` (1957212), `UiMapXMapArt` (1957217),
   `UiMapAssignment` (1957219); layouts from WoWDBDefs (THIRD_PARTY_NOTICES "Format definitions").

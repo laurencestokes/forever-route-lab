@@ -21,6 +21,7 @@ import { fixtureGeometry } from '../geo/test-fixtures';
 import { surfacesOf } from '../map/layers';
 import {
   createDrawnRouteFilter,
+  createPositions,
   createRouteInputBuilder,
   firstRouteSurface,
   flightMasterModel,
@@ -401,5 +402,54 @@ describe('focus', () => {
     const focus = { selected: [accept.id, note.id], hovered: note.id, active: note.id };
     expect(focusWithin(focus, new Set([accept.id]))).toEqual({ selected: [accept.id], hovered: null, active: null });
     expect(focusWithin(focus, new Set([accept.id, note.id]))).toEqual(focus);
+  });
+});
+
+describe('createPositions (D-050 item 5)', () => {
+  interface Item {
+    readonly id: string;
+  }
+  const items = (ids: readonly string[]): Item[] => ids.map((id) => ({ id }));
+  /** The positions a fresh map gives (the last position of a repeated id), for comparison. */
+  const fresh = (list: readonly Item[]): Map<string, number> => new Map(list.map((item, index) => [item.id, index]));
+
+  it('numbers an array, and gives the same object for the same array', () => {
+    const positionsOf = createPositions((item: Item) => item.id);
+    const list = items(['a', 'b', 'c']);
+    const first = positionsOf(list);
+    expect([...first.positions]).toEqual([...fresh(list)]);
+    expect(positionsOf(list)).toBe(first);
+  });
+
+  it('renumbers only the changed items of a move, in place, and moves the version', () => {
+    const positionsOf = createPositions((item: Item) => item.id);
+    const list = items(['a', 'b', 'c', 'd', 'e']);
+    const before = positionsOf(list);
+    const [a, b, c, d, e] = list;
+    if (a === undefined || b === undefined || c === undefined || d === undefined || e === undefined) throw new Error('no item');
+    // b moved down by one: the same objects, two of them swapped.
+    const moved = [a, c, b, d, e];
+    const after = positionsOf(moved);
+    expect(after.version).toBe(before.version + 1);
+    expect(after.positions).toBe(before.positions);
+    expect(new Map(after.positions)).toEqual(fresh(moved));
+  });
+
+  it('follows inserts, deletes, new objects and repeated ids as a fresh map would', () => {
+    const positionsOf = createPositions((item: Item) => item.id);
+    const [a, b, c] = items(['a', 'b', 'c']);
+    if (a === undefined || b === undefined || c === undefined) throw new Error('no item');
+    const x: Item = { id: 'x' };
+    const cases: Item[][] = [
+      [a, b, c],
+      [a, x, b, c],
+      [x, b, c],
+      [x, b, { id: 'c' }],
+      [x, b, { id: 'c' }, { id: 'b' }],
+      [a, b, c],
+      [],
+      [c, b, a],
+    ];
+    for (const list of cases) expect(new Map(positionsOf(list).positions)).toEqual(fresh(list));
   });
 });

@@ -5,6 +5,7 @@ import type { WorldPoint } from '../domain/points';
 import type { TaxiNodeRef } from '../domain/route';
 import type { EffectiveRules, EffectiveValue } from './precedence';
 import type { RuleBasis } from './ruleset';
+import { berthBoarding } from './berths';
 import { isFlightMaster } from './travel-graph-flags';
 import { FOREVER_TAXI_NODE_SEEDS, type TaxiNodeSeed, TRANSPORT_SEEDS, type TransportSeed } from './travel-seeds';
 
@@ -19,7 +20,8 @@ import { FOREVER_TAXI_NODE_SEEDS, type TaxiNodeSeed, TRANSPORT_SEEDS, type Trans
  * `CLIENT_NODE_MATCH_YARDS`, INFERRED), the rows no flight master stands at become nodes of their
  * own, its flights become the taxi edges (their path lengths are TIME-6's per-leg data), and the
  * stops of the transport paths the seeds cite give the seeded docks an inferred position (TIME-7;
- * NAV-08): the client berths, which lie in the water beside the piers (`inferredBerths`). A node's
+ * NAV-08): the client berths, which lie in the water beside the piers, each with its boarding
+ * point on walkable ground (`TransportDock.boarding`, src/rules/berths.ts). A node's
  * factions (`TaxiNode.factions`) are the one faction source of the engine and the map.
  * Without it the graph is the dataset's flight masters, the cited seeds and TIME-5.
  *
@@ -93,6 +95,19 @@ export interface TransportDock {
   readonly npcId: NpcId | null;
   /** For an inferred dock, its matching record: "client transport path 11167, stop 2 of 3"; absent otherwise. */
   readonly record?: string;
+  /**
+   * For an inferred dock (a client berth, in the water beside its pier): where walks to and from
+   * the dock end, the nearest walkable navmesh point within `BOARDING_RADIUS_YD` of the berth
+   * (TIME-7, src/rules/berths.ts); the step between it and the berth is part of the wait. Absent
+   * for other docks and for a berth without one: walks then end at `point`.
+   */
+  readonly boarding?: DockBoarding;
+}
+
+/** A client berth's boarding point and its straight-line yards from the berth (TIME-7). */
+export interface DockBoarding {
+  readonly point: WorldPoint;
+  readonly fromBerthYd: number;
 }
 
 /** One directed transport crossing: board at `from`, leave at `to`. */
@@ -413,16 +428,24 @@ function dockOf(
     if (world !== null) return { stop: index, name: stop.name, mapId: stop.mapId, point: world, pointFrom: 'dock-npc', npcId };
   }
   const inferred = inferredDock(seed, index, taxi);
-  if (inferred !== null) return { stop: index, name: stop.name, mapId: stop.mapId, point: inferred.point, pointFrom: 'inferred', npcId: null, record: inferred.record };
+  if (inferred !== null) {
+    const dock: TransportDock = { stop: index, name: stop.name, mapId: stop.mapId, point: inferred.point, pointFrom: 'inferred', npcId: null, record: inferred.record };
+    return inferred.boarding === null ? dock : { ...dock, boarding: inferred.boarding };
+  }
   return { stop: index, name: stop.name, mapId: stop.mapId, point: null, pointFrom: null, npcId: null };
 }
 
 /**
  * A seeded stop's position from the committed taxi file (TIME-7, map-presentation.md §10): the
  * `clientStop`-th stop of the seed's `clientPath`, when the file has that path and that stop is on
- * the seed stop's world map; null otherwise (a stop on another map is never taken).
+ * the seed stop's world map; null otherwise (a stop on another map is never taken). With it, the
+ * berth's boarding point (src/rules/berths.ts), or null when the table has none for this berth.
  */
-export function inferredDock(seed: TransportSeed, index: number, taxi: CommittedTaxi | null): { readonly point: WorldPoint; readonly record: string } | null {
+export function inferredDock(
+  seed: TransportSeed,
+  index: number,
+  taxi: CommittedTaxi | null,
+): { readonly point: WorldPoint; readonly record: string; readonly boarding: DockBoarding | null } | null {
   const stop = seed.stops[index];
   const pathId = seed.clientPath ?? null;
   const at = stop?.clientStop ?? null;
@@ -430,7 +453,9 @@ export function inferredDock(seed: TransportSeed, index: number, taxi: Committed
   const path = taxi.transports.find((candidate) => candidate.pathId === pathId);
   const point = path?.stops[at]?.point;
   if (path === undefined || point === undefined || point.mapId !== stop.mapId) return null;
-  return { point, record: `client transport path ${String(pathId)}, stop ${String(at + 1)} of ${String(path.stops.length)}` };
+  const board = berthBoarding(pathId, at, point);
+  const boarding = board === null || board.boarding === null ? null : { point: board.boarding, fromBerthYd: board.fromBerthYd ?? 0 };
+  return { point, record: `client transport path ${String(pathId)}, stop ${String(at + 1)} of ${String(path.stops.length)}`, boarding };
 }
 
 /**
@@ -695,53 +720,13 @@ export function sameMapTransports(graph: TravelGraph, mapId: WorldMapId): Transp
  */
 export function withDeparture(edge: TransportEdge, point: WorldPoint): TransportEdge | null {
   if (point.mapId !== edge.from.mapId) return null;
-  const { record: _record, ...dock } = edge.from;
+  const { record: _record, boarding: _boarding, ...dock } = edge.from;
   return { ...edge, from: { ...dock, point, pointFrom: 'user', npcId: null } };
 }
 
 /** Whether `faction` may use `node` (TIME-5, TIME-6): its factions include it, or are unknown. */
 export function taxiNodeOpenTo(node: TaxiNode, faction: Faction): boolean {
   return node.factions === null || node.factions.includes(faction);
-}
-
-const BERTHS = new WeakMap<TravelGraph, readonly WorldPoint[]>();
-
-/**
- * The positions of the graph's inferred docks (TIME-7): the committed taxi file's transport stops,
- * where the ship berths. A berth lies in the water beside its pier, and the navigation data snaps
- * it to the water surface, not to the pier's deck, so a walk to or from one ends with a swim that
- * stands for the walk along the pier (`berthTravel` in src/sim/travel.ts prices it as walking).
- * A user dock or a dock NPC's spawn is not a berth. Computed once per graph.
- */
-export function inferredBerths(graph: TravelGraph): readonly WorldPoint[] {
-  let berths = BERTHS.get(graph);
-  if (berths === undefined) {
-    const out: WorldPoint[] = [];
-    for (const edge of graph.transports) {
-      for (const dock of [edge.from, edge.to]) {
-        const point = dock.point;
-        if (dock.pointFrom !== 'inferred' || point === null) continue;
-        if (!out.some((p) => p.mapId === point.mapId && p.x === point.x && p.y === point.y)) out.push(point);
-      }
-    }
-    berths = out;
-    BERTHS.set(graph, berths);
-  }
-  return berths;
-}
-
-/** Whether `point` is one of `berths` (`inferredBerths`), by value. An index loop: it runs for every leg. */
-export function isBerthIn(berths: readonly WorldPoint[], point: WorldPoint): boolean {
-  for (let i = 0; i < berths.length; i += 1) {
-    const berth = berths[i];
-    if (berth !== undefined && berth.x === point.x && berth.y === point.y && berth.mapId === point.mapId) return true;
-  }
-  return false;
-}
-
-/** Whether `point` is one of the graph's inferred berths (`inferredBerths`), by value. */
-export function isInferredBerth(graph: TravelGraph, point: WorldPoint): boolean {
-  return isBerthIn(inferredBerths(graph), point);
 }
 
 /** Whether any entrance edge leads into `mapId`, i.e. `mapId` is a known instance map. */

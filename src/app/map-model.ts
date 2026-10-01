@@ -454,6 +454,59 @@ export function createRouteInputBuilder(geometry: MapGeometry): RouteInputBuilde
  */
 export const isDrawnStep = (step: RouteStepInput): boolean => step.placement.kind !== 'none' || step.departs !== null;
 
+/** Each item's position in its array by id, with a version that changes whenever a position does. */
+export interface Positions<K> {
+  readonly positions: ReadonlyMap<K, number>;
+  readonly version: number;
+}
+
+/**
+ * Positions by id in the last array asked for (D-050 item 5: numbering 10,000 steps afresh took
+ * about 0.75 ms an edit). One map is kept and updated in place: only the items between the first and
+ * the last that are not the same objects as before are renumbered (a move renumbers the two steps
+ * it swaps; an insert or a delete everything after it), and `version` counts the changes, so callers
+ * compare it rather than the map. An id repeated in the array takes its last position, as
+ * `new Map(items.map(...))` gives, by numbering afresh.
+ */
+export function createPositions<T, K>(idOf: (item: T) => K): (items: readonly T[]) => Positions<K> {
+  let last: readonly T[] = [];
+  let positions = new Map<K, number>();
+  let current: Positions<K> = { positions, version: 0 };
+  return (items) => {
+    if (items === last) return current;
+    const previous = last;
+    last = items;
+    const shortest = Math.min(previous.length, items.length);
+    let head = 0;
+    while (head < shortest && previous[head] === items[head]) head += 1;
+    if (head === previous.length && head === items.length) return current;
+    let endBefore = previous.length;
+    let endAfter = items.length;
+    // With the lengths equal, the unchanged tail keeps its positions; otherwise everything after the head moves.
+    if (previous.length === items.length) {
+      while (endBefore > head && previous[endBefore - 1] === items[endAfter - 1]) {
+        endBefore -= 1;
+        endAfter -= 1;
+      }
+    }
+    for (let i = head; i < endBefore; i += 1) {
+      const item = previous[i];
+      if (item !== undefined) positions.delete(idOf(item));
+    }
+    for (let i = head; i < endAfter; i += 1) {
+      const item = items[i];
+      if (item !== undefined) positions.set(idOf(item), i);
+    }
+    // A repeated id (before or now) leaves the map short of the array: number afresh, the last position winning.
+    if (positions.size !== items.length) {
+      positions = new Map();
+      items.forEach((item, index) => positions.set(idOf(item), index));
+    }
+    current = { positions, version: current.version + 1 };
+    return current;
+  };
+}
+
 /**
  * The route the route layers draw: only the steps that can change what they draw. A step with no
  * location that does not move the character and leaves by no special means (`none`, `departs`

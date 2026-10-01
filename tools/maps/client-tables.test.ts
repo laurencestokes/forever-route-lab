@@ -65,7 +65,7 @@ describe('the manifest (D-039: FileDataIDs, CKeys, build, WoWDBDefs commit, tool
   it('records the pinned build, the WoWDBDefs commit, the tool tree hash and every table read with its columns', () => {
     expect(rawManifest['client']).toEqual(CLIENT_PIN);
     expect(CLIENT_TABLES_PIN).toEqual(CLIENT_PIN);
-    expect(manifest.build).toBe('1.60.1.70009');
+    expect(manifest.build).toBe(CLIENT_PIN.version);
     expect((rawManifest['layouts'] as Json)['wowdbdefs']).toMatchObject({ commit: WOWDBDEFS_COMMIT });
     const tool = rawManifest['tool'] as Json;
     expect(Object.entries(tool['toolTreeHash'] as Json)).toEqual([['tools/maps/client-tables.ts', expect.stringMatching(/^[0-9a-f]{64}$/) as unknown]]);

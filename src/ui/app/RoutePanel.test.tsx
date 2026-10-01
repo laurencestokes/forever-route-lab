@@ -180,7 +180,7 @@ describe('the shell’s per-browser preferences (ui-refresh.md §4.3)', () => {
 });
 
 describe('the Quest log tab (ui-refresh.md §5.5)', () => {
-  function renderLog(selected: 'none' | 'log') {
+  function renderLog(selected: 'none' | 'log' | 'end') {
     const { project, dataset } = createPlaceholderWorkspace({ nowIso: NOW });
     const store = createEditorStore({ project, ids: sequentialIdSource(1000), clock: fixedClock(NOW) });
     const view = buildRouteView(project.route, dataset, 1);
@@ -197,7 +197,7 @@ describe('the Quest log tab (ui-refresh.md §5.5)', () => {
       ]),
     };
     const state = readyState(results, {
-      selected: selected === 'none' || step === undefined ? null : ({ revision: 0, stepId: step.id, index: 3, record: {}, before: after, after, issues: [] } as never),
+      selected: selected === 'none' || step === undefined ? null : ({ revision: 0, stepId: step.id, index: 3, atEnd: selected === 'end', record: {}, before: after, after, issues: [] } as never),
     });
     const add = vi.fn();
     const onOpen = vi.fn();
@@ -212,8 +212,16 @@ describe('the Quest log tab (ui-refresh.md §5.5)', () => {
   it('never claims an empty log without a walked step, and says why', () => {
     renderLog('none');
     expect(screen.getByText('Not checked yet')).toBeTruthy();
-    expect(screen.getByText('Select a step to see the quest log after it.')).toBeTruthy();
+    // With no step selected the pipeline publishes the last step's state (D-050 item 2): none means it is on its way.
+    expect(screen.getByText('Working out the state after the selected step.')).toBeTruthy();
     expect(screen.queryByRole('grid')).toBeNull();
+  });
+
+  it('with no step selected, heads the last step’s log as the end of the route (D-050 item 2)', () => {
+    renderLog('end');
+    expect(screen.getByRole('heading', { name: 'Quest log at the end of the route' })).toBeTruthy();
+    expect(screen.getByText('In the quest log at the end of the route (after step 4): 2 of 40 quests (capacity 40: client data).')).toBeTruthy();
+    expect(screen.getByRole('grid', { name: 'Quest log at the end of the route (after step 4)' })).toBeTruthy();
   });
 
   it('lists the log after the step with its capacity and basis, each quest’s "?" in its state, and its objectives', () => {

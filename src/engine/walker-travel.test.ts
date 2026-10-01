@@ -15,7 +15,8 @@ import { walkRoute } from './walker';
  * The walker's transports and flights after the map rework's travel review (docs/SIMULATION.md
  * TIME-5..TIME-7; findings TR-01, TR-02, TR-03 and TR-08): the quickest-edge choice never picks a
  * service from inferred docks, a ride records its edge and its docks' provenance, a walk to or from
- * a client berth prices its swim as walking, and a flight to a node its faction may not use warns.
+ * a client berth ends at its boarding point on walkable ground (D-050 item 4), and a flight to a
+ * node its faction may not use warns.
  * The seeded ship, its client path and the positions are made up for the tests.
  */
 
@@ -87,10 +88,9 @@ describe('a transport step naming its record (TIME-7; TR-02)', () => {
         edgeId: 'test-ship:0>1',
         name: 'Test ship',
         docks: [
-          { end: 'departure', name: 'Kalimdor pier', pointFrom: 'inferred', record: 'client transport path 900, stop 1 of 2' },
-          { end: 'arrival', name: 'Eastern Kingdoms pier', pointFrom: 'inferred', record: 'client transport path 900, stop 2 of 2' },
+          { end: 'departure', name: 'Kalimdor pier', pointFrom: 'inferred', record: 'client transport path 900, stop 1 of 2', boardingYd: null },
+          { end: 'arrival', name: 'Eastern Kingdoms pier', pointFrom: 'inferred', record: 'client transport path 900, stop 2 of 2', boardingYd: null },
         ],
-        berthWalk: true,
       },
     ]);
   });
@@ -98,7 +98,7 @@ describe('a transport step naming its record (TIME-7; TR-02)', () => {
   it('a user dock boards where the user said: the departure is the user’s, without the inferred record', () => {
     const result = walk([makeTravelStep(ids, { mode: 'transport', transport: { id: 'test-ship', dock: at(70) }, location: at(0, 0, EASTERN_KINGDOMS) })]);
     const [ride] = factsOf(record(result, 0), 'transport-ride');
-    expect(ride?.docks[0]).toEqual({ end: 'departure', name: 'Kalimdor pier', pointFrom: 'user', record: null });
+    expect(ride?.docks[0]).toEqual({ end: 'departure', name: 'Kalimdor pier', pointFrom: 'user', record: null, boardingYd: null });
     expect(ride?.docks[1]).toMatchObject({ pointFrom: 'inferred' });
   });
 });
@@ -124,33 +124,54 @@ describe('a transport step naming no record and no dock (TIME-7; TR-01)', () => 
     const result = walk([makeTravelStep(ids, { mode: 'transport', transport: null, location: at(40, 30, EASTERN_KINGDOMS) })], context({ graph: { transports: [SHIP], taxi: TAXI, userDocks } }));
     const crossing = record(result, 0);
     expect(crossing.estimate.duration.value).toBeCloseTo((100 * 1.25) / 7 + 120 + (50 * 1.25) / 7, 10);
-    expect(factsOf(crossing, 'transport-ride')[0]).toMatchObject({ edgeId: 'test-ship:0>1', berthWalk: false });
+    expect(factsOf(crossing, 'transport-ride')[0]).toMatchObject({ edgeId: 'test-ship:0>1' });
   });
 });
 
-describe('walks to and from client berths (TIME-7; TR-03)', () => {
-  it('price the swim beside the pier as walking, without SIM-21, as an assumption', () => {
-    const ctx = context({ travel: halfSwim });
-    const run = 7; // runSpeed, on foot
-    const result = walk([makeTravelStep(ids, { mode: 'transport', transport: { id: 'test-ship', dock: null }, location: at(0, 900, EASTERN_KINGDOMS) })], ctx);
+// D-050 item 4 (review TR-03): a client berth lies in the water beside its pier; its walks end at
+// the boarding point the berth table gives (src/rules/berths.ts), the step to the berth is in the wait.
+describe('walks to and from client berths (TIME-7; D-050 item 4; TR-03)', () => {
+  /** The Stormwind Harbor – Auberdine ship on its real client path and berths (the table knows them). */
+  const REAL: TransportSeed = { ...SHIP, id: 'real-ship', clientPath: 11616 };
+  const REAL_TAXI: CommittedTaxi = {
+    ...TAXI,
+    transports: [{ pathId: 11616, maps: [KALIMDOR, EASTERN_KINGDOMS], stops: [{ point: point(6548, 942), delaySeconds: 60 }, { point: point(-8654, 1344, EASTERN_KINGDOMS), delaySeconds: 60 }] }],
+  };
+  const BOARD_K = point(6534, 908);
+  const BOARD_E = point(-8648, 1333, EASTERN_KINGDOMS);
+  const real = (options: FixtureContextOptions = {}) => fixtureContext(DATA, { flightMasterIds: [60, 61], graph: { transports: [REAL], taxi: REAL_TAXI }, travel: halfSwim, ...options });
+  const start = { character: { startLocation: at(6634, 908) } };
+
+  it('walk to the boarding point on walkable ground, and on from the arrival’s, with no time for the step to the berth', () => {
+    const result = walk([makeTravelStep(ids, { mode: 'transport', transport: { id: 'real-ship', dock: null }, location: at(-8648, 1433, EASTERN_KINGDOMS) })], real(), start);
     const crossing = record(result, 0);
-    // Dock leg 100 yd and onward walk 900 yd, both touching a berth: every yard at the ground speed.
-    expect(crossing.legs.map((leg) => [leg.purpose, leg.seconds.value, leg.seconds.basis, leg.warnings])).toEqual([
-      ['dock', 100 / run, 'assumption', []],
-      ['step', 900 / run, 'assumption', []],
+    expect(crossing.legs.map((leg) => [leg.purpose, leg.from.point, leg.to.point])).toEqual([
+      ['dock', point(6634, 908), BOARD_K],
+      ['step', BOARD_E, point(-8648, 1433, EASTERN_KINGDOMS)],
     ]);
-    expect(crossing.estimate.facts.filter((fact) => fact.kind === 'travel-warning')).toEqual([]);
-    // A walk that touches no berth keeps its swim speed and its warning.
-    const plain = walk([makeVendorStep(ids, { location: at(900) })], ctx);
-    expect(record(plain, 0).legs[0]?.seconds.value).toBeCloseTo(450 / run + 450 / ctx.rules.values.swimSpeed.value, 10);
-    expect(record(plain, 0).estimate.facts).toContainEqual({ kind: 'travel-warning', warning: { kind: 'long-swim', longestSwimYd: 450 } });
+    // 100 yd to the boarding point and 100 yd on (half ground, half swim in this model), the wait and the ride; nothing for the berths.
+    const swim = crossing.legs[0]?.seconds.value ?? 0;
+    expect(crossing.estimate.duration.value).toBeCloseTo(2 * swim + 120, 10);
+    expect(factsOf(crossing, 'transport-ride')[0]?.docks.map((dock) => dock.boardingYd)).toEqual([36.8, 12.5]);
   });
 
-  it('the walk on from a berth where a transport without a location left the character counts as walking too', () => {
+  it('a transport without a location leaves the character at the arrival’s boarding point', () => {
+    const result = walk([makeTravelStep(ids, { mode: 'transport', transport: { id: 'real-ship', dock: null } }), makeVendorStep(ids, { location: at(-8648, 1433, EASTERN_KINGDOMS) })], real(), start);
+    expect(record(result, 0).delta.locationAfter).toEqual(BOARD_E);
+    expect(record(result, 1).legs[0]?.from.point).toEqual(BOARD_E);
+  });
+
+  it('a berth the table does not know keeps its walk to the berth, priced as it is, swim and warning included', () => {
     const ctx = context({ travel: halfSwim });
-    const result = walk([makeTravelStep(ids, { mode: 'transport', transport: { id: 'test-ship', dock: null } }), makeVendorStep(ids, { location: at(0, 900, EASTERN_KINGDOMS) })], ctx);
-    expect(record(result, 0).delta.locationAfter).toEqual(point(0, 0, EASTERN_KINGDOMS));
-    expect(record(result, 1).legs[0]).toMatchObject({ seconds: { value: 900 / 7, basis: 'assumption' }, warnings: [] });
+    const result = walk([makeTravelStep(ids, { mode: 'transport', transport: { id: 'test-ship', dock: null }, location: at(0, 900, EASTERN_KINGDOMS) })], ctx);
+    const crossing = record(result, 0);
+    const swimSpeed = ctx.rules.values.swimSpeed.value;
+    expect(crossing.legs.map((leg) => [leg.purpose, leg.to.point])).toEqual([
+      ['dock', point(100)],
+      ['step', point(0, 900, EASTERN_KINGDOMS)],
+    ]);
+    expect(crossing.legs[1]?.seconds.value).toBeCloseTo(450 / 7 + 450 / swimSpeed, 10);
+    expect(crossing.estimate.facts).toContainEqual({ kind: 'travel-warning', warning: { kind: 'long-swim', longestSwimYd: 450 } });
   });
 });
 

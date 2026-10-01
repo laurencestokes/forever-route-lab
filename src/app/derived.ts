@@ -129,12 +129,18 @@ export interface DerivedResults {
   readonly shortIssue?: (issue: ValidationIssue, stepQuest: QuestId | null) => string;
 }
 
-/** The character around the selection's focus step (route context, ARCHITECTURE §9.2). */
+/**
+ * The character around the selection's focus step (route context, ARCHITECTURE §9.2), or, with no
+ * step selected, around the last step: the panels and the map then show the state after the last
+ * step, as the status bar does (D-050 item 2; review PR-13).
+ */
 export interface SelectedStepState {
   /** The editor revision of the results it was read from. */
   readonly revision: number;
   readonly stepId: StepId;
   readonly index: number;
+  /** No step is selected: this is the last step, the state at the end of the route. */
+  readonly atEnd: boolean;
   readonly record: StepRecord;
   /** The state before the step runs. */
   readonly before: ReadonlyCharacterState;
@@ -150,7 +156,11 @@ export interface DerivedState {
   readonly failure: string | null;
   /** The latest results, or null before the first walk. */
   readonly results: DerivedResults | null;
-  /** The state at the selection's focus step, from `results`; null without a focus (or before the first walk). */
+  /**
+   * The state at the selection's focus step, from `results`; without a focus, at the last step
+   * (`atEnd`, D-050 item 2). Null before the first walk, for an empty route, or while the focus
+   * step is not walked yet.
+   */
   readonly selected: SelectedStepState | null;
   readonly travel: TravelStatus;
   readonly paths: PathsProgress;
@@ -159,8 +169,9 @@ export interface DerivedState {
    * every quest open to the character classified with its reason, the Available tab's groups and
    * the map's quest layers. Built by the pipeline in a task of its own after `selected` is
    * published (so a selection change paints first), keyed by the walk and the step: it may name the
-   * previous step for a moment (`questState.stepId`). Null before the first walk, without a focus,
-   * or after a failure: the shell then shows the quests open by race and class, and says so.
+   * previous step for a moment (`questState.stepId`). Without a focus it is the state after the last
+   * step (`questState.atEnd`, D-050 item 2). Null before the first walk, for an empty route, or after
+   * a failure: the shell then shows the quests open by race and class, and says so.
    */
   readonly questState: QuestStateModel | null;
   /** The zones' level spans for the character (§12.5), once per dataset view and character; null until the pipeline has built them. */

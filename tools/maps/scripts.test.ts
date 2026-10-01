@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { REPO_ROOT } from '../build/lib/fs';
+import { CLIENT_PIN } from './lib/shared';
 import { hasPinnedCheckout } from './lib/test-support';
 
 const scripts = (JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as { readonly scripts: Readonly<Record<string, string>> }).scripts;
@@ -27,9 +28,9 @@ const tsx = (args: readonly string[]): { readonly status: number; readonly outpu
 describe('command line', () => {
   it('import refuses unknown options, another build and a --build output under public/ (before touching the client)', () => {
     expect(tsx(['tools/maps/import.ts', '--placeholder', '--bogus'])).toMatchObject({ status: 1, output: expect.stringContaining('unknown option --bogus') as unknown });
-    expect(tsx(['tools/maps/import.ts', '--build', '1.60.1.69999'])).toMatchObject({ status: 1, output: expect.stringContaining('pinned to wow_classic_beta 1.60.1.70009') as unknown });
-    expect(tsx(['tools/maps/import.ts', '--build', '1.60.1.70009', '--out', 'public/maps/local'])).toMatchObject({ status: 1, output: expect.stringContaining('never writes under public/') as unknown });
-    expect(tsx(['tools/maps/import.ts', '--build', '1.60.1.70009', '--placeholder'])).toMatchObject({ status: 1, output: expect.stringContaining('separate runs') as unknown });
+    expect(tsx(['tools/maps/import.ts', '--build', '1.60.1.69999'])).toMatchObject({ status: 1, output: expect.stringContaining(`pinned to wow_classic_beta ${CLIENT_PIN.version}`) as unknown });
+    expect(tsx(['tools/maps/import.ts', '--build', CLIENT_PIN.version, '--out', 'public/maps/local'])).toMatchObject({ status: 1, output: expect.stringContaining('never writes under public/') as unknown });
+    expect(tsx(['tools/maps/import.ts', '--build', CLIENT_PIN.version, '--placeholder'])).toMatchObject({ status: 1, output: expect.stringContaining('separate runs') as unknown });
     expect(tsx(['tools/maps/convert.ts', '--bogus'])).toMatchObject({ status: 1, output: expect.stringContaining('unknown option --bogus') as unknown });
   }, 60_000);
 

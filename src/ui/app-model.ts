@@ -119,17 +119,43 @@ export function questPlaces(dataset: DatasetView, quest: QuestRecord): readonly 
  * `Inside an instance (entrance in The Barrens)`); null when no spawn says. When the starters spawn
  * in several places it says so, `Dun Morogh and 6 other zones`, so a row never names one of them as
  * the only one (review finding QA-20: the Horde copy of Winter's Presents showed only its giver's
- * Dun Morogh spawn). `prefer` names first the first place it accepts, such as a zone on the
- * character's side when the caller knows the zones' factions (the client zone table, D-039 C).
+ * Dun Morogh spawn). `prefer` names first the first place the first of its tests accepts, then the
+ * second's, and so on: the character's start zone, then a zone on its start continent
+ * (`startZonePreference`), or a zone on the character's side when the caller knows the zones'
+ * factions (the client zone table, D-039 C).
  */
-export function questZoneName(dataset: DatasetView, quest: QuestRecord, prefer?: (uiMapId: UiMapId) => boolean): string | null {
+export function questZoneName(dataset: DatasetView, quest: QuestRecord, prefer?: ZonePreference): string | null {
   const places = questPlaces(dataset, quest);
-  const first = (prefer === undefined ? undefined : places.find((p) => p.uiMapId !== null && prefer(p.uiMapId))) ?? places[0];
+  const tests = prefer === undefined ? [] : typeof prefer === 'function' ? [prefer] : prefer;
+  let first: (typeof places)[number] | undefined;
+  for (const test of tests) {
+    first = places.find((p) => p.uiMapId !== null && test(p.uiMapId));
+    if (first !== undefined) break;
+  }
+  first ??= places[0];
   if (first === undefined) return null;
   const others = places.filter((p) => p !== first);
   if (others.length === 0) return first.text;
   const noun = others.every((p) => p.uiMapId !== null) ? (others.length === 1 ? 'zone' : 'zones') : others.length === 1 ? 'place' : 'places';
   return `${first.text} and ${String(others.length)} other ${noun}`;
+}
+
+/** Which places `questZoneName` names first: one test, or several in order. */
+export type ZonePreference = ((uiMapId: UiMapId) => boolean) | readonly ((uiMapId: UiMapId) => boolean)[];
+
+/**
+ * The character's side as far as the shell knows it without route state (review QA-20): its start
+ * zone first, then any zone on its start's world map; none without a start location.
+ */
+export function startZonePreference(dataset: Pick<DatasetView, 'zone'>, start: Location | null): ZonePreference | undefined {
+  const source = start?.source ?? null;
+  if (source === null) return undefined;
+  const zone = source.uiMapId;
+  const mapId = source.space === 'world' ? source.mapId : (dataset.zone(source.uiMapId)?.worldMapId ?? null);
+  const tests: ((uiMapId: UiMapId) => boolean)[] = [];
+  if (zone !== null) tests.push((id) => id === zone);
+  if (mapId !== null) tests.push((id) => dataset.zone(id)?.worldMapId === mapId);
+  return tests.length === 0 ? undefined : tests;
 }
 
 // Locations -------------------------------------------------------------------------------------

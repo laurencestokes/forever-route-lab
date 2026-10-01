@@ -46,7 +46,7 @@ import { type GroundTravel, type StepSpeeds, trainRiding } from '../sim/travel';
 import { grantXp } from '../sim/xp';
 import { evaluateFilter, evaluateSkipIf, or3 } from './conditions';
 import { newStepWork, reportUnresolved, type StepWork, type WalkEnv, ZERO_XP } from './env';
-import { groundMove, here, reportUnknownPosition, setLocation, touchesBerth, unknownTravel, walkTo } from './movement';
+import { groundMove, here, reportUnknownPosition, setLocation, unknownTravel, walkTo } from './movement';
 import { newLogEntry, type VisitKey, type WalkMemo } from './state';
 import type { CharacterState, QuestLogEntry, StepDelta, StepRecord } from './types';
 
@@ -561,7 +561,7 @@ function priceCrossing(
   radius: number | null,
   speeds: StepSpeeds,
 ): PricedCrossing {
-  // A walk to or from an inferred berth prices its swim as the walk along the pier (TIME-7).
+  // A client berth's walks end at its boarding point (`env.places.dock`, TIME-7).
   const walk = groundMove(env, here(state), dock, null, speeds);
   const crossing = transportCrossing(walk, edge, env.project.character.faction, env.rules);
   const facts: SimFact[] = [...crossing.facts];
@@ -593,7 +593,7 @@ function priceCrossing(
 function forChoice(edge: TransportEdge): TransportEdge {
   const unplaced = (dock: TransportEdge['from']): TransportEdge['from'] => {
     if (dock.pointFrom !== 'inferred') return dock;
-    const { record: _record, ...rest } = dock;
+    const { record: _record, boarding: _boarding, ...rest } = dock;
     return { ...rest, point: null, pointFrom: null };
   };
   if (edge.from.pointFrom !== 'inferred' && edge.to.pointFrom !== 'inferred') return edge;
@@ -601,9 +601,15 @@ function forChoice(edge: TransportEdge): TransportEdge {
 }
 
 /** The ride's `transport-ride` fact (TIME-7): the edge, and where each dock's position comes from. */
-function rideFact(edge: TransportEdge, berthWalk: boolean): SimFact {
-  const dockOf = (end: 'departure' | 'arrival', dock: TransportEdge['from']): TransportDockFact => ({ end, name: dock.name, pointFrom: dock.pointFrom, record: dock.record ?? null });
-  return { kind: 'transport-ride', transportId: edge.transportId, edgeId: edge.id, name: edge.name, docks: [dockOf('departure', edge.from), dockOf('arrival', edge.to)], berthWalk };
+function rideFact(edge: TransportEdge): SimFact {
+  const dockOf = (end: 'departure' | 'arrival', dock: TransportEdge['from']): TransportDockFact => ({
+    end,
+    name: dock.name,
+    pointFrom: dock.pointFrom,
+    record: dock.record ?? null,
+    boardingYd: dock.boarding?.fromBerthYd ?? null,
+  });
+  return { kind: 'transport-ride', transportId: edge.transportId, edgeId: edge.id, name: edge.name, docks: [dockOf('departure', edge.from), dockOf('arrival', edge.to)] };
 }
 
 /** The better of two crossings: known before unknown, then the least total, then the lower edge id. */
@@ -672,10 +678,7 @@ function transport(env: WalkEnv, state: CharacterState, memo: WalkMemo, work: St
   // The edge ridden and its docks' provenance (TIME-7; map-presentation.md §10, MP-R32): for a
   // named transport, or a chosen one whose time is known (an unknown choice ties by id, so it names
   // no service).
-  const berthWalk =
-    (chosen.walk.outcome === 'leg' && touchesBerth(env.graph, from, chosen.dock)) ||
-    (chosen.onward !== null && chosen.onward.outcome === 'leg' && touchesBerth(env.graph, chosen.arrival, target));
-  if (id !== null || chosen.total !== null) work.facts.push(rideFact(chosen.edge, berthWalk));
+  if (id !== null || chosen.total !== null) work.facts.push(rideFact(chosen.edge));
   if (chosen.onward !== null && chosen.arrival !== null && target !== null) {
     if (chosen.onward.outcome === 'leg' && chosen.onward.method !== null) {
       work.legs.push({ from: chosen.arrival, to: target, purpose: 'step', seconds: chosen.onward.seconds, method: chosen.onward.method, pending: chosen.onward.pending, warnings: chosen.onward.warnings });
