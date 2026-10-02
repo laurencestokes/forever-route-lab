@@ -8,7 +8,7 @@ import { knownReadout } from '../lib/readout';
 import { UNKNOWN_FOREVER_PROVENANCE } from '../markers/provenance';
 import { RouteList, routeRowDomId, type RouteListProps } from './RouteList';
 import { routeRowContext, type GroupRowModel, type RouteRowModel, type StepRowModel } from './rows';
-import { ROW_DENSITIES, routeRowHeight, type RowDensity, type SelectionMode } from './virtual';
+import { ROUTE_ACTIVE_ROW_EXTRA, ROUTE_ROW_HEIGHT_TWO_LINE, ROW_DENSITIES, routeRowHeight, type RowDensity, type SelectionMode } from './virtual';
 
 afterEach(cleanup);
 
@@ -51,7 +51,19 @@ type Handlers = Pick<
 >;
 
 /** A controlled host that keeps the active row and a simple selection, like the store will. */
-function Harness({ count, readOnly = false, spy, density = 'one-line' }: { count: number; readOnly?: boolean; spy: Partial<Handlers>; density?: RowDensity }) {
+function Harness({
+  count,
+  readOnly = false,
+  spy,
+  density = 'one-line',
+  viewport,
+}: {
+  count: number;
+  readOnly?: boolean;
+  spy: Partial<Handlers>;
+  density?: RowDensity;
+  viewport?: number;
+}) {
   const data = rows(count);
   const [active, setActive] = useState<number | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -89,7 +101,7 @@ function Harness({ count, readOnly = false, spy, density = 'one-line' }: { count
       readOnly={readOnly}
       density={density}
       overscan={2}
-      initialViewportHeight={viewportOf(density)}
+      initialViewportHeight={viewport ?? viewportOf(density)}
     />
   );
 }
@@ -444,5 +456,193 @@ describe.each(ROW_DENSITIES)('RouteList insertion line and later band, %s rows (
     rerender(<Insert insertAt={null} />);
     expect(container.querySelector('.frl-routelist__insert')).toBeNull();
     expect(container.querySelector('.frl-routelist__later')).toBeNull();
+  });
+});
+
+describe('RouteList, the grown active row (B+, D-051)', () => {
+  const H = ROUTE_ROW_HEIGHT_TWO_LINE;
+  const X = ROUTE_ACTIVE_ROW_EXTRA;
+  const options = () => within(listbox()).getAllByRole('option');
+  const option = (posinset: number) => options().find((el) => el.getAttribute('aria-posinset') === String(posinset));
+  const canvas = () => listbox().firstElementChild as HTMLElement;
+  const domOrder = () => options().map((el) => Number(el.getAttribute('aria-posinset')));
+
+  it('grows the active step row by the extra, the canvas with it, and keeps every row\'s top at index × 44', () => {
+    render(<Harness count={1000} spy={{}} density="two-line" />);
+    expect(canvas().style.height).toBe(`${String(1000 * H)}px`);
+    fireEvent.click(option(4) as HTMLElement);
+    expect(canvas().style.height).toBe(`${String(1000 * H + X)}px`);
+    expect(option(4)?.style.height).toBe(`${String(H + X)}px`);
+    expect(option(4)?.className).toContain('is-active');
+    for (const el of options()) {
+      const index = Number(el.getAttribute('aria-posinset')) - 1;
+      expect(el.style.top).toBe(`${String(index * H)}px`);
+      if (index !== 3) expect(el.style.height).toBe(`${String(H)}px`);
+    }
+  });
+
+  it('grows no row in a list too short for the grown row (200% zoom), so the active row is never taller than the list', () => {
+    const data = rows(100).map((row, i) => (i === 3 && row.type === 'step' ? { ...row, issues: { error: 1, warning: 0, info: 0 }, issue: { severity: 'error' as const, message: 'No path' } } : row));
+    const list = (viewport: number) => (
+      <RouteList rows={data} label="Placeholder route" activeIndex={3} selectedKeys={new Set()} onActiveIndexChange={vi.fn()} onSelect={vi.fn()} initialViewportHeight={viewport} />
+    );
+    // 61px: a 768px-high screen at 200% zoom. The grown row (76px) and one plain row need 120px.
+    const { unmount } = render(list(61));
+    expect(option(4)?.className).toContain('is-active');
+    expect(option(4)?.className).not.toContain('is-grown');
+    expect(option(4)?.style.height).toBe(`${String(H)}px`);
+    expect(canvas().style.height).toBe(`${String(100 * H)}px`);
+    // Its issue stays on line 2, as at rest, with no block of its own below.
+    expect(option(4)?.querySelector('.frl-steprow__more')).toBeNull();
+    expect(option(4)?.querySelector('.frl-steprow__line2 .frl-steprow__issue')).not.toBeNull();
+    unmount();
+    render(list(2 * H + X));
+    expect(option(4)?.className).toContain('is-grown');
+    expect(option(4)?.querySelector('.frl-steprow__more')).not.toBeNull();
+  });
+
+  it('grows the active row from a list of 2 × 44 + 32px, and marks the grown row for the CSS that moves the rows after it', () => {
+    render(<Harness count={100} spy={{}} density="two-line" viewport={2 * H + X} />);
+    fireEvent.click(option(4) as HTMLElement);
+    expect(option(4)?.className).toContain('is-grown');
+    expect(option(4)?.style.height).toBe(`${String(H + X)}px`);
+    expect(options().filter((el) => el.className.includes('is-grown'))).toHaveLength(1);
+  });
+
+  it('has nothing but rows between the first and the last option, so the sibling rule moves exactly the rows after the grown one', () => {
+    const { container } = render(
+      <RouteList rows={rows(1000)} label="Placeholder route" insertAt={6} activeIndex={3} selectedKeys={new Set()} onActiveIndexChange={vi.fn()} onSelect={vi.fn()} initialViewportHeight={viewportOf('two-line')} />,
+    );
+    const all = [...canvas().children];
+    const first = all.findIndex((el) => el.getAttribute('role') === 'option');
+    const last = all.findLastIndex((el) => el.getAttribute('role') === 'option');
+    expect(first).toBeGreaterThanOrEqual(0);
+    for (const el of all.slice(first, last + 1)) expect(el.classList.contains('frl-row')).toBe(true);
+    // The rows are the canvas's own children (no wrapper), and the band and the line come after them.
+    expect(container.querySelectorAll('.frl-routelist__canvas > .frl-row')).toHaveLength(options().length);
+  });
+
+  it('shows the row actions on one selected row, and on none of a selection of several but the active row (D-051: the selected row)', () => {
+    render(<Harness count={20} spy={{}} density="two-line" />);
+    const root = () => listbox().parentElement as HTMLElement;
+    fireEvent.click(option(2) as HTMLElement);
+    expect(root().className).not.toContain('is-multi-selected');
+    fireEvent.click(option(5) as HTMLElement, { shiftKey: true });
+    expect(root().className).toContain('is-multi-selected');
+  });
+
+  it('never grows one-line rows or an active group header', () => {
+    const { unmount } = render(<Harness count={100} spy={{}} density="one-line" />);
+    fireEvent.click(option(4) as HTMLElement);
+    expect(canvas().style.height).toBe(`${String(100 * routeRowHeight('one-line'))}px`);
+    unmount();
+    const header: GroupRowModel = { type: 'group', key: 'g', label: 'Placeholder group', stepCount: 2, imported: false, levelSpan: null };
+    render(
+      <RouteList
+        rows={[header, ...rows(5)]}
+        label="Placeholder route"
+        activeIndex={0}
+        selectedKeys={new Set()}
+        onActiveIndexChange={vi.fn()}
+        onSelect={vi.fn()}
+        initialViewportHeight={viewportOf('two-line')}
+      />,
+    );
+    expect(canvas().style.height).toBe(`${String(6 * H)}px`);
+    expect(screen.getByRole('option', { name: /^Group:/ }).style.height).toBe(`${String(H)}px`);
+  });
+
+  it('keeps the rows in index order in the DOM, the active row first or last when it is outside the window', () => {
+    render(<Harness count={1000} spy={{}} density="two-line" />);
+    fireEvent.click(option(2) as HTMLElement);
+    const el = listbox();
+    el.scrollTop = 500 * H + X;
+    fireEvent.scroll(el);
+    expect(domOrder()[0]).toBe(2);
+    expect(domOrder()).toEqual([...domOrder()].sort((a, b) => a - b));
+    // End makes the last row active and reveals it; scrolled back to the top it is the last option.
+    fireEvent.keyDown(el, { key: 'End' });
+    el.scrollTop = 0;
+    fireEvent.scroll(el);
+    expect(domOrder().at(-1)).toBe(1000);
+    expect(domOrder()).toEqual([...domOrder()].sort((a, b) => a - b));
+  });
+
+  it('pages by the 44px rows that fit (10 in the 505px list) and reveals the grown row by its whole box', () => {
+    render(<Harness count={1000} spy={{}} density="two-line" viewport={505} />);
+    const el = listbox();
+    fireEvent.keyDown(el, { key: 'ArrowDown' });
+    fireEvent.keyDown(el, { key: 'PageDown' });
+    expect(option(11)?.className).toContain('is-active');
+    // Row 10's box, its extra included, ends at 10 × 44 + 76 = 516px: 11px past the 505px viewport.
+    expect(el.scrollTop).toBe(10 * H + H + X - 505);
+    fireEvent.keyDown(el, { key: 'PageDown' });
+    expect(option(21)?.className).toContain('is-active');
+    expect(el.scrollTop).toBe(20 * H + H + X - 505);
+    fireEvent.keyDown(el, { key: 'PageUp' });
+    expect(option(11)?.className).toContain('is-active');
+    expect(el.scrollTop).toBe(10 * H);
+    fireEvent.keyDown(el, { key: 'Home' });
+    expect(el.scrollTop).toBe(0);
+    fireEvent.keyDown(el, { key: 'End' });
+    expect(el.scrollTop).toBe(1000 * H + X - 505);
+  });
+
+  it('keeps the rows in view still when the grown row above them gives way to one in view', () => {
+    render(<Harness count={1000} spy={{}} density="two-line" />);
+    fireEvent.click(option(2) as HTMLElement);
+    const el = listbox();
+    // Row 500 at the top of the view, below the grown row 1.
+    el.scrollTop = 500 * H + X;
+    fireEvent.scroll(el);
+    fireEvent.click(option(503) as HTMLElement);
+    // Row 1 shrinks, so row 500 now starts 32px higher: the list follows it, and row 502 grows in view.
+    expect(el.scrollTop).toBe(500 * H);
+    expect(option(503)?.className).toContain('is-active');
+  });
+
+  it('places the band, the insertion line and the drop line by the grown row\'s offsets', () => {
+    const spy = { onDrop: vi.fn() };
+    const { container } = render(<Harness count={20} spy={spy} density="two-line" />);
+    fireEvent.click(option(4) as HTMLElement);
+    // Drag row 1; the pointer just below the grown row 3's extra is the gap above row 4.
+    fireEvent.pointerDown(container.querySelectorAll('.frl-steprow__number.is-handle')[1] as HTMLElement, { button: 0, clientY: 1.5 * H });
+    act(() => {
+      window.dispatchEvent(new PointerEvent('pointermove', { clientY: 4 * H + X + 3 }));
+    });
+    expect(container.querySelector<HTMLElement>('.frl-routelist__drop')?.style.top).toBe(`${String(4 * H + X)}px`);
+    // Inside the grown row's lower half: its bottom gap.
+    act(() => {
+      window.dispatchEvent(new PointerEvent('pointermove', { clientY: 3 * H + (H + X) / 2 + 2 }));
+    });
+    expect(container.querySelector<HTMLElement>('.frl-routelist__drop')?.style.top).toBe(`${String(4 * H + X)}px`);
+    act(() => {
+      window.dispatchEvent(new PointerEvent('pointerup', {}));
+    });
+    expect(spy.onDrop).toHaveBeenCalledWith(1, 3);
+    cleanup();
+    const list = (insertAt: number) => (
+      <RouteList
+        rows={rows(30)}
+        density="two-line"
+        insertAt={insertAt}
+        label="Placeholder route"
+        activeIndex={5}
+        selectedKeys={new Set(['step-6'])}
+        onActiveIndexChange={vi.fn()}
+        onSelect={vi.fn()}
+        initialViewportHeight={viewportOf('two-line')}
+      />
+    );
+    const { container: c2, rerender } = render(list(6));
+    const line = () => c2.querySelector<HTMLElement>('.frl-routelist__insert');
+    const band = () => c2.querySelector<HTMLElement>('.frl-routelist__later');
+    expect(line()?.style.top).toBe(`${String(6 * H + X)}px`);
+    expect(band()?.style.top).toBe(`${String(6 * H + X)}px`);
+    expect(band()?.style.height).toBe(`${String(24 * H)}px`);
+    // At or above the grown row: no extra above the line, the band covers it.
+    rerender(list(5));
+    expect(line()?.style.top).toBe(`${String(5 * H)}px`);
+    expect(band()?.style.height).toBe(`${String(25 * H + X)}px`);
   });
 });

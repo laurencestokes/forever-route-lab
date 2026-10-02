@@ -1,8 +1,10 @@
 /*
- * Route list and rows. Every row of a list has one height (the virtualiser relies on it): 40px
- * two-line rows (--frl-row-height-two-line, the default, D-048 A) or 28px one-line rows
- * (--frl-row-height, the compact View choice). Rows have no background at rest, so the band under
- * the later steps (D-048 B) shows through them; hover and selection keep their own.
+ * Route list and rows. Every row of a list has one height (the virtualiser relies on it): 44px
+ * two-line rows (--frl-row-height-two-line, the default, layout B+, D-051) or 28px one-line rows
+ * (--frl-row-height, the compact View choice). The one exception is the active two-line step row,
+ * which grows by --frl-row-grow; the rows after it move down by as much (virtual.ts, `rowTop`).
+ * Rows have no background at rest, so the band under the later steps (D-048 B) shows through them;
+ * hover and selection keep their own.
  */
 
 .frl-routelist {
@@ -156,6 +158,27 @@
   line-height: normal;
 }
 
+/* B+ (D-051): every row after the grown (active) step row moves down by its extra. Each row's top
+   stays index × 44px, so a change of active row re-renders no other row (PERF-11); the list keeps the
+   rows in index order in the DOM, with nothing but rows between them, and places its single elements
+   (band, lines) itself. A list too short for the grown row grows none (`activeRowCanGrow`). */
+.frl-row--two-line.frl-steprow.is-grown ~ .frl-row {
+  transform: translateY(var(--frl-row-grow));
+}
+
+/* The grown row: its two lines stay where they were, at the top; the extra below holds the issue. */
+.frl-row--two-line.frl-steprow.is-grown {
+  align-items: flex-start;
+}
+
+.frl-row--two-line.frl-steprow.is-grown > :is(.frl-steprow__number, .frl-steprow__markbox, .frl-steprow__text, .frl-steprow__estimates) {
+  margin-top: 3px;
+}
+
+.frl-row--two-line.frl-steprow.is-grown > .frl-steprow__number {
+  line-height: 20px;
+}
+
 /* The row hover shows on the later band as on the panel (review UI-06). */
 .frl-row:hover {
   --frl-row-bg: var(--frl-row-hover);
@@ -203,7 +226,32 @@
 .frl-steprow__markbox {
   display: flex;
   flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   margin: 0 8px 0 6px;
+}
+
+/* The quest's difficulty pips under its mark, in ink (D-051): the count is the shape cue, the mark's
+   colour the difficulty's. Lit pips are the muted ink, unlit ones the border (6.1:1 light, 5.8:1 dark). */
+.frl-steprow__pips .frl-difficulty__pip {
+  fill: var(--frl-border);
+}
+
+.frl-steprow__pips .frl-difficulty__pip.is-on {
+  fill: var(--frl-fg-muted);
+}
+
+/* "Lv n", first on line 2 (D-051); dotted when the player level behind its difficulty is a lower
+   bound (the chip's dashed edge said it; the tooltip and the name say it in words). */
+.frl-steprow__lv {
+  flex: none;
+  color: var(--frl-fg-muted);
+}
+
+.frl-steprow__lv.is-uncertain {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
 }
 
 .frl-steprow__text {
@@ -224,11 +272,35 @@
 }
 
 .frl-steprow__line1 {
-  height: 18px;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  height: 20px;
+  overflow: hidden;
+  row-gap: 20px;
+}
+
+/* Line 1's title, provenance and lock never part; the chain after them wraps to an unseen second
+   line where it does not fit beside the whole title (D-051). The active row always shows it, and its
+   title gives way instead. */
+.frl-steprow__head {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.frl-steprow__line1 > * {
+  height: 20px;
+  line-height: 20px;
+}
+
+.frl-row.is-active .frl-steprow__line1 {
+  flex-wrap: nowrap;
 }
 
 .frl-steprow__line2 {
-  height: 16px;
+  height: 18px;
   color: var(--frl-fg-subtle);
   font-size: var(--frl-text-sm);
 }
@@ -273,6 +345,12 @@
   display: flex;
   align-items: baseline;
   text-overflow: clip;
+}
+
+/* The grown row has line 2 to itself (its row actions sit below): the NPC and the zone show whole. */
+.frl-row.is-grown .frl-steprow__lead {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .frl-steprow__lead {
@@ -349,18 +427,49 @@
   flex: none;
 }
 
+/* The active row's issue (D-051): its words in full on up to two lines of their own, under line 2,
+   from the text column's left edge to the row's right; two floats keep the second line's end clear
+   for the row actions. */
+.frl-steprow__more {
+  position: absolute;
+  top: calc(var(--frl-row-height-two-line) - 2px);
+  right: 8px;
+  left: calc(var(--frl-number-digits) * 0.62 * var(--frl-text-xs) + 42px);
+  height: 32px;
+  overflow: hidden;
+  font-size: var(--frl-text-sm);
+  line-height: 16px;
+  white-space: normal;
+}
+
+.frl-steprow__more > svg {
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+.frl-steprow__float {
+  float: right;
+  width: 0;
+  height: 16px;
+}
+
+.frl-steprow__float + .frl-steprow__float {
+  clear: right;
+  width: 68px;
+}
+
 .frl-steprow__issues[data-severity='error'],
-.frl-steprow__issue[data-severity='error'] {
+.frl-steprow [data-severity='error'] {
   color: var(--frl-severity-error);
 }
 
 .frl-steprow__issues[data-severity='warning'],
-.frl-steprow__issue[data-severity='warning'] {
+.frl-steprow [data-severity='warning'] {
   color: var(--frl-severity-warning);
 }
 
 .frl-steprow__issues[data-severity='info'],
-.frl-steprow__issue[data-severity='info'] {
+.frl-steprow [data-severity='info'] {
   color: var(--frl-severity-info);
 }
 
@@ -396,14 +505,14 @@
 }
 
 .frl-steprow__top {
-  height: 18px;
-  line-height: 18px;
+  height: 20px;
+  line-height: 20px;
   color: var(--frl-fg);
 }
 
 .frl-steprow__bottom {
-  height: 16px;
-  line-height: 16px;
+  height: 18px;
+  line-height: 18px;
 }
 
 .frl-steprow__estimate[data-column='time'] {
@@ -455,16 +564,31 @@
 
 /* Row actions (duplicate, delete, lock) ------------------------------------------------------ */
 
-/* Two-line rows (D-048 F): on every row, muted, at the right end of line 2, on the row's own
-   background (the surface, the hover, the selection or the later band showing through a row at
-   rest), never over a fade. Line 2's words end before them, so nothing runs under them. */
+/* Two-line rows (B+, D-051): only on the hovered row, the selected row (one selected; a selection of
+   several shows them on none of its rows but the hovered and the active) and the active row, at the
+   right end of line 2, on the row's own background (the hover, the selection or the band showing
+   through), never over a fade; line 2's words end before them. On the grown (active) row they sit at
+   the bottom right of its extra, so line 2 keeps its room for the place. */
 .frl-row--two-line .frl-steprow__actions {
-  display: inline-flex;
+  display: none;
   flex: none;
   gap: 2px;
   margin-left: auto;
   padding-left: 4px;
   background: var(--frl-row-bg);
+}
+
+.frl-row--two-line:hover .frl-steprow__actions,
+.frl-routelist:not(.is-multi-selected) .frl-row--two-line.is-selected .frl-steprow__actions,
+.frl-row--two-line.is-active .frl-steprow__actions {
+  display: inline-flex;
+}
+
+.frl-row--two-line.is-grown .frl-steprow__actions {
+  position: absolute;
+  right: 8px;
+  bottom: 3px;
+  height: 16px;
 }
 
 .frl-row--two-line .frl-row__action {
@@ -571,6 +695,10 @@
 
   .frl-steprow__markbox {
     margin: 0 6px 0 4px;
+  }
+
+  .frl-steprow__more {
+    left: calc(var(--frl-number-digits) * 0.62 * var(--frl-text-xs) + 38px);
   }
 }
 
@@ -679,5 +807,13 @@
 
   .frl-row--two-line .frl-steprow__actions {
     background: Canvas;
+  }
+
+  .frl-steprow__pips .frl-difficulty__pip {
+    fill: GrayText;
+  }
+
+  .frl-steprow__pips .frl-difficulty__pip.is-on {
+    fill: CanvasText;
   }
 }

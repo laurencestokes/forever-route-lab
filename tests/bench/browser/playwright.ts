@@ -62,7 +62,7 @@ export interface Page {
   waitForTimeout(ms: number): Promise<void>;
   locator(selector: string): Locator;
   getByRole(role: string, options?: { readonly name?: string | RegExp; readonly exact?: boolean }): Locator;
-  screenshot(options: { readonly path: string }): Promise<unknown>;
+  screenshot(options: { readonly path: string; readonly clip?: Box }): Promise<unknown>;
   on(event: 'pageerror', handler: (error: Error) => void): void;
   on(event: 'console', handler: (message: { type(): string; text(): string }) => void): void;
   readonly mouse: Mouse;
@@ -77,7 +77,11 @@ export interface BrowserContext {
 }
 
 export interface Browser {
-  newContext(options: { readonly viewport: { readonly width: number; readonly height: number }; readonly deviceScaleFactor: number }): Promise<BrowserContext>;
+  newContext(options: {
+    readonly viewport: { readonly width: number; readonly height: number };
+    readonly deviceScaleFactor: number;
+    readonly colorScheme?: 'light' | 'dark';
+  }): Promise<BrowserContext>;
   version(): string;
   close(): Promise<void>;
 }

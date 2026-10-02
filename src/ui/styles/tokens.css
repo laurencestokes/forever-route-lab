@@ -11,7 +11,7 @@
  * token differs from DIFFICULTY_COLORS (src/rules/difficulty.ts); a documented foreground and
  * background pair falls below WCAG AA (4.5:1 text, 3:1 edges, rings, bars, meters and hatching);
  * a reserved hue comes too close to another signal's; a neutral surface stops reading as neutral;
- * or --frl-row-height is not ROUTE_ROW_HEIGHT.
+ * or --frl-row-height, --frl-row-height-two-line or --frl-row-grow differs from virtual.ts.
  * Drawing a new foreground on a new background means adding the pair there (docs/UI.md §9).
  */
 
@@ -40,8 +40,10 @@
 
   /* Density and fixed heights --------------------------------------------------------------- */
   --frl-row-height: 28px;
-  /* Two-line route rows, the default density (ui-refresh.md §6.1; D-048 A). */
-  --frl-row-height-two-line: 40px;
+  /* Two-line route rows, the default density (layout B+, D-051; ui-refresh.md §6.1), and what the
+     active two-line step row grows by: its issue in full, the NPC and the zone. */
+  --frl-row-height-two-line: 44px;
+  --frl-row-grow: 32px;
   /* 28 and 24px: WCAG 2.2 target size (2.5.8) without relying on spacing (ui-refresh.md §7.1). */
   --frl-control-height: 28px;
   --frl-control-height-sm: 24px;

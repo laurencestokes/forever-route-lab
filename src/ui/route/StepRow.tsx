@@ -4,7 +4,7 @@ import { formatDuration, formatDurationLong, formatInteger, formatLevel } from '
 import { describeIssueCounts, SEVERITY_LABELS, totalIssues, worstSeverity } from '../lib/issues';
 import type { Readout } from '../lib/readout';
 import { Icon, type IconName } from '../primitives/Icon';
-import { DifficultyLabel, describeDifficulty } from '../markers/DifficultyLabel';
+import { DifficultyLabel, DifficultyPips, describeDifficulty } from '../markers/DifficultyLabel';
 import { PENDING_TRAVEL_TEXTS, PendingMarker, type PendingTravel } from '../markers/PendingMarker';
 import { ProvenanceBadge } from '../markers/ProvenanceBadge';
 import { QuestMark } from '../markers/QuestMark';
@@ -31,7 +31,7 @@ interface RowFrameProps {
   readonly posInSet?: number | undefined;
   readonly setSize?: number | undefined;
   readonly style?: CSSProperties | undefined;
-  /** Two lines of 40px (the default, D-048 A) or one line of 28px (the compact View choice). */
+  /** Two lines of 44px (the default; B+, D-051) or one line of 28px (the compact View choice). */
   readonly density?: RowDensity | undefined;
   readonly onClick?: ((event: MouseEvent<HTMLDivElement>) => void) | undefined;
   readonly onDoubleClick?: ((event: MouseEvent<HTMLDivElement>) => void) | undefined;
@@ -54,6 +54,12 @@ export interface StepRowProps extends RowFrameProps {
   readonly onToggleLock?: (() => void) | undefined;
   readonly onDuplicate?: (() => void) | undefined;
   readonly onDelete?: (() => void) | undefined;
+  /**
+   * Two-line rows: the row is drawn grown (D-051): the issue in full on lines of its own, the row
+   * actions below line 2. The list grows its active step row unless the list is too short for it
+   * (`activeRowCanGrow`); defaults to `active`.
+   */
+  readonly grown?: boolean | undefined;
 }
 
 /** How a row's name says a pending travel time, after "Time …, pending: ". */
@@ -125,6 +131,9 @@ function sentences(parts: readonly string[]): string {
   return `${parts.map((part) => part.replace(/\.+$/, '')).join('. ')}.`;
 }
 
+/** " (1 of 2)" after a title in a chain, as the name and the tooltip say it; nothing for none. */
+const chainWords = (model: StepRowModel): string => (model.chain === null ? '' : ` (${String(model.chain.index)} of ${String(model.chain.length)})`);
+
 /**
  * The accessible name of a step row; the row's children are presentational (role option). It says
  * the whole row in a fixed order: the number, the kind and title with the chain position and where,
@@ -134,7 +143,7 @@ function sentences(parts: readonly string[]): string {
  */
 export function describeStepRow(model: StepRowModel, groupLabel: string | null = null): string {
   const parts: string[] = [];
-  const chain = model.chain === null ? '' : ` (${String(model.chain.index)} of ${String(model.chain.length)})`;
+  const chain = chainWords(model);
   const detail = model.detail === null ? '' : `, ${model.detail.replaceAll(' · ', ', ')}`;
   const group = groupLabel === null ? '' : `, in group ${groupLabel}`;
   parts.push(`${String(model.number)}. ${STEP_KIND_LABELS[model.kind]}: ${model.title}${chain}${detail}${group}`);
@@ -360,11 +369,12 @@ const markSaysVerb = (model: StepRowModel): boolean => (model.kind === 'accept' 
 /**
  * Line 1's title: the verb in the muted ink, then what it acts on (one ellipsis for both). `verb`
  * false leaves the verb to the mark (one-line rows, review UI-15); the tooltip and the row's name
- * keep it.
+ * keep it, with the chain position.
  */
 function TitleText({ model, withDetail, verb = true }: { readonly model: StepRowModel; readonly withDetail: boolean; readonly verb?: boolean }) {
   const detail = withDetail && model.detail !== null ? model.detail : null;
-  const full = `${model.verb} ${model.title}`;
+  // The chain position is in every row's tooltip, as in its name, wherever line 1 has room for it or not (D-051).
+  const full = `${model.verb} ${model.title}${chainWords(model)}`;
   return (
     <span className="frl-steprow__title" title={detail === null ? full : `${full} · ${detail}`}>
       {verb && (
@@ -400,13 +410,17 @@ function IssueMarker({ model }: { readonly model: StepRowModel }) {
 }
 
 /**
- * One route step: two lines of 40px (the default) or one line of 28px (docs/research/ui-refresh.md
- * §6). Two lines: the number (the drag handle), the mark, line 1 with the verb, title, chain,
- * provenance, issue marker and lock; line 2 with the quest's chip and where the step happens, or
- * the worst issue in words, and the row actions (duplicate, delete, lock) on every row, muted
- * (D-048 F); on the right the top number (XP gained or the step time) over the level after. One
- * line: today's row with the mark, the verb and one chosen estimate; duplicate and delete appear on
- * hover or when active.
+ * One route step: two lines of 44px (the default, layout B+, D-051) or one line of 28px
+ * (docs/research/ui-refresh.md §6). Two lines: the number (the drag handle); the mark, with the
+ * quest's difficulty pips under it in ink; line 1 with the verb, title, provenance and lock, then the
+ * chain where it fits; line 2 with "Lv n" and where the step happens, or the worst issue in words
+ * (its shape drawn once); the row actions (duplicate, delete, lock) at line 2's end, shown only on
+ * hover, on the selected row (one row selected) and on the active row (CSS); on the right the top
+ * number (XP gained or the step time) over the level after. The active row always shows the chain on
+ * line 1. It is also grown (taller; the list grows it unless the list is too short, `grown`): line 2
+ * shows where whole, and the issue's words get two lines of their own below, with the row actions at
+ * their end. One line: today's row with the mark, the verb, the chip and one
+ * chosen estimate; duplicate and delete appear on hover or when active.
  */
 export function StepRow({
   model,
@@ -418,6 +432,7 @@ export function StepRow({
   onDuplicate,
   onDelete,
   onHandlePointerDown,
+  grown: grownProp,
   ...frame
 }: StepRowProps) {
   const density = frame.density ?? 'two-line';
@@ -448,7 +463,8 @@ export function StepRow({
       )}
     </span>
   );
-  const className = cx('frl-steprow', model.locked && 'is-locked', model.pending !== null && 'is-pending');
+  const grown = density === 'two-line' && (grownProp ?? frame.active);
+  const className = cx('frl-steprow', model.locked && 'is-locked', model.pending !== null && 'is-pending', grown && 'is-grown');
   const data = { 'data-row-type': 'step', 'data-step-kind': model.kind };
   const label = describeStepRow(model, groupLabel);
 
@@ -484,57 +500,90 @@ export function StepRow({
   }
 
   const issue = model.issue;
-  // Line 2's place: who, then the zone, which stays when the lead gives way; the coordinates are in the tooltip and the name (UI-01).
+  // Line 2's place: who, then the zone, which stays when the lead gives way at rest (the active row
+  // shows both whole); the coordinates are in the tooltip and the name (UI-01).
   const place = model.place ?? null;
   const detail = model.assumptions === null ? undefined : `this step reads ${model.assumptions}`;
+  // "Lv n" in place of the chip (D-051): the pips are under the mark, whose colour is the difficulty's.
+  const level = quest !== null && (
+    <span className={cx('frl-steprow__lv frl-num', quest.uncertain && 'is-uncertain')} title={describeDifficulty(quest.level, quest.difficulty, quest.uncertain)}>
+      Lv {quest.level ?? '?'}
+    </span>
+  );
+  const where =
+    model.kind === 'travel' && topNumber !== 'time' ? (
+      <span className="frl-steprow__detail frl-steprow__travel-time">
+        <TimeValue model={model} detail={detail} />
+      </span>
+    ) : (
+      model.detail !== null && (
+        <span className={cx('frl-steprow__detail', place !== null && 'is-place')} title={model.detail}>
+          {place === null ? (
+            model.detail
+          ) : (
+            <>
+              {place.lead !== null && <span className="frl-steprow__lead">{place.lead}</span>}
+              {place.lead !== null && place.zone !== null && <span className="frl-steprow__sep"> · </span>}
+              {place.zone !== null && <span className="frl-steprow__zone">{place.zone}</span>}
+            </>
+          )}
+        </span>
+      )
+    );
+  // At rest the worst issue takes line 2 in place of where; the grown (active) row keeps where on
+  // line 2 and gives the issue its own lines below. Its shape is drawn once, either way (D-051); its
+  // tooltip has the step's issue counts, either way.
+  const issueTitle = issue === null ? undefined : `${issue.message}. Issues: ${describeIssueCounts(model.issues)}`;
+  const issueWords = issue !== null && (
+    <>
+      <SeverityIcon severity={issue.severity} labelled={false} size={12} />
+      <span className="frl-steprow__issue-text">{issue.short ?? issue.message}</span>
+    </>
+  );
+  const second = issue !== null && !grown ? (
+    <span className="frl-steprow__issue" data-severity={issue.severity} title={issueTitle}>
+      {issueWords}
+    </span>
+  ) : (
+    where
+  );
   return (
     <RowFrame {...frame} label={label} className={className} data={data}>
       {number}
       <span className="frl-steprow__markbox">
         <RowMark model={model} compact={false} />
+        {quest !== null && <DifficultyPips difficulty={quest.difficulty} className="frl-steprow__pips" />}
       </span>
       <span className="frl-steprow__text">
         <span className="frl-steprow__line1">
-          <TitleText model={model} withDetail={false} />
+          {/* The title, provenance and lock never part; the chain wraps out of sight where it does not fit (not on the active row). */}
+          <span className="frl-steprow__head">
+            <TitleText model={model} withDetail={false} />
+            {provenance}
+            {model.locked && (
+              <span className="frl-steprow__locked" title="Locked">
+                <Icon name="lock" size={14} />
+              </span>
+            )}
+          </span>
           <Chain model={model} />
-          {provenance}
-          <IssueMarker model={model} />
-          {model.locked && (
-            <span className="frl-steprow__locked" title="Locked">
-              <Icon name="lock" size={14} />
-            </span>
-          )}
         </span>
         <span className="frl-steprow__line2">
-          {chip}
-          {issue !== null ? (
-            <span className="frl-steprow__issue" data-severity={issue.severity} title={issue.message}>
-              <SeverityIcon severity={issue.severity} labelled={false} size={12} />
-              <span className="frl-steprow__issue-text">{issue.short ?? issue.message}</span>
-            </span>
-          ) : model.kind === 'travel' && topNumber !== 'time' ? (
-            <span className="frl-steprow__detail frl-steprow__travel-time">
-              <TimeValue model={model} detail={detail} />
-            </span>
-          ) : (
-            model.detail !== null && (
-              <span className={cx('frl-steprow__detail', place !== null && 'is-place')} title={model.detail}>
-                {place === null ? (
-                  model.detail
-                ) : (
-                  <>
-                    {place.lead !== null && <span className="frl-steprow__lead">{place.lead}</span>}
-                    {place.lead !== null && place.zone !== null && <span className="frl-steprow__sep"> · </span>}
-                    {place.zone !== null && <span className="frl-steprow__zone">{place.zone}</span>}
-                  </>
-                )}
-              </span>
-            )
-          )}
+          {level}
+          {level !== false && second !== false && second !== null && <span className="frl-steprow__sep">·</span>}
+          {second}
           {actions}
         </span>
       </span>
       <EstimatePair model={model} top={topNumber} />
+      {grown && issue !== null && (
+        <span className="frl-steprow__more" data-severity={issue.severity} title={issueTitle}>
+          {/* Two floats keep the second line's end clear for the row actions. */}
+          <span className="frl-steprow__float" />
+          <span className="frl-steprow__float" />
+          {issueWords}
+        </span>
+      )}
     </RowFrame>
   );
 }

@@ -1189,3 +1189,50 @@ unsupported fact or a legal conclusion was corrected in place on 2026-09-25 and 
   verifier. The verifier ran actionlint with shellcheck, the workflow schema, the SHA pins, every
   step's script as written, and a clean-copy build. It also ran a Playwright smoke test under
   `/forever-route-lab/`. The first run on GitHub is the only end-to-end test.
+
+## D-054: Layout B+ as built (architect, 2026-10-02)
+
+- **Date:** 2026-10-02
+- **Decided by:** architect defaults on the B+ build's review findings (BP-C01 to BP-C10); the owner
+  may overrule any of them.
+- **Context:** D-051, the B+ build on branch `b-plus`. It was mocked and measured first
+  (`tests/bench/browser/bplus-mock.ts`, `readability.ts`), then built, measured independently and
+  critiqued: 10 findings, none refuted, 8 fixed.
+- **As built:**
+  - Two-line rows are 44 px. The active row grows by 32 px to 76 px.
+    - The virtual list is index × 44 plus that one extra (`ROUTE_ACTIVE_ROW_EXTRA`, `rowTop`).
+    - The rows after the active row move by CSS alone, so a selection still re-renders two rows
+      (PERF-11).
+    - One-line rows are unchanged.
+  - "Lv n" with pips under the disc replaces the chip. The issue shape is drawn once, on line 2.
+  - The chain position is on the active row, in every row's name, and now in every row's tooltip.
+  - Entry chunk: 248.21 kB gzip (+0.58 kB), 0.29 kB under the stop rule. The next entry change
+    needs a room-maker; the mock stage points at zod's classic `z` in `src/project/schema.ts`.
+- **Measured (Selawik, Segoe UI's metrics; 1366 × 768, DPR 1.5; the Segoe UI figures are owed on the
+  owner's machine):**
+  - titles cut at rest: 2 of 54 (target 4);
+  - issue words cut at rest: 7 of 22 (target 7);
+  - NPC names and zones cut at rest: 0 of 32 (target 0);
+  - steps in view: 10 as the app opens and with a row active, and 11 at the top of the list (D-051
+    said "about 11");
+  - on the active row, everything is whole: the issue (22 of 22), the NPC and zone (54 of 54) and the
+    D-040 cue (18 of 18).
+- **Architect defaults (the owner may overrule):**
+  1. **Growth threshold:** the active row grows only when the list is at least 120 px high (the grown
+     row plus one plain row). At 200% zoom it stays 44 px, so it is never taller than the list
+     (BP-C02).
+  2. **Hollow quest marks** (locked, unlocks soon, in progress, record unknown) carry no difficulty
+     colour in two-line rows, now the chip is gone. Their difficulty is still in "Lv n", in the pips'
+     count, and in the name and tooltip (BP-C03).
+  3. **Buttons on a multi-selection:** D-051's "the selected row" is read as singular. In a
+     multi-selection, only the hovered and the active row show buttons (BP-C07).
+  4. **Unlit pips** stay as faint as today's chip pips (1.1 to 1.6:1). The pips read as "n bars"
+     rather than "n of 5", and the difficulty is in words in the tooltip (BP-C08).
+  5. **An active row with no issue** still grows. The blank line keeps the list's arithmetic simple
+     and the buttons in one place.
+  6. **Hovered rows** still cut issue words and some NPC names, because the buttons take line 2's
+     end. D-051 does not cover hover; the active row is the place to read a row whole.
+- **Known limits:**
+  - An issue longer than two lines is cut on the active row; its full text is in the name and
+    tooltip. This happens for one issue in DejaVu Sans, and none in Selawik.
+  - Under reduced motion, the growth lands one frame late (an existing base.css rule).

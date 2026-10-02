@@ -2,13 +2,24 @@
  * Fixed-row-height virtualisation and list keyboard handling, as pure functions (ARCHITECTURE
  * §12.4: fixed-height rows of one or two lines, in-house index-based virtualisation). RouteList.tsx
  * is a thin shell over these; the tests exercise them directly.
+ *
+ * Two-line rows have one exception to the fixed height (layout B+, docs/DECISIONS.md D-051): the
+ * active row grows by one fixed extra, so row `i` starts at `i × rowHeight`, plus the extra for every
+ * row after the grown one (`rowTop`). Every offset below takes that grown row as an optional
+ * `GrownRow`; without one the list is plain index arithmetic.
  */
 
 /** One-line route rows (the compact View choice): 28px, matching `--frl-row-height` in tokens.css. */
 export const ROUTE_ROW_HEIGHT = 28;
 
-/** Two-line route rows (the default, D-048 A): 40px, matching `--frl-row-height-two-line` in tokens.css. */
-export const ROUTE_ROW_HEIGHT_TWO_LINE = 40;
+/** Two-line route rows (the default; B+, D-051): 44px, matching `--frl-row-height-two-line` in tokens.css. */
+export const ROUTE_ROW_HEIGHT_TWO_LINE = 44;
+
+/**
+ * What the active two-line row grows by (D-051): two 16px lines for its issue in full, the NPC and the
+ * zone; matching `--frl-row-grow` in tokens.css. One-line rows never grow.
+ */
+export const ROUTE_ACTIVE_ROW_EXTRA = 32;
 
 /** The route list's row density (docs/research/ui-refresh.md §6): every row of a list has the same height. */
 export type RowDensity = 'two-line' | 'one-line';
@@ -20,6 +31,21 @@ export function routeRowHeight(density: RowDensity): number {
   return density === 'one-line' ? ROUTE_ROW_HEIGHT : ROUTE_ROW_HEIGHT_TWO_LINE;
 }
 
+/** The one row taller than the rest (the active two-line row, D-051) and how much taller; null for none. */
+export interface GrownRow {
+  readonly index: number;
+  readonly extra: number;
+}
+
+/**
+ * Whether the active two-line row may grow in a viewport this tall: only when the grown row and one
+ * plain row fit (2 × 44 + 32 = 120px). A shorter list (200% zoom on a 768px-high screen leaves about
+ * 61px) keeps the active row at the plain height, so it is never taller than the list.
+ */
+export function activeRowCanGrow(viewportHeight: number, rowHeight: number, extra: number = ROUTE_ACTIVE_ROW_EXTRA): boolean {
+  return viewportHeight >= 2 * rowHeight + extra;
+}
+
 /** Rows rendered beyond each edge of the viewport so fast scrolling does not show gaps. */
 export const DEFAULT_OVERSCAN = 8;
 
@@ -29,6 +55,7 @@ export interface VirtualWindowInput {
   readonly rowHeight: number;
   readonly rowCount: number;
   readonly overscan: number;
+  readonly grown?: GrownRow | null | undefined;
 }
 
 /** Rows `[start, end)` are rendered; `offsetTop` is the top of row `start`. */
@@ -39,32 +66,60 @@ export interface VirtualWindow {
   readonly totalHeight: number;
 }
 
-export function totalHeight(rowCount: number, rowHeight: number): number {
-  return Math.max(0, rowCount) * rowHeight;
+/** The extra a grown row adds above row `index` (0 at and above the grown row). */
+function extraAbove(index: number, grown: GrownRow | null): number {
+  return grown !== null && index > grown.index ? grown.extra : 0;
+}
+
+/** The top of row `index`: `index × rowHeight`, plus the grown row's extra below it. Index `rowCount` is the end. */
+export function rowTop(index: number, rowHeight: number, grown: GrownRow | null = null): number {
+  return index * rowHeight + extraAbove(index, grown);
+}
+
+/** The grown row when it is one of the list's rows, else null (a stale index draws nothing taller). */
+function grownIn(rowCount: number, grown: GrownRow | null | undefined): GrownRow | null {
+  const row = grown ?? null;
+  return row !== null && row.index >= 0 && row.index < rowCount ? row : null;
+}
+
+export function totalHeight(rowCount: number, rowHeight: number, grown: GrownRow | null = null): number {
+  const count = Math.max(0, rowCount);
+  return rowTop(count, rowHeight, grownIn(count, grown));
 }
 
 /** The largest scrollTop that still shows content (0 when everything fits). */
-export function maxScrollTop(rowCount: number, rowHeight: number, viewportHeight: number): number {
-  return Math.max(0, totalHeight(rowCount, rowHeight) - Math.max(0, viewportHeight));
+export function maxScrollTop(rowCount: number, rowHeight: number, viewportHeight: number, grown: GrownRow | null = null): number {
+  return Math.max(0, totalHeight(rowCount, rowHeight, grown) - Math.max(0, viewportHeight));
 }
 
-export function clampScrollTop(scrollTop: number, rowCount: number, rowHeight: number, viewportHeight: number): number {
+export function clampScrollTop(scrollTop: number, rowCount: number, rowHeight: number, viewportHeight: number, grown: GrownRow | null = null): number {
   if (!Number.isFinite(scrollTop)) return 0;
-  return Math.min(Math.max(0, scrollTop), maxScrollTop(rowCount, rowHeight, viewportHeight));
+  return Math.min(Math.max(0, scrollTop), maxScrollTop(rowCount, rowHeight, viewportHeight, grown));
+}
+
+/** The index of the row (or the end, past the last row) whose box holds `offsetY` (≥ 0), unbounded. */
+function indexAt(offsetY: number, rowHeight: number, grown: GrownRow | null): number {
+  const plain = Math.floor(offsetY / rowHeight);
+  if (grown === null || plain <= grown.index) return plain;
+  // Inside the grown row's extra, or below it: count from the extra's end.
+  return Math.max(grown.index, Math.floor((offsetY - grown.extra) / rowHeight));
 }
 
 export function computeVirtualWindow(input: VirtualWindowInput): VirtualWindow {
   const { rowHeight, rowCount, overscan } = input;
-  const height = totalHeight(rowCount, rowHeight);
   if (rowCount <= 0 || rowHeight <= 0) return { start: 0, end: 0, offsetTop: 0, totalHeight: 0 };
+  const grown = grownIn(rowCount, input.grown);
+  const height = totalHeight(rowCount, rowHeight, grown);
   const viewportHeight = Math.max(0, input.viewportHeight);
-  const scrollTop = clampScrollTop(input.scrollTop, rowCount, rowHeight, viewportHeight);
-  const firstVisible = Math.floor(scrollTop / rowHeight);
-  // A viewport of height h starting mid-row can touch ceil(h / rowHeight) + 1 rows.
-  const lastVisibleExclusive = Math.ceil((scrollTop + viewportHeight) / rowHeight);
+  const scrollTop = clampScrollTop(input.scrollTop, rowCount, rowHeight, viewportHeight, grown);
+  const firstVisible = indexAt(scrollTop, rowHeight, grown);
+  // A viewport of height h starting mid-row can touch the rows up to the one its bottom edge is in.
+  const bottom = scrollTop + viewportHeight;
+  const last = indexAt(bottom, rowHeight, grown);
+  const lastVisibleExclusive = rowTop(last, rowHeight, grown) < bottom ? last + 1 : last;
   const start = Math.max(0, firstVisible - Math.max(0, overscan));
   const end = Math.min(rowCount, Math.max(lastVisibleExclusive, firstVisible + 1) + Math.max(0, overscan));
-  return { start, end, offsetTop: start * rowHeight, totalHeight: height };
+  return { start, end, offsetTop: rowTop(start, rowHeight, grown), totalHeight: height };
 }
 
 /** Whole rows that fit in the viewport, at least 1. PageUp/PageDown move by one page less a row. */
@@ -75,30 +130,37 @@ export function pageSize(viewportHeight: number, rowHeight: number): number {
 
 /**
  * The scrollTop that brings row `index` fully into view, changing as little as possible:
- * unchanged if already visible, else aligned to the nearer edge.
+ * unchanged if already visible, else aligned to the nearer edge. A grown row is revealed by its
+ * whole box; a row taller than the viewport is aligned to its top.
  */
-export function scrollTopToReveal(index: number, scrollTop: number, viewportHeight: number, rowHeight: number): number {
-  const rowTop = index * rowHeight;
-  const rowBottom = rowTop + rowHeight;
-  if (rowTop < scrollTop) return rowTop;
-  if (rowBottom > scrollTop + viewportHeight) return Math.max(0, rowBottom - viewportHeight);
+export function scrollTopToReveal(index: number, scrollTop: number, viewportHeight: number, rowHeight: number, grown: GrownRow | null = null): number {
+  const top = rowTop(index, rowHeight, grown);
+  const bottom = top + rowHeight + (grown !== null && grown.index === index ? grown.extra : 0);
+  if (top < scrollTop) return top;
+  if (bottom > scrollTop + viewportHeight) return Math.max(0, Math.min(top, bottom - viewportHeight));
   return scrollTop;
 }
 
 /** The row under a y offset measured from the top of the list content (scroll included). */
-export function rowIndexAtOffset(offsetY: number, rowHeight: number, rowCount: number): number | null {
+export function rowIndexAtOffset(offsetY: number, rowHeight: number, rowCount: number, grown: GrownRow | null = null): number | null {
   if (rowCount <= 0 || rowHeight <= 0 || offsetY < 0) return null;
-  const index = Math.floor(offsetY / rowHeight);
+  const index = indexAt(offsetY, rowHeight, grownIn(rowCount, grown));
   return index < rowCount ? index : null;
 }
 
 /**
  * Drag and drop. A drop *slot* is a gap between rows: slot `s` is just above row `s`, and slot
- * `rowCount` is after the last row. The slot is the gap nearest to the pointer.
+ * `rowCount` is after the last row. The slot is the gap nearest to the pointer; a grown row's gaps
+ * are its top and its bottom, extra included.
  */
-export function dropSlotAtOffset(offsetY: number, rowHeight: number, rowCount: number): number {
+export function dropSlotAtOffset(offsetY: number, rowHeight: number, rowCount: number, grown: GrownRow | null = null): number {
   if (rowCount <= 0 || rowHeight <= 0) return 0;
-  return Math.min(rowCount, Math.max(0, Math.round(offsetY / rowHeight)));
+  const g = grownIn(rowCount, grown);
+  let slot: number;
+  if (g === null) slot = Math.round(offsetY / rowHeight);
+  else if (offsetY < g.index * rowHeight + (rowHeight + g.extra) / 2) slot = Math.min(g.index, Math.round(offsetY / rowHeight));
+  else slot = Math.max(g.index + 1, Math.round((offsetY - g.extra) / rowHeight));
+  return Math.min(rowCount, Math.max(0, slot));
 }
 
 /**

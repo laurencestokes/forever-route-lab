@@ -48,6 +48,19 @@ out of the figures and fails the run (F-10).
   in every build (F-10).
 - **Pans**: the 10,000-step project, "Go to zone" Durotar, then the drags at 4×.
 
+**Builds with B+** (D-051): a click makes its row the active row, which grows by `--frl-row-grow`
+(32 px) and moves every row below it down by as much. The clicks therefore go only to the rows that
+stay wholly in view with that much room below them (`rowsInView`; usually one row fewer than are
+in view), and each row is found again on screen before its click. Builds without the token ask for no
+room, so their rows are chosen as before. `scrollListTo` adds the active row's extra when the active
+row is above the step it scrolls to (`scrollTopForStep`): rows are placed at `index × 44` and moved
+by a CSS transform, which `offsetTop` leaves out.
+
+**Reduced motion**: under `prefers-reduced-motion: reduce`, base.css gives every element a 0.01 ms
+transition, so a row's new height or shift lands a frame after the key or click that caused it.
+The harness runs without reduced motion; a script that reads geometry under it should wait a frame
+first.
+
 Every page: 1366 × 768 CSS px at a device scale of 1.5, the painted map style (the Map layers
 record's `style`, set before the app loads; builds before the atlas ignore it). The minimap style
 needs the minimap tile pack, which is not in git (D-049 O14): measure it with `--style minimap` on a
@@ -115,8 +128,9 @@ minimum, maximum and the per-round values, and each tree's ratio of medians to t
 <out>/summary.json [--filter toLastPaintMs] [--base <label>]`).
 
 [harness.test.ts](harness.test.ts) checks the pure parts in `pnpm test` (the frame that draws the
-work, the click order, the frame statistics, the first view's bytes, the statistics); the browser
-side is checked by running the harness, which fails on a click without map work.
+work, the click order, the rows clicked and the list placed under B+, the frame statistics, the
+first view's bytes, the statistics); the browser side is checked by running the harness, which fails
+on a click without map work.
 
 ## Finding the cause
 
@@ -136,3 +150,54 @@ CPU probe (a 2e7 square-root loop in the page, recorded per session) took about 
 37-42 ms at 1×, against 38-40 ms on the owner's desktop. Only ratios between builds measured
 interleaved on one machine compare. The interactions are measured on a warm page, one at a time;
 other processes on the machine show up as spread, which the rounds and the medians are for.
+
+## The left panel's readability
+
+[readability.ts](readability.ts) measures the route list's readability in a built app, for D-051 (layout
+"B+") with the definitions of the readability study, mocks and critic in
+[docs/reviews/rework-followup.md](../../../docs/reviews/rework-followup.md). It opens the sample
+project as a first visit does, at 1366 × 768 and a device scale of 1.5, light theme, and reads every
+step row:
+
+- **at rest** (not hovered, selected or active): quest titles cut, issue words cut, NPC names and zones
+  cut, quest rows that show no place, chain positions hidden;
+- **hovered**, one row at a time: issue words and NPC names cut while the row's buttons show;
+- **active**, each row clicked in turn: whether its issue's words, NPC name and zone are whole, whether
+  a carried turn-in's cue (D-040: its issue's words) shows and is whole, whether its chain position
+  shows, and its height;
+- the steps wholly in view (as the app opens, at the top of the list, and with step 8 active), whether
+  the active row ends in view after ↓, ↓, PageDown, PageDown, PageUp, End and Home, and whether every
+  row's name and title tooltip carry its chain position and level.
+
+**Cut** is measured on the glyphs, not the box: a text is cut when a Range over it reaches past the
+box that clips it (every clipping box from the text up to its row) by more than 0.02 px across or 1 px
+up or down ([readability-summary.ts](readability-summary.ts) has the definitions and the counts, and
+[readability-page.ts](readability-page.ts) the page side).
+
+`--variant bplus` injects a mock of B+ ([bplus-mock.ts](bplus-mock.ts): a stylesheet and a small page
+script, no product code) into the same build, so B+ is measured on the same data and in the same font
+as today's panel. **B+ is built since 2026-10-02**, so `--variant today` on a current build measures
+B+ itself; the mock only makes sense on a build from before it (for example `ff73222`), and on a
+current build it would be applied twice.
+
+**The font decides the figures.** D-051's figures were taken in Segoe UI on Windows. `--font
+selawik` draws the UI in Selawik, Microsoft's open font with Segoe UI's metrics, installed for
+measurement only (never committed; for example from the 1.01 release of
+<https://github.com/microsoft/Selawik>, into `~/.fonts`), with weight 500 drawn Semibold as the study saw
+Chrome draw Segoe UI; `--font system` (the default) keeps the app's own font stack, which is Segoe UI
+on Windows and DejaVu Sans on a bare Linux container. Every result records the font Chromium used
+(`fonts`); quote it with every figure. `--gutter N` takes N px from the right of the rows, as a classic
+scroll bar would: Playwright's headless Chromium draws none, and the study's line 1 was 208 px where
+this harness's is 218 px.
+
+```bash
+pnpm build
+pnpm exec tsx tests/bench/browser/readability.ts --variant today,bplus [--font system|selawik] \
+  [--theme light|dark] [--gutter 0] [--dpr 1.5] [--quick] [--no-shots] [--dist dist] [--out <dir>]
+```
+
+Output (default `.cache/readability/<time>/`): `readability-<variant>.json` (the counts and every row's
+record), `table.md` (the counts side by side, also printed), and screenshots of the left panel:
+`<variant>-open.png` (as the app opens), `-rest.png` (the top of the list, the active row out of view),
+`-active-8.png`, `-hover.png` (step 11 hovered, step 8 active) and `-active-45.png` (a carried turn-in
+active).

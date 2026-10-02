@@ -72,13 +72,49 @@ export function describeDifficulty(level: number | null, difficulty: Difficulty 
   return uncertain ? `${base}, from a lower-bound level: may be easier` : base;
 }
 
+export interface DifficultyPipsProps {
+  readonly difficulty: Difficulty | null;
+  readonly className?: string | undefined;
+}
+
+/**
+ * The five pips, `DIFFICULTY_RANK` of them lit: difficulty's shape cue, which never relies on colour.
+ * Decorative (`aria-hidden`): whoever draws them says the difficulty in words. The chip colours the
+ * lit ones in the difficulty colour on its dark well; a two-line route row draws them under its mark
+ * in ink (D-051), where the mark's colour is the difficulty's.
+ */
+export function DifficultyPips({ difficulty, className }: DifficultyPipsProps) {
+  const rank = difficulty === null ? 0 : DIFFICULTY_RANK[difficulty];
+  return (
+    <svg
+      className={cx('frl-difficulty__pips', className)}
+      viewBox={`0 0 ${String(PIP_BOX_WIDTH)} ${String(PIP_BOX_HEIGHT)}`}
+      width={PIP_BOX_WIDTH}
+      height={PIP_BOX_HEIGHT}
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {PIPS.map((pip) => (
+        <rect
+          key={pip}
+          className={pip <= rank ? 'frl-difficulty__pip is-on' : 'frl-difficulty__pip'}
+          x={(pip - 1) * (PIP_WIDTH + PIP_GAP)}
+          y={PIP_BOX_HEIGHT - pip * 2}
+          width={PIP_WIDTH}
+          height={pip * 2}
+        />
+      ))}
+    </svg>
+  );
+}
+
 /**
  * Quest level with its difficulty. Difficulty is carried three ways: the reserved colour, the
  * number of filled pips (shape), and text (visible in `full`, tooltip and screen-reader text
  * always). The chip keeps its dark well in both themes so every difficulty colour has contrast.
  */
 export function DifficultyLabel({ level, difficulty, variant = 'compact', uncertain = false, description: said, className }: DifficultyLabelProps) {
-  const rank = difficulty === null ? 0 : DIFFICULTY_RANK[difficulty];
   const description = said ?? describeDifficulty(level, difficulty, uncertain);
   return (
     <span
@@ -91,26 +127,7 @@ export function DifficultyLabel({ level, difficulty, variant = 'compact', uncert
       title={description}
       data-difficulty={difficulty ?? 'unknown'}
     >
-      <svg
-        className="frl-difficulty__pips"
-        viewBox={`0 0 ${String(PIP_BOX_WIDTH)} ${String(PIP_BOX_HEIGHT)}`}
-        width={PIP_BOX_WIDTH}
-        height={PIP_BOX_HEIGHT}
-        shapeRendering="crispEdges"
-        aria-hidden="true"
-        focusable="false"
-      >
-        {PIPS.map((pip) => (
-          <rect
-            key={pip}
-            className={pip <= rank ? 'frl-difficulty__pip is-on' : 'frl-difficulty__pip'}
-            x={(pip - 1) * (PIP_WIDTH + PIP_GAP)}
-            y={PIP_BOX_HEIGHT - pip * 2}
-            width={PIP_WIDTH}
-            height={pip * 2}
-          />
-        ))}
-      </svg>
+      <DifficultyPips difficulty={difficulty} />
       <span className="frl-difficulty__level frl-num" aria-hidden="true">
         {level === null ? '?' : level}
       </span>

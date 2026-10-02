@@ -158,9 +158,10 @@ describe('route rows with the walk’s numbers', () => {
     act(() => {
       s.store.select({ kind: 'single', id: step.id });
     });
+    // Two 44px rows, the second of them the active row, grown by 32px (B+, D-051).
     const insert = document.querySelector<HTMLElement>('.frl-routelist__insert');
-    expect(insert?.style.top).toBe('80px');
-    expect(document.querySelector<HTMLElement>('.frl-routelist__later')?.style.top).toBe('80px');
+    expect(insert?.style.top).toBe('120px');
+    expect(document.querySelector<HTMLElement>('.frl-routelist__later')?.style.top).toBe('120px');
     expect(screen.getByRole('toolbar', { name: 'Add after step 2' })).toBeTruthy();
   });
 });

@@ -126,31 +126,82 @@ export interface RowBox {
   readonly height: number;
 }
 
-const VISIBLE_ROWS = `(() => {
-  const list = document.querySelector('[role=listbox]');
-  if (list === null) return [];
-  const box = list.getBoundingClientRect();
-  return [...list.querySelectorAll('[role=option][aria-posinset]')]
-    .map((row) => { const r = row.getBoundingClientRect(); return { step: Number(row.getAttribute('aria-posinset')), x: r.x, y: r.y, width: r.width, height: r.height }; })
-    .filter((r) => r.y >= box.top - 0.5 && r.y + r.height <= box.bottom + 0.5)
-    .sort((a, b) => a.y - b.y);
-})()`;
-
-/** The route rows wholly inside the list's viewport, top to bottom (F-10: only these are clicked). */
-export function visibleRows(page: Page): Promise<RowBox[]> {
-  return page.evaluate<RowBox[]>(VISIBLE_ROWS);
+/** The rows in the list's viewport as the page has them, with the list's box and how much the active row grows. */
+interface ListRows {
+  readonly rows: readonly RowBox[];
+  readonly top: number;
+  readonly bottom: number;
+  /** `--frl-row-grow` (B+, D-051: the active two-line row is that much taller); 0 in builds before B+. */
+  readonly grow: number;
 }
 
-/** Scrolls the route list so that step `step` is the first row (row height read from the rows themselves). */
+const LIST_ROWS = `(() => {
+  const list = document.querySelector('[role=listbox]');
+  if (list === null) return { rows: [], top: 0, bottom: 0, grow: 0 };
+  const box = list.getBoundingClientRect();
+  const grow = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--frl-row-grow'));
+  const rows = [...list.querySelectorAll('[role=option][aria-posinset]')]
+    .map((row) => { const r = row.getBoundingClientRect(); return { step: Number(row.getAttribute('aria-posinset')), x: r.x, y: r.y, width: r.width, height: r.height }; });
+  return { rows, top: box.top, bottom: box.bottom, grow: Number.isFinite(grow) ? grow : 0 };
+})()`;
+
+/**
+ * The rows wholly inside the list's box, top to bottom, with `room` px to spare below (pure, for
+ * tests). A click grows its row by `--frl-row-grow` (B+, D-051) and moves every row below it down by
+ * as much: rows chosen with that room stay wholly in view whichever row above them is clicked.
+ */
+export function rowsInView(list: ListRows, room = 0): RowBox[] {
+  return list.rows.filter((r) => r.y >= list.top - 0.5 && r.y + r.height + room <= list.bottom + 0.5).sort((a, b) => a.y - b.y);
+}
+
+/** The route rows wholly inside the list's viewport, top to bottom (F-10: only these are clicked). */
+export async function visibleRows(page: Page): Promise<RowBox[]> {
+  return rowsInView(await page.evaluate<ListRows>(LIST_ROWS));
+}
+
+/** The visible rows that stay wholly in view when a row above them grows (B+): the rows `measureSelection` clicks. */
+async function rowsWithRoom(page: Page): Promise<RowBox[]> {
+  const list = await page.evaluate<ListRows>(LIST_ROWS);
+  return rowsInView(list, list.grow);
+}
+
+/** What `scrollListTo` reads from the page: the plain row height and the active step row, when one is mounted. */
+export interface ListGeometry {
+  readonly rowHeight: number;
+  readonly active: { readonly step: number; readonly height: number } | null;
+}
+
+/**
+ * The scrollTop that puts step `step` at the top of the list (pure, for tests): `(step - 1) × row
+ * height`, plus what the active row adds when it is above the step (B+: the active two-line row is
+ * taller and every row after it sits that much lower, by a CSS transform that `offsetTop` leaves out).
+ */
+export function scrollTopForStep(step: number, geometry: ListGeometry): number {
+  const active = geometry.active;
+  const extra = active !== null && active.step < step ? Math.max(0, active.height - geometry.rowHeight) : 0;
+  return (step - 1) * geometry.rowHeight + extra;
+}
+
+const LIST_GEOMETRY = `(() => {
+  const list = document.querySelector('[role=listbox]');
+  const rows = [...list.querySelectorAll('[role=option][aria-posinset]')].map((row) => ({ n: Number(row.getAttribute('aria-posinset')), top: row.offsetTop })).sort((a, b) => a.n - b.n);
+  let height = 0;
+  for (let i = 1; i < rows.length && height === 0; i += 1) if (rows[i].n === rows[i - 1].n + 1) height = rows[i].top - rows[i - 1].top;
+  if (height <= 0) throw new Error('no two consecutive rows to measure the row height');
+  const id = list.getAttribute('aria-activedescendant');
+  const active = id === null ? null : document.getElementById(id);
+  const step = active === null ? null : active.getAttribute('aria-posinset');
+  return { rowHeight: height, active: step === null ? null : { step: Number(step), height: active.offsetHeight } };
+})()`;
+
+/**
+ * Scrolls the route list so that step `step` is the first row (row height read from the rows
+ * themselves; `offsetTop` is each row's own `index × height`, so the active row's extra is added
+ * where it is above the step, `scrollTopForStep`).
+ */
 export async function scrollListTo(page: Page, step: number): Promise<void> {
-  await page.evaluate(`(() => {
-    const list = document.querySelector('[role=listbox]');
-    const rows = [...list.querySelectorAll('[role=option][aria-posinset]')].map((row) => ({ n: Number(row.getAttribute('aria-posinset')), top: row.offsetTop })).sort((a, b) => a.n - b.n);
-    let height = 0;
-    for (let i = 1; i < rows.length && height === 0; i += 1) if (rows[i].n === rows[i - 1].n + 1) height = rows[i].top - rows[i - 1].top;
-    if (height <= 0) throw new Error('no two consecutive rows to measure the row height');
-    list.scrollTop = (${String(step)} - 1) * height;
-  })()`);
+  const geometry = await page.evaluate<ListGeometry>(LIST_GEOMETRY);
+  await page.evaluate(`(() => { document.querySelector('[role=listbox]').scrollTop = ${String(scrollTopForStep(step, geometry))}; })()`);
   await page.waitForFunction(`document.querySelector('[role=option][aria-posinset="${String(step)}"]') !== null`, undefined, { timeout: 10_000, polling: 'raf' });
 }
 
@@ -345,11 +396,14 @@ export function clickOrder(visible: number, count: number): number[] {
 
 /**
  * Selection to pins painted: `count` clicks on route rows that are on screen (F-10), after one
- * unmeasured click on the first of them. Each click must produce map work.
+ * unmeasured click on the first of them. Each click must produce map work. The rows are those that
+ * stay wholly in view when a clicked row above them grows (B+, D-051; `rowsInView`); each is found
+ * again on screen before its click.
  */
 export async function measureSelection(page: Page, throttle: number, count: number): Promise<InteractionSet> {
   const policy = quietPolicy(throttle);
-  const rows = await visibleRows(page);
+  // Rows with room for the clicked row's growth below them (B+), so none of them leaves the view.
+  const rows = await rowsWithRoom(page);
   if (rows.length < 2) throw new Error('fewer than two route rows are visible');
   const order = clickOrder(rows.length, count + 1);
   const samples: InteractionResult[] = [];

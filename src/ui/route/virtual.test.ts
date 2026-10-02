@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ROUTE_ROW_HEIGHT,
   ROUTE_ROW_HEIGHT_TWO_LINE,
+  ROUTE_ACTIVE_ROW_EXTRA,
   ROW_DENSITIES,
+  activeRowCanGrow,
   routeRowHeight,
   clampScrollTop,
   computeVirtualWindow,
@@ -12,8 +14,10 @@ import {
   maxScrollTop,
   pageSize,
   rowIndexAtOffset,
+  rowTop,
   scrollTopToReveal,
   selectionModeForClick,
+  totalHeight,
   type KeyInput,
   type ListKeyState,
 } from './virtual';
@@ -247,21 +251,123 @@ describe('selectionModeForClick', () => {
 });
 
 describe('row densities (ui-refresh.md §6, §10.1)', () => {
-  it('gives each density one fixed height: 40px two-line rows (the default), 28px one-line rows', () => {
+  it('gives each density one fixed height: 44px two-line rows (the default, B+), 28px one-line rows', () => {
     expect(routeRowHeight('two-line')).toBe(ROUTE_ROW_HEIGHT_TWO_LINE);
     expect(routeRowHeight('one-line')).toBe(ROUTE_ROW_HEIGHT);
-    expect(ROUTE_ROW_HEIGHT_TWO_LINE).toBe(40);
+    expect(ROUTE_ROW_HEIGHT_TWO_LINE).toBe(44);
+    expect(ROUTE_ACTIVE_ROW_EXTRA).toBe(32);
     expect(ROW_DENSITIES).toEqual(['two-line', 'one-line']);
   });
 
   it('windows, pages and reveals by the density’s height', () => {
     const tall = ROUTE_ROW_HEIGHT_TWO_LINE;
-    // 13 two-line rows in the mock's 519px list; 8 rows of overscan each side mid-list.
-    const view = computeVirtualWindow({ scrollTop: 100 * tall, viewportHeight: 519, rowHeight: tall, rowCount: 10_000, overscan: 8 });
+    // 11 whole two-line rows in the sample's 505px list (D-051); 8 rows of overscan each side mid-list.
+    const view = computeVirtualWindow({ scrollTop: 100 * tall, viewportHeight: 505, rowHeight: tall, rowCount: 10_000, overscan: 8 });
     expect(view.start).toBe(92);
-    expect(view.end).toBe(121);
+    expect(view.end).toBe(120);
     expect(view.offsetTop).toBe(92 * tall);
-    expect(pageSize(519, tall)).toBe(11);
-    expect(scrollTopToReveal(200, 0, 519, tall)).toBe(201 * tall - 519);
+    expect(pageSize(505, tall)).toBe(10);
+    expect(scrollTopToReveal(200, 0, 505, tall)).toBe(201 * tall - 505);
+  });
+});
+
+describe('the grown active row (B+, D-051): index × 44 plus one fixed extra below it', () => {
+  it('grows the active row only in a list that holds it and one plain row (2 × 44 + 32 = 120px)', () => {
+    expect(activeRowCanGrow(120, ROUTE_ROW_HEIGHT_TWO_LINE)).toBe(true);
+    expect(activeRowCanGrow(560, ROUTE_ROW_HEIGHT_TWO_LINE)).toBe(true);
+    expect(activeRowCanGrow(119, ROUTE_ROW_HEIGHT_TWO_LINE)).toBe(false);
+    // 200% zoom on a 768px-high screen: a 61px list, shorter than the 76px grown row.
+    expect(activeRowCanGrow(61, ROUTE_ROW_HEIGHT_TWO_LINE)).toBe(false);
+    expect(activeRowCanGrow(2 * ROUTE_ROW_HEIGHT_TWO_LINE + ROUTE_ACTIVE_ROW_EXTRA, ROUTE_ROW_HEIGHT_TWO_LINE)).toBe(true);
+  });
+
+  const h = ROUTE_ROW_HEIGHT_TWO_LINE;
+  const x = ROUTE_ACTIVE_ROW_EXTRA;
+  const at = (index: number) => ({ index, extra: x });
+
+  it('puts every row after the grown one down by the extra, and no other', () => {
+    expect([0, 4, 5, 6, 9].map((i) => rowTop(i, h, at(5)))).toEqual([0, 4 * h, 5 * h, 6 * h + x, 9 * h + x]);
+    expect(rowTop(7, h)).toBe(7 * h);
+    expect(rowTop(7, h, null)).toBe(7 * h);
+    // First, last and absent.
+    expect(totalHeight(10, h, at(0))).toBe(10 * h + x);
+    expect(totalHeight(10, h, at(9))).toBe(10 * h + x);
+    expect(totalHeight(10, h, null)).toBe(10 * h);
+    // An index outside the list grows nothing.
+    expect(totalHeight(10, h, at(10))).toBe(10 * h);
+    expect(totalHeight(10, h, at(-1))).toBe(10 * h);
+    expect(maxScrollTop(20, h, 505, at(3))).toBe(20 * h + x - 505);
+    expect(clampScrollTop(10_000, 20, h, 505, at(3))).toBe(20 * h + x - 505);
+  });
+
+  it('finds the row under an offset, the grown row through its extra', () => {
+    const g = at(5);
+    expect(rowIndexAtOffset(5 * h - 1, h, 10, g)).toBe(4);
+    expect(rowIndexAtOffset(5 * h, h, 10, g)).toBe(5);
+    expect(rowIndexAtOffset(6 * h, h, 10, g)).toBe(5);
+    expect(rowIndexAtOffset(6 * h + x - 1, h, 10, g)).toBe(5);
+    expect(rowIndexAtOffset(6 * h + x, h, 10, g)).toBe(6);
+    expect(rowIndexAtOffset(10 * h + x - 1, h, 10, g)).toBe(9);
+    expect(rowIndexAtOffset(10 * h + x, h, 10, g)).toBeNull();
+    // The grown row first and last.
+    expect(rowIndexAtOffset(h + x - 1, h, 10, at(0))).toBe(0);
+    expect(rowIndexAtOffset(h + x, h, 10, at(0))).toBe(1);
+    expect(rowIndexAtOffset(9 * h + x + 5, h, 10, at(9))).toBe(9);
+    // Absent: plain arithmetic.
+    expect(rowIndexAtOffset(6 * h, h, 10, null)).toBe(6);
+  });
+
+  it('drops into the gap nearest the pointer, the grown row\'s gaps at its top and its bottom', () => {
+    const g = at(5);
+    expect(dropSlotAtOffset(5 * h + 3, h, 10, g)).toBe(5);
+    // The grown row's middle is 5h + (h + x) / 2: above it its top, below it its bottom.
+    expect(dropSlotAtOffset(5 * h + (h + x) / 2 - 1, h, 10, g)).toBe(5);
+    expect(dropSlotAtOffset(5 * h + (h + x) / 2 + 1, h, 10, g)).toBe(6);
+    expect(dropSlotAtOffset(6 * h + x + 3, h, 10, g)).toBe(6);
+    expect(dropSlotAtOffset(7 * h + x - 3, h, 10, g)).toBe(7);
+    expect(dropSlotAtOffset(4 * h + 3, h, 10, g)).toBe(4);
+    expect(dropSlotAtOffset(10 * h + x + 50, h, 10, g)).toBe(10);
+    expect(dropSlotAtOffset(-50, h, 10, g)).toBe(0);
+    expect(dropSlotAtOffset((h + x) / 2 - 2, h, 10, at(0))).toBe(0);
+    expect(dropSlotAtOffset(h + x - 2, h, 10, at(0))).toBe(1);
+    expect(dropSlotAtOffset(10 * h + x - 2, h, 10, at(9))).toBe(10);
+    expect(dropSlotAtOffset(6 * h - 2, h, 10, null)).toBe(6);
+  });
+
+  it('windows the rows by their real offsets', () => {
+    // The grown row above the viewport: the first visible row is found past its extra.
+    const above = computeVirtualWindow({ scrollTop: 20 * h + x, viewportHeight: 505, rowHeight: h, rowCount: 1000, overscan: 0, grown: at(5) });
+    expect(above.start).toBe(20);
+    expect(above.offsetTop).toBe(20 * h + x);
+    expect(above.end).toBe(32);
+    expect(above.totalHeight).toBe(1000 * h + x);
+    // The grown row in the viewport takes its extra's room: the window ends a row earlier than without it.
+    const inside = computeVirtualWindow({ scrollTop: 0, viewportHeight: 505, rowHeight: h, rowCount: 1000, overscan: 0, grown: at(3) });
+    expect(inside.start).toBe(0);
+    expect(inside.end).toBe(11);
+    const plain = computeVirtualWindow({ scrollTop: 0, viewportHeight: 505, rowHeight: h, rowCount: 1000, overscan: 0 });
+    expect(plain.end).toBe(12);
+    const exact = computeVirtualWindow({ scrollTop: 0, viewportHeight: 11 * h + x, rowHeight: h, rowCount: 1000, overscan: 0, grown: at(3) });
+    expect(exact.end).toBe(11);
+    // Below the viewport: unchanged.
+    const below = computeVirtualWindow({ scrollTop: 0, viewportHeight: 505, rowHeight: h, rowCount: 1000, overscan: 2, grown: at(500) });
+    expect(below).toEqual({ ...plain, end: 14, totalHeight: 1000 * h + x });
+    // One-line rows never grow: the same arithmetic with no grown row.
+    const compact = computeVirtualWindow({ scrollTop: 0, viewportHeight: 505, rowHeight: ROUTE_ROW_HEIGHT, rowCount: 1000, overscan: 0, grown: null });
+    expect(compact.end).toBe(Math.ceil(505 / ROUTE_ROW_HEIGHT));
+  });
+
+  it('reveals the grown row by its whole box, and the rows after it at their shifted offsets', () => {
+    // Below the viewport: its bottom, extra included, meets the viewport's.
+    expect(scrollTopToReveal(20, 0, 505, h, at(20))).toBe(21 * h + x - 505);
+    // Above: its top.
+    expect(scrollTopToReveal(3, 600, 505, h, at(3))).toBe(3 * h);
+    // A row after the grown one.
+    expect(scrollTopToReveal(30, 0, 505, h, at(3))).toBe(31 * h + x - 505);
+    expect(scrollTopToReveal(30, 31 * h + x - 505, 505, h, at(3))).toBe(31 * h + x - 505);
+    // A grown row taller than the viewport shows its top.
+    expect(scrollTopToReveal(20, 0, 60, h, at(20))).toBe(20 * h);
+    // Paging still counts whole 44px rows: 10 rows in the 505px list.
+    expect(pageSize(505, h)).toBe(10);
   });
 });

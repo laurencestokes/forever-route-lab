@@ -21,7 +21,7 @@ import { DifficultyLabel } from '../src/ui/markers/DifficultyLabel';
 import { ReadoutValue } from '../src/ui/markers/ReadoutValue';
 import { unknownReadout } from '../src/ui/lib/readout';
 import { Button } from '../src/ui/primitives/Button';
-import { ROUTE_ROW_HEIGHT, ROUTE_ROW_HEIGHT_TWO_LINE } from '../src/ui/route/virtual';
+import { ROUTE_ACTIVE_ROW_EXTRA, ROUTE_ROW_HEIGHT, ROUTE_ROW_HEIGHT_TWO_LINE } from '../src/ui/route/virtual';
 import { AppShell } from '../src/ui/shell/AppShell';
 import { StatusBar, type StatusBarProps } from '../src/ui/shell/StatusBar';
 import { Tabs } from '../src/ui/shell/Tabs';
@@ -241,8 +241,20 @@ describe('tokens.css layout', () => {
     expect(SHARED.get('--frl-radius-control')).toBe('6px');
     expect(SHARED.get('--frl-mark-size')).toBe('22px');
     expect(SHARED.get('--frl-mark-size-compact')).toBe('18px');
-    // The two-line density (D-048 A): the virtualiser's ROUTE_ROW_HEIGHT_TWO_LINE (UR.3).
+    // The two-line density (B+, D-051): the virtualiser's ROUTE_ROW_HEIGHT_TWO_LINE, 44px, and the
+    // active row's one fixed extra, 32px, which the CSS moves the later rows by.
     expect(SHARED.get('--frl-row-height-two-line')).toBe(`${String(ROUTE_ROW_HEIGHT_TWO_LINE)}px`);
+    expect(SHARED.get('--frl-row-height-two-line')).toBe('44px');
+    expect(SHARED.get('--frl-row-grow')).toBe(`${String(ROUTE_ACTIVE_ROW_EXTRA)}px`);
+    expect(SHARED.get('--frl-row-grow')).toBe('32px');
+    // What moves the rows after the grown one (virtual.ts `rowTop`): one sibling rule on the grown
+    // two-line step row, by the token. RouteList renders only rows between its first and last option
+    // (RouteList.test), so this rule and the DOM order put every row where the virtualiser says.
+    const routeCss = readCss('route/RouteList.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const shift = /\.frl-row--two-line\.frl-steprow\.is-grown\s*~\s*\.frl-row\s*\{([^}]*)\}/.exec(routeCss);
+    expect(shift?.[1]?.replace(/\s+/g, ' ').trim()).toBe('transform: translateY(var(--frl-row-grow));');
+    // Nothing else moves or transforms a row.
+    expect(routeCss.match(/translateY\(var\(--frl-row-grow\)\)/g)).toHaveLength(1);
     // A sm control fits the 32px status bar with room for the 2px ring and its 1px offset.
     const px = (name: string) => Number.parseFloat(SHARED.get(name) ?? 'NaN');
     expect(px('--frl-statusbar-height') - px('--frl-control-height-sm')).toBeGreaterThanOrEqual(2 * 3);
@@ -303,6 +315,9 @@ const CONTRAST_PAIRS: readonly ContrastPair[] = [
   ...[...DIFFICULTIES, 'unknown'].map((d): ContrastPair => ({ fg: `difficulty-${d}`, bg: 'difficulty-well', min: 4.5, use: 'difficulty level text' })),
   // Pips: each lit pip against an unlit one (the count is the non-colour cue).
   ...DIFFICULTIES.map((d): ContrastPair => ({ fg: `difficulty-${d}`, bg: 'difficulty-pip-off', min: 3, use: 'lit against unlit pips' })),
+  // A two-line row's pips under its mark, in ink (B+, D-051): lit against unlit, and lit on every row state.
+  { fg: 'fg-muted', bg: 'border', min: 3, use: 'lit against unlit pips under a route row mark' },
+  ...ROW_STATES.map((bg): ContrastPair => ({ fg: 'fg-muted', bg, min: 3, use: 'lit pips under a route row mark' })),
   // Control edges, including the dashed edge of the uncertain difficulty chip, which sits on every
   // row background and shows the well in its gaps.
   ...[...ROW_AND_PANEL_BACKGROUNDS, 'surface-sunken', 'difficulty-well'].map(

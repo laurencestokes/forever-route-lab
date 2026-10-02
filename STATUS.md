@@ -4,7 +4,7 @@
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md).
 > Nothing here depends on any previous AI conversation.
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Current milestone
 
@@ -24,8 +24,11 @@ See [docs/reviews/review-map-ui-rework.md](docs/reviews/review-map-ui-rework.md)
 <https://www.lozstokes.co.uk/forever-route-lab/>, with the painted map only until the owner publishes
 the minimap tile pack.
 
+**Left-panel layout B+ is built and verified** (D-051, D-054): every D-051 target is met in Selawik.
+The Segoe UI re-measure is owed on the owner's machine (`tests/bench/browser/readability.ts`).
+
 **Next:**
-1. Left-panel layout B+ (D-051), then the open D-050 item 5 measurements on the owner's machine.
+1. The open D-050 item 5 measurements on the owner's machine, and the Segoe UI readability figures.
 2. Milestone 8, the proposal UX.
 3. Milestone 9, the gauntlet.
 
@@ -306,9 +309,13 @@ _None._
 record is [docs/reviews/rework-followup.md](docs/reviews/rework-followup.md), "Fix and verify". This
 container has no WoW client, no minimap tiles, no `.cache/` and no Segoe UI font.
 
-**1. Left-panel layout B+ (D-051):** mock it and measure it, then build it within the 870 B left
-under the 248.5 kB stop rule (with D-053's painted build), or trim first. The truncation figures must be re-measured in Segoe UI
-on the owner's machine (D-052 item 6).
+**1. Left-panel layout B+ (D-051, D-054): built.** Still owed:
+- the Segoe UI figures on the owner's machine (`readability.ts --font system`);
+- the owner's view on D-054's defaults (hollow marks without colour, faint unlit pips, buttons on
+  a multi-selection).
+
+The entry is 248.21 kB, 0.29 kB under the stop rule. The next entry change needs a room-maker,
+such as zod's classic `z` in `src/project/schema.ts` going lazy or moving to zod/mini.
 
 **1b. D-050 item 5, still open:** the F-03 gate ruling (D-052 item 5), MR-06 for the opening view,
 and the pans at 4×. Measure them on the owner's machine with `tests/bench/browser` (both styles,

@@ -411,8 +411,68 @@ It is a lazy part (the chunk the Validation panel uses), so its code is not in t
 
 ## 6. Route step rows
 
-### 6.1 Layout (two lines, 40 px)
+### 6.1 Layout (two lines, 40 px; 44 px since B+)
 
+**Layout B+ (D-051, built 2026-10-02).** The two-line row below is revised, and the revision is what
+the app draws (UI.md §8 has the details):
+
+- **44 px rows**, line 1 20 px and line 2 18 px (`ROUTE_ROW_HEIGHT_TWO_LINE`, `--frl-row-height-two-line`).
+- **Difficulty:** the chip leaves two-line rows. The pips sit under the mark in ink, a filled disc
+  keeps its difficulty colour, and line 2 starts with "Lv n", whose tooltip says the level and
+  difficulty in words (a dotted underline for a lower-bound difficulty). One-line rows keep the chip.
+  A hollow mark (locked, unlocks soon, in progress, record unknown) is not coloured, so those rows
+  show no difficulty colour, only the lit pips' count, "Lv n" and the words (the chip carried the
+  colour there before B+; owed to the owner). The unlit pips barely show against the row (1.1 to
+  1.6:1): the cue is the lit count, not "n of 5".
+- **Line 1:** the verb, title, provenance and lock, then the chain, which wraps out of sight where it
+  does not fit. Line 1's issue marker is gone: the issue's shape is drawn once, on line 2, and the
+  counts are in its tooltip and the name.
+- **Row actions** (§6.5): only on the hovered row, the selected row (one row selected; a selection
+  of several shows them on none of its rows at rest) and the active row.
+- **The active row grows** by 32 px (`ROUTE_ACTIVE_ROW_EXTRA`, `--frl-row-grow`): the chain always
+  shows, line 2 shows "Lv n · NPC · zone" whole, and the worst issue's words get up to two lines of
+  their own below, with the row actions at the bottom right. The rows after it move down by 32 px
+  through CSS, so a change of active row still re-renders two rows (§10.1). **Not in a list too
+  short for it**: the row grows only when the list holds it and one plain row (120 px,
+  `activeRowCanGrow`); at 200% zoom on a 768 px-high screen (a 61 px list) the active row stays
+  44 px and is drawn as at rest, so it is never taller than the list.
+- **Chain position** in every row's name and title tooltip ("(2 of 2)"), always on the active row,
+  elsewhere where it fits.
+
+MEASURED on the built B+ (`pnpm build`, then `tests/bench/browser/readability.ts --variant today`;
+the committed sample project, 55 steps; 1366 × 768, device scale 1.5, light theme, Playwright's
+Chromium 1194 headless, which draws no scroll bar; the glyph-box test of "cut"). **None of these
+figures is in Segoe UI**: this container has no Segoe UI, so "Selawik" is Selawik 1.01 (Microsoft's
+open, Segoe UI-metric font, drawn with weight 500 as Semibold) and "DejaVu" is the container's
+system font. The Segoe UI re-measure is owed on the owner's Windows machine (`--font system`).
+
+| | D-051's target (mock, Segoe UI) | Selawik | Selawik, 10 px gutter | DejaVu Sans |
+|---|---|---|---|---|
+| Quest titles cut at rest (of 54) | 4 (from 13) | 2 | 4 | 4 |
+| Issue words cut at rest (of 22) | 7 (from 22) | 7 | 8 | 22 |
+| NPC names cut at rest (of 32) | 0 (from 24) | 0 | 0 | 1 |
+| Zones cut at rest (of 32) | — | 0 | 0 | 0 |
+| Chain hidden at rest (of 38) | — | 2 | 8 | 12 |
+| Steps wholly in view: as opened / top / step 8 active | about 11 | 10 / 11 / 10 | 10 / 11 / 10 | 10 / 10 / 10 |
+| Active row: issue words whole | all | 22 of 22 | 22 of 22 | 21 of 22 |
+| Active row: NPC and zone whole | all | 54 of 54 | 54 of 54 | 53 of 54 |
+| Active row: D-040 carried-work cue shown / whole | kept | 18 / 18 of 18 | 18 / 18 of 18 | 18 / 18 of 18 |
+| Active row: chain shown | always | 38 of 38 | 38 of 38 | 38 of 38 |
+| Chain in the name / in the tooltip | all | 38 / 38 of 38 | 38 / 38 of 38 | 38 / 38 of 38 |
+| Hovered row: issue words / NPC names cut | not covered | 22 of 22 / 17 of 31 | 22 of 22 / 18 of 31 | 22 of 22 / 24 of 31 |
+| Active row height | 44 + one extra | 76 px | 76 px | 76 px |
+
+- The list is 505 px in Selawik (476 px in DejaVu). With the grown active row in view 10 steps fit
+  wholly, 11 without it. ↓ ↓ PageDown PageDown PageUp End Home each left the active row wholly in
+  view; PageDown moves 10 rows. The dark theme gives the same counts as light (Selawik).
+- The figures equal the B+ mock's (docs/reviews/rework-followup.md, "Readability mocks"), measured
+  the same way in the mock stage. Our line 1 is about 10 px wider than the study's (218 against
+  208 px): the 10 px gutter column reproduces the study's widths; a scroll bar on the owner's
+  machine is the likely cause, not confirmed here.
+- Today's panel before B+ (Selawik, no gutter): 7 quest titles cut, 22 of 22 issues, 18 of 32 NPC
+  names, 12 steps in view, the chain in 0 of 38 tooltips.
+
+**Before B+** (revision 2, built in UR.3):
 MEASURED in the mock at a 340 px panel with hidden scroll bars: the text column is 212 px, about 28
 to 30 characters of a 13 px title, against 15 to 20 today; a classic 17 px scroll bar leaves 195 px.
 
@@ -480,6 +540,13 @@ spoken name gains the span.
   In the dark theme it is faint (1.10:1 against the surface), which the owner sees on the dark sheet.
 
 ### 6.5 Row actions (decision F)
+
+**Since B+ (D-051)** the two-line rows show the actions only on the hovered row, the selected row
+(one row selected: a selection of several shows them on none of its rows but the hovered and the
+active one) and the active row, which is option (a) below; on the active row they sit at the bottom right of its
+extra. They stay pointer-only `aria-hidden` spans, so the keys and the toolbar are unchanged. The
+hovered row's line 2 still gives them its end (22 of 22 issues and about half the NPC names cut on
+hover, §6.1); D-051 does not cover the hovered row.
 
 Duplicate, Delete and the lock toggle stay **pointer-only** affordances (`aria-hidden` spans, UI.md §8)
 at the right end of **line 2**, so they never squeeze the title. Every one has a list key and a toolbar
@@ -787,9 +854,14 @@ colours do not change.
 
 ### 10.1 The virtualised route list
 
-- **Fixed heights stay.** `ROUTE_ROW_HEIGHT` (28) and a new `ROUTE_ROW_HEIGHT_TWO_LINE` (40) in
-  `virtual.ts`, each equal to its token (tested); `RouteList` takes the density and uses one row
-  height for the window, drag, auto-scroll and paging, as it does now. No offset table is needed.
+- **Fixed heights stay.** `ROUTE_ROW_HEIGHT` (28) and a new `ROUTE_ROW_HEIGHT_TWO_LINE` (40; 44
+  since B+) in `virtual.ts`, each equal to its token (tested); `RouteList` takes the density and
+  uses one row height for the window, drag, auto-scroll and paging, as it does now. No offset table
+  is needed. **B+ (D-051)** adds one exception: the active two-line step row is
+  `ROUTE_ACTIVE_ROW_EXTRA` (32) taller, so `rowTop(i) = i × 44`, plus 32 after the grown row; every
+  offset function takes that one `GrownRow`. The rows after it move down by CSS
+  (`.frl-row--two-line.frl-steprow.is-grown ~ .frl-row`), the list keeping the rows in index order in the DOM, so a change of
+  active row re-renders only the two rows whose flags changed (tested in `RouteList.memo.test.tsx`).
 - **Fewer mounted rows.** At 1366×768 the list is 519 px (MEASURED, mock): 13 visible rows, so about
   21 mounted at the top of the list and 29 mid-list (8 rows of overscan each side), against 27 and 35
   today.
@@ -860,7 +932,8 @@ step records its dist-audit figure in it.
 | The D-050 speed fixes (item 6): the quest givers' clusters (their cells, pins and hover words) moved from `map/layers` into `app/map-clusters.ts`, made in the derived pipeline's quest-state task and handed to the layer builder by the places model (`PlacesModel.clusters`), less the builder's new focus and split caches; **moved out of the entry**: the terrain byproducts' guards (`terrain.ts`, 1.62 kB) and the image-header reader (`image-header.ts`, 1.79 kB), each now a chunk of its own loaded with its first file (their paths and the image types stay in the entry) | D-050 speed | **−2.16** (246.82 kB) | MEASURED (dist audit, 2026-09-30, `tools/build/audit-dist.ts` on a build of `eff4341` and of the tree: `index` 236.89 → 234.73 kB, shared 11.76 and http 0.32 kB unchanged; in context `map/layers` 15.34 → 14.94 kB; `ui-refresh.json` `d050`; `docs/reviews/rework-followup.md`, Results). The clusters' −1.1 kB is the one still owed in the "Planned before Milestone 8" row. Under the 248.5 kB stop rule by 1.68 kB |
 | The D-050 UX items and the review's minors together (rework follow-up): selection on open (`app/selection-memory.ts`, UI-08), the state after the last step with no step selected (PR-13), the level ceiling (PR-18), the berth table (TR-03), labels kept until the view changes (PR-16), the later band and row hover tokens (UI-06), one-line quest rows without the verb (UI-15), the giver's place without route state (QA-20), the free-path flight points (TR-10) | D-050 UX | **+0.68** (247.50 kB) | MEASURED (dist audit of the follow-up's build, 2026-09-30; not attributed in context; the same 247.50 kB on the re-pin's audit and on the follow-up critic's: `docs/reviews/rework-followup.md`, F-06, "Entry chunk" and the re-pin's budget table; `ui-refresh.json` `d050ux`). **1.00 kB under the 248.5 kB stop rule**, the room left for D-051's B+ build |
 | The rework follow-up's cloud fixes (2026-10-01): the side panel's tab stops written only when they change (F-03, `PanelContent.tsx`), and the repair stage's drawer counts (C-04; `MapLayersPanel` is a lazy part, so it adds nothing to the entry) | follow-up | **+0.01** (247.51 kB) | MEASURED (dist audit, 2026-10-01, gzip level 6: `index` 235.43 + shared 11.76 + http 0.32; 247,515 B before the repair stage and 247,512 B after it, so the entry's own code is unchanged by the repair; `ui-refresh.json` `followupCloud`). **0.99 kB under the 248.5 kB stop rule** (988 B), the room left for D-051's B+ build |
-| **Measured total** (the last MEASURED row; review UI-17) | | **246.05 kB** after MM.9 and ATL.10; **251.10 kB** with the review's fixes on 2026-09-30 13:05; **248.98 kB** after the final verification's moves; **246.82 kB** after the D-050 speed fixes; **247.50 kB** after the rework follow-up; **247.51 kB** after its cloud fixes | MEASURED |
+| Left-panel layout B+ (D-051): `virtual.ts`'s grown-row offsets (`rowTop`, the window, the row and gap under the pointer, the reveal), `RouteList`'s grown row (its height, the DOM order, the scroll anchoring, the band and lines by `rowTop`), `StepRow`'s two-line row ("Lv n", the pips under the mark, the chain's group, the active row's place and issue block, the chain in the tooltip; less the chip and line 1's issue marker), `DifficultyPips` split from `DifficultyLabel`; the rest is CSS (not counted). Nothing on the row path can be lazy: the grown active row is painted as the app opens | B+ | **+0.51** (248.14 kB) | MEASURED (dist audit, 2026-10-02, gzip level 6: `index` 235.54 → 236.05 kB, shared 11.76 and http 0.32 kB unchanged; 247,622 → 248,136 B. In context, against a source-map build of `ff73222`: `StepRow` 2,891 → 3,042 B (+151), `virtual.ts` 686 → 887 B (+201), `RouteList` 1,963 → 2,064 B (+101), `DifficultyLabel` 446 → 417 B (−29)). Inside the mock stage's ESTIMATE of +0.45 to 0.85 kB. **Under the 248.5 kB stop rule by 0.36 kB** (364 B); no room-maker was taken |
+| **Measured total** (the last MEASURED row; review UI-17) | | **246.05 kB** after MM.9 and ATL.10; **251.10 kB** with the review's fixes on 2026-09-30 13:05; **248.98 kB** after the final verification's moves; **246.82 kB** after the D-050 speed fixes; **247.50 kB** after the rework follow-up; **247.51 kB** after its cloud fixes; **247.62 kB** at `ff73222`; **248.14 kB** after B+ | MEASURED |
 | **Planned before Milestone 8** (review UI-17): the pin-only exports of `map/marks` (+1.41 kB in the MP.4 row) into the lazy map chunk (**taken** in the final verification: −1.30 kB), and the quest givers' clusters (+1.11 kB) into the derived pipeline, as §25.7 first planned (still owed) | — | about −2.5; about −1.1 left | MEASURED in context (the MP.4 row) |
 | Reserve: the Projects menu's content lazy (the button stays) | — | up to −4.8 | MEASURED in context (`ProjectMenu.tsx`). **Taken in UR.4** (the UR.3 to UR.6 row) |
 

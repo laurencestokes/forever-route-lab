@@ -171,7 +171,8 @@ is the same object, kept for the kit's export list).
 | `--frl-weight-regular` / `-medium` / `-bold` | 400 / 500 / 650 | |
 | `--frl-space-half`, `--frl-space-1` … `-6` | 2, 4, 8, 12, 16, 24, 32px | 4px grid with a 2px half step |
 | `--frl-row-height` | 28px | Route rows (fixed; the virtualiser relies on it) |
-| `--frl-row-height-two-line` | 40px | Two-line route rows, the default density from UR.3 (D-048 A); `ROUTE_ROW_HEIGHT_TWO_LINE` will equal it |
+| `--frl-row-height-two-line` | 44px | Two-line route rows, the default density (layout B+, D-051; 40px from UR.3 to B+); equal to `ROUTE_ROW_HEIGHT_TWO_LINE` (tested) |
+| `--frl-row-grow` | 32px | What the active two-line step row grows by (D-051), and what the rows after it move down by; equal to `ROUTE_ACTIVE_ROW_EXTRA` (tested) |
 | `--frl-control-height` / `-sm` | 28 / 24px | Buttons, inputs, selects / small buttons and each segment of a segmented control. 24px meets WCAG 2.2 target size (2.5.8) without relying on spacing; a small button leaves 4px above and below in the 32px status bar for the ring. The route rows' in-row affordances are 20 × 16px under 2.5.8's equivalent exception (§9 rule 13) |
 | `--frl-topbar-height`, `--frl-statusbar-height` | 44px, 32px | Shell bars |
 | `--frl-tab-height`, `--frl-panel-header-height` | 36px, 32px | Tab strip, panel headers |
@@ -193,12 +194,12 @@ is the same object, kept for the kit's export list).
 | Signal | Colour | Non-colour cue | Text |
 |---|---|---|---|
 | Quest difficulty | the five reserved colours, on the dark difficulty well | 1-5 filled pips (trivial 1 … impossible 5): 2px bars with 1px gaps on whole pixels, crisp edges, lit 3:1 against unlit | "Difficult (yellow)" in the tooltip and screen-reader text; visible word in `full` variant |
-| Quest-mark difficulty (`QuestMark`) | the reserved colour fills the disc under the well's "!" or "?", with a well keyline; only on a disc of 11px or more (22 and 18px, so always in rows), D-041 G as D-047 words it | the pips on the chip beside the mark | the row's or list item's name |
+| Quest-mark difficulty (`QuestMark`) | the reserved colour fills the disc under the well's "!" or "?", with a well keyline; only on a disc of 11px or more (22 and 18px, so always in rows), D-041 G as D-047 words it | the pips on the chip beside the mark; in two-line route rows the pips under the mark, in ink (`--frl-fg-muted` lit, `--frl-border` unlit: 6.1:1 light, 5.8:1 dark; the lit count is the cue, the unlit slots barely show), and "Lv n" on line 2 (D-051). Only filled marks are coloured: a two-line row in a hollow state (locked, unlocks soon, in progress, record unknown) shows no difficulty colour | the row's or list item's name; "Lv n"'s tooltip |
 | Quest-mark state (the one table, map-presentation.md §25.2.3) | none | filled or hollow; a dashed ring for "not sure"; the lock, level or progress-pie badge top right, the dungeon-quest arch top left; "!" or "?" | "May be available: …", "Needs …", "Ready to turn in", "1 of 3 objectives done" |
 | Step kind (`StepMark`) | none | the glyph on a neutral disc (the tile, a hairline edge); the map's flight point, vendor and innkeeper pins are the filled forms of the same glyphs (one symbol per concept) | the kind in the row's name |
 | Destructive action | `--frl-danger` (the error hue, by design) | the delete icon or the words "Delete …" | the label |
 | Pressed toggle, expanded disclosure | accent | the doubled accent edge and bold text (a 2px `Highlight` edge under forced colours) | `aria-pressed`, `aria-expanded` |
-| Difficulty from a lower-bound level | same | dashed chip edge in `--frl-border-strong` (3:1 on every row state) | "…from a lower-bound level: may be easier" |
+| Difficulty from a lower-bound level | same | dashed chip edge in `--frl-border-strong` (3:1 on every row state); in two-line route rows a dotted underline under "Lv n" | "…from a lower-bound level: may be easier" |
 | New in Forever | cyan | ◆ glyph | "New in Forever (per the dataset)" |
 | Changed in Forever | cyan | ◇ glyph | "Changed in Forever (per the dataset)" |
 | …declared by the user | cyan | dashed frame around the glyph | "(user-declared)"; "· user-declared" in `full` |
@@ -237,9 +238,11 @@ Rules:
 - Interface text is 13px on an 18px line; secondary text 12px; small caps labels (panel
   sections, status bar labels) 11px bold with letter spacing.
 - Numbers that line up use tabular figures (`frl-num`).
-- Route rows have one fixed height per list (D-048 A): two lines of 40px by default, one line of
-  28px as View's compact choice. Line 1 starts with the verb ("Accept", "Turn in", "Travel"); long
-  titles ellipsise and details live in the right panel. Group headers are rows of the same height.
+- Route rows have one fixed height per list (D-048 A): two lines of 44px by default (layout B+,
+  D-051), one line of 28px as View's compact choice. The one exception is the active two-line step
+  row, which grows by 32px to show its issue in full and its NPC and zone. Line 1 starts with the
+  verb ("Accept", "Turn in", "Travel"); long titles ellipsise and details live in the right panel.
+  Group headers are rows of the same height.
 - Controls are 28px (24px small and inside rows). Icon buttons are square.
 - Panels are separated by 1px gutters of `--frl-bg`, not by borders, so the panel edges stay crisp
   in both themes.
@@ -377,11 +380,11 @@ All exported from `src/ui/kit.ts`.
 | `AppShell` | `shell/AppShell.tsx` | Grid frame: `top`, `left`, `centre`, `right`, `bottom`; `leftWidth`, `onLeftWidthChange`, `rightWidth`, `onRightWidthChange` (300-460px); `layout` (`ShellLayout`: `leftCollapsed`, `rightCollapsed`, `mapFocus`) and `onLayoutChange`, which add the panel handles, Enter on the separators and the Map focus toggle (§6) |
 | `TopBar` | `shell/TopBar.tsx` | Product, quest search (`search`), "Go to zone or view…" (`zones`), the character button (`character`: "Orc Warrior · Horde", opens Settings, D-048 D), Import, Export, theme toggle, About (ui-refresh.md §8) |
 | `RouteList` | `route/RouteList.tsx` | Virtualised listbox of `RouteRowModel`s; controlled `activeIndex` and `selectedKeys`; selection, editing and drag callbacks by index (§8); `density` (`two-line`, the default, or `one-line`); `deriveRow(row, index)` and `deriveGroup` fill a row's derived values as it renders (only mounted rows ask); `topNumber` (two-line rows) and `estimateColumn` (one-line rows) pick the numbers (§8, §16); `insertAt`, the row boundary where new steps go, draws the insertion line and the later band |
-| `StepRow`, `GroupRow` | `route/StepRow.tsx` | One route row (§8): two lines of 40px (the number, which is the drag handle; the mark; line 1 with the verb, title, chain, provenance, issue marker and lock; line 2 with the chip and where, or the worst issue in words, and the row actions; the top number over the level after) or one line of 28px (`density="one-line"`: the 18px mark, the verb (none on accept and turn-in rows, whose mark says it; UI-15) and title, one estimate by `estimateColumn`, the lock; duplicate and delete on hover or when active). `groupLabel` for the spoken "in group …". `describeStepRow` says the row in a fixed order (number, kind, title with its chain part and where, group, the mark's state, difficulty, provenance, every estimate with a level-up, the issues and the worst one's words, the lock), never doubling a full stop; `formatXpGained` (`+450`) |
+| `StepRow`, `GroupRow` | `route/StepRow.tsx` | One route row (§8): two lines of 44px (B+, D-051: the number, which is the drag handle; the mark with the difficulty pips under it; line 1 with the verb, title, provenance and lock, then the chain where it fits; line 2 with "Lv n" and where, or the worst issue in words, and the row actions, shown on hover, on the one selected row and on the active row; the top number over the level after; when `grown` (the list's active step row, unless the list is too short; defaults to `active`), line 2 shows where whole and the issue's words get their own lines below, the counts in their tooltip) or one line of 28px (`density="one-line"`: the 18px mark, the verb (none on accept and turn-in rows, whose mark says it; UI-15) and title, one estimate by `estimateColumn`, the lock; duplicate and delete on hover or when active). `groupLabel` for the spoken "in group …". `describeStepRow` says the row in a fixed order (number, kind, title with its chain part and where, group, the mark's state, difficulty, provenance, every estimate with a level-up, the issues and the worst one's words, the lock), never doubling a full stop; `formatXpGained` (`+450`) |
 | `StepTypeGlyph` | `markers/StepTypeGlyph.tsx` | Original glyphs for accept, complete, turnin, abandon, travel, grind, hearth, flight, train, vendor, note (16, 14 or 12px) |
-| `QuestMark` | `markers/QuestMark.tsx` | A quest's "!" or "?" in a row or a quest list (ui-refresh.md §5.1), 22px (`md`) or 18px (`compact`), in one of the eight quest-mark states of the one table (`src/map/marks.ts`, read through `app/map-exports` as the same objects the map's pins draw). Filled states take the difficulty colour on the disc with a well glyph and keyline (an unknown difficulty takes the neutral `--frl-difficulty-unknown`); hollow states are a strong ring with an ink glyph; "not sure" is a dashed ring; badges sit in the map's slots (`progress` fills the pie, `unlockLevel` the level pill, `dungeonQuest` the arch). `questMarkColour` says when the mark is coloured, so the caller draws the chip's pips beside it. Decorative (`aria-hidden`) |
+| `QuestMark` | `markers/QuestMark.tsx` | A quest's "!" or "?" in a row or a quest list (ui-refresh.md §5.1), 22px (`md`) or 18px (`compact`), in one of the eight quest-mark states of the one table (`src/map/marks.ts`, read through `app/map-exports` as the same objects the map's pins draw). Filled states take the difficulty colour on the disc with a well glyph and keyline (an unknown difficulty takes the neutral `--frl-difficulty-unknown`); hollow states are a strong ring with an ink glyph; "not sure" is a dashed ring; badges sit in the map's slots (`progress` fills the pie, `unlockLevel` the level pill, `dungeonQuest` the arch). `questMarkColour` says when the mark is coloured; the caller draws the pips: the chip beside the mark, or in two-line route rows `DifficultyPips` under it in ink with "Lv n" on line 2 (D-051), where a hollow mark leaves the row without a difficulty colour. Decorative (`aria-hidden`) |
 | `StepMark` | `markers/StepMark.tsx` | The other step kinds on a neutral disc (the tile, a hairline edge) with `StepTypeGlyph` in the muted ink, 22 or 18px; decorative |
-| `DifficultyLabel` | `markers/DifficultyLabel.tsx` | Quest level chip with difficulty colour, pips and text; `uncertain` for lower-bound levels |
+| `DifficultyLabel`, `DifficultyPips` | `markers/DifficultyLabel.tsx` | Quest level chip with difficulty colour, pips and text; `uncertain` for lower-bound levels. `DifficultyPips`: the five pips alone (decorative), which the chip draws in the difficulty colour and a two-line route row draws in ink under its mark (D-051) |
 | `ProvenanceBadge` | `markers/ProvenanceBadge.tsx` | ◆ / ◇ in cyan, user-declared variant; `compact` or `full`. `foreverProvenanceOf(record.provenance)` derives its input |
 | `AssumedMarker` | `markers/AssumedMarker.tsx` | `≈` (assumption) or `E` (Era fallback) with text |
 | `PendingMarker` | `markers/PendingMarker.tsx` | The neutral hourglass of a provisional number, with its words (`detail`, default `PENDING_TRAVEL_TEXT`; `PENDING_TRAVEL_TEXTS` by `PendingTravel`: `path`, `retrying`, `paused`, `failed` or `checking`, from the route-wide `pendingTravelReason`, Milestone 6 review UI-04); `silent` inside a route row, whose name says it |
@@ -469,27 +472,79 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
 ## 8. Route list
 
 - **Virtualisation.** Index arithmetic over one fixed row height per list (`route/virtual.ts`):
-  `ROUTE_ROW_HEIGHT_TWO_LINE` (40px, the default density, equal to `--frl-row-height-two-line`) or
+  `ROUTE_ROW_HEIGHT_TWO_LINE` (44px, the default density, equal to `--frl-row-height-two-line`) or
   `ROUTE_ROW_HEIGHT` (28px, one-line rows, equal to `--frl-row-height`); `routeRowHeight(density)`
   gives it for the window, drag, auto-scroll and paging. `computeVirtualWindow` renders the visible
-  rows plus 8 rows of overscan each side; the canvas is `rows × height` tall and rows are
-  absolutely positioned at `index × height`. The active row is always mounted, even when scrolled
-  away, so `aria-activedescendant` never dangles.
-- **Two-line rows** (the default, D-048 A; ui-refresh.md §6.1). The number (its width follows the
-  route's longest number) is also the drag handle; the mark (`QuestMark` for an accept or a turn-in
-  in its state, `StepMark` for the other kinds); line 1: **the verb** in the muted ink ("Accept",
-  "Turn in", "Complete", "Travel", "Grind", "Hearth", "Buy"), the title, the chain part ("1/2",
-  spoken "1 of 2"), provenance, the issue marker and the lock when locked; line 2: the quest's chip
-  (always beside a coloured mark, so the colour never stands alone) and where the step happens,
-  short: who and the zone ("Kaltunk · Durotar"; the NPC gives way first, so the zone shows at a
-  340px panel; the coordinates are in the tooltip and the row's name; a travel step's time with its
-  hourglass), **or the worst issue at the step in words**, in its severity colour with its shape,
-  in a short form that drops the step's own quest, which line 1 names ("Needs Cutting Teeth turned
-  in first", "No step finishes objective 1"; the whole message is in the tooltip and the name;
-  review UI-01); on the right the top number (XP
+  rows plus 8 rows of overscan each side; rows are absolutely positioned at `index × height`. The
+  active row is always mounted, even when scrolled away, so `aria-activedescendant` never dangles.
+  - **The grown active row** (layout B+, D-051). In a two-line list the active *step* row (not a
+    group header) is `ROUTE_ACTIVE_ROW_EXTRA` (32px, `--frl-row-grow`) taller, so row `i` starts at
+    `rowTop(i) = i × 44`, plus 32 for every row after the grown one; the canvas is `rows × 44 + 32`
+    when an active step row exists (else `rows × 44`).
+    Every offset takes the grown row as an optional `GrownRow`: the window (`computeVirtualWindow`),
+    the row under the pointer (`rowIndexAtOffset`), the drop gap (`dropSlotAtOffset`: the grown row's
+    gaps are its top and its bottom, extra included), the reveal (`scrollTopToReveal` brings the whole
+    76px box into view) and the end (`totalHeight`). Paging stays one page of 44px rows less one
+    (10 rows in the sample's 505px list).
+  - **Not in a list too short for it.** The row grows only when the list holds the grown row and
+    one plain row (`activeRowCanGrow`: 2 × 44 + 32 = 120px). At 200% zoom on a 768px-high screen the
+    list is about 61px, shorter than the 76px grown row, whose bottom (the row actions, the issue's
+    lines) the reveal would cut; there the active row keeps 44px and is drawn as at rest (its issue on
+    line 2, the row actions at line 2's end) and the canvas is `rows × 44`. The grown row carries
+    `is-grown` (the growth CSS keys on it, not on `is-active`); the chain stays on the active row
+    either way.
+  - **Without re-rendering the rows between.** Each row's own `top` stays `index × 44`; the rows
+    after the grown one move down by CSS alone (`.frl-row--two-line.frl-steprow.is-grown ~ .frl-row`,
+    a `translateY` of `--frl-row-grow`). For that rule the list keeps the rows in index order in the
+    DOM, with nothing but rows between the first and the last (tests/ui-tokens.test.ts checks the rule,
+    RouteList.test the DOM): an active row outside the window is rendered first when it is above it and last when it is
+    below. The list places what it draws as single elements itself (the canvas height, the later
+    band, the insertion line and the drop line, by `rowTop`). So a change of active row re-renders
+    only the two rows whose flags changed, however far it jumps (PERF-11, tested).
+  - **Rows in view stay still.** When the grown row changes and the old one was above the first row
+    in view, the list moves its scroll position by the change at that row (scroll anchoring, by
+    hand), then reveals the new active row, so a click on a row does not move the rows under the
+    pointer.
+- **Two-line rows** (the default; layout B+, D-051, after D-048 A; ui-refresh.md §6.1). 44px: line 1
+  20px, line 2 18px. The number (its width follows the route's longest number) is also the drag
+  handle; the mark (`QuestMark` for an accept or a turn-in in its state, `StepMark` for the other
+  kinds) with, on quest steps, **the difficulty pips under it** in ink (`DifficultyPips`: lit
+  `--frl-fg-muted`, unlit `--frl-border`; `CanvasText` and `GrayText` under forced colours), while
+  a filled disc keeps the difficulty colour, so colour never stands alone. **A hollow mark (locked,
+  unlocks soon, in progress, record unknown) has no colour**, so such a row shows the difficulty only
+  by the lit pips' count, "Lv n" and the words (the chip carried the colour there before B+; owed to
+  the owner). The pips' shape cue is **the lit count**: the unlit pips are at 1.1 to 1.6:1 against the
+  row backgrounds, so the five-slot frame barely shows (lit against unlit is 6.1:1 light, 5.8:1 dark;
+  `--frl-border-strong` for the unlit ones would show the frame but leave the lit ones under 3:1
+  against them); line 1: **the verb** in the
+  muted ink ("Accept", "Turn in", "Complete", "Travel", "Grind", "Hearth", "Buy"), the title,
+  provenance and the lock when locked, which never part, then **the chain part** ("2/2", spoken "2
+  of 2"), which wraps out of sight where it does not fit beside the whole title (line 1 is one
+  20px line with `flex-wrap`), so the title is cut only when it alone is too long; line 2: **"Lv n"**
+  (the quest's level, in place of the chip, which two-line rows no longer draw; its tooltip says the
+  level and difficulty in words, and a dotted underline marks a lower-bound difficulty), then where
+  the step happens, short: who and the zone ("Kaltunk · Durotar"; the NPC gives way first, so the
+  zone shows at a 340px panel; the coordinates are in the tooltip and the row's name; a travel
+  step's time with its hourglass), **or the worst issue at the step in words**, in its severity
+  colour with its shape (drawn once: line 1 has no issue marker), in a short form that drops the
+  step's own quest, which line 1 names ("Needs Cutting Teeth turned in first", "No step finishes
+  objective 1"; the whole message and the counts by severity are in its tooltip, on the active row's
+  issue block too, and both are in the name; review UI-01); on the right the top number (XP
   gained, or the step time, a View choice) over the level after. **A known zero is muted and
   regular** (a gain is bold; an unknown stays "?", a lower bound "≥"). **A level-up** (the level
   after crosses a whole level) reads "↑4.6" in bold and the name adds "reaches level 4".
+- **The active row grows** (D-051). The active two-line step row is 76px (44 + 32): its two lines
+  stay at the top; line 1 always shows the chain (the title gives way instead); line 2 shows "Lv n"
+  and the NPC and zone **whole** (on issue rows too); and the worst issue's short words get **up to
+  two 16px lines of their own** below, from the text column's left edge to the row's right, with the
+  row actions at the bottom right (a float keeps the second line's end clear for them). That block is
+  the D-040 carried-work cue on a carried turn-in ("No step finishes objective 1"). A row without an
+  issue leaves the extra empty. The row's name is the same whether it is active or not. Measured on
+  the sample route (Selawik, `tests/bench/browser/readability.ts`; ui-refresh.md §6.1): every active
+  row's issue, NPC and zone whole, and its chain shown.
+- **Chain position.** Always on the active row; in every row's name ("(2 of 2)") and its title's
+  tooltip ("Turn in Simple Parchment (2 of 2)", both densities); elsewhere on line 1 only where it
+  fits.
 - **Marks at the walk** (ui-refresh.md §5.2). An accept or turn-in with an error at the step is
   locked (hollow, the lock badge; line 2 names the error); a doubt (the accept checks'
   `-uncertain` and `-unverifiable` codes, VAL013, VAL021) makes it "may be" (a dashed ring, colour
@@ -512,7 +567,8 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
   `app/derived-view.ts`), so only the mounted rows (the window, about 30) do any work when new
   results arrive; a walk never rebuilds the row models. The deriver reads memoised results only: an
   index lookup, three readouts, the step's issue counts, the mark's state and the worst issue, the
-  level-up, and the quest chip at the level the step starts at. Line 2's words are formatted when a
+  level-up, and the quest's difficulty (the pips, "Lv n" and the mark's colour) at the level the
+  step starts at. Line 2's words are formatted when a
   row first mounts and cached per dataset view, then per step object (`lineTwoOf`), so a route edit
   formats nothing and a new view starts afresh. A row whose fields a new walk left as they were
   keeps its model object, so the memoised row does not re-render.
@@ -531,14 +587,16 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
   straight-line estimate for now" (or "pending: the navigation data is still being checked, …").
   While computing is paused, waits to retry after a failure, or has failed, the row's name,
   the tooltip and Details say that instead ("computing walking paths is paused, …"; UI-04).
-- **Narrow lists** (a container query on the list, below 320px of width; UI-18). The issue marker
-  keeps its shape and drops its count (the tooltip and the row's name say the counts), the
-  estimate cell takes only the room its number needs, and the row's gaps tighten from 6px to 4px.
-  At the route panel's 288px (800×700), titles on rows with an issue marker keep at least 90px
-  (98px with the level column), where they kept 40px.
-- **Issue indicator.** The worst severity's shape (in its severity colour) and the step's issue
-  count; its tooltip and the row's name say the counts by severity ("Issues: 1 error, 2
-  warnings"). Option children are presentational, so the name carries it for assistive technology.
+- **Narrow lists** (a container query on the list, below 320px of width; UI-18). One-line rows'
+  issue marker keeps its shape and drops its count (the tooltip and the row's name say the counts),
+  the estimate cell takes only the room its number needs, and the row's gaps tighten from 6px to
+  4px; two-line rows' mark margins tighten. At the route panel's 288px (800×700), one-line titles on
+  rows with an issue marker keep at least 90px (98px with the level column), where they kept 40px.
+- **Issue indicator.** One-line rows: the worst severity's shape (in its severity colour) and the
+  step's issue count beside the title. Two-line rows: the shape once, with the worst issue's words
+  on line 2 (or below it on the active row), and no count (D-051). The tooltip and the row's name
+  say the counts by severity ("Issues: 1 error, 2 warnings"). Option children are presentational,
+  so the name carries it for assistive technology.
 - **Semantics.** `role="listbox"`, `aria-multiselectable`, one tab stop, focus stays on the
   list and `aria-activedescendant` names the active row. Every row is an `option` with
   `aria-selected` and an `aria-label` that states the whole row in words.
@@ -553,10 +611,16 @@ reads 12.9). `lib/rule-labels.ts` names the ruleset parameters in words (`RULE_L
   - **In-row affordances.** Option children are presentational, so duplicate, delete and the
     lock toggle are not buttons: they are `aria-hidden` spans with pointer handlers and a
     tooltip, never focusable, and pressing one keeps focus on the list without selecting the
-    row. In two-line rows they sit on **every row, muted** (D-048 F), at the right end of line 2,
-    whose words end before them, on the row's own background (the band shows through at rest; `Canvas`
-    under forced colours), never over a fade; in one-line rows duplicate and delete appear on hover
-    or when active. Every action also has a list key (below) and a route-toolbar button. Component tests
+    row. In two-line rows they show **only on the hovered row, the selected row and the active row**
+    (B+, D-051, by CSS alone; until B+ they sat on every row, muted, D-048 F), at the right end of
+    line 2, whose words end before them, on the row's own background (`Canvas` under forced colours),
+    never over a fade; on the grown active row at the bottom right of its extra, so line 2 keeps its
+    room. A selection of several rows shows them on none of its rows but the hovered and the active
+    one (the list's `is-multi-selected`), so line 2's words are not cut on every selected row (D-051
+    names "the selected row"; owed to the owner to confirm).
+    The hovered row's line 2 still gives them its end, so its words are cut there (measured: every
+    issue and about half the NPC names; ui-refresh.md §6.1). In one-line rows duplicate and delete
+    appear on hover or when active. Every action also has a list key (below) and a route-toolbar button. Component tests
     assert that no option contains focusable or interactive content (axe-core's
     nested-interactive rule; axe itself is not a dependency yet, so the planned Playwright
     smoke test is where it will run).

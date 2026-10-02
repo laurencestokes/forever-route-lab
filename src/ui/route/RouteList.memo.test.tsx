@@ -6,7 +6,10 @@ import { knownReadout } from '../lib/readout';
 import { RouteList } from './RouteList';
 import type { StepRowModel } from './rows';
 import type * as StepRowModule from './StepRow';
-import { ROW_DENSITIES, routeRowHeight } from './virtual';
+import { ROUTE_ACTIVE_ROW_EXTRA, ROW_DENSITIES, routeRowHeight, type RowDensity } from './virtual';
+
+/** What the active row grows by in a density: two-line rows only (B+, D-051). */
+const extra = (density: RowDensity): number => (density === 'two-line' ? ROUTE_ACTIVE_ROW_EXTRA : 0);
 
 /**
  * The route list's rows are memoised (PERF-11): new derived results re-render only the rows whose
@@ -110,7 +113,23 @@ describe.each(ROW_DENSITIES)('RouteList row memoisation (PERF-11), %s rows', (de
     // The line and the band are single elements outside the rows: moving them renders no row.
     rerender(<RouteList {...base(derive)} selectedKeys={new Set(['step-3'])} activeIndex={3} insertAt={9} />);
     expect(renders.size).toBe(0);
-    expect(document.querySelector<HTMLElement>('.frl-routelist__insert')?.style.top).toBe(`${String(9 * routeRowHeight(density))}px`);
+    // Below the active row (3): two-line rows add its extra (B+, D-051).
+    expect(document.querySelector<HTMLElement>('.frl-routelist__insert')?.style.top).toBe(`${String(9 * routeRowHeight(density) + extra(density))}px`);
+  });
+
+  it('re-renders only the two rows whose flags changed when the active row jumps, the rows between moved by CSS', () => {
+    const deriver = deriverFactory();
+    const derive = deriver(null);
+    const { rerender } = render(<RouteList {...base(derive)} selectedKeys={new Set(['step-1'])} activeIndex={1} insertAt={2} />);
+    renders.clear();
+    // From row 1 to row 7, past rows 2 to 6, whose offsets change by the grown row's extra.
+    rerender(<RouteList {...base(derive)} selectedKeys={new Set(['step-7'])} activeIndex={7} insertAt={8} />);
+    expect([...renders.keys()].sort()).toEqual(['step-1', 'step-7']);
+    const rows = screen.getAllByRole('option');
+    // Every row keeps its index × height top; the grown row alone is taller.
+    expect(rows.map((row) => row.style.top)).toEqual(rows.map((_, i) => `${String(i * routeRowHeight(density))}px`));
+    expect(rows[7]?.style.height).toBe(`${String(routeRowHeight(density) + extra(density))}px`);
+    expect(rows[6]?.style.height).toBe(`${String(routeRowHeight(density))}px`);
   });
 
   it('refreshes line 2 of every mounted row when the view changes its words', () => {

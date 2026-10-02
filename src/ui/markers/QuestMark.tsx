@@ -36,9 +36,14 @@ import './markers.css';
  *   empty pie when the record is unknown).
  *
  * D-041 G as D-047 words it: the colour appears only on a shape of 11px or more, the disc here (22px,
- * or 18px in one-line rows, so always), and always with the pips beside it: the caller draws the
- * quest's `DifficultyLabel` chip next to a coloured mark (`questMarkColour` says when). The mark is
- * decorative (`aria-hidden`); the row's or list item's name says the state in words.
+ * or 18px in one-line rows, so always), and always with the pips beside it. The caller draws them:
+ * a one-line route row (and any other caller) draws the quest's `DifficultyLabel` chip next to the
+ * mark; a two-line route row (layout B+, D-051) draws `DifficultyPips` under the mark in ink, with
+ * "Lv n" first on line 2 and the difficulty in its tooltip and the row's name, and no chip
+ * (`questMarkColour` says when the mark is coloured). A hollow mark has no difficulty colour, so a
+ * two-line row in a hollow state shows the difficulty only by the pips' count, "Lv n" and the words:
+ * colour is never the only cue, but there it is not a cue at all. The mark is decorative
+ * (`aria-hidden`); the row's or list item's name says the state in words.
  */
 
 export type QuestMarkState = Extract<MarkState, 'available' | 'uncertain' | 'locked' | 'unlocks-soon' | 'low-level' | 'ready' | 'in-progress' | 'record-unknown'>;

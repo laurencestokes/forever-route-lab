@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { NO_ISSUES } from '../lib/issues';
+import { NO_ISSUES, describeIssueCounts } from '../lib/issues';
 import { knownReadout, unknownReadout } from '../lib/readout';
 import { PENDING_CHECKING_TEXT, PENDING_TRAVEL_TEXT } from '../markers/PendingMarker';
+import { DIFFICULTY_RANK } from '../markers/DifficultyLabel';
 import { UNKNOWN_FOREVER_PROVENANCE } from '../markers/provenance';
 import { GroupRow, StepRow, describeStepRow } from './StepRow';
 import type { GroupRowModel, StepRowModel } from './rows';
@@ -130,18 +131,22 @@ describe('describeStepRow', () => {
   });
 });
 
-describe('StepRow, two lines (the default, D-048 A)', () => {
-  it('leads line 1 with the verb, then the title, chain and provenance; line 2 has the chip and where', () => {
+describe('StepRow, two lines (the default; B+, D-051)', () => {
+  it('leads line 1 with the verb, then the title and provenance, then the chain; line 2 has "Lv n" and where, and no chip', () => {
     const { container } = render(<StepRow model={{ ...base, chain: { index: 1, length: 2 } }} selected={false} active={false} />);
     const option = screen.getByRole('option');
     expect(option.className).toContain('frl-row--two-line');
     const line1 = container.querySelector('.frl-steprow__line1');
     expect(line1?.querySelector('.frl-steprow__verb')?.textContent).toBe('Accept');
-    expect(line1?.querySelector('.frl-steprow__title')?.textContent).toBe('Accept Placeholder quest A');
-    expect(line1?.querySelector('.frl-steprow__chain')?.textContent).toBe('1/2');
+    expect(line1?.querySelector('.frl-steprow__head .frl-steprow__title')?.textContent).toBe('Accept Placeholder quest A');
+    // The chain follows the title's group, so it is the one part of line 1 that wraps away where it does not fit.
+    expect(line1?.querySelector(':scope > .frl-steprow__chain')?.textContent).toBe('1/2');
+    expect([...(line1?.children ?? [])].map((el) => el.className)).toEqual(['frl-steprow__head', 'frl-steprow__chain frl-num']);
     const line2 = container.querySelector('.frl-steprow__line2');
-    expect(line2?.querySelector('[data-difficulty="difficult"]')).not.toBeNull();
+    expect(line2?.querySelector('.frl-steprow__lv')?.textContent).toBe('Lv 8');
     expect(line2?.querySelector('.frl-steprow__detail')?.textContent).toBe('Placeholder zone');
+    expect(container.querySelector('.frl-difficulty')).toBeNull();
+    expect(container.querySelector('[data-difficulty]')).toBeNull();
   });
 
   it('draws the quest mark in its state, coloured by difficulty only when filled, and a turn-in with its "?"', () => {
@@ -174,8 +179,13 @@ describe('StepRow, two lines (the default, D-048 A)', () => {
     expect(issue?.textContent).toContain('Needs level 3: level before is 2.6');
     expect(issue?.querySelector('svg')).not.toBeNull();
     expect(container.querySelector('.frl-steprow__line2 .frl-steprow__detail')).toBeNull();
-    // Line 1 keeps the marker with the count.
-    expect(container.querySelector('.frl-steprow__line1 .frl-steprow__issues')?.textContent).toBe('2');
+    // The shape is drawn once (D-051): line 1 has no issue marker; the counts are in the tooltip and the name.
+    expect(container.querySelector('.frl-steprow__issues')).toBeNull();
+    expect(container.querySelectorAll('.frl-steprow svg.frl-severity-icon, .frl-steprow [data-severity] svg')).toHaveLength(1);
+    expect(issue?.getAttribute('title')).toBe('Needs level 3: level before is 2.6. Issues: 1 error, 1 warning');
+    expect(screen.getByRole('option').getAttribute('aria-label')).toContain('Issues: 1 error, 1 warning. Error: Needs level 3: level before is 2.6.');
+    // Line 2 starts with the level, then the issue.
+    expect([...(container.querySelector('.frl-steprow__line2')?.children ?? [])].map((el) => el.className.split(' ')[0])).toEqual(['frl-steprow__lv', 'frl-steprow__sep', 'frl-steprow__issue']);
   });
 
   it('puts XP gained over the level after, a known zero muted and regular, a gain in bold, and "↑" on a level-up', () => {
@@ -215,7 +225,7 @@ describe('StepRow, two lines (the default, D-048 A)', () => {
     expect(time?.querySelector('[data-state="pending"]')).not.toBeNull();
   });
 
-  it('shows duplicate, delete and lock on every row, muted, as pointer-only spans on line 2 (D-048 F)', () => {
+  it('has duplicate, delete and lock as pointer-only spans at line 2\'s end (shown by CSS on hover, selection and the active row, D-051)', () => {
     const onClick = vi.fn();
     const handlers = { onToggleLock: vi.fn(), onDuplicate: vi.fn(), onDelete: vi.fn() };
     render(<StepRow model={base} selected={false} active={false} onClick={onClick} {...handlers} />);
@@ -247,6 +257,128 @@ describe('StepRow, two lines (the default, D-048 A)', () => {
     expect(container.querySelector('.frl-row__handle')).toBeNull();
     rerender(<StepRow model={base} selected={false} active={false} readOnly onHandlePointerDown={onHandle} />);
     expect(number()?.className).not.toContain('is-handle');
+  });
+});
+
+describe('StepRow, B+ details (D-051)', () => {
+  const issueModel: StepRowModel = {
+    ...base,
+    kind: 'turnin',
+    verb: 'Turn in',
+    mark: 'ready',
+    chain: { index: 2, length: 2 },
+    detail: 'Gornek · Durotar 42.1, 68.3',
+    place: { lead: 'Gornek', zone: 'Durotar' },
+    issues: { error: 0, warning: 1, info: 0 },
+    issue: { severity: 'warning', message: 'No step finishes objective 1 of Cutting Teeth', short: 'No step finishes objective 1' },
+  };
+
+  it('draws the pips under the mark, as many lit as the difficulty\'s rank, in ink; non-quest rows have none', () => {
+    const { container, rerender } = render(<StepRow model={base} selected={false} active={false} />);
+    const pips = () => container.querySelector('.frl-steprow__markbox > .frl-steprow__pips');
+    expect(pips()?.getAttribute('aria-hidden')).toBe('true');
+    expect(pips()?.querySelectorAll('.frl-difficulty__pip')).toHaveLength(5);
+    expect(pips()?.querySelectorAll('.frl-difficulty__pip.is-on')).toHaveLength(DIFFICULTY_RANK.difficult);
+    // The disc keeps the difficulty colour.
+    expect(container.querySelector('.frl-steprow__markbox > .frl-quest-mark')?.getAttribute('data-colour')).toBe('difficult');
+    for (const difficulty of ['trivial', 'standard', 'verydifficult', 'impossible'] as const) {
+      rerender(<StepRow model={{ ...base, quest: { level: 8, difficulty, uncertain: false, provenance: UNKNOWN_FOREVER_PROVENANCE } }} selected={false} active={false} />);
+      expect(pips()?.querySelectorAll('.frl-difficulty__pip.is-on')).toHaveLength(DIFFICULTY_RANK[difficulty]);
+    }
+    rerender(<StepRow model={{ ...base, quest: { level: null, difficulty: null, uncertain: false, provenance: UNKNOWN_FOREVER_PROVENANCE } }} selected={false} active={false} />);
+    expect(pips()?.querySelectorAll('.frl-difficulty__pip.is-on')).toHaveLength(0);
+    expect(container.querySelector('.frl-steprow__lv')?.textContent).toBe('Lv ?');
+    rerender(<StepRow model={{ ...base, kind: 'grind', verb: 'Grind', quest: null, mark: null }} selected={false} active={false} />);
+    expect(pips()).toBeNull();
+    expect(container.querySelector('.frl-steprow__lv')).toBeNull();
+    expect(container.querySelector('.frl-steprow__line2 > .frl-steprow__sep')).toBeNull();
+  });
+
+  it('says the level and difficulty in words in the "Lv n" tooltip, and marks a lower-bound difficulty', () => {
+    const { container, rerender } = render(<StepRow model={base} selected={false} active={false} />);
+    const lv = () => container.querySelector('.frl-steprow__lv');
+    expect(lv()?.getAttribute('title')).toBe('Quest level 8, Difficult (yellow)');
+    expect(lv()?.className).not.toContain('is-uncertain');
+    rerender(<StepRow model={{ ...base, quest: { level: 8, difficulty: 'standard', uncertain: true, provenance: UNKNOWN_FOREVER_PROVENANCE } }} selected={false} active={false} />);
+    expect(lv()?.getAttribute('title')).toBe('Quest level 8, Standard (green), from a lower-bound level: may be easier');
+    expect(lv()?.className).toContain('is-uncertain');
+  });
+
+  it('carries the chain position in the tooltip and the name of every row, at rest and active, in both densities', () => {
+    for (const density of ['two-line', 'one-line'] as const) {
+      for (const active of [false, true]) {
+        const { container, unmount } = render(<StepRow model={issueModel} density={density} selected={false} active={active} />);
+        expect(container.querySelector('.frl-steprow__title')?.getAttribute('title')).toMatch(/^Turn in Placeholder quest A \(2 of 2\)/);
+        expect(screen.getByRole('option').getAttribute('aria-label')).toContain('Placeholder quest A (2 of 2)');
+        unmount();
+      }
+    }
+    // No chain, no position.
+    const { container } = render(<StepRow model={base} selected={false} active={false} />);
+    expect(container.querySelector('.frl-steprow__title')?.getAttribute('title')).toBe('Accept Placeholder quest A');
+  });
+
+  it('gives the active row the place whole on line 2 and the issue in full below it, its shape still drawn once', () => {
+    const { container, rerender } = render(<StepRow model={issueModel} selected={false} active={false} onDelete={vi.fn()} />);
+    // At rest: the issue on line 2, no block.
+    expect(container.querySelector('.frl-steprow__line2 .frl-steprow__issue')).not.toBeNull();
+    expect(container.querySelector('.frl-steprow__more')).toBeNull();
+    expect(container.querySelector('.frl-steprow__line2 .frl-steprow__lead')).toBeNull();
+    rerender(<StepRow model={issueModel} selected active onDelete={vi.fn()} />);
+    const line2 = container.querySelector('.frl-steprow__line2');
+    expect(line2?.querySelector('.frl-steprow__issue')).toBeNull();
+    expect(line2?.querySelector('.frl-steprow__lv')?.textContent).toBe('Lv 8');
+    expect(line2?.querySelector('.frl-steprow__lead')?.textContent).toBe('Gornek');
+    expect(line2?.querySelector('.frl-steprow__zone')?.textContent).toBe('Durotar');
+    expect(line2?.querySelector('.frl-steprow__detail')?.getAttribute('title')).toBe('Gornek · Durotar 42.1, 68.3');
+    // The D-040 carried-work cue: the warning's words in full, in its colour, with its shape, once.
+    const more = container.querySelector('.frl-steprow__more');
+    expect(more?.parentElement?.getAttribute('role')).toBe('option');
+    expect(more?.getAttribute('data-severity')).toBe('warning');
+    expect(more?.querySelector('.frl-steprow__issue-text')?.textContent).toBe('No step finishes objective 1');
+    // Its tooltip has the step's issue counts, as the issue at rest does: the counts are not drawn anywhere on the row.
+    expect(more?.getAttribute('title')).toBe(`No step finishes objective 1 of Cutting Teeth. Issues: ${describeIssueCounts(issueModel.issues)}`);
+    expect(more?.getAttribute('title')).toContain('1 warning');
+    expect(container.querySelectorAll('.frl-steprow [data-severity] svg')).toHaveLength(1);
+    // The actions stay on line 2 (the CSS moves them to the extra's corner).
+    expect(line2?.querySelector('.frl-steprow__actions [data-action="delete"]')).not.toBeNull();
+    // The name is the same in both states.
+    expect(screen.getByRole('option').getAttribute('aria-label')).toBe(describeStepRow(issueModel));
+  });
+
+  it('keeps an active row that the list does not grow (a list too short for it) as at rest: the issue on line 2, no block', () => {
+    const { container } = render(<StepRow model={issueModel} selected active grown={false} onDelete={vi.fn()} />);
+    const option = screen.getByRole('option');
+    expect(option.className).toContain('is-active');
+    expect(option.className).not.toContain('is-grown');
+    expect(container.querySelector('.frl-steprow__more')).toBeNull();
+    expect(container.querySelector('.frl-steprow__line2 .frl-steprow__issue')?.getAttribute('title')).toBe(
+      `No step finishes objective 1 of Cutting Teeth. Issues: ${describeIssueCounts(issueModel.issues)}`,
+    );
+    expect(container.querySelectorAll('.frl-steprow [data-severity] svg')).toHaveLength(1);
+    // The chain is still always on the active row (CSS keeps line 1 from wrapping it away), and in its name.
+    expect(container.querySelector('.frl-steprow__line1 .frl-steprow__chain')?.textContent).toBe('2/2');
+    expect(option.getAttribute('aria-label')).toBe(describeStepRow(issueModel));
+  });
+
+  it('adds no block to an active row without an issue, and keeps a travel step\'s time on line 2', () => {
+    const { container, rerender } = render(<StepRow model={{ ...issueModel, issues: NO_ISSUES, issue: null }} selected={false} active />);
+    expect(container.querySelector('.frl-steprow__more')).toBeNull();
+    expect(container.querySelector('.frl-steprow__line2 .frl-steprow__zone')?.textContent).toBe('Durotar');
+    const travel: StepRowModel = { ...base, kind: 'travel', verb: 'Travel', title: 'to Razor Hill', quest: null, mark: null, detail: null, issues: { error: 1, warning: 0, info: 0 }, issue: { severity: 'error', message: 'No path' } };
+    rerender(<StepRow model={travel} selected={false} active />);
+    expect(container.querySelector('.frl-steprow__line2 .frl-steprow__travel-time')).not.toBeNull();
+    expect(container.querySelector('.frl-steprow__more .frl-steprow__issue-text')?.textContent).toBe('No path');
+  });
+
+  it('never puts anything focusable or interactive inside the option, active or not', () => {
+    for (const active of [false, true]) {
+      const { unmount } = render(<StepRow model={issueModel} selected={active} active={active} onDelete={vi.fn()} onDuplicate={vi.fn()} onToggleLock={vi.fn()} onHandlePointerDown={vi.fn()} />);
+      const option = screen.getByRole('option');
+      expect(option.querySelectorAll('button, a[href], input, select, textarea, [tabindex], [role="button"], [contenteditable]')).toHaveLength(0);
+      for (const el of option.querySelectorAll('[data-action]')) expect(el.closest('[aria-hidden="true"]')).not.toBeNull();
+      unmount();
+    }
   });
 });
 

@@ -17,14 +17,19 @@ import { GroupRow, StepRow } from './StepRow';
 import { routeRowContext, type EstimateColumn, type GroupRowModel, type RouteRowModel, type StepRowModel, type TopNumber } from './rows';
 import {
   DEFAULT_OVERSCAN,
+  ROUTE_ACTIVE_ROW_EXTRA,
+  activeRowCanGrow,
   computeVirtualWindow,
   dropSlotAtOffset,
   dropTargetIndex,
   listCommandForKey,
   pageSize,
   routeRowHeight,
+  rowIndexAtOffset,
+  rowTop,
   scrollTopToReveal,
   selectionModeForClick,
+  type GrownRow,
   type ListCommand,
   type RowDensity,
   type SelectionMode,
@@ -41,7 +46,10 @@ export interface RouteListProps {
   readonly deriveRow?: ((row: StepRowModel, index: number) => StepRowModel) | undefined;
   /** Fills in a group header's level span as it renders, as `deriveRow` does for steps; omitted: drawn as it is. */
   readonly deriveGroup?: ((row: GroupRowModel, index: number) => GroupRowModel) | undefined;
-  /** Two lines of 40px (default, D-048 A) or one line of 28px: one height for every row of the list. */
+  /**
+   * Two lines of 44px (default; B+, D-051), whose active step row grows by one fixed extra, or one
+   * line of 28px: one height for every other row of the list.
+   */
   readonly density?: RowDensity | undefined;
   /** One-line rows: which estimate the right-hand column shows; default the level after the step. */
   readonly estimateColumn?: EstimateColumn | undefined;
@@ -128,6 +136,7 @@ interface StepRowSlotProps {
   readonly height: number;
   readonly selected: boolean;
   readonly active: boolean;
+  readonly grown: boolean;
   readonly dragging: boolean;
   readonly posInSet: number | undefined;
   readonly setSize: number;
@@ -157,6 +166,7 @@ const StepRowSlot = memo(function StepRowSlot({
   height,
   selected,
   active,
+  grown,
   dragging,
   posInSet,
   setSize,
@@ -177,6 +187,7 @@ const StepRowSlot = memo(function StepRowSlot({
       id={id}
       selected={selected}
       active={active}
+      grown={grown}
       dragging={dragging}
       style={{ top, height }}
       onClick={(event) => {
@@ -242,11 +253,19 @@ export function routeRowDomId(baseId: string, key: string): string {
 }
 
 /**
- * The route editor list: fixed-height rows (40px two-line rows, or 28px one-line rows; one height
+ * The route editor list: fixed-height rows (44px two-line rows, or 28px one-line rows; one height
  * per list), virtualised by index arithmetic (virtual.ts), a `listbox` with
  * `aria-activedescendant` so keyboard focus stays on the list while the active row scrolls into
  * view. Rows other than the active one are unmounted outside the window. The insertion line and the
  * band under the later steps are one element each, drawn by the list, never by a row.
+ *
+ * Two-line rows (B+, D-051): the active step row grows by `ROUTE_ACTIVE_ROW_EXTRA`, so every row
+ * after it sits that much lower. Each row's `top` stays `index × 44`; the rows after the grown one
+ * are moved down by CSS alone (`.is-grown ~ .frl-row`, RouteList.css), so a change of active row
+ * re-renders only the two rows whose flags changed (PERF-11). For that rule the rows are in index
+ * order in the DOM: an active row outside the window comes first or last. The list itself places what
+ * it draws as single elements (the canvas height, the band, the insertion and drop lines) and finds
+ * rows, gaps and reveals with the grown row's offsets.
  *
  * Step rows carry `aria-posinset`/`aria-setsize` among the steps only (so "16." is also "16 of
  * 40"), and a step under a group header says "in group …" in its name; header rows carry no
@@ -315,15 +334,31 @@ export function RouteList({
   // scroll position comes from a ref and edits elsewhere in the route do not re-run this, so a
   // user who scrolled away is not snapped back.
   const revealIndex = activeIndex !== null && activeIndex >= 0 && activeIndex < rowCount ? activeIndex : null;
+  // The active step row of a two-line list grows (D-051); a header row, one-line rows and a list too
+  // short for the grown row (activeRowCanGrow) never do.
+  const grownIndex =
+    density === 'two-line' && revealIndex !== null && rows[revealIndex]?.type === 'step' && activeRowCanGrow(viewportHeight, rowHeight) ? revealIndex : null;
+  const grown = useMemo<GrownRow | null>(() => (grownIndex === null ? null : { index: grownIndex, extra: ROUTE_ACTIVE_ROW_EXTRA }), [grownIndex]);
+  const grownRef = useRef<GrownRow | null>(null);
   useLayoutEffect(() => {
-    if (revealIndex === null) return;
-    const next = scrollTopToReveal(revealIndex, scrollTopRef.current, viewportHeight, rowHeight);
+    const before = grownRef.current;
+    grownRef.current = grown;
+    let next = scrollTopRef.current;
+    // A grown row above the view that shrinks (or a new one there) moves every row in view: keep them
+    // still, as the browser's scroll anchoring would, by the change at the first row in view.
+    if (before !== grown) {
+      const first = rowIndexAtOffset(next, rowHeight, rowCount, before);
+      if (first !== null && first !== before?.index) next += rowTop(first, rowHeight, grown) - rowTop(first, rowHeight, before);
+    }
+    if (revealIndex !== null) next = scrollTopToReveal(revealIndex, next, viewportHeight, rowHeight, grown);
     if (next === scrollTopRef.current) return;
     scrollTopRef.current = next;
     setScrollTop(next);
     const el = listRef.current;
     if (el !== null && el.scrollTop !== next) el.scrollTop = next;
-  }, [revealIndex, viewportHeight, rowHeight]);
+    // Edits elsewhere (new rows) do not re-run this: the grown row is read when the active row changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealIndex, grown, viewportHeight, rowHeight]);
 
   // While dragging, follow the pointer anywhere in the window.
   const dragging = drag !== null;
@@ -348,7 +383,7 @@ export function RouteList({
         if (event.clientY < rect.top + rowHeight) el.scrollTop = Math.max(0, el.scrollTop - rowHeight / 2);
         else if (event.clientY > rect.bottom - rowHeight) el.scrollTop += rowHeight / 2;
       }
-      const slot = dropSlotAtOffset(event.clientY - rect.top + el.scrollTop, rowHeight, rowCount);
+      const slot = dropSlotAtOffset(event.clientY - rect.top + el.scrollTop, rowHeight, rowCount, grown);
       if (slot === current.slot) return;
       dragRef.current = { from: current.from, slot };
       setDragState(dragRef.current);
@@ -375,7 +410,7 @@ export function RouteList({
       window.removeEventListener('pointercancel', onPointerCancel);
       window.removeEventListener('keydown', onKeyDown, true);
     };
-  }, [dragging, rowCount, rowHeight, onDrop, onDragCancel]);
+  }, [dragging, rowCount, rowHeight, grown, onDrop, onDragCancel]);
 
   const canDrag = !readOnly && onDrop !== undefined;
   const beginDrag = (index: number, event: PointerEvent<HTMLElement>) => {
@@ -472,11 +507,14 @@ export function RouteList({
     [],
   );
 
-  const view = computeVirtualWindow({ scrollTop, viewportHeight, rowHeight, rowCount, overscan });
+  const view = computeVirtualWindow({ scrollTop, viewportHeight, rowHeight, rowCount, overscan, grown });
   const indices: number[] = [];
   for (let i = view.start; i < view.end; i += 1) indices.push(i);
-  // The active row is always mounted so aria-activedescendant never points at nothing.
-  if (revealIndex !== null && (revealIndex < view.start || revealIndex >= view.end)) indices.push(revealIndex);
+  // The active row is always mounted so aria-activedescendant never points at nothing; in index order
+  // (first or last), so the rows after it in the DOM are the rows after it in the list.
+  if (revealIndex !== null && revealIndex < view.start) indices.unshift(revealIndex);
+  if (revealIndex !== null && revealIndex >= view.end) indices.push(revealIndex);
+  const at = (index: number) => rowTop(index, rowHeight, grown);
 
   const activeRow = revealIndex === null ? undefined : rows[revealIndex];
   const activeId = activeRow === undefined ? undefined : routeRowDomId(baseId, activeRow.key);
@@ -484,7 +522,17 @@ export function RouteList({
   const insertLine = insertAt === null || rowCount === 0 ? null : Math.min(rowCount, Math.max(0, insertAt));
 
   return (
-    <div className={cx('frl-routelist', `frl-routelist--${density}`, readOnly && 'is-read-only', dragging && 'is-dragging', className)}>
+    <div
+      className={cx(
+        'frl-routelist',
+        `frl-routelist--${density}`,
+        readOnly && 'is-read-only',
+        dragging && 'is-dragging',
+        // A selection of several rows shows the row actions on none of them at rest (D-051: "the selected row").
+        selectedKeys.size > 1 && 'is-multi-selected',
+        className,
+      )}
+    >
       <div
         ref={listRef}
         role="listbox"
@@ -519,7 +567,8 @@ export function RouteList({
                   id={routeRowDomId(baseId, row.key)}
                   model={deriveRow === undefined ? row : deriveRow(row, index)}
                   top={index * rowHeight}
-                  height={rowHeight}
+                  height={index === grownIndex ? rowHeight + ROUTE_ACTIVE_ROW_EXTRA : rowHeight}
+                  grown={index === grownIndex}
                   selected={selectedKeys.has(row.key)}
                   active={index === activeIndex}
                   dragging={drag?.from === index}
@@ -564,13 +613,13 @@ export function RouteList({
           {insertLine !== null && (
             <>
               {insertLine < rowCount && (
-                <div className="frl-routelist__later" style={{ top: insertLine * rowHeight, height: (rowCount - insertLine) * rowHeight }} aria-hidden="true" />
+                <div className="frl-routelist__later" style={{ top: at(insertLine), height: view.totalHeight - at(insertLine) }} aria-hidden="true" />
               )}
-              <div className="frl-routelist__insert" style={{ top: insertLine * rowHeight }} aria-hidden="true" />
+              <div className="frl-routelist__insert" style={{ top: at(insertLine) }} aria-hidden="true" />
             </>
           )}
           {showDropIndicator && (
-            <div className="frl-routelist__drop" style={{ top: drag.slot * rowHeight }} aria-hidden="true" />
+            <div className="frl-routelist__drop" style={{ top: at(drag.slot) }} aria-hidden="true" />
           )}
         </div>
       </div>
